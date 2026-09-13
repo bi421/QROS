@@ -73,6 +73,7 @@ testpaths = [
     "researchos/market_memory/tests",
     "researchos/experiments/phase51/tests",
     "researchos/experiments/phase52/tests",
+    "researchos/experiments/phase52_rebuild/tests",
     "researchos/self_healing/tests",
 ]
 python_files = ["test_*.py"]
