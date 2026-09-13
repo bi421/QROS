@@ -135,6 +135,7 @@ def build_context_feature_dataset(
         "feature_set": feature_set,
         "feature_names": list(combined_names),
         "feature_count": len(combined_names),
+        "price_feature_count": len(price_features.feature_names),
         "context_rows": len(context_observations),
         "research_rows": len(research_observations),
         "warmup_rows": contract.warmup,

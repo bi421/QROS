@@ -109,9 +109,7 @@ def _raw_timestamp_set(path: Path, name: str) -> tuple[int, set[datetime]]:
             rows += 1
             try:
                 if "observation_date" in fields:
-                    value_columns = [
-                        x for x in fields.values() if x != fields["observation_date"]
-                    ]
+                    value_columns = [x for x in fields.values() if x != fields["observation_date"]]
                     if len(value_columns) == 1:
                         raw_value = (row.get(value_columns[0]) or "").strip()
                         if not raw_value or raw_value == ".":
@@ -128,9 +126,9 @@ def _raw_timestamp_set(path: Path, name: str) -> tuple[int, set[datetime]]:
                         row[fields["observation_date"]].strip(), "%Y-%m-%d"
                     ).replace(tzinfo=timezone.utc)
                 elif "date" in fields:
-                    ts = datetime.strptime(
-                        row[fields["date"]].strip(), "%Y-%m-%d"
-                    ).replace(tzinfo=timezone.utc)
+                    ts = datetime.strptime(row[fields["date"]].strip(), "%Y-%m-%d").replace(
+                        tzinfo=timezone.utc
+                    )
                 else:
                     raise KeyError("no supported timestamp column")
                 timestamps.add(ts)
@@ -219,8 +217,7 @@ def _result_dict(result: Any) -> dict[str, Any]:
         "out_of_sample": getattr(result, "out_of_sample", False),
         "cost_adjusted": getattr(result, "cost_adjusted", False),
         "reproducible": bool(
-            getattr(result, "reproducibility_hash", None)
-            or metadata.get("combined_input_hash")
+            getattr(result, "reproducibility_hash", None) or metadata.get("combined_input_hash")
         ),
         "reproducibility_hash": getattr(result, "reproducibility_hash", None),
         "combined_input_hash": metadata.get("combined_input_hash"),
@@ -269,15 +266,31 @@ def _build_report() -> Report:
         DXY_PATH,
     )
     results = run_context_aware_phase52_comparison(build, config)
-    result_map = {name: _result_dict(results[name]) for name in FEATURE_SET_NAMES}
+    report_to_rebuild = {
+        "PRICE_ONLY": "PRICE_ONLY",
+        "PRICE + DXY": "PRICE_DXY",
+        "PRICE + US10Y": "PRICE_US10Y",
+        "PRICE + VIX": "PRICE_VIX",
+        "PRICE + ALL": "PRICE_ALL",
+    }
+    result_map = {
+        name: _result_dict(results[report_to_rebuild[name]]) for name in FEATURE_SET_NAMES
+    }
 
-    research_days = {datetime.fromisoformat(o.day).replace(tzinfo=timezone.utc) for o in build.research_observations}
+    research_days = {
+        datetime.fromisoformat(o.day).replace(tzinfo=timezone.utc)
+        for o in build.research_observations
+    }
     production_common = research_days
-    context_days = {datetime.fromisoformat(o.day).replace(tzinfo=timezone.utc) for o in build.context_observations}
+    context_days = {
+        datetime.fromisoformat(o.day).replace(tzinfo=timezone.utc)
+        for o in build.context_observations
+    }
     usable = build.usable_sample_count
     required_samples = TRAIN_SIZE + VALIDATION_SIZE
     dataset_blocked = usable < required_samples
-    experiment_blocked = any(v["outcome"] == "BLOCKED" for v in result_map.values())
+    experiment_passed = all(v["outcome"] == "PASS" for v in result_map.values())
+    experiment_blocked = not experiment_passed
 
     dataset_report = {
         "context_sample": build.context_sample_count,
@@ -314,14 +327,18 @@ def _build_report() -> Report:
         "experiment": "BLOCKED" if experiment_blocked else "PASS",
         "overall": "READY" if not dataset_blocked and not experiment_blocked else "NOT READY",
         "scientific_claim": (
-            "NO_PREDICTIVE_CLAIM_WHILE_BLOCKED"
+            "NO_PREDICTIVE_CLAIM_WHILE_BLOCKED_OR_FAILED"
             if dataset_blocked or experiment_blocked
             else "EVALUATE_ONLY_AFTER_ALL_GATES_PASS"
         ),
         "blocking_reason": (
             "REAL XAUUSD + MACRO DATA REQUIRED (insufficient aligned samples after merge)"
             if dataset_blocked
-            else None
+            else (
+                "EXPERIMENT_GATE_FAILED (one or more feature sets failed the frozen evidence criteria)"
+                if experiment_blocked
+                else None
+            )
         ),
     }
 
@@ -442,8 +459,10 @@ def _render(report: Report) -> str:
         "|---|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for name, v in r["phase52"].items():
+
         def fmt(x):
             return "—" if x is None else (f"{x:.4f}" if isinstance(x, float) else str(x))
+
         lines.append(
             f"| {name} | {v['outcome']} | {v['validation_samples'] or 0} | {fmt(v['accuracy'])} | {fmt(v['baseline_accuracy'])} | {fmt(v['accuracy_delta_vs_baseline'])} | {fmt(v['brier'])} | {fmt(v['brier_delta_vs_baseline'])} | {fmt(v['p_value'])} |"
         )
@@ -478,9 +497,7 @@ def main() -> int:
     (out_dir / "canonical_phase52_report.json").write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    (out_dir / "canonical_phase52_report.md").write_text(
-        _render(report) + "\n", encoding="utf-8"
-    )
+    (out_dir / "canonical_phase52_report.md").write_text(_render(report) + "\n", encoding="utf-8")
     print(_render(report))
     return 0
 

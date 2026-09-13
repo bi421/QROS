@@ -12,6 +12,14 @@ from researchos.experiments.phase52.provenance import build_input_provenance
 from .context_pipeline import ContextAwareFeatureBuild
 from .feature_contract import FEATURE_SET_NAMES, Phase52FeatureContract
 
+_EXECUTION_FEATURE_SET_NAMES = {
+    "PRICE_ONLY": "PRICE_ONLY",
+    "PRICE_DXY": "PRICE + DXY",
+    "PRICE_US10Y": "PRICE + US10Y",
+    "PRICE_VIX": "PRICE + VIX",
+    "PRICE_ALL": "PRICE + ALL",
+}
+
 
 @dataclass(frozen=True)
 class _DatasetView:
@@ -82,7 +90,9 @@ class _PreparedView:
         return None
 
 
-def _prepared_view(build: ContextAwareFeatureBuild, feature_set: str, cfg: Phase52Config) -> _PreparedView:
+def _prepared_view(
+    build: ContextAwareFeatureBuild, feature_set: str, cfg: Phase52Config
+) -> _PreparedView:
     research = build.research_observations
     close = tuple(o.close for o in research)
     high = tuple(o.high for o in research)
@@ -95,9 +105,7 @@ def _prepared_view(build: ContextAwareFeatureBuild, feature_set: str, cfg: Phase
         "VIX": tuple(o.vix for o in research),
     }
     macro_timestamps = {symbol: timestamps for symbol in macro}
-    diagnostics = MacroFeatureBuilder(
-        aligned_length=len(research), factor_series=macro
-    ).build()
+    diagnostics = MacroFeatureBuilder(aligned_length=len(research), factor_series=macro).build()
     provenance = build_input_provenance(
         timestamps,
         close,
@@ -113,9 +121,7 @@ def _prepared_view(build: ContextAwareFeatureBuild, feature_set: str, cfg: Phase
     metadata = dict(dataset.metadata)
     expected_source_indices = tuple(range(dataset.sample_count))
     if tuple(metadata.get("source_indices", ())) != expected_source_indices:
-        raise AssertionError(
-            f"context dataset source-index contract failed for {feature_set}"
-        )
+        raise AssertionError(f"context dataset source-index contract failed for {feature_set}")
     view = _DatasetView(
         feature_names=dataset.feature_names,
         features=dataset.rows,
@@ -156,7 +162,7 @@ def run_context_aware_phase52_comparison(
         prepared = _prepared_view(build, feature_set, cfg)
         results[feature_set] = _run_prepared(
             prepared,
-            replace(cfg, feature_set=feature_set),
+            replace(cfg, feature_set=_EXECUTION_FEATURE_SET_NAMES[feature_set]),
         )
     return results
 

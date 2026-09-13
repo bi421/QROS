@@ -119,7 +119,10 @@ def _load_daily_xau_from_d1(path: str | Path) -> tuple[DailyXAUBar, ...]:
             row = {str(k).strip().lower(): v for k, v in raw.items() if k is not None}
             date_value = str(row["date"]).strip()
             time_value = str(row["time"]).strip()
-            ts = _utc_iso(f"{date_value}T{time_value}Z")
+            normalized_date = (
+                date_value.replace(".", "-") if date_value.count(".") == 2 else date_value
+            )
+            ts = _utc_iso(f"{normalized_date}T{time_value}Z")
             day = _day(ts)
             if day in seen_days:
                 raise ValueError(f"XAUUSD duplicate calendar day: {day}")
