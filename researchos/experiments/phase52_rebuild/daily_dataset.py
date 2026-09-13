@@ -1,20 +1,11 @@
 """Deterministic daily XAUUSD + macro observation assembly for Phase 5.2.
 
-This module is the boundary between the canonical XAUUSD research source and
-the research dataset. It accepts either the canonical MT5 M1 source or the
-canonical D1 artifact deterministically produced from that MT5 M1 source.
-
-* XAUUSD M1 bars are aggregated by UTC calendar day when an M1 source is used.
-* Canonical D1 rows are accepted without re-aggregation.
-* Daily OHLC uses first-open, max-high, min-low, last-close.
-* Tick and real volume are summed; spread is averaged when present.
-* Macro sources contribute only observations that actually exist on the
-  same UTC calendar day. No interpolation or forward-fill is performed.
-* The returned observations are ordered by UTC day and carry source counts.
-
-No labels or model features are created here. That separation prevents the
-calendar/alignment boundary from being silently mixed with feature warm-up
-or future-label eligibility.
+The canonical XAUUSD sources are either real MT5 M1 data or the canonical D1
+artifact derived from that M1 data. Both paths must expose the same VWAP
+semantic: tick-volume-weighted daily typical price. A D1 OHLC row does not
+contain enough information to reconstruct VWAP, so canonical D1 input must
+carry the precomputed VWAP explicitly. This module never substitutes
+(high + low + close) / 3 for a missing VWAP.
 """
 from __future__ import annotations
 
@@ -101,10 +92,12 @@ def _float(row: dict[str, str | None], key: str) -> float:
 
 
 def _load_daily_xau_from_d1(path: str | Path) -> tuple[DailyXAUBar, ...]:
-    """Load the canonical D1 artifact produced from the MT5 M1 source.
+    """Load the canonical D1 artifact with its precomputed true VWAP.
 
-    The repository's D1 preparation script publishes Date/Time/OHLC/tick_volume
-    from real MT5 M1 data. No synthetic rows or repair are introduced here.
+    The D1 preparation pipeline derives each row from the source M1 bars and
+    therefore publishes the tick-volume-weighted VWAP. Rejecting a D1 file
+    without that field is intentional: falling back to typical price would
+    silently change feature semantics at an M1/D1 source boundary.
     """
     path = Path(path)
     output: list[DailyXAUBar] = []
@@ -112,9 +105,20 @@ def _load_daily_xau_from_d1(path: str | Path) -> tuple[DailyXAUBar, ...]:
     with path.open(encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
         fields = {str(x).strip().lower(): x for x in (reader.fieldnames or [])}
-        required = {"date", "time", "open", "high", "low", "close", "tick_volume"}
+        required = {
+            "date",
+            "time",
+            "open",
+            "high",
+            "low",
+            "close",
+            "tick_volume",
+            "vwap",
+        }
         if not required.issubset(fields):
-            raise ValueError("XAUUSD D1 source must use canonical Date/Time/OHLCV schema")
+            raise ValueError(
+                "XAUUSD canonical D1 source must contain Date/Time/OHLC/tick_volume/vwap schema"
+            )
         for raw in reader:
             row = {str(k).strip().lower(): v for k, v in raw.items() if k is not None}
             date_value = str(row["date"]).strip()
@@ -132,8 +136,11 @@ def _load_daily_xau_from_d1(path: str | Path) -> tuple[DailyXAUBar, ...]:
             low = _float(row, "low")
             close = _float(row, "close")
             tick_volume = _float(row, "tick_volume")
+            vwap = _float(row, "vwap")
             if high < max(open_, close) or low > min(open_, close) or high < low:
                 raise ValueError(f"invalid OHLC relationship at calendar day: {day}")
+            if not low <= vwap <= high:
+                raise ValueError(f"invalid VWAP range at calendar day: {day}")
             output.append(
                 DailyXAUBar(
                     day=day,
@@ -146,30 +153,50 @@ def _load_daily_xau_from_d1(path: str | Path) -> tuple[DailyXAUBar, ...]:
                     spread=None,
                     real_volume=0.0,
                     m1_rows=0,
-                    vwap=(high + low + close) / 3.0,
+                    vwap=vwap,
                 )
             )
     return tuple(sorted(output, key=lambda x: x.day))
 
 
 def load_daily_xau_from_m1(path: str | Path) -> tuple[DailyXAUBar, ...]:
-    """Load canonical XAUUSD research data into UTC daily OHLCV bars.
+    """Load canonical XAUUSD data into deterministic UTC daily OHLCV bars.
 
-    Canonical MT5 M1 CSV is aggregated deterministically. The canonical D1
-    artifact generated from that same MT5 M1 source is also accepted because
-    the existing production research dataset uses that derived artifact.
+    M1 input computes true daily VWAP from every M1 typical price weighted by
+    tick volume. Canonical D1 input must carry the same precomputed semantic.
     """
     path = Path(path)
     with path.open(encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
         fields = {str(x).strip().lower() for x in (reader.fieldnames or [])}
 
-    m1_required = {"time", "open", "high", "low", "close", "tick_volume", "spread", "real_volume"}
-    d1_required = {"date", "time", "open", "high", "low", "close", "tick_volume"}
+    m1_required = {
+        "time",
+        "open",
+        "high",
+        "low",
+        "close",
+        "tick_volume",
+        "spread",
+        "real_volume",
+    }
+    d1_required = {
+        "date",
+        "time",
+        "open",
+        "high",
+        "low",
+        "close",
+        "tick_volume",
+        "vwap",
+    }
     if d1_required.issubset(fields) and not m1_required.issubset(fields):
         return _load_daily_xau_from_d1(path)
     if not m1_required.issubset(fields):
-        raise ValueError("XAUUSD source must use canonical MT5 M1 or canonical D1 OHLCV schema")
+        raise ValueError(
+            "XAUUSD source must use canonical MT5 M1 or canonical D1 "
+            "OHLCV+VWAP schema"
+        )
 
     groups: dict[str, list[tuple[str, float, float, float, float, float, float | None, float]]] = {}
     seen_timestamps: set[str] = set()
@@ -187,22 +214,29 @@ def load_daily_xau_from_m1(path: str | Path) -> tuple[DailyXAUBar, ...]:
             close = _float(row, "close")
             if high < max(open_, close) or low > min(open_, close) or high < low:
                 raise ValueError(f"invalid OHLC relationship at timestamp: {ts}")
-            values = (
-                ts,
-                open_,
-                high,
-                low,
-                close,
-                _float(row, "tick_volume"),
-                _float(row, "spread"),
-                _float(row, "real_volume"),
+            groups.setdefault(_day(ts), []).append(
+                (
+                    ts,
+                    open_,
+                    high,
+                    low,
+                    close,
+                    _float(row, "tick_volume"),
+                    _float(row, "spread"),
+                    _float(row, "real_volume"),
+                )
             )
-            groups.setdefault(_day(ts), []).append(values)
 
     output: list[DailyXAUBar] = []
     for day in sorted(groups):
         rows = sorted(groups[day], key=lambda x: x[0])
         spreads = [r[6] for r in rows]
+        volume_sum = sum(r[5] for r in rows)
+        vwap = (
+            sum(((r[2] + r[3] + r[4]) / 3.0) * r[5] for r in rows) / volume_sum
+            if volume_sum != 0
+            else ((rows[-1][2] + rows[-1][3] + rows[-1][4]) / 3.0)
+        )
         output.append(
             DailyXAUBar(
                 day=day,
@@ -211,15 +245,11 @@ def load_daily_xau_from_m1(path: str | Path) -> tuple[DailyXAUBar, ...]:
                 high=max(r[2] for r in rows),
                 low=min(r[3] for r in rows),
                 close=rows[-1][4],
-                tick_volume=sum(r[5] for r in rows),
+                tick_volume=volume_sum,
                 spread=sum(spreads) / len(spreads) if spreads else None,
                 real_volume=sum(r[7] for r in rows),
                 m1_rows=len(rows),
-                vwap=(
-                    sum(((r[2] + r[3] + r[4]) / 3.0) * r[5] for r in rows) / sum(r[5] for r in rows)
-                    if sum(r[5] for r in rows) != 0
-                    else ((rows[-1][2] + rows[-1][3] + rows[-1][4]) / 3.0)
-                ),
+                vwap=vwap,
             )
         )
     return tuple(output)
@@ -232,8 +262,7 @@ def load_dxy_daily(path: str | Path) -> dict[str, float]:
     with path.open(encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
         fields = {str(x).strip().lower() for x in (reader.fieldnames or [])}
-        required = {"timestamp", "close"}
-        if not required.issubset(fields):
+        if not {"timestamp", "close"}.issubset(fields):
             raise ValueError("DXY source must contain timestamp and close columns")
         for raw in reader:
             row = {str(k).strip().lower(): v for k, v in raw.items() if k is not None}
@@ -251,11 +280,8 @@ def _load_fred_daily(path: str | Path, value_key: str, symbol: str) -> dict[str,
     with path.open(encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
         fields = {str(x).strip().lower() for x in (reader.fieldnames or [])}
-        required = {"observation_date", value_key}
-        if not required.issubset(fields):
-            raise ValueError(
-                f"{symbol} source must contain observation_date and {value_key} columns"
-            )
+        if not {"observation_date", value_key}.issubset(fields):
+            raise ValueError(f"{symbol} source must contain observation_date and {value_key} columns")
         for raw in reader:
             row = {str(k).strip().lower(): v for k, v in raw.items() if k is not None}
             raw_value = row.get(value_key)
@@ -274,7 +300,7 @@ def load_macro_daily(
     us10y_path: str | Path,
     vix_path: str | Path,
 ) -> tuple[DailyMacroObservation, ...]:
-    """Return the exact four-way macro daily intersection as immutable observations."""
+    """Return the exact four-way macro daily intersection."""
     dxy = load_dxy_daily(dxy_path)
     us10y = _load_fred_daily(us10y_path, "dgs10", "US10Y")
     vix = _load_fred_daily(vix_path, "vixcls", "VIX")
