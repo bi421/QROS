@@ -18,7 +18,7 @@ def test_canonical_d1_source_requires_explicit_vwap(tmp_path: Path) -> None:
 
     with pytest.raises(
         ValueError,
-        match=r"canonical D1 source must contain Date/Time/OHLC/tick_volume/vwap schema",
+        match=r"XAUUSD source must use canonical MT5 M1 or canonical D1 OHLCV\+VWAP schema",
     ):
         load_daily_xau_from_m1(source)
 
