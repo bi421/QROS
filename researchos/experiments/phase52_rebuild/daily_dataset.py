@@ -1,10 +1,11 @@
 """Deterministic daily XAUUSD + macro observation assembly for Phase 5.2.
 
-This module is the boundary between the raw M1 XAUUSD source and the
-research dataset. It deliberately performs only transformations that are
-well-defined from the source data:
+This module is the boundary between the canonical XAUUSD research source and
+the research dataset. It accepts either the canonical MT5 M1 source or the
+canonical D1 artifact deterministically produced from that MT5 M1 source.
 
-* XAUUSD M1 bars are aggregated by UTC calendar day.
+* XAUUSD M1 bars are aggregated by UTC calendar day when an M1 source is used.
+* Canonical D1 rows are accepted without re-aggregation.
 * Daily OHLC uses first-open, max-high, min-low, last-close.
 * Tick and real volume are summed; spread is averaged when present.
 * Macro sources contribute only observations that actually exist on the
@@ -99,22 +100,78 @@ def _float(row: dict[str, str | None], key: str) -> float:
     return number
 
 
-def load_daily_xau_from_m1(path: str | Path) -> tuple[DailyXAUBar, ...]:
-    """Aggregate canonical MT5 XAUUSD M1 CSV into UTC daily OHLCV bars.
+def _load_daily_xau_from_d1(path: str | Path) -> tuple[DailyXAUBar, ...]:
+    """Load the canonical D1 artifact produced from the MT5 M1 source.
 
-    Duplicate raw timestamps are rejected rather than silently aggregated.
-    Keeping an unknown duplicate is scientifically unsafe because it can
-    change OHLC/volume values without a deterministic deduplication rule.
+    The repository's D1 preparation script publishes Date/Time/OHLC/tick_volume
+    from real MT5 M1 data. No synthetic rows or repair are introduced here.
     """
     path = Path(path)
+    output: list[DailyXAUBar] = []
+    seen_days: set[str] = set()
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        fields = {str(x).strip().lower(): x for x in (reader.fieldnames or [])}
+        required = {"date", "time", "open", "high", "low", "close", "tick_volume"}
+        if not required.issubset(fields):
+            raise ValueError("XAUUSD D1 source must use canonical Date/Time/OHLCV schema")
+        for raw in reader:
+            row = {str(k).strip().lower(): v for k, v in raw.items() if k is not None}
+            date_value = str(row["date"]).strip()
+            time_value = str(row["time"]).strip()
+            ts = _utc_iso(f"{date_value}T{time_value}Z")
+            day = _day(ts)
+            if day in seen_days:
+                raise ValueError(f"XAUUSD duplicate calendar day: {day}")
+            seen_days.add(day)
+            open_ = _float(row, "open")
+            high = _float(row, "high")
+            low = _float(row, "low")
+            close = _float(row, "close")
+            tick_volume = _float(row, "tick_volume")
+            if high < max(open_, close) or low > min(open_, close) or high < low:
+                raise ValueError(f"invalid OHLC relationship at calendar day: {day}")
+            output.append(
+                DailyXAUBar(
+                    day=day,
+                    timestamp=f"{day}T00:00:00Z",
+                    open=open_,
+                    high=high,
+                    low=low,
+                    close=close,
+                    tick_volume=tick_volume,
+                    spread=None,
+                    real_volume=0.0,
+                    m1_rows=0,
+                    vwap=(high + low + close) / 3.0,
+                )
+            )
+    return tuple(sorted(output, key=lambda x: x.day))
+
+
+def load_daily_xau_from_m1(path: str | Path) -> tuple[DailyXAUBar, ...]:
+    """Load canonical XAUUSD research data into UTC daily OHLCV bars.
+
+    Canonical MT5 M1 CSV is aggregated deterministically. The canonical D1
+    artifact generated from that same MT5 M1 source is also accepted because
+    the existing production research dataset uses that derived artifact.
+    """
+    path = Path(path)
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        fields = {str(x).strip().lower() for x in (reader.fieldnames or [])}
+
+    m1_required = {"time", "open", "high", "low", "close", "tick_volume", "spread", "real_volume"}
+    d1_required = {"date", "time", "open", "high", "low", "close", "tick_volume"}
+    if d1_required.issubset(fields) and not m1_required.issubset(fields):
+        return _load_daily_xau_from_d1(path)
+    if not m1_required.issubset(fields):
+        raise ValueError("XAUUSD source must use canonical MT5 M1 or canonical D1 OHLCV schema")
+
     groups: dict[str, list[tuple[str, float, float, float, float, float, float | None, float]]] = {}
     seen_timestamps: set[str] = set()
     with path.open(encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
-        fields = {str(x).strip().lower() for x in (reader.fieldnames or [])}
-        required = {"time", "open", "high", "low", "close", "tick_volume", "spread", "real_volume"}
-        if not required.issubset(fields):
-            raise ValueError("XAUUSD source must use canonical MT5 OHLCV schema")
         for raw in reader:
             row = {str(k).strip().lower(): v for k, v in raw.items() if k is not None}
             ts = _utc_iso(str(row["time"]))
@@ -228,7 +285,7 @@ def build_daily_common_dataset(
     us10y_path: str | Path,
     vix_path: str | Path,
 ) -> tuple[DailyObservation, ...]:
-    """Build the exact common-day dataset from raw XAU M1 and macro sources."""
+    """Build the exact common-day dataset from canonical XAU and macro sources."""
     xau = {bar.day: bar for bar in load_daily_xau_from_m1(xau_path)}
     macro = load_macro_daily(dxy_path, us10y_path, vix_path)
     observations: list[DailyObservation] = []
