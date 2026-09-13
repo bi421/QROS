@@ -16,7 +16,7 @@ def test_canonical_d1_source_requires_explicit_vwap(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match="OHLC/tick_volume/vwap schema"):
+    with pytest.raises(ValueError, match="canonical D1 OHLCV\+VWAP schema"):
         load_daily_xau_from_m1(source)
 
 
