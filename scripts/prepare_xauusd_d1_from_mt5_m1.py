@@ -4,8 +4,11 @@ Accepted M1 columns:
     time, open, high, low, close, tick_volume
 
 Optional columns such as spread and real_volume are ignored for D1 aggregation.
-The output format intentionally matches ``load_xauusd_d1``:
-    Date, Time, Open, High, Low, Close, tick_volume
+The output preserves the true tick-volume-weighted daily VWAP computed from the
+source M1 bars; D1 consumers must never substitute typical price for VWAP.
+
+Output format:
+    Date, Time, Open, High, Low, Close, tick_volume, vwap
 
 Example:
     python scripts/prepare_xauusd_d1_from_mt5_m1.py \
@@ -34,8 +37,7 @@ def _read_input(path: Path) -> pl.DataFrame:
         csv_names = [name for name in archive.namelist() if name.lower().endswith(".csv")]
         if not csv_names:
             raise ValueError(f"No CSV file found inside {path}")
-        if len(csv_names) > 1:
-            csv_names.sort()
+        csv_names.sort()
         with archive.open(csv_names[0]) as handle:
             return pl.read_csv(io.BytesIO(handle.read()))
 
@@ -54,8 +56,7 @@ def _normalise(df: pl.DataFrame) -> pl.DataFrame:
             pl.col("close").cast(pl.Float64),
             pl.col("tick_volume").cast(pl.Float64),
         ]
-    )
-    out = out.with_columns(
+    ).with_columns(
         pl.col("time")
         .str.to_datetime(strict=False, time_zone="UTC")
         .alias("timestamp")
@@ -75,11 +76,7 @@ def _normalise(df: pl.DataFrame) -> pl.DataFrame:
     if invalid.height:
         raise ValueError(f"M1 input contains {invalid.height} invalid OHLCV rows")
 
-    return (
-        out.drop("time")
-        .unique(subset=["timestamp"], keep="first")
-        .sort("timestamp")
-    )
+    return out.drop("time").unique(subset=["timestamp"], keep="first").sort("timestamp")
 
 
 def _aggregate_d1(m1: pl.DataFrame) -> pl.DataFrame:
@@ -91,11 +88,22 @@ def _aggregate_d1(m1: pl.DataFrame) -> pl.DataFrame:
                 pl.col("high").max().alias("High"),
                 pl.col("low").min().alias("Low"),
                 pl.col("close").last().alias("Close"),
-                pl.col("tick_volume").sum().round(0).cast(pl.Int64).alias("tick_volume"),
+                pl.col("tick_volume").sum().alias("_tick_volume_sum"),
+                (
+                    ((pl.col("high") + pl.col("low") + pl.col("close")) / 3.0)
+                    * pl.col("tick_volume")
+                ).sum().alias("_vwap_pv"),
             ]
         )
         .drop_nulls()
         .sort("timestamp")
+        .with_columns(
+            pl.when(pl.col("_tick_volume_sum") != 0)
+            .then(pl.col("_vwap_pv") / pl.col("_tick_volume_sum"))
+            .otherwise((pl.col("High") + pl.col("Low") + pl.col("Close")) / 3.0)
+            .alias("vwap"),
+            pl.col("_tick_volume_sum").round(0).cast(pl.Int64).alias("tick_volume"),
+        )
     )
     return d1.select(
         [
@@ -106,6 +114,7 @@ def _aggregate_d1(m1: pl.DataFrame) -> pl.DataFrame:
             "Low",
             "Close",
             "tick_volume",
+            "vwap",
         ]
     )
 
@@ -135,6 +144,7 @@ def main() -> int:
     print(f"D1 rows              : {d1.height}")
     print(f"D1 start              : {d1['Date'][0]} {d1['Time'][0]}")
     print(f"D1 end                : {d1['Date'][-1]} {d1['Time'][-1]}")
+    print("VWAP source           : tick-volume-weighted M1 typical price")
     print(f"Output                : {output_path}")
     return 0
 
