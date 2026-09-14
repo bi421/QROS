@@ -6,7 +6,6 @@ It creates tenant-scoped jobs and leaves execution to a worker adapter.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Protocol
 from uuid import UUID, uuid4
 
@@ -16,7 +15,6 @@ from pydantic import BaseModel, Field
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.contracts import (
     DEFAULT_USAGE_POLICIES,
-    Plan,
     ResearchJob,
     ResearchJobStatus,
     TenantContext,
@@ -98,8 +96,10 @@ def create_app(
             raise HTTPException(status_code=400, detail="unsupported workflow")
 
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
-        if not policy.allows_monthly_runs(0):
+        if not policy.allows_monthly_runs(store.count_monthly(tenant.workspace_id)):
             raise HTTPException(status_code=402, detail="research run limit reached")
+        if not policy.allows_concurrency(store.count_active(tenant.workspace_id)):
+            raise HTTPException(status_code=429, detail="concurrent research run limit reached")
 
         job = ResearchJob(
             id=uuid4(),
