@@ -6,6 +6,7 @@ be sent to a browser or accepted from a request.
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from researchos.saas.contracts import Plan
@@ -14,7 +15,7 @@ from researchos.saas.contracts import Plan
 class SupabaseWorkspaceMembershipResolver:
     """Resolve one active workspace membership and server-side subscription plan."""
 
-    def __init__(self, supabase_client) -> None:
+    def __init__(self, supabase_client: Any) -> None:
         self._client = supabase_client
 
     def resolve(self, user_id: UUID) -> tuple[UUID, Plan] | None:
