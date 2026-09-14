@@ -65,7 +65,8 @@ where = ["."]
 include = ["researchos*", "cpp_quant_engine*"]
 
 [tool.pytest.ini_options]
-# Mirrors the CI suite (.github/workflows/test-python.yml).
+# Mirrors the Python test roots executed by CI. Native C++ bridge tests run in
+# the dedicated quant-engine job after the extension has been built.
 testpaths = [
     "researchos/tests",
     "tests/unit",
@@ -75,6 +76,10 @@ testpaths = [
     "researchos/experiments/phase52/tests",
     "researchos/experiments/phase52_rebuild/tests",
     "researchos/self_healing/tests",
+    "researchos/engines/data/tests",
+    "researchos/engines/quant/tests",
+    "researchos/memory/tests",
+    "financial_research_lab/tests",
 ]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
