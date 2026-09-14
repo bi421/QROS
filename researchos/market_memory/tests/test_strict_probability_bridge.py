@@ -51,16 +51,18 @@ def _record(dataset_id: str) -> EvidenceRecord:
     )
 
 
-def test_strict_record_persists_exact_dataset_identity(tmp_path: Path) -> None:
+def test_strict_record_rebinds_legacy_dataset_id_to_exact_identity(tmp_path: Path) -> None:
     source = tmp_path / "sample.csv"
     source.write_text("sample-data", encoding="utf-8")
     identity = _build_dataset_identity(
         _sample_df(), data_path=str(source), asset="XAUUSD", timeframe="D1"
     )
 
-    record = _strict_record(_record(identity.dataset_id), identity)
+    legacy_dataset_id = f"XAUUSD_D1_{identity.dataset_id.rsplit('_', 1)[-1][:16]}"
+    record = _strict_record(_record(legacy_dataset_id), identity)
     persisted = record.uncertainty["provenance"]["dataset_identity"]
 
+    assert record.dataset_id == identity.dataset_id
     assert persisted["dataset_id"] == identity.dataset_id
     assert persisted["dataset_content_hash"] == identity.dataset_content_hash
     assert persisted["dataset_hash"] == identity.dataset_hash
