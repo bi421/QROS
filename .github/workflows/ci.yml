@@ -2,11 +2,16 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - "feat/**"
+      - "fix/**"
+      - "refactor/**"
   pull_request:
   workflow_dispatch:
 
 # Keep the PR path fast while preserving the full compatibility matrix on main/manual runs.
+# Feature/fix/refactor pushes are validated before a PR is opened.
 # New pushes cancel stale PR runs so obsolete commits do not consume runner time.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}

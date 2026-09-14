@@ -1,4 +1,4 @@
-﻿import json
+import json
 import hashlib
 from pathlib import Path
 
@@ -14,10 +14,10 @@ if not manifest_path.exists():
     print("WAITING: manifest.json олдсонгүй. Өгөгдөл татаж дуусаагүй байна.")
     exit(0)
 
-with open(manifest_path, 'r', encoding='utf-8') as f:
+with open(manifest_path, "r", encoding="utf-8") as f:
     manifest = json.load(f)
 
-print("Manifest олдлоо: " + str(manifest.get('asset')) + " " + str(manifest.get('timeframe')))
+print("Manifest олдлоо: " + str(manifest.get("asset")) + " " + str(manifest.get("timeframe")))
 
 # 2. Өгөгдлийн файлыг хайх
 file_ext = manifest.get("format", "csv")
@@ -28,11 +28,11 @@ if not data_file.exists():
     csv_files = list(data_dir.glob("*.csv"))
     parquet_files = list(data_dir.glob("*.parquet"))
     all_files = csv_files + parquet_files
-    
+
     if not all_files:
         print("FAILED: Өгөгдлийн файл олдсонгүй: " + str(data_dir))
         exit(1)
-    
+
     # Хамгийн том файлыг сонгоё (ихэвчлэн M1 өгөгдөл хамгийн том байна)
     data_file = max(all_files, key=lambda f: f.stat().st_size)
     print("Автоматаар хамгийн том файл сонгогдлоо: " + data_file.name)
@@ -41,10 +41,10 @@ else:
 
 # 3. Hash шалгах (Provenance)
 print("Hash шалгаж байна...")
-with open(data_file, 'rb') as f:
+with open(data_file, "rb") as f:
     actual_hash = hashlib.sha256(f.read()).hexdigest()
 
-expected_hash = manifest.get('sha256_hash', '')
+expected_hash = manifest.get("sha256_hash", "")
 if expected_hash and actual_hash != expected_hash:
     print("FAILED: Hash таарахгүй байна.")
     print("  Expected: " + str(expected_hash)[:32] + "...")
@@ -54,11 +54,13 @@ if expected_hash and actual_hash != expected_hash:
 print("Hash амжилттай таарлаа: " + actual_hash[:32] + "...")
 
 # 4. Manifest-ийн бусад талбаруудыг шалгах
-row_count = manifest.get('row_count', 0)
+row_count = manifest.get("row_count", 0)
 print("Row count: " + str(row_count))
 
 if row_count < 100000:
-    print("WARNING: Мөр тоо маш бага байна (< 100,000). M1 өгөгдөл 4 жилд 1 сая+ мөртэй байх ёстой.")
+    print(
+        "WARNING: Мөр тоо маш бага байна (< 100,000). M1 өгөгдөл 4 жилд 1 сая+ мөртэй байх ёстой."
+    )
 else:
     print("Мөр тоо хангалттай: " + f"{row_count:,}")
 

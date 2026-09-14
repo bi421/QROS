@@ -1,24 +1,24 @@
 """
 Timezone normalization utilities for market data.
 
-Based on Article XVII: Object Model â€” Data Layer.
+Based on Article XVII: Object Model — Data Layer.
 
 All timestamps in ResearchOS are normalized to UTC on load.
 This module provides utilities for converting timestamps from
 various timezones to UTC.
 
 Guarantees:
-    - Deterministic: Same input timestamp â†’ same UTC output
+    - Deterministic: Same input timestamp → same UTC output
     - Safe: Handles naive and aware datetimes correctly
     - Standard: All timestamps are ISO 8601 compliant
     - Explicit: Unknown or invalid timezone names raise
-      ``TimezoneResolutionError`` â€” never a silent UTC fallback
+      ``TimezoneResolutionError`` — never a silent UTC fallback
 
 Resolution order for a timezone name:
     1. Common abbreviation table (fixed offsets; e.g. "EST", "CET")
     2. Explicit numeric offset (e.g. "+05:30", "-05:00")
     3. IANA zone name via ``zoneinfo`` (e.g. "America/New_York"),
-       with DST handled by the IANA database â€” no assumptions
+       with DST handled by the IANA database — no assumptions
 Anything else is an error.
 """
 
@@ -180,7 +180,13 @@ def parse_iso(value: str) -> datetime:
     Returns:
         Timezone-aware datetime in UTC.
     """
-    dt = datetime.fromisoformat(value)
+    normalized = value.strip()
+    if normalized.endswith(("Z", "z")):
+        normalized = normalized[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise ValueError(f"Invalid ISO 8601 timestamp: {value!r}") from exc
     return normalize_timestamp(dt)
 
 

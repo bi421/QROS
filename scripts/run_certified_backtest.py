@@ -1,4 +1,4 @@
-﻿"""
+"""
 Certified Backtest Execution Script.
 """
 from researchos.objects.evidence import EvidenceRegistry
@@ -12,7 +12,7 @@ from researchos.experiments.live_certifier import (
 
 def run_certified_backtest():
     print("Starting Certified Backtest Execution...")
-    
+
     registry = EvidenceRegistry(research_id="XAUUSD_M1_RESEARCH_2026")
     certifier = LiveCertifier(registry)
 
@@ -52,7 +52,7 @@ def run_certified_backtest():
         oos_metrics=oos_metrics,
         hypothesis_id="HYP_XAUUSD_SMC_MACRO_001",
         interpretation=f"SMC strategy with macro filter shows positive OOS performance. "
-                       f"Win rate {oos_metrics.win_rate:.1%}, Sharpe {oos_metrics.sharpe_ratio:.2f}.",
+        f"Win rate {oos_metrics.win_rate:.1%}, Sharpe {oos_metrics.sharpe_ratio:.2f}.",
     )
 
     report = certifier.generate_report(evidence)

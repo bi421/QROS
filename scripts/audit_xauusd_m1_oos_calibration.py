@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 MIN_SAMPLES = 10
-CONTRACT = {"asset": "XAUUSD", "timeframe": "M1", "label": "hit_threshold_1d"}
 
 
 def _time(value: str) -> datetime:
@@ -38,12 +37,14 @@ def _pava(rows: list[tuple[float, int]]) -> tuple[tuple[float, float], ...]:
             a, b = blocks[-2], blocks[-1]
             if float(a[3]) / int(a[2]) <= float(b[3]) / int(b[2]):
                 break
-            blocks[-2:] = [[
-                min(float(a[0]), float(b[0])),
-                0.0,
-                int(a[2]) + int(b[2]),
-                float(a[3]) + float(b[3]),
-            ]]
+            blocks[-2:] = [
+                [
+                    min(float(a[0]), float(b[0])),
+                    0.0,
+                    int(a[2]) + int(b[2]),
+                    float(a[3]) + float(b[3]),
+                ]
+            ]
     return tuple(
         (float(block[0]), round(max(0.0, min(1.0, float(block[3]) / int(block[2]))), 12))
         for block in blocks
@@ -60,8 +61,10 @@ def _score(predictions: list[float], labels: list[int]) -> dict[str, float | int
         raise ValueError("Invalid score inputs")
     brier = sum((p - y) ** 2 for p, y in zip(predictions, labels)) / len(labels)
     log_loss = sum(
-        -(y * math.log(min(max(p, 1e-15), 1.0 - 1e-15))
-          + (1 - y) * math.log(1 - min(max(p, 1e-15), 1.0 - 1e-15)))
+        -(
+            y * math.log(min(max(p, 1e-15), 1.0 - 1e-15))
+            + (1 - y) * math.log(1 - min(max(p, 1e-15), 1.0 - 1e-15))
+        )
         for p, y in zip(predictions, labels)
     ) / len(labels)
     return {
@@ -105,7 +108,23 @@ def audit(source_path: Path, result_path: Path, calibration_path: Path) -> dict:
         failures.append("invalid calibration stage")
     if calibration.get("scientific_status") != "OOS_CALIBRATION_ONLY_NO_EDGE_CLAIM":
         failures.append("invalid scientific status")
-    if source.get("contract") != CONTRACT or result.get("contract") != CONTRACT or calibration.get("contract") != CONTRACT:
+    source_contract = source.get("contract")
+    result_contract = result.get("contract")
+    calibration_contract = calibration.get("contract")
+
+    required_contract = {
+        "asset": "XAUUSD",
+        "timeframe": "M1",
+        "label": "hit_threshold_1d",
+    }
+    if not isinstance(source_contract, dict):
+        failures.append("invalid source contract")
+    else:
+        for key, expected in required_contract.items():
+            if source_contract.get(key) != expected:
+                failures.append(f"invalid source contract: {key}")
+
+    if result_contract != source_contract or calibration_contract != source_contract:
         failures.append("contract mismatch")
     source_sha = hashlib.sha256(source_raw).hexdigest()
     result_sha = hashlib.sha256(result_raw).hexdigest()
@@ -126,7 +145,11 @@ def audit(source_path: Path, result_path: Path, calibration_path: Path) -> dict:
                 failures.append(f"invalid prediction membership: {event_id}")
                 continue
             probability = prediction.get("probability")
-            if not isinstance(probability, (int, float)) or not math.isfinite(float(probability)) or not 0.0 <= float(probability) <= 1.0:
+            if (
+                not isinstance(probability, (int, float))
+                or not math.isfinite(float(probability))
+                or not 0.0 <= float(probability) <= 1.0
+            ):
                 failures.append(f"invalid raw probability: {event_id}")
                 continue
             source_row = source_rows[event_id]
@@ -135,10 +158,21 @@ def audit(source_path: Path, result_path: Path, calibration_path: Path) -> dict:
             except (KeyError, ValueError):
                 failures.append(f"invalid prediction timestamp: {event_id}")
                 continue
-            if prediction_time != source_row["timestamp"] or int(prediction.get("label", -1)) != source_row["label"]:
+            if (
+                prediction_time != source_row["timestamp"]
+                or int(prediction.get("label", -1)) != source_row["label"]
+            ):
                 failures.append(f"prediction/source mismatch: {event_id}")
                 continue
-            predictions.append({"event_id": event_id, "timestamp": prediction_time, "probability": float(probability), "label": source_row["label"], "realized_end": source_row["realized_end"]})
+            predictions.append(
+                {
+                    "event_id": event_id,
+                    "timestamp": prediction_time,
+                    "probability": float(probability),
+                    "label": source_row["label"],
+                    "realized_end": source_row["realized_end"],
+                }
+            )
             seen.add(event_id)
     predictions.sort(key=lambda row: (row["timestamp"], row["event_id"]))
 
@@ -152,7 +186,10 @@ def audit(source_path: Path, result_path: Path, calibration_path: Path) -> dict:
     if metadata.get("total_oos_predictions") != len(predictions):
         failures.append("total OOS prediction count mismatch")
 
-    completion_order = sorted(range(len(predictions)), key=lambda index: (predictions[index]["realized_end"], predictions[index]["event_id"]))
+    completion_order = sorted(
+        range(len(predictions)),
+        key=lambda index: (predictions[index]["realized_end"], predictions[index]["event_id"]),
+    )
     completion_cursor = 0
     eligible_indices: list[int] = []
     expected: list[dict] = []
@@ -189,13 +226,34 @@ def audit(source_path: Path, result_path: Path, calibration_path: Path) -> dict:
             refit_count += 1
             fit_id += 1
             fit_cutoff_timestamp = row["timestamp"]
-            fit_summaries.append({"fit_id": fit_id, "fit_cutoff_timestamp": row["timestamp"].isoformat(), "training_event_count": len(prior), "training_positive_count": sum(item["label"] for item in prior), "training_negative_count": sum(1 - item["label"] for item in prior)})
+            fit_summaries.append(
+                {
+                    "fit_id": fit_id,
+                    "fit_cutoff_timestamp": row["timestamp"].isoformat(),
+                    "training_event_count": len(prior),
+                    "training_positive_count": sum(item["label"] for item in prior),
+                    "training_negative_count": sum(1 - item["label"] for item in prior),
+                }
+            )
 
         calibrated = _predict(breakpoints, row["probability"])
         raw_scores.append(row["probability"])
         calibrated_scores.append(calibrated)
         labels.append(row["label"])
-        expected.append({"event_id": row["event_id"], "timestamp": row["timestamp"].isoformat(), "raw_probability": round(row["probability"], 12), "calibrated_probability": round(calibrated, 12), "label": row["label"], "calibration_fit_id": fit_id, "calibration_fit_cutoff_timestamp": fit_cutoff_timestamp.isoformat() if fit_cutoff_timestamp else None, "calibration_training_event_count": len(prior)})
+        expected.append(
+            {
+                "event_id": row["event_id"],
+                "timestamp": row["timestamp"].isoformat(),
+                "raw_probability": round(row["probability"], 12),
+                "calibrated_probability": round(calibrated, 12),
+                "label": row["label"],
+                "calibration_fit_id": fit_id,
+                "calibration_fit_cutoff_timestamp": fit_cutoff_timestamp.isoformat()
+                if fit_cutoff_timestamp
+                else None,
+                "calibration_training_event_count": len(prior),
+            }
+        )
 
     if calibration.get("predictions") != expected:
         failures.append("calibration predictions differ from independent reconstruction")
@@ -215,10 +273,21 @@ def audit(source_path: Path, result_path: Path, calibration_path: Path) -> dict:
         failures.append("fit summaries differ from independent reconstruction")
     for record in calibration.get("predictions", []):
         probability = record.get("calibrated_probability")
-        if not isinstance(probability, (int, float)) or not math.isfinite(float(probability)) or not 0.0 <= float(probability) <= 1.0:
+        if (
+            not isinstance(probability, (int, float))
+            or not math.isfinite(float(probability))
+            or not 0.0 <= float(probability) <= 1.0
+        ):
             failures.append(f"invalid calibrated probability: {record.get('event_id')}")
 
-    return {"status": "PASS" if not failures else "FAIL", "stage": "M1_OOS_ISOTONIC_CALIBRATION_INDEPENDENT_AUDIT", "source_sha256": source_sha, "result_sha256": result_sha, "calibration_sha256": hashlib.sha256(calibration_raw).hexdigest(), "failures": failures}
+    return {
+        "status": "PASS" if not failures else "FAIL",
+        "stage": "M1_OOS_ISOTONIC_CALIBRATION_INDEPENDENT_AUDIT",
+        "source_sha256": source_sha,
+        "result_sha256": result_sha,
+        "calibration_sha256": hashlib.sha256(calibration_raw).hexdigest(),
+        "failures": failures,
+    }
 
 
 def main() -> int:
@@ -226,7 +295,9 @@ def main() -> int:
     parser.add_argument("source", type=Path)
     parser.add_argument("result", type=Path)
     parser.add_argument("calibration", type=Path)
-    parser.add_argument("--output", type=Path, default=Path("artifacts/xauusd_m1_oos_calibration_audit.json"))
+    parser.add_argument(
+        "--output", type=Path, default=Path("artifacts/xauusd_m1_oos_calibration_audit.json")
+    )
     args = parser.parse_args()
     report = audit(args.source, args.result, args.calibration)
     args.output.parent.mkdir(parents=True, exist_ok=True)
