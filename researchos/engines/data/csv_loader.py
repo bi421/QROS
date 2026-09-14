@@ -722,11 +722,17 @@ class CsvLoader:
 
     def _parse_timestamp(self, value: str, source_timezone: Optional[str] = None) -> datetime:
         """Parse a timestamp string, with timezone normalization."""
+        # Python 3.10 does not accept the ISO 8601 UTC `Z` suffix.
+        # Normalize it to an explicit UTC offset before fromisoformat().
+        normalized = value.strip()
+        if normalized.endswith(("Z", "z")):
+            normalized = normalized[:-1] + "+00:00"
+
         # Try ISO format first
         try:
-            dt = datetime.fromisoformat(value)
+            dt = datetime.fromisoformat(normalized)
         except (ValueError, TypeError):
-            dt = datetime.strptime(value, self.config.date_format)
+            dt = datetime.strptime(normalized, self.config.date_format)
 
         if self.config.normalize_timezone:
             dt = normalize_timestamp(dt, source_timezone or self.config.timezone)
