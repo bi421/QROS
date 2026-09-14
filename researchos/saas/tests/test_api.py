@@ -78,16 +78,20 @@ def test_unsupported_workflow_is_rejected() -> None:
 
 
 def test_cross_tenant_job_lookup_returns_404() -> None:
-    first = _client(uuid4())
-    created = first.post(
+    store = InMemoryResearchJobStore()
+    owner = TenantContext(uuid4(), uuid4(), Plan.PRO)
+    other = TenantContext(uuid4(), uuid4(), Plan.PRO)
+    owner_client = TestClient(create_app(auth_provider=StaticAuth(owner), job_store=store))
+    other_client = TestClient(create_app(auth_provider=StaticAuth(other), job_store=store))
+
+    created = owner_client.post(
         "/v1/research-runs",
         headers={"Authorization": "Bearer test"},
         json={"dataset_id": "xauusd-m1"},
     )
     job_id = created.json()["id"]
 
-    other = _client(uuid4())
-    response = other.get(
+    response = other_client.get(
         f"/v1/research-runs/{job_id}",
         headers={"Authorization": "Bearer test"},
     )
