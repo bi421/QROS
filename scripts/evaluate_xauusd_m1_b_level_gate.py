@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import itertools
 import json
 import math
 import random
 from pathlib import Path
 
+from scripts.audit_xauusd_m1_source_to_result import audit as audit_source_to_result
 from scripts.audit_xauusd_m1_walkforward import audit as audit_walkforward
 from scripts.run_xauusd_m1_future_leakage_negative_control import run as run_future_leakage_control
 from scripts.run_xauusd_m1_negative_controls import run as run_label_shuffle_control
@@ -27,12 +27,6 @@ BOOTSTRAP_RESAMPLES = 20_000
 BOOTSTRAP_SEED = 20260914
 PERMUTATION_SEED = 20260914
 LABEL_SHUFFLE_SEED = 20260910
-
-
-def _brier(predictions: list[float], labels: list[int]) -> float:
-    if not predictions or len(predictions) != len(labels):
-        raise ValueError("empty or misaligned Brier inputs")
-    return sum((p - y) ** 2 for p, y in zip(predictions, labels)) / len(labels)
 
 
 def _two_sided_sign_test(positive: int, negative: int) -> float:
@@ -75,9 +69,7 @@ def _bootstrap_ci(differences: list[float], seed: int) -> tuple[float, float]:
     n = len(differences)
     means: list[float] = []
     for _ in range(BOOTSTRAP_RESAMPLES):
-        total = 0.0
-        for _ in range(n):
-            total += differences[rng.randrange(n)]
+        total = sum(differences[rng.randrange(n)] for _ in range(n))
         means.append(total / n)
     means.sort()
     lower = means[int(0.025 * (len(means) - 1))]
@@ -106,6 +98,10 @@ def evaluate(result_path: Path, source_artifact: Path, output_path: Path) -> dic
     independent_audit = audit_walkforward(result_path)
     if independent_audit["status"] != "PASS":
         raise ValueError("Independent walk-forward audit failed: " + "; ".join(independent_audit["failures"]))
+
+    source_audit = audit_source_to_result(source_artifact, result_path)
+    if source_audit["status"] != "PASS":
+        raise ValueError("Independent source-to-result audit failed: " + "; ".join(source_audit["failures"]))
 
     source_raw = source_artifact.read_bytes()
     expected_source_sha = result.get("source_artifact", {}).get("sha256")
@@ -141,11 +137,12 @@ def evaluate(result_path: Path, source_artifact: Path, output_path: Path) -> dic
 
     leakage_path = output_path.with_name(output_path.stem + "_future_leakage_control.json")
     run_future_leakage_control(result_path, leakage_path)
-    leakage_audit = audit_walkforward(leakage_path)
+    leakage_audit = audit_source_to_result(source_artifact, leakage_path)
     leakage_pass = leakage_audit["status"] == "FAIL"
 
     gates = {
         "independent_walkforward_audit": independent_audit["status"] == "PASS",
+        "independent_source_to_result_audit": source_audit["status"] == "PASS",
         "minimum_10000_unique_oos_events": oos_events >= MIN_OOS_EVENTS,
         "positive_aggregate_brier_improvement": aggregate_improvement > 0.0,
         "fold_improvement_ci_above_zero": ci_low > 0.0,
