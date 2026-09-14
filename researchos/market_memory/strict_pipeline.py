@@ -81,7 +81,7 @@ def _strict_record(record: EvidenceRecord, identity: DatasetIdentity) -> Evidenc
     uncertainty.pop("provenance", None)
     return create_evidence_record(
         finding_name=record.finding_name,
-        dataset_id=record.dataset_id,
+        dataset_id=identity.dataset_id,
         dataset_version=identity.dataset_hash,
         event_definition=record.event_definition,
         condition_definition=record.condition_definition,
