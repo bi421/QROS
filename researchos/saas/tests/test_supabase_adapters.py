@@ -1,4 +1,4 @@
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from researchos.saas.contracts import Plan
 from researchos.saas.supabase_auth import SupabaseJwtAuthProvider
