@@ -1,112 +1,28 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "researchos"
-version = "1.0.1"
-description = "Institutional-grade market research platform - deterministic, explainable, scientific"
-readme = "README.md"
-requires-python = ">=3.10,<3.15"
-license = {text = "ResearchOS Scientific License"}
-authors = [
-    {name = "ResearchOS Team"},
-]
-keywords = [
-    "market-research",
-    "institutional-trading",
-    "deterministic",
-    "explainable-ai",
-    "scientific-method",
-]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Science/Research",
-    "License :: Other/Proprietary License",
-    "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
-    "Topic :: Scientific/Engineering",
-    "Topic :: Office/Business :: Financial",
-]
-dependencies = [
-    "pandas>=2.0",
-    "numpy>=1.24",
-    "polars>=1.0",
-    "pydantic>=2.0",
-]
-
-[project.optional-dependencies]
-cli = [
-    "click>=8.0",
-]
-api = [
-    "fastapi>=0.100.0",
-    "uvicorn>=0.20.0",
-]
-dev = [
-    "pytest>=7.0",
-    "pytest-cov>=4.0",
-]
-test = [
-    "yfinance>=0.2",
-]
-
-[project.urls]
-Homepage = "https://github.com/researchos/researchos"
-Documentation = "docs/"
+version = "0.1.0"
+description = "Evidence-driven financial research and quantitative analysis system"
+requires-python = ">=3.10"
 
 [tool.setuptools.packages.find]
-where = [".", "financial_research_lab/src"]
-include = ["researchos*", "cpp_quant_engine*", "financial_research_lab*"]
+where = ["."]
+include = ["researchos*", "cpp_quant_engine*"]
+
+[tool.setuptools.package-dir]
+financial_research_lab = "financial_research_lab/src/financial_research_lab"
 
 [tool.pytest.ini_options]
-# Mirrors the Python test roots executed by CI. Native C++ bridge tests run in
-# the dedicated quant-engine job after the extension has been built.
+addopts = "-v --tb=short --ignore=researchos/tests/test_cpp_backtest_regression.py --ignore=cpp_quant_engine"
 testpaths = [
+    "tests",
     "researchos/tests",
-    "tests/unit",
-    "researchos/data_engine/tests",
-    "researchos/market_memory/tests",
-    "researchos/experiments/phase51/tests",
-    "researchos/experiments/phase52/tests",
-    "researchos/experiments/phase52_rebuild/tests",
-    "researchos/self_healing/tests",
     "researchos/engines/data/tests",
     "researchos/engines/quant/tests",
     "researchos/memory/tests",
+    "researchos/experiments/phase52_rebuild/tests",
     "financial_research_lab/tests",
 ]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = "-v --tb=short --ignore=researchos/tests/test_cpp_backtest_regression.py --ignore=cpp_quant_engine"
-
-[tool.mypy]
-python_version = "3.10"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-
-[tool.ruff]
-exclude = ["archive"]
-line-length = 100
-target-version = "py310"
-
-[tool.ruff.lint]
-select = ["E", "F", "W"]
-ignore = ["E501"]
-
-[tool.ruff.lint.per-file-ignores]
-"scripts/**" = ["E402"]
-"src/**" = ["E402"]
-"researchos/tests/**" = ["E402"]
-
-[tool.ruff.format]
-quote-style = "double"
-line-ending = "auto"
