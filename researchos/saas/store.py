@@ -23,6 +23,12 @@ class ResearchJobStore:
     def get(self, workspace_id: UUID, job_id: UUID) -> ResearchJob | None:
         raise NotImplementedError
 
+    def count_active(self, workspace_id: UUID) -> int:
+        raise NotImplementedError
+
+    def count_monthly(self, workspace_id: UUID) -> int:
+        raise NotImplementedError
+
     def transition(
         self,
         workspace_id: UUID,
@@ -53,6 +59,19 @@ class InMemoryResearchJobStore(ResearchJobStore):
             if job is None or job.workspace_id != workspace_id:
                 return None
             return job
+
+    def count_active(self, workspace_id: UUID) -> int:
+        with self._lock:
+            return sum(
+                job.workspace_id == workspace_id
+                and job.status in {ResearchJobStatus.QUEUED, ResearchJobStatus.RUNNING}
+                for job in self._jobs.values()
+            )
+
+    def count_monthly(self, workspace_id: UUID) -> int:
+        """Return the process-local count; production must apply a month predicate."""
+        with self._lock:
+            return sum(job.workspace_id == workspace_id for job in self._jobs.values())
 
     def transition(
         self,
