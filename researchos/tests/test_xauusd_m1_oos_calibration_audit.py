@@ -24,7 +24,16 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
                 },
             }
         )
-    contract = {"asset": "XAUUSD", "timeframe": "M1", "label": "hit_threshold_1d"}
+    contract = {
+        "asset": "XAUUSD",
+        "timeframe": "M1",
+        "event": "SMA20/100 crossover",
+        "label": "hit_threshold_1d",
+        "horizon_days": 1,
+        "threshold_return": 0.0,
+        "price_field": "close",
+        "direction_aware": True,
+    }
     source = {"contract": contract, "dataset": {"sha256": "a" * 64}, "events_data": events}
     source_path = tmp_path / "source.json"
     source_path.write_text(json.dumps(source), encoding="utf-8")
