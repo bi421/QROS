@@ -1,12 +1,13 @@
 # ResearchOS SaaS Architecture Boundary
 
-**Status:** Phase 1 architecture contract
-**Scope:** Local ResearchOS + future SaaS
+**Status:** Active production architecture contract
+**Scope:** Local ResearchOS + production SaaS
 **Scientific baseline:** `docs/M1_RESEARCH_BASELINE_FREEZE_2026-09.md`
+**Implementation contract:** `docs/saas/PRODUCT_IMPLEMENTATION_PLAN.md`
 
 ## 1. Product boundary
 
-ResearchOS will support two delivery modes over the same scientific core:
+ResearchOS supports two delivery modes over the same scientific core:
 
 ```text
                          ResearchOS Core
@@ -17,7 +18,9 @@ ResearchOS will support two delivery modes over the same scientific core:
                 |                           |
              CLI/API                    Web/API
                 |                           |
-          local storage             database/storage
+          local storage             Auth + Postgres
+                                          + queue
+                                          + object storage
 ```
 
 The scientific core is the source of truth for research computation. SaaS infrastructure must not redefine scientific semantics.
@@ -51,7 +54,7 @@ The core must not depend on:
 
 ## 3. Application responsibilities
 
-The application/API layer will own:
+The application/API layer owns:
 
 - authentication and authorization;
 - workspace and tenant isolation;
@@ -60,38 +63,43 @@ The application/API layer will own:
 - job state transitions;
 - result retrieval;
 - usage limits;
+- subscription entitlements;
 - report delivery;
-- API request validation.
+- API request validation;
+- rate limiting and request correlation.
 
 The application layer must call the core rather than duplicate scientific calculations.
 
 ## 4. Persistence responsibilities
 
-Persistent storage will eventually separate:
+Production persistence separates:
 
 ```text
 workspace
+  -> membership
+  -> subscription
   -> dataset
       -> dataset_version
-  -> experiment
-      -> experiment_run
-          -> artifact
-              -> evidence
+  -> research_run
+      -> artifact
+          -> evidence
+  -> audit_event
 ```
 
-Every tenant-owned resource must be bound to a workspace. Cross-workspace reads must fail closed.
+Every tenant-owned resource is bound to a workspace. Cross-workspace reads and writes must fail closed at both application and database policy layers.
 
 ## 5. Research job boundary
 
 Long-running research must not execute synchronously inside an HTTP request.
 
-Target flow:
-
 ```text
 API request
+    -> authorize workspace
+    -> validate entitlement
     -> create research_run
     -> QUEUED
-    -> worker
+    -> durable worker queue
+    -> RUNNING
     -> ResearchOS Core
     -> artifact/evidence persistence
     -> SUCCEEDED or FAILED
@@ -106,6 +114,8 @@ with terminal failure/cancellation states:
 `RUNNING -> FAILED`
 
 `QUEUED/RUNNING -> CANCELLED`
+
+State transitions must be monotonic and authorization-scoped.
 
 ## 6. Scientific integrity rules
 
@@ -123,35 +133,68 @@ SaaS features must preserve the frozen research invariants:
 
 A SaaS convenience feature is not allowed to weaken a scientific invariant.
 
-## 7. Local mode requirement
+## 7. Security rules
 
-Local users must retain a complete research path without requiring SaaS authentication, subscriptions, or network connectivity for core computation.
+- Authentication is delegated to a supported identity provider; the default API behavior is fail-closed.
+- Authorization is workspace-based, not merely “authenticated user” based.
+- Database RLS is defense in depth for tenant isolation.
+- Service-role/secret credentials never reach browser clients.
+- Subscription state is server authoritative.
+- API keys are stored only as hashes and are shown once at creation.
+- Rate limits are enforced server-side.
+- Audit events never contain secrets or raw authentication tokens.
 
-Local mode therefore remains a first-class supported delivery mode, not a debug-only mode.
+## 8. Local mode requirement
 
-## 8. Initial SaaS MVP boundary
+Local users retain a complete research path without SaaS authentication, subscriptions, or network connectivity for core computation.
 
-The first SaaS product will expose only one frozen research workflow:
+Local mode is a first-class supported delivery mode, not a debug-only mode.
+
+## 9. Initial SaaS MVP boundary
+
+The first SaaS product exposes one frozen research workflow:
 
 ```text
-Upload validated-compatible XAUUSD M1 data
-    -> validate dataset
-    -> run frozen research pipeline
-    -> produce auditable evidence/report
+Authenticate
+    -> create workspace
+    -> upload compatible XAUUSD M1 data
+    -> validate immutable dataset version
+    -> queue frozen research pipeline
+    -> persist auditable artifacts/evidence
+    -> display report
 ```
 
-Do not add multiple assets, autonomous trading, broker execution, or unvalidated predictive products to the first MVP.
+Do not add broker execution or unvalidated predictive products to the MVP.
 
-## 9. Implementation rule
+## 10. AI boundary
 
-Future SaaS work must follow this order:
+The AI layer is an application-level research agent. It may:
+
+- translate natural-language hypotheses into structured requests;
+- call approved ResearchOS tools;
+- explain persisted evidence;
+- identify failed gates and request follow-up experiments.
+
+It may not:
+
+- fabricate statistics;
+- alter scientific artifacts;
+- bypass validation gates;
+- authorize itself;
+- access another workspace;
+- convert an `INCONCLUSIVE` or failed result into a positive claim.
+
+## 11. Implementation rule
+
+SaaS work follows this order:
 
 1. preserve/freeze scientific behavior;
-2. define a narrow interface;
-3. add tests at the interface boundary;
-4. implement persistence/orchestration around the interface;
-5. verify local mode remains functional;
-6. verify SaaS tenant isolation;
-7. run full CI before merge.
-
-This document is an architecture boundary, not a claim that the SaaS implementation already exists.
+2. define narrow application contracts;
+3. add interface and tenant-isolation tests;
+4. implement durable persistence and authorization;
+5. implement queue/worker execution;
+6. implement web delivery;
+7. implement billing and entitlements;
+8. implement the AI research agent;
+9. verify local mode remains functional;
+10. run full CI and staging end-to-end validation before release.
