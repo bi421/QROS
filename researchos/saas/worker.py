@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Protocol
 from uuid import UUID
 
-from researchos.research_core.contracts import ResearchRequest, ResearchResult
+from researchos.research_core.contracts import ResearchResult
 from researchos.saas.contracts import ResearchJobStatus
 from researchos.saas.store import ResearchJobStore
 
