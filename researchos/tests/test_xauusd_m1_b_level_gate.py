@@ -13,7 +13,7 @@ def test_sign_test_is_two_sided() -> None:
 
 
 def test_exact_paired_permutation_is_deterministic() -> None:
-    differences = [0.1, 0.2, 0.3, 0.4]
+    differences = [0.1] * 10
     first = _permutation_pvalue(differences, seed=20260914)
     second = _permutation_pvalue(differences, seed=20260914)
     assert first == second
