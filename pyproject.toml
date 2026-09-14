@@ -24,6 +24,7 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: Other/Proprietary License",
     "Operating System :: OS Independent",
+    "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -61,8 +62,8 @@ Homepage = "https://github.com/researchos/researchos"
 Documentation = "docs/"
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["researchos*", "cpp_quant_engine*"]
+where = [".", "financial_research_lab/src"]
+include = ["researchos*", "cpp_quant_engine*", "financial_research_lab*"]
 
 [tool.pytest.ini_options]
 # Mirrors the Python test roots executed by CI. Native C++ bridge tests run in
