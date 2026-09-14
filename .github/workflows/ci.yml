@@ -31,7 +31,7 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,test]"
+          python -m pip install -e ".[dev,test,saas]"
           python -m pip install pytest pytest-cov
       - name: Test + coverage
         run: python -m pytest -v --cov=researchos --cov-report=xml --cov-report=term
@@ -54,7 +54,7 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,test]"
+          python -m pip install -e ".[dev,test,saas]"
           python -m pip install pytest pytest-cov
       - name: Compatibility test
         run: python -m pytest -v
@@ -80,7 +80,7 @@ jobs:
       - name: Install Python build dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,test]"
+          python -m pip install -e ".[dev,test,saas]"
           python -m pip install nanobind scikit-build-core cmake
           python -m pip install pytest pytest-cov
       - name: Cache build
