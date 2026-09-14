@@ -7,7 +7,7 @@ never inferred from user-editable profile metadata.
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -25,7 +25,7 @@ class WorkspaceMembershipResolver(Protocol):
 class SupabaseJwtAuthProvider:
     """Fail-closed Supabase JWT verifier for FastAPI Authorization headers."""
 
-    def __init__(self, supabase_client, membership_resolver: WorkspaceMembershipResolver) -> None:
+    def __init__(self, supabase_client: Any, membership_resolver: WorkspaceMembershipResolver) -> None:
         self._client = supabase_client
         self._membership = membership_resolver
 
