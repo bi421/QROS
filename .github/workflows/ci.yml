@@ -26,10 +26,10 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install -e .[dev,test]
-          pip install pytest pytest-cov
+          python -m pip install -e ".[dev,test]"
+          python -m pip install pytest pytest-cov
       - name: Test + coverage
-        run: pytest -v --cov=researchos --cov-report=xml --cov-report=term
+        run: python -m pytest -v --cov=researchos --cov-report=xml --cov-report=term
 
   python-compatibility:
     name: Python Compatibility (${{ matrix.python-version }})
@@ -49,10 +49,10 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install -e .[dev,test]
-          pip install pytest pytest-cov
+          python -m pip install -e ".[dev,test]"
+          python -m pip install pytest pytest-cov
       - name: Compatibility test
-        run: pytest -v
+        run: python -m pytest -v
 
   quant-engine:
     name: Quant Engine (C++ / nanobind)
@@ -75,8 +75,9 @@ jobs:
       - name: Install Python build dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .[dev,test]
-          pip install nanobind scikit-build-core cmake
+          python -m pip install -e ".[dev,test]"
+          python -m pip install nanobind scikit-build-core cmake
+          python -m pip install pytest pytest-cov
       - name: Cache build
         uses: actions/cache@v5
         with:
@@ -100,4 +101,6 @@ jobs:
           PYTHONPATH: cpp_quant_engine/python
         run: python cpp_quant_engine/benchmarks/bench_fast_numeric.py --rows 1000000 --repeat 3
       - name: Test Python Quant Integration
-        run: pytest researchos/tests/ -k quant -v
+        env:
+          PYTHONPATH: cpp_quant_engine/python
+        run: python -m pytest researchos/tests/ -k quant -v
