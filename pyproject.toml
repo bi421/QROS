@@ -61,20 +61,25 @@ Homepage = "https://github.com/researchos/researchos"
 Documentation = "docs/"
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["researchos*", "cpp_quant_engine*"]
+where = [".", "financial_research_lab/src"]
+include = ["researchos*", "cpp_quant_engine*", "financial_research_lab*"]
+exclude = ["financial_research_lab"]
 
 [tool.pytest.ini_options]
 # Mirrors the CI suite (.github/workflows/test-python.yml).
 testpaths = [
-    "researchos/tests",
-    "tests/unit",
-    "researchos/data_engine/tests",
-    "researchos/market_memory/tests",
     "researchos/experiments/phase51/tests",
-    "researchos/experiments/phase52/tests",
+    "researchos/market_memory/tests",
     "researchos/experiments/phase52_rebuild/tests",
+    "researchos/data_engine/tests",
+    "tests/unit",
     "researchos/self_healing/tests",
+    "researchos/experiments/phase52/tests",
+    "researchos/tests",
+    "researchos/engines/data/tests",
+    "researchos/engines/quant/tests",
+    "researchos/memory/tests",
+    "financial_research_lab/tests",
 ]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
