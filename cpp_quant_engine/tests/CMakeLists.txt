@@ -18,4 +18,7 @@ target_link_libraries(quant_engine_tests PRIVATE quant_engine GTest::gtest_main)
 target_include_directories(quant_engine_tests PRIVATE ${gtest_SOURCE_DIR}/include)
 
 include(GoogleTest)
-gtest_discover_tests(quant_engine_tests)
+# The Windows CI runner can exceed CMake's 5-second default while launching the
+# 526-test executable for discovery. Discovery is a build-time probe, not a
+# test timeout, so allow a bounded but realistic startup window.
+gtest_discover_tests(quant_engine_tests DISCOVERY_TIMEOUT 60)
