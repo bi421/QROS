@@ -52,6 +52,7 @@ saas = [
     "fastapi>=0.100.0",
     "uvicorn>=0.20.0",
     "python-multipart>=0.0.9",
+    "supabase>=2.18.1",
 ]
 dev = [
     "pytest>=7.0",
