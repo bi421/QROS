@@ -45,18 +45,11 @@ class Query:
         return self
 
     def execute(self):
-        class Response:
-            data = self.rows
-
-        return Response()
+        return type("Response", (), {"data": self.rows})()
 
 
 class Client:
-    def __init__(self):
-        self.calls = 0
-
     def table(self, name):
-        self.calls += 1
         if name == "workspace_member":
             return Query([{"workspace_id": str(WORKSPACE_ID)}])
         return Query([{"plan": "team", "status": "active"}])
