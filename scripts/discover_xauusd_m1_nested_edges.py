@@ -134,6 +134,7 @@ def _candidate_library(contexts: list[dict]) -> list[Candidate]:
 def _probability(rows: list[dict]) -> float:
     if not rows:
         raise ValueError("cannot estimate from empty training subset")
+    # Jeffreys smoothing avoids zero/one probabilities without touching labels.
     return (0.5 + sum(_label(row) for row in rows)) / (1.0 + len(rows))
 
 
