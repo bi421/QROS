@@ -134,7 +134,6 @@ def _candidate_library(contexts: list[dict]) -> list[Candidate]:
 def _probability(rows: list[dict]) -> float:
     if not rows:
         raise ValueError("cannot estimate from empty training subset")
-    # Jeffreys smoothing avoids zero/one probabilities without touching labels.
     return (0.5 + sum(_label(row) for row in rows)) / (1.0 + len(rows))
 
 
@@ -258,25 +257,51 @@ def run(
         selected_valid = [
             row for row in valid if selected.predicate(_features(row))
         ]
-        if len(selected_train) < min_events or len(selected_valid) < min_events:
-            raise RuntimeError("selected candidate failed outer minimum")
+        outer_support_met = (
+            len(selected_train) >= min_events and len(selected_valid) >= min_events
+        )
+
+        fold = {
+            "fold": len(folds) + 1,
+            "train_start": train[0]["timestamp"],
+            "train_end": train[-1]["timestamp"],
+            "validation_start": valid[0]["timestamp"],
+            "validation_end": valid[-1]["timestamp"],
+            "candidate": selected.name,
+            "candidate_count_inner": len(library),
+            "selected_train_events": len(selected_train),
+            "selected_validation_events": len(selected_valid),
+            "outer_minimum_required": min_events,
+            "outer_support_met": outer_support_met,
+        }
+
+        # Outer labels must never influence candidate selection. A candidate
+        # can legitimately have weak/zero outer support; record that fact and
+        # keep the fold auditable instead of turning discovery into a hard
+        # failure. Such a fold is excluded from aggregate diagnostics below.
+        if not outer_support_met:
+            fold.update(
+                {
+                    "outer_support_status": "FAIL",
+                    "training_probability": None,
+                    "baseline_probability": None,
+                    "model_brier": None,
+                    "baseline_brier": None,
+                    "brier_improvement": None,
+                }
+            )
+            folds.append(fold)
+            start += step_size
+            continue
 
         model = _probability(selected_train)
         baseline = _probability(train)
         model_brier = _brier(model, selected_valid)
         baseline_brier = _brier(baseline, selected_valid)
         improvement = baseline_brier - model_brier
-        folds.append(
+        fold.update(
             {
-                "fold": len(folds) + 1,
-                "train_start": train[0]["timestamp"],
-                "train_end": train[-1]["timestamp"],
-                "validation_start": valid[0]["timestamp"],
-                "validation_end": valid[-1]["timestamp"],
-                "candidate": selected.name,
-                "candidate_count_inner": len(library),
-                "selected_train_events": len(selected_train),
-                "selected_validation_events": len(selected_valid),
+                "outer_support_status": "PASS",
                 "training_probability": model,
                 "baseline_probability": baseline,
                 "model_brier": model_brier,
@@ -284,11 +309,25 @@ def run(
                 "brier_improvement": improvement,
             }
         )
+        folds.append(fold)
         start += step_size
 
-    improvements = [fold["brier_improvement"] for fold in folds]
+    evaluated_folds = [
+        fold for fold in folds if fold["brier_improvement"] is not None
+    ]
+    improvements = [fold["brier_improvement"] for fold in evaluated_folds]
     positive = sum(value > 0 for value in improvements)
     negative = sum(value < 0 for value in improvements)
+    support_failures = sum(not fold["outer_support_met"] for fold in folds)
+    mean_improvement = statistics.fmean(improvements) if improvements else None
+    permutation_p = (
+        _permutation_p(improvements, permutations, seed=20260915)
+        if improvements
+        else None
+    )
+    sign_test_p = _sign_test_p(positive, negative) if improvements else None
+    positive_fold_rate = positive / len(improvements) if improvements else None
+
     result = {
         "stage": "XAUUSD_M1_NESTED_EDGE_DISCOVERY",
         "scientific_status": "EXPLORATORY_NO_EDGE_CLAIM",
@@ -305,21 +344,24 @@ def run(
             "outer_training_embargo": "realized_end_1d < validation_start",
         },
         "fold_count": len(folds),
+        "evaluated_fold_count": len(evaluated_folds),
+        "outer_support_failures": support_failures,
         "selected_oos_events": sum(
-            fold["selected_validation_events"] for fold in folds
+            fold["selected_validation_events"] for fold in evaluated_folds
         ),
         "positive_folds": positive,
         "negative_folds": negative,
-        "positive_fold_rate": positive / len(folds),
-        "mean_brier_improvement": statistics.fmean(improvements),
-        "permutation_p": _permutation_p(
-            improvements, permutations, seed=20260915
-        ),
-        "sign_test_p": _sign_test_p(positive, negative),
+        "positive_fold_rate": positive_fold_rate,
+        "mean_brier_improvement": mean_improvement,
+        "permutation_p": permutation_p,
+        "sign_test_p": sign_test_p,
         "folds": folds,
         "scientific_gate": {
             "status": "NO_EDGE_OR_INCONCLUSIVE",
-            "reason": "Discovery requires a separate preregistered confirmation gate on untouched data; this artifact is candidate-generation evidence only.",
+            "reason": (
+                "Discovery requires a separate preregistered confirmation gate on untouched data; "
+                "outer-support failures are recorded and excluded from aggregate diagnostics."
+            ),
         },
     }
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -332,6 +374,8 @@ def run(
                 key: result[key]
                 for key in (
                     "fold_count",
+                    "evaluated_fold_count",
+                    "outer_support_failures",
                     "selected_oos_events",
                     "positive_folds",
                     "negative_folds",
