@@ -130,6 +130,8 @@ jobs:
           python -m pip install pytest ruff nanobind scikit-build-core cmake
       - name: Scope guard
         run: python scripts/check_scope.py --base origin/main
+      - name: Repository truth audit
+        run: python scripts/audit_repository_truth.py
       - name: Text integrity guard
         run: python scripts/check_text_integrity.py .github/workflows/ci.yml .pre-commit-config.yaml pyproject.toml
       - name: Run canonical health check
