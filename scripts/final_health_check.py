@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
-"""Run the canonical local health gate in one command.
-
-The command intentionally reports facts, not interpretations:
-ruff -> pytest -> C++ configure/build -> git status.
-Any failed command makes the overall health check fail.
-"""
+"""Run the canonical local health gate and emit machine-readable evidence."""
 from __future__ import annotations
 
 import argparse
+import datetime as dt
+import json
 import os
 import shutil
 import subprocess
@@ -17,62 +14,97 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CPP_SOURCE = ROOT / "cpp_quant_engine"
 HEALTH_BUILD = ROOT / ".healthcheck" / "cpp"
+HEALTH_DIR = ROOT / ".health"
+HEALTH_JSON = HEALTH_DIR / "last_run.json"
 
 
-def run(label: str, command: list[str], *, cwd: Path = ROOT) -> bool:
-    print(f"\n=== {label} ===")
-    print("$ " + " ".join(command))
-    completed = subprocess.run(command, cwd=cwd, check=False)
-    print(f"[{label}] {'PASS' if completed.returncode == 0 else 'FAIL'}")
-    return completed.returncode == 0
+def command_result(label: str, command: list[str], *, cwd: Path = ROOT) -> dict[str, object]:
+    completed = subprocess.run(command, cwd=cwd, text=True, capture_output=True, check=False)
+    stdout = completed.stdout.strip()
+    stderr = completed.stderr.strip()
+    return {
+        "label": label,
+        "command": command,
+        "returncode": completed.returncode,
+        "status": "PASS" if completed.returncode == 0 else "FAIL",
+        "stdout": stdout[-12000:],
+        "stderr": stderr[-12000:],
+    }
+
+
+def git_value(args: list[str]) -> str:
+    completed = subprocess.run(["git", *args], cwd=ROOT, text=True, capture_output=True, check=False)
+    return completed.stdout.strip()
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--skip-cpp", action="store_true", help="Skip C++ configure/build locally")
+    parser.add_argument("--skip-cpp", action="store_true", help="Skip C++ configure/build")
     args = parser.parse_args()
-
     os.chdir(ROOT)
-    results: list[tuple[str, bool]] = []
 
-    if shutil.which("ruff"):
-        results.append(("RUFF", run("RUFF", ["ruff", "check", "."])))
-    else:
-        results.append(("RUFF", run("RUFF", [sys.executable, "-m", "ruff", "check", "."])))
+    checks: dict[str, dict[str, object]] = {}
 
-    results.append(("PYTEST", run("PYTEST", [sys.executable, "-m", "pytest", "-q"])))
+    ruff = ["ruff", "check", "."] if shutil.which("ruff") else [sys.executable, "-m", "ruff", "check", "."]
+    checks["ruff"] = command_result("ruff", ruff)
+    checks["pytest"] = command_result("pytest", [sys.executable, "-m", "pytest", "-q"])
 
     if args.skip_cpp:
-        print("\n=== C++ COMPILE ===\n[ C++ COMPILE ] SKIPPED (--skip-cpp)")
-        results.append(("C++ COMPILE", True))
-    elif not CPP_SOURCE.exists():
-        print("\n=== C++ COMPILE ===\n[ C++ COMPILE ] FAIL: cpp_quant_engine/ not found")
-        results.append(("C++ COMPILE", False))
-    elif not shutil.which("cmake"):
-        print("\n=== C++ COMPILE ===\n[ C++ COMPILE ] FAIL: cmake not found")
-        results.append(("C++ COMPILE", False))
+        checks["cpp_compile"] = {
+            "label": "cpp_compile",
+            "command": [],
+            "returncode": None,
+            "status": "SKIPPED",
+            "stdout": "",
+            "stderr": "--skip-cpp",
+        }
+    elif not CPP_SOURCE.exists() or not shutil.which("cmake"):
+        checks["cpp_compile"] = {
+            "label": "cpp_compile",
+            "command": [],
+            "returncode": 1,
+            "status": "FAIL",
+            "stdout": "",
+            "stderr": "cpp_quant_engine/ or cmake is unavailable",
+        }
     else:
         HEALTH_BUILD.mkdir(parents=True, exist_ok=True)
-        configured = run(
-            "C++ CONFIGURE",
+        configure = command_result(
+            "cpp_configure",
             ["cmake", "-S", str(CPP_SOURCE), "-B", str(HEALTH_BUILD), "-DCMAKE_BUILD_TYPE=Release"],
         )
-        built = configured and run("C++ BUILD", ["cmake", "--build", str(HEALTH_BUILD), "--config", "Release"])
-        results.append(("C++ COMPILE", built))
+        if configure["status"] == "PASS":
+            build = command_result("cpp_build", ["cmake", "--build", str(HEALTH_BUILD), "--config", "Release"])
+        else:
+            build = {"label": "cpp_build", "command": [], "returncode": 1, "status": "NOT_RUN", "stdout": "", "stderr": "configure failed"}
+        checks["cpp_compile"] = {
+            "label": "cpp_compile",
+            "status": "PASS" if build["status"] == "PASS" else "FAIL",
+            "configure": configure,
+            "build": build,
+        }
 
-    print("\n=== GIT STATUS ===")
-    git_ok = run("GIT STATUS", ["git", "status", "--short", "--branch"])
-    results.append(("GIT STATUS", git_ok))
+    git_status = command_result("git_status", ["git", "status", "--short", "--branch"])
+    checks["git_status"] = git_status
 
-    print("\n=== FINAL HEALTH ===")
-    for name, passed in results:
-        print(f"{'PASS' if passed else 'FAIL':5} {name}")
-    failed = [name for name, passed in results if not passed]
-    if failed:
-        print("FAILURES: " + ", ".join(failed))
-        return 1
-    print("HEALTH: PASS")
-    return 0
+    statuses = [check["status"] for check in checks.values()]
+    overall = "PASS" if all(status == "PASS" for status in statuses) else "FAIL"
+    evidence = {
+        "schema_version": 1,
+        "health_status": overall,
+        "timestamp_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "commit": git_value(["rev-parse", "HEAD"]),
+        "branch": git_value(["branch", "--show-current"]),
+        "checks": checks,
+    }
+
+    HEALTH_DIR.mkdir(parents=True, exist_ok=True)
+    HEALTH_JSON.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    print(json.dumps(evidence, indent=2, sort_keys=True))
+    print(f"HEALTH: {overall}")
+    print(f"EVIDENCE: {HEALTH_JSON.relative_to(ROOT)}")
+    return 0 if overall == "PASS" else 1
 
 
 if __name__ == "__main__":
