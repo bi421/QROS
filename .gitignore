@@ -47,7 +47,6 @@ archive/root_files/project_structure.txt
 archive/old_structure/cpp_quant_engine_archive/python/cpp_quant_engine/cpp_quant_backend.pdb
 
 *.pdb
-
 *.pdb
 # --- auto cleanup ---
 *.db
@@ -65,12 +64,6 @@ backup*/
 _backup*/
 .lint_fix_backup/
 cpp_quant/
-cpp_quant_engine_archive/
-archive/
-AI_*.txt
-AI_*.md
-repo_*.txt
-architecture.backup_*.md
 learner_state.json
 live_signal.json
 # build artifacts
@@ -120,3 +113,11 @@ old_tests.txt
 new_tests.txt
 duplicate_resolution_report.txt
 *.ps1
+
+# Historical reports are preserved only in the explicit archive area.
+archive/
+!archive/
+archive/*
+!archive/reports/
+archive/reports/*
+!archive/reports/**/
