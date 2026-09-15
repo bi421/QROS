@@ -1,4 +1,4 @@
-﻿repos:
+repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.1.6
     hooks:
@@ -14,3 +14,16 @@
       - id: check-yaml
       - id: check-added-large-files
         exclude: ^data/mt5/xauusd/XAUUSD_M1_2021_2025_MT5\.zip$
+
+  - repo: local
+    hooks:
+      - id: researchos-text-integrity
+        name: ResearchOS text integrity (no BOM / trailing whitespace)
+        entry: python scripts/check_text_integrity.py
+        language: system
+        pass_filenames: true
+      - id: researchos-scope-guard
+        name: ResearchOS scope guard
+        entry: python scripts/check_scope.py --staged
+        language: system
+        pass_filenames: false
