@@ -1,9 +1,9 @@
 """Nested, leakage-safe discovery of conditional XAUUSD M1 candidates.
 
 Candidate definitions are created inside each chronological training window.
-The inner validation slice selects one candidate.  That candidate is then
-estimated from the prior training data and evaluated once on untouched outer
-OOS data.  Outer labels are never used for selection.
+The inner validation slice selects one candidate. That candidate is then
+estimated from prior training data and evaluated once on untouched outer OOS
+data. Outer labels are never used for selection.
 
 This is a discovery tool, not a trading strategy or an edge claim.
 """
@@ -16,6 +16,7 @@ import math
 import random
 import statistics
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
@@ -37,18 +38,36 @@ def _label(event: dict) -> int:
     return int(value)
 
 
-def _candidate_library(contexts: list[dict]) -> list[Candidate]:
-    """Build candidates only from the current inner-validation context."""
-    out: list[Candidate] = []
+def _time(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise ValueError(f"timestamp must be timezone-aware: {value}")
+    return parsed
 
+
+def _features(event: dict) -> dict:
+    features = dict(event.get("context") or {})
+    features["direction"] = event.get("direction")
+    return features
+
+
+def _candidate_library(contexts: list[dict]) -> list[Candidate]:
+    """Build candidates only from the current inner-training contexts."""
+    out: list[Candidate] = []
+    directions = sorted({c.get("direction") for c in contexts if c.get("direction")})
     out.extend(
-        Candidate(f"direction={value}", lambda c, value=value: c.get("direction") == value)
-        for value in sorted({c.get("direction") for c in contexts if c.get("direction")})
+        Candidate(
+            f"direction={value}",
+            lambda c, value=value: c.get("direction") == value,
+        )
+        for value in directions
     )
 
     categorical = ("market_regime", "volatility_state", "session", "day_of_week")
     for field in categorical:
-        values = sorted({c.get(field) for c in contexts if c.get(field) is not None}, key=str)
+        values = sorted(
+            {c.get(field) for c in contexts if c.get(field) is not None}, key=str
+        )
         for value in values:
             out.append(
                 Candidate(
@@ -89,13 +108,15 @@ def _candidate_library(contexts: list[dict]) -> list[Candidate]:
             out.append(
                 Candidate(
                     f"{field}>0",
-                    lambda c, field=field: _finite(c.get(field)) and float(c[field]) > 0,
+                    lambda c, field=field: _finite(c.get(field))
+                    and float(c[field]) > 0,
                 )
             )
             out.append(
                 Candidate(
                     f"{field}<0",
-                    lambda c, field=field: _finite(c.get(field)) and float(c[field]) < 0,
+                    lambda c, field=field: _finite(c.get(field))
+                    and float(c[field]) < 0,
                 )
             )
         if field == "rsi":
@@ -123,9 +144,18 @@ def _brier(probability: float, rows: list[dict]) -> float:
     return sum((probability - _label(row)) ** 2 for row in rows) / len(rows)
 
 
-def _candidate_score(inner_train: list[dict], inner_valid: list[dict], candidate: Candidate, min_events: int) -> tuple[float, int]:
-    train_selected = [row for row in inner_train if candidate.predicate(row["context"])]
-    valid_selected = [row for row in inner_valid if candidate.predicate(row["context"])]
+def _candidate_score(
+    inner_train: list[dict],
+    inner_valid: list[dict],
+    candidate: Candidate,
+    min_events: int,
+) -> tuple[float, int]:
+    train_selected = [
+        row for row in inner_train if candidate.predicate(_features(row))
+    ]
+    valid_selected = [
+        row for row in inner_valid if candidate.predicate(_features(row))
+    ]
     if len(train_selected) < min_events or len(valid_selected) < min_events:
         return float("-inf"), 0
     model = _probability(train_selected)
@@ -155,13 +185,28 @@ def _sign_test_p(positive: int, negative: int) -> float:
     return min(1.0, 2.0 * tail / (2**n))
 
 
-def run(source: Path, output: Path, train_size: int, validation_size: int, step_size: int, min_events: int, permutations: int) -> dict:
+def run(
+    source: Path,
+    output: Path,
+    train_size: int,
+    validation_size: int,
+    step_size: int,
+    min_events: int,
+    permutations: int,
+) -> dict:
+    if train_size <= 0 or validation_size <= 0 or step_size <= 0:
+        raise ValueError("window sizes must be positive")
     if step_size < validation_size:
         raise ValueError("step_size must be >= validation_size")
+    if min_events <= 0 or permutations <= 0:
+        raise ValueError("min_events and permutations must be positive")
+
     raw = source.read_bytes()
     report = json.loads(raw.decode("utf-8"))
-    if report.get("contract", {}).get("asset") != "XAUUSD" or report.get("contract", {}).get("timeframe") != "M1":
+    contract = report.get("contract", {})
+    if contract.get("asset") != "XAUUSD" or contract.get("timeframe") != "M1":
         raise ValueError("source is not the XAUUSD M1 contract")
+
     events = [
         event
         for event in report.get("events_data", [])
@@ -174,26 +219,48 @@ def run(source: Path, output: Path, train_size: int, validation_size: int, step_
     folds: list[dict] = []
     start = 0
     while start + train_size + validation_size <= len(events):
-        train = events[start : start + train_size]
+        train_pool = events[start : start + train_size]
         valid = events[start + train_size : start + train_size + validation_size]
-        inner_cut = max(min_events * 2, int(len(train) * 0.70))
+        validation_start = _time(valid[0]["timestamp"])
+        train = [
+            row
+            for row in train_pool
+            if _time((row.get("outcome") or {}).get("data_availability", {}).get("realized_end_1d", ""))
+            < validation_start
+        ]
+        if len(train) < min_events * 2:
+            raise RuntimeError("temporal embargo left insufficient training events")
+
+        inner_cut = int(len(train) * 0.70)
         inner_train = train[:inner_cut]
         inner_valid = train[inner_cut:]
-        library = _candidate_library([event["context"] for event in inner_train])
+        if len(inner_train) < min_events or len(inner_valid) < min_events:
+            raise RuntimeError("inner split is too small")
+
+        library = _candidate_library([_features(event) for event in inner_train])
         ranked: list[tuple[float, int, str, Candidate]] = []
         for candidate in library:
-            improvement, count = _candidate_score(inner_train, inner_valid, candidate, min_events)
+            improvement, count = _candidate_score(
+                inner_train, inner_valid, candidate, min_events
+            )
             if math.isfinite(improvement):
                 ranked.append((improvement, count, candidate.name, candidate))
         if not ranked:
-            raise RuntimeError(f"fold starting {valid[0]['timestamp']}: no eligible candidate")
+            raise RuntimeError(
+                f"fold starting {valid[0]['timestamp']}: no eligible candidate"
+            )
         ranked.sort(key=lambda item: (-item[0], -item[1], item[2]))
         _, _, _, selected = ranked[0]
 
-        selected_train = [row for row in train if selected.predicate(row["context"])]
-        selected_valid = [row for row in valid if selected.predicate(row["context"])]
+        selected_train = [
+            row for row in train if selected.predicate(_features(row))
+        ]
+        selected_valid = [
+            row for row in valid if selected.predicate(_features(row))
+        ]
         if len(selected_train) < min_events or len(selected_valid) < min_events:
             raise RuntimeError("selected candidate failed outer minimum")
+
         model = _probability(selected_train)
         baseline = _probability(train)
         model_brier = _brier(model, selected_valid)
@@ -235,14 +302,19 @@ def run(source: Path, output: Path, train_size: int, validation_size: int, step_
             "min_events": min_events,
             "permutations": permutations,
             "outer_labels_used_for_selection": False,
+            "outer_training_embargo": "realized_end_1d < validation_start",
         },
         "fold_count": len(folds),
-        "selected_oos_events": sum(fold["selected_validation_events"] for fold in folds),
+        "selected_oos_events": sum(
+            fold["selected_validation_events"] for fold in folds
+        ),
         "positive_folds": positive,
         "negative_folds": negative,
         "positive_fold_rate": positive / len(folds),
         "mean_brier_improvement": statistics.fmean(improvements),
-        "permutation_p": _permutation_p(improvements, permutations, seed=20260915),
+        "permutation_p": _permutation_p(
+            improvements, permutations, seed=20260915
+        ),
         "sign_test_p": _sign_test_p(positive, negative),
         "folds": folds,
         "scientific_gate": {
@@ -251,8 +323,27 @@ def run(source: Path, output: Path, train_size: int, validation_size: int, step_
         },
     }
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({key: result[key] for key in ("fold_count", "selected_oos_events", "positive_folds", "negative_folds", "positive_fold_rate", "mean_brier_improvement", "permutation_p", "sign_test_p")}, indent=2))
+    output.write_text(
+        json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    print(
+        json.dumps(
+            {
+                key: result[key]
+                for key in (
+                    "fold_count",
+                    "selected_oos_events",
+                    "positive_folds",
+                    "negative_folds",
+                    "positive_fold_rate",
+                    "mean_brier_improvement",
+                    "permutation_p",
+                    "sign_test_p",
+                )
+            },
+            indent=2,
+        )
+    )
     print(f"Artifact: {output}")
     return result
 
@@ -260,14 +351,26 @@ def run(source: Path, output: Path, train_size: int, validation_size: int, step_
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("source", type=Path)
-    parser.add_argument("--output", type=Path, default=Path("artifacts/xauusd_m1_nested_edge_discovery.json"))
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("artifacts/xauusd_m1_nested_edge_discovery.json"),
+    )
     parser.add_argument("--train-size", type=int, default=2000)
     parser.add_argument("--validation-size", type=int, default=500)
     parser.add_argument("--step-size", type=int, default=500)
     parser.add_argument("--min-events", type=int, default=100)
     parser.add_argument("--permutations", type=int, default=20000)
     args = parser.parse_args()
-    run(args.source, args.output, args.train_size, args.validation_size, args.step_size, args.min_events, args.permutations)
+    run(
+        args.source,
+        args.output,
+        args.train_size,
+        args.validation_size,
+        args.step_size,
+        args.min_events,
+        args.permutations,
+    )
     return 0
 
 
