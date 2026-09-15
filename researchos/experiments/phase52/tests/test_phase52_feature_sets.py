@@ -31,7 +31,7 @@ def test_phase52_comparison_returns_all_isolated_feature_sets():
     assert results["PRICE_ONLY"].metadata["selected_feature_names"]
     assert all(name.startswith("macro_DXY_") for name in results["PRICE + DXY"].metadata["selected_feature_names"][-3:])
     assert all(name.startswith("macro_US10Y_") for name in results["PRICE + US10Y"].metadata["selected_feature_names"][-3:])
-    assert all(name.startswith("macro_VIX_") for name in results["PRICE + VIX"]["metadata"]["selected_feature_names"][-3:])
+    assert all(name.startswith("macro_VIX_") for name in results["PRICE + VIX"].metadata["selected_feature_names"][-3:])
     assert len(results["PRICE + ALL"].metadata["selected_feature_names"]) == len(results["PRICE_ONLY"].metadata["selected_feature_names"]) + 9
 
 
