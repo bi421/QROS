@@ -9,8 +9,10 @@ from __future__ import annotations
 from typing import Protocol
 from uuid import UUID, uuid4
 
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.contracts import (
@@ -20,6 +22,21 @@ from researchos.saas.contracts import (
     TenantContext,
 )
 from researchos.saas.store import InMemoryResearchJobStore, ResearchJobStore
+
+REQUEST_ID_HEADER = "X-Request-ID"
+MAX_REQUEST_ID_LENGTH = 128
+
+
+class RequestCorrelationMiddleware(BaseHTTPMiddleware):
+    """Attach one bounded correlation ID to every HTTP request and response."""
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        supplied = request.headers.get(REQUEST_ID_HEADER, "").strip()
+        request_id = supplied[:MAX_REQUEST_ID_LENGTH] if supplied else str(uuid4())
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers[REQUEST_ID_HEADER] = request_id
+        return response
 
 
 class AuthProvider(Protocol):
@@ -66,6 +83,7 @@ def create_app(
         version="1.0.0",
         description="Multi-tenant delivery API for auditable financial research.",
     )
+    app.add_middleware(RequestCorrelationMiddleware)
 
     def current_tenant(authorization: str | None = Header(default=None)) -> TenantContext:
         return auth.authenticate(authorization)
@@ -73,6 +91,13 @@ def create_app(
     @app.get("/healthz", tags=["system"])
     def healthz() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/readyz", tags=["system"])
+    def readyz() -> dict[str, str]:
+        """Report whether the configured application dependencies are usable."""
+        if store is None:
+            raise HTTPException(status_code=503, detail="research job store is not configured")
+        return {"status": "ready"}
 
     @app.get("/v1/me", response_model=dict[str, str], tags=["identity"])
     def me(tenant: TenantContext = Depends(current_tenant)) -> dict[str, str]:
@@ -130,4 +155,4 @@ def create_app(
 
 app = create_app()
 
-__all__ = ["AuthProvider", "app", "create_app"]
+__all__ = ["AuthProvider", "RequestCorrelationMiddleware", "app", "create_app"]

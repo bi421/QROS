@@ -36,6 +36,27 @@ def test_health_does_not_require_authentication() -> None:
     response = client.get("/healthz")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+    assert len(response.headers["X-Request-ID"]) == 36
+
+
+def test_request_id_is_propagated_and_bounded() -> None:
+    client = TestClient(create_app())
+    supplied = "request-123"
+    response = client.get("/healthz", headers={"X-Request-ID": supplied})
+    assert response.status_code == 200
+    assert response.headers["X-Request-ID"] == supplied
+
+    long_id = "x" * 256
+    response = client.get("/healthz", headers={"X-Request-ID": long_id})
+    assert response.status_code == 200
+    assert len(response.headers["X-Request-ID"]) == 128
+
+
+def test_readiness_does_not_require_authentication() -> None:
+    client = TestClient(create_app())
+    response = client.get("/readyz")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}
 
 
 def test_unconfigured_saas_auth_fails_closed() -> None:
