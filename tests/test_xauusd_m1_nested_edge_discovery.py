@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 
-from scripts.discover_xauusd_m1_nested_edges import run
+from scripts.discover_xauusd_m1_nested_edges import Candidate, run
 
 
 def _event(index: int, *, label: bool, session: str, realized_lag_hours: int = 1) -> dict:
@@ -80,3 +80,37 @@ def test_temporal_embargo_excludes_unrealized_training_events(tmp_path):
     result = run(source, output, 20, 10, 10, 2, 1000)
 
     assert result["folds"][0]["train_end"] != events[19]["timestamp"]
+
+
+def test_outer_support_failure_is_recorded_not_hard_failure(tmp_path, monkeypatch):
+    events = [
+        _event(index, label=index % 2 == 0, session="Asian" if index < 30 else "US")
+        for index in range(40)
+    ]
+    source = tmp_path / "source.json"
+    output = tmp_path / "result.json"
+    source.write_text(
+        json.dumps(
+            {
+                "contract": {"asset": "XAUUSD", "timeframe": "M1"},
+                "events_data": events,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "scripts.discover_xauusd_m1_nested_edges._candidate_library",
+        lambda contexts: [
+            Candidate("session=Asian", lambda context: context.get("session") == "Asian")
+        ],
+    )
+
+    result = run(source, output, 20, 10, 10, 5, 1000)
+
+    assert result["fold_count"] == 2
+    assert result["outer_support_failures"] >= 1
+    assert result["folds"][0]["outer_support_met"] is True
+    assert result["folds"][1]["outer_support_met"] is False
+    assert result["folds"][1]["brier_improvement"] is None
+    assert result["scientific_gate"]["status"] == "NO_EDGE_OR_INCONCLUSIVE"
