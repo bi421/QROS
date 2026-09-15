@@ -63,6 +63,9 @@ test = [
     "yfinance>=0.2",
 ]
 
+[project.scripts]
+researchos-health = "scripts.final_health_check:main"
+
 [project.urls]
 Homepage = "https://github.com/researchos/researchos"
 Documentation = "docs/"
