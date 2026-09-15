@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Repository-truth audit: verify claims against reachable Git/filesystem evidence.
 
-Explicitly unverified historical references are distinguished from fabricated claims.
+The audit distinguishes:
+- missing artifact claims from explicit historical/unverified references;
+- concrete public API stubs from intentional abstract interface methods;
+- SHA-256 digests from unrelated Git commit hashes.
+
 Static TODO reachability is a heuristic and is reported as such.
 """
 from __future__ import annotations
@@ -18,6 +22,7 @@ DOC_ROOT = ROOT / "docs"
 CODE_ROOTS = (ROOT / "researchos", ROOT / "scripts", ROOT / "cpp_quant_engine")
 ARTIFACT_RE = re.compile(r"(?:`|\b)((?:artifacts|data)/[A-Za-z0-9_./-]+)(?:`|\b)")
 SHA_RE = re.compile(r"\b[a-f0-9]{64}\b", re.I)
+SHA256_CONTEXT_RE = re.compile(r"sha[- ]?256|sha256|digest|hash", re.I)
 TODO_RE = re.compile(r"\b(TODO|FIXME|XXX|HACK)\b")
 SCOPE_PATTERNS = (
     re.compile(r"^[^/\\]+\.py$", re.I),
@@ -62,7 +67,18 @@ def enclosing_function(tree: ast.AST, lineno: int) -> ast.FunctionDef | ast.Asyn
     return best
 
 
-def function_is_stub(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+def has_abstractmethod_decorator(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    for decorator in fn.decorator_list:
+        if isinstance(decorator, ast.Name) and decorator.id == "abstractmethod":
+            return True
+        if isinstance(decorator, ast.Attribute) and decorator.attr == "abstractmethod":
+            return True
+    return False
+
+
+def function_is_stub(fn: ast.FunctionDef | ast.AsyncFunctionDef, *, allow_abstract: bool = False) -> bool:
+    if allow_abstract and has_abstractmethod_decorator(fn):
+        return False
     meaningful = []
     for node in fn.body:
         if isinstance(node, ast.Expr) and isinstance(getattr(node, "value", None), ast.Constant) and isinstance(node.value.value, str):
@@ -78,6 +94,18 @@ def function_is_stub(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     return False
 
 
+def class_is_abstract(cls: ast.ClassDef) -> bool:
+    for decorator in cls.decorator_list:
+        if isinstance(decorator, ast.Name) and decorator.id in {"abstractclass", "abstract"}:
+            return True
+    for base in cls.bases:
+        if isinstance(base, ast.Name) and base.id == "ABC":
+            return True
+        if isinstance(base, ast.Attribute) and base.attr == "ABC":
+            return True
+    return any(has_abstractmethod_decorator(m) for m in cls.body if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)))
+
+
 def module_symbol_stubs(source: Path, names: set[str]) -> set[str]:
     try:
         tree = ast.parse(source.read_text(encoding="utf-8", errors="replace"), filename=str(source))
@@ -85,11 +113,15 @@ def module_symbol_stubs(source: Path, names: set[str]) -> set[str]:
         return set()
     found: set[str] = set()
     for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in names and function_is_stub(node):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in names and function_is_stub(node, allow_abstract=True):
             found.add(node.name)
         elif isinstance(node, ast.ClassDef) and node.name in names:
+            # Abstract/interface classes are intentionally allowed to contain pass-only
+            # abstract methods. Concrete classes are checked for actual stub methods.
+            if class_is_abstract(node):
+                continue
             methods = [m for m in node.body if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef))]
-            if any(function_is_stub(m) for m in methods):
+            if any(function_is_stub(m, allow_abstract=True) for m in methods):
                 found.add(node.name)
     return found
 
@@ -182,6 +214,8 @@ def main() -> int:
                     ))
                 else:
                     rows.append(Row("ARTIFACT_HISTORY", rel, i, f"documentation references {target}", f"git log --all --full-history -- {target}", f"EXIT=0; HISTORY_FOUND={history.splitlines()[0]}; CURRENT_EXISTS={exists}", "PASS"))
+            if not SHA256_CONTEXT_RE.search(text):
+                continue
             for sha in SHA_RE.findall(text):
                 nearby: list[str] = []
                 for j in range(max(0, i - 3), min(len(lines), i + 2)):
@@ -191,7 +225,7 @@ def main() -> int:
                     continue
                 for target in sorted(set(nearby)):
                     target_path = ROOT / target
-                    if target_path.exists():
+                    if target_path.exists() and target_path.is_file():
                         digest = hashlib.sha256(target_path.read_bytes()).hexdigest()
                         ok = digest.lower() == sha.lower()
                         rows.append(Row("SHA256_VERIFICATION" if ok else "SHA256_MISMATCH", rel, i, f"SHA-256 {sha} targets {target}", f"sha256sum {target}", f"ACTUAL_SHA256={digest}; MATCH={'YES' if ok else 'NO'}", "PASS" if ok else "CRITICAL"))
@@ -206,8 +240,6 @@ def main() -> int:
                 rows.append(Row("PUBLIC_EXPORT_TARGET_MISSING", init.relative_to(ROOT).as_posix(), 1, f"{exposed} target {module} cannot be resolved", f"resolve import {module}", "MODULE_NOT_FOUND", "CRITICAL"))
             elif module_symbol_stubs(source, {symbol}):
                 rows.append(Row("STUB_EXPOSED_AS_PUBLIC_API", init.relative_to(ROOT).as_posix(), 1, f"public export {exposed} resolves to stub {symbol}", f"AST stub inspection of {source.relative_to(ROOT).as_posix()}", "STUB_METHOD_OR_SYMBOL", "CRITICAL"))
-            else:
-                rows.append(Row("PUBLIC_API_EXPORT", init.relative_to(ROOT).as_posix(), 1, f"public export {exposed} resolves to implemented symbol", f"AST inspection of {source.relative_to(ROOT).as_posix()}", "NO_EXPORTED_STUB_DETECTED", "PASS"))
 
     # 3. Existing root scripts are reported; check_scope.py blocks new/changed ones.
     for path in sorted(ROOT.glob("*.py")):
