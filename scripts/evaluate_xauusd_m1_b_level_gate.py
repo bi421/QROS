@@ -14,10 +14,21 @@ import math
 import random
 from pathlib import Path
 
-from scripts.audit_xauusd_m1_source_to_result import audit as audit_source_to_result
-from scripts.audit_xauusd_m1_walkforward import audit as audit_walkforward
-from scripts.run_xauusd_m1_future_leakage_negative_control import run as run_future_leakage_control
-from scripts.run_xauusd_m1_negative_controls import run as run_label_shuffle_control
+try:
+    from scripts.audit_xauusd_m1_source_to_result import audit as audit_source_to_result
+    from scripts.audit_xauusd_m1_walkforward import audit as audit_walkforward
+    from scripts.run_xauusd_m1_future_leakage_negative_control import run as run_future_leakage_control
+    from scripts.run_xauusd_m1_negative_controls import run as run_label_shuffle_control
+except ModuleNotFoundError:
+    # Supports direct execution: python scripts/evaluate_xauusd_m1_b_level_gate.py ...
+    # without requiring the repository root to be imported as a package first.
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from scripts.audit_xauusd_m1_source_to_result import audit as audit_source_to_result
+    from scripts.audit_xauusd_m1_walkforward import audit as audit_walkforward
+    from scripts.run_xauusd_m1_future_leakage_negative_control import run as run_future_leakage_control
+    from scripts.run_xauusd_m1_negative_controls import run as run_label_shuffle_control
 
 MIN_OOS_EVENTS = 10_000
 MIN_FOLD_IMPROVEMENT_RATE = 0.70
