@@ -131,7 +131,22 @@ jobs:
       - name: Scope guard
         run: python scripts/check_scope.py --base origin/main
       - name: Repository truth audit
+        id: truth_audit
+        continue-on-error: true
         run: python scripts/audit_repository_truth.py
+      - name: Upload repository truth audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: researchos-truth-audit-${{ github.sha }}
+          path: docs/audits/repository_truth_audit.md
+          if-no-files-found: error
+          retention-days: 30
+      - name: Fail on repository truth findings
+        if: steps.truth_audit.outcome == 'failure'
+        run: |
+          echo "Repository truth audit found findings; audit evidence was uploaded above."
+          exit 1
       - name: Text integrity guard
         run: python scripts/check_text_integrity.py .github/workflows/ci.yml .pre-commit-config.yaml pyproject.toml
       - name: Run canonical health check
