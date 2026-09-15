@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from researchos.experiments.phase52 import FEATURE_SET_NAMES, Phase52Config, run_phase52_comparison
 from researchos.experiments.phase52.multivariate import MultivariateEmpiricalProbabilityEstimator
 from researchos.experiments.phase52.tests.test_phase52 import _run_inputs
@@ -17,6 +19,7 @@ def test_multivariate_estimator_uses_all_selected_features():
     assert est_b.predict_class(row) == -1
 
 
+@pytest.mark.frozen
 def test_phase52_comparison_returns_all_isolated_feature_sets():
     close, high, low, volume, macro, ts, macro_ts = _run_inputs()
     cfg = Phase52Config(train_size=400, validation_size=100, step_size=100, n_neighbors=25)
@@ -28,10 +31,11 @@ def test_phase52_comparison_returns_all_isolated_feature_sets():
     assert results["PRICE_ONLY"].metadata["selected_feature_names"]
     assert all(name.startswith("macro_DXY_") for name in results["PRICE + DXY"].metadata["selected_feature_names"][-3:])
     assert all(name.startswith("macro_US10Y_") for name in results["PRICE + US10Y"].metadata["selected_feature_names"][-3:])
-    assert all(name.startswith("macro_VIX_") for name in results["PRICE + VIX"].metadata["selected_feature_names"][-3:])
+    assert all(name.startswith("macro_VIX_") for name in results["PRICE + VIX"]["metadata"]["selected_feature_names"][-3:])
     assert len(results["PRICE + ALL"].metadata["selected_feature_names"]) == len(results["PRICE_ONLY"].metadata["selected_feature_names"]) + 9
 
 
+@pytest.mark.frozen
 def test_phase52_comparison_is_deterministic():
     close, high, low, volume, macro, ts, macro_ts = _run_inputs()
     cfg = Phase52Config(train_size=400, validation_size=100, step_size=100)
