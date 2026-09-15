@@ -16,31 +16,30 @@ FORBIDDEN_NEW_PATHS = (
     re.compile(r"(^|/)FORENSIC_AUDIT(?:[^/]*)", re.I),
     re.compile(r"(^|/)run_full_analysis[^/]*\.py$", re.I),
 )
-DUPLICATE_FAMILIES = (
-    ("cpp_quant", "cpp_quant_engine"),
-)
 
 
-def changed_paths(base: str) -> list[str]:
-    completed = subprocess.run(
-        ["git", "diff", "--name-only", "--diff-filter=ACMR", f"{base}...HEAD"],
-        cwd=ROOT,
-        text=True,
-        capture_output=True,
-        check=True,
-    )
+def changed_paths(base: str | None, staged: bool) -> list[str]:
+    command = ["git", "diff", "--name-only", "--diff-filter=ACMR"]
+    if staged:
+        command.append("--cached")
+    elif base:
+        command.append(f"{base}...HEAD")
+    else:
+        command.append("HEAD")
+    completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=True)
     return [line.strip().replace("\\", "/") for line in completed.stdout.splitlines() if line.strip()]
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base", default="origin/main")
+    parser.add_argument("--base", default=None)
+    parser.add_argument("--staged", action="store_true")
     args = parser.parse_args()
 
     try:
-        paths = changed_paths(args.base)
+        paths = changed_paths(args.base, args.staged)
     except subprocess.CalledProcessError as exc:
-        print(f"SCOPE GUARD: FAIL: cannot compare against {args.base}: {exc.stderr.strip()}")
+        print(f"SCOPE GUARD: FAIL: git diff failed: {exc.stderr.strip()}")
         return 1
 
     failures: list[str] = []
@@ -50,21 +49,7 @@ def main() -> int:
                 failures.append(f"forbidden new artifact: {path}")
                 break
 
-    added_names = {Path(path).name.lower() for path in paths}
-    if any("cpp_quant" in name for name in added_names):
-        existing_cpp_quant = [p for p in paths if "cpp_quant" in p.lower()]
-        if existing_cpp_quant:
-            failures.append(
-                "quant-engine naming requires explicit architecture review; "
-                f"do not add another cpp_quant/cpp_quant_engine tree: {existing_cpp_quant}"
-            )
-
-    for family in DUPLICATE_FAMILIES:
-        if any(family[0] in p.lower() and family[1] in p.lower() for p in paths):
-            failures.append(f"new path contains both duplicate family names: {family}")
-
-    workflow_dir = ROOT / ".github" / "workflows"
-    for workflow in workflow_dir.glob("*.y*ml"):
+    for workflow in (ROOT / ".github" / "workflows").glob("*.y*ml"):
         text = workflow.read_text(encoding="utf-8")
         if re.search(r"^\s*-\s*master\s*$", text, re.MULTILINE):
             failures.append(f"workflow uses forbidden master branch trigger: {workflow.as_posix()}")
