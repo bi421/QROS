@@ -2,6 +2,10 @@
 
 **Institutional-Grade Market Research Platform**
 
+[![Health](https://github.com/bi421/ResearchOS/actions/workflows/ci.yml/badge.svg)](https://github.com/bi421/ResearchOS/actions/workflows/ci.yml)
+
+> **Health evidence rule:** a local or AI-reported "checked" state is **UNVERIFIED** until `scripts/final_health_check.py` produces `.health/last_run.json`, or the corresponding GitHub Actions Health Evidence Gate passes and uploads that artifact.
+
 ResearchOS is a deterministic, explainable, scientific market research platform that produces institutional-quality research for human traders. It is **NOT** an automated trading system — it never executes trades, sends orders, or makes final trading decisions.
 
 ## Key Principles
@@ -41,19 +45,25 @@ The ResearchOS constitutional framework consists of 17 articles:
 pip install -e .
 ```
 
+## Health evidence
+
+```bash
+python scripts/final_health_check.py
+```
+
+The command records the commit SHA, UTC timestamp, ruff result, pytest result, C++ configure/build result, and git status in `.health/last_run.json`. The local evidence file is ephemeral; CI uploads the same file as a workflow artifact named `researchos-health-<commit-sha>`.
+
 ## Quick Start
 
 ```python
 from researchos import Research, Observation, Evidence, Hypothesis, Scenario
 
-# Create a research project
 research = Research(
     question="What is the inflation outlook?",
     time_horizon="Monthly",
     asset="US",
 )
 
-# Create an observation
 from datetime import datetime, timezone
 
 obs = Observation(
@@ -64,7 +74,6 @@ obs = Observation(
 )
 obs.validate()
 
-# Create evidence
 ev = Evidence(
     observation_id=obs.id,
     hypothesis_id="hyp1",
@@ -72,7 +81,6 @@ ev = Evidence(
     direction="Supporting",
 )
 
-# Create a hypothesis
 hyp = Hypothesis(
     research_id=research.id,
     type="Primary",
@@ -83,16 +91,12 @@ hyp = Hypothesis(
     falsifiability=0.6,
 )
 
-# Create scenarios
-from researchos import Scenario, ScenarioSet
-
+from researchos import ScenarioSet
 ss = ScenarioSet(research_id=research.id)
 ss.add_scenario(Scenario(hypothesis_id=hyp.id, type="Base", probability=0.5))
 ss.add_scenario(Scenario(hypothesis_id=hyp.id, type="Bull", probability=0.3))
 ss.add_scenario(Scenario(hypothesis_id=hyp.id, type="Bear", probability=0.2))
 ss.normalize_probabilities()
-
-# Complete the research
 research.complete()
 ```
 
@@ -100,35 +104,11 @@ research.complete()
 
 ```
 ResearchOS/
-├── docs/                    # Constitutional documentation (Articles I-XVII)
+├── docs/                    # Constitutional documentation
 ├── researchos/              # Python package
-│   ├── core/                # Core infrastructure
-│   │   ├── base_object.py   # Base class for all objects
-│   │   ├── identity.py      # Deterministic ID generation
-│   │   ├── lifecycle.py     # Object lifecycle management
-│   │   ├── timestamp.py     # Timestamp utilities
-│   │   └── versioning.py    # Version control
-│   ├── objects/             # Object classes (20 types)
-│   │   ├── observation.py   # Observation, MarketState, MacroState
-│   │   ├── evidence.py      # Evidence, EvidenceRegistry
-│   │   ├── interpretation.py # Interpretation, Narrative
-│   │   ├── hypothesis.py    # Hypothesis, HypothesisSet
-│   │   ├── scenario.py      # Scenario, ScenarioSet
-│   │   ├── confidence.py    # Confidence, ConfidenceReport
-│   │   ├── contradiction.py # Contradiction, ContradictionReport
-│   │   ├── knowledge.py     # Knowledge, Pattern, Lesson
-│   │   └── research.py      # Research, ResearchReport, ResearchQuestion
-│   ├── validation/          # Validation engine
-│   │   ├── validators.py    # Validator classes
-│   │   └── rules.py         # Validation rules
-│   ├── repository/          # Repository layer
-│   │   ├── interface.py     # Repository interface
-│   │   └── memory.py        # In-memory implementation
-│   └── tests/               # Test suite
 ├── examples/                # Usage examples
-├── scripts/                 # Utility scripts
-├── README.md
-└── pyproject.toml
+├── scripts/                 # Reproducible operational entry points
+└── README.md
 ```
 
 ## Repository Hygiene
@@ -139,8 +119,6 @@ ResearchOS/
 - Historical reports and completed audit material belong under `docs/archive/`.
 - One-off exploratory, repair, manual-test, and scratch scripts must not be added to the repository root.
 - Credentials and API keys must never be committed; use environment variables or local secret configuration.
-
-See `docs/architecture/hardening/CLEANUP_PLAN.md` for the staged architecture cleanup plan.
 
 ## Running Tests
 

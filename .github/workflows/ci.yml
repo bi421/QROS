@@ -110,8 +110,8 @@ jobs:
           PYTHONPATH: cpp_quant_engine/python
         run: python -m pytest researchos/tests/ -k quant -v
 
-  quality-gate:
-    name: Final Health + Scope Gate
+  health-evidence:
+    name: Health Evidence + Scope Gate
     needs: [python-primary, quant-engine]
     runs-on: ubuntu-latest
     steps:
@@ -127,10 +127,18 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,test,saas]"
-          python -m pip install pytest ruff
+          python -m pip install pytest ruff nanobind scikit-build-core cmake
       - name: Scope guard
         run: python scripts/check_scope.py --base origin/main
       - name: Text integrity guard
         run: python scripts/check_text_integrity.py .github/workflows/ci.yml .pre-commit-config.yaml pyproject.toml
-      - name: Final health check
-        run: python scripts/final_health_check.py --skip-cpp
+      - name: Run canonical health check
+        run: python scripts/final_health_check.py
+      - name: Upload health evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: researchos-health-${{ github.sha }}
+          path: .health/last_run.json
+          if-no-files-found: error
+          retention-days: 30
