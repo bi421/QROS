@@ -26,7 +26,7 @@ def _job(workspace_id):
     return ResearchJob(
         id=uuid4(),
         workspace_id=workspace_id,
-        dataset_id="xauusd-m1",
+        dataset_version_id=uuid4(),
         workflow_id="xauusd_m1_frozen_research_v1",
         status=ResearchJobStatus.QUEUED,
     )
