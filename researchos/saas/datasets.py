@@ -159,27 +159,32 @@ class SupabaseDatasetStore:
         return self._dataset(rows[0])
 
     def create_version(self, version: DatasetVersion) -> DatasetVersion:
-        result = (
-            self._client.table("dataset_version")
-            .insert(
-                {
-                    "id": str(version.id),
-                    "dataset_id": str(version.dataset_id),
-                    "content_sha256": version.content_sha256,
-                    "storage_path": version.storage_path,
-                    "byte_size": version.byte_size,
-                    "created_by": str(version.created_by),
-                }
-            )
-            .select(
-                "id,dataset_id,version_no,content_sha256,storage_path,byte_size,created_by"
-            )
-            .execute()
-        )
-        rows = result.data or []
-        if len(rows) != 1:
-            raise RuntimeError("dataset version insert returned no unique row")
-        return self._version(rows[0])
+        """Create a version through the atomic Postgres allocator.
+
+        The database owns version numbering and the immutable row identity. The
+        supplied version_no is intentionally ignored so concurrent uploads cannot
+        race on max(version_no)+1 in application code.
+        """
+        result = self._client.rpc(
+            "create_dataset_version",
+            {
+                "p_dataset_id": str(version.dataset_id),
+                "p_content_sha256": version.content_sha256,
+                "p_storage_path": version.storage_path,
+                "p_byte_size": version.byte_size,
+                "p_created_by": str(version.created_by),
+            },
+        ).execute()
+        data = result.data
+        if isinstance(data, list):
+            if len(data) != 1:
+                raise RuntimeError("dataset version RPC returned no unique row")
+            row = data[0]
+        elif isinstance(data, dict):
+            row = data
+        else:
+            raise RuntimeError("dataset version RPC returned invalid data")
+        return self._version(row)
 
     def get_dataset(self, workspace_id: UUID, dataset_id: UUID) -> Dataset | None:
         result = (
@@ -243,7 +248,14 @@ def stream_sha256(file: BinaryIO, max_bytes: int) -> tuple[str, int]:
 
 
 def storage_path_for(workspace_id: UUID, dataset_id: UUID, version_id: UUID, digest: str) -> str:
-    return f"{workspace_id}/datasets/{dataset_id}/versions/{version_id}/{digest}"
+    """Return a content-addressed, tenant-scoped path.
+
+    ``version_id`` remains in the signature for call-site compatibility, but the
+    object path is keyed by the immutable content digest rather than a mutable
+    upload sequence number.
+    """
+    del version_id
+    return f"{workspace_id}/datasets/{dataset_id}/sha256/{digest}"
 
 
 __all__ = [
