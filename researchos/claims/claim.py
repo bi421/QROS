@@ -16,8 +16,6 @@ from researchos.core.timestamp import parse_timestamp, utc_now
 
 
 class ResearchClaimType(str, Enum):
-    """Allowed semantic classes for a research claim."""
-
     EMPIRICAL = "empirical"
     CAUSAL = "causal"
     PREDICTIVE = "predictive"
@@ -26,8 +24,6 @@ class ResearchClaimType(str, Enum):
 
 
 class EvidenceState(str, Enum):
-    """Evidence state; absence of evidence is never treated as support."""
-
     UNTESTED = "UNTESTED"
     TESTED = "TESTED"
     INCONCLUSIVE = "INCONCLUSIVE"
@@ -41,7 +37,7 @@ class EvidenceState(str, Enum):
 
 @dataclass(frozen=True)
 class ResearchPlan:
-    """Locked research-plan contract used to prevent silent post-hoc changes."""
+    """Machine-readable analysis plan that becomes immutable when locked."""
 
     hypothesis: str
     sample_definition: str
@@ -57,18 +53,17 @@ class ResearchPlan:
     replication_policy: str
 
     def __post_init__(self) -> None:
-        if not self.hypothesis.strip():
-            raise ValueError("ResearchPlan.hypothesis is required")
-        if not self.sample_definition.strip():
-            raise ValueError("ResearchPlan.sample_definition is required")
-        if not self.train_validation_test.strip():
-            raise ValueError("ResearchPlan.train_validation_test is required")
-        if not self.costs_slippage.strip():
-            raise ValueError("ResearchPlan.costs_slippage is required")
-        if not self.multiple_testing_policy.strip():
-            raise ValueError("ResearchPlan.multiple_testing_policy is required")
-        if not self.replication_policy.strip():
-            raise ValueError("ResearchPlan.replication_policy is required")
+        required = {
+            "hypothesis": self.hypothesis,
+            "sample_definition": self.sample_definition,
+            "train_validation_test": self.train_validation_test,
+            "costs_slippage": self.costs_slippage,
+            "multiple_testing_policy": self.multiple_testing_policy,
+            "replication_policy": self.replication_policy,
+        }
+        for name, value in required.items():
+            if not value.strip():
+                raise ValueError(f"ResearchPlan.{name} is required")
         if not self.features:
             raise ValueError("ResearchPlan.features must not be empty")
         if not self.metrics:
@@ -115,6 +110,28 @@ class ResearchPlan:
 
 class ResearchClaim(BaseObject):
     """Versioned, auditable statement that can accumulate empirical evidence."""
+
+    _SEMANTIC_FIELDS = frozenset(
+        {
+            "statement",
+            "claim_type",
+            "target_population",
+            "instrument",
+            "horizon",
+            "timestamp_policy",
+            "economic_rationale",
+            "falsification_conditions",
+            "primary_metrics",
+            "minimum_evidence_requirements",
+            "creator",
+            "workspace_id",
+            "research_id",
+            "version",
+            "parent_claim_id",
+            "research_plan",
+            "plan_hash",
+        }
+    )
 
     def __init__(
         self,
@@ -172,6 +189,17 @@ class ResearchClaim(BaseObject):
         self.plan_hash: str | None = None
         self.experiment_ids: tuple[str, ...] = ()
         self.evidence_hashes: tuple[str, ...] = ()
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if (
+            name in self._SEMANTIC_FIELDS
+            and getattr(self, "plan_locked_at", None) is not None
+            and getattr(self, name, value) != value
+        ):
+            raise AttributeError(
+                f"ResearchClaim.{name} is immutable after plan lock; fork a new claim version"
+            )
+        super().__setattr__(name, value)
 
     @property
     def is_plan_locked(self) -> bool:
@@ -305,11 +333,12 @@ class ResearchClaim(BaseObject):
         obj.evidence_state = EvidenceState(data.get("evidence_state", EvidenceState.UNTESTED.value))
         plan_data = data.get("research_plan")
         obj.research_plan = ResearchPlan.from_dict(plan_data) if plan_data else None
-        locked_at = data.get("plan_locked_at")
-        obj.plan_locked_at = parse_timestamp(locked_at) if locked_at else None
+        obj.plan_locked_at = None
         obj.plan_hash = data.get("plan_hash")
         obj.experiment_ids = tuple(data.get("experiment_ids", []))
         obj.evidence_hashes = tuple(data.get("evidence_hashes", []))
+        locked_at = data.get("plan_locked_at")
+        obj.plan_locked_at = parse_timestamp(locked_at) if locked_at else None
         return obj
 
     def clone(self) -> "ResearchClaim":
