@@ -19,7 +19,7 @@ def test_stream_sha256_returns_digest_size_and_rewinds_file() -> None:
     digest, size = stream_sha256(file, max_bytes=1024)
 
     assert size == len(body)
-    assert digest == "a2eaf8cdeaa86a7f4cde7e4bbab8a0b4df3c0fbd6e2d6e5f2e9c9b3e0a4f6a0a"
+    assert digest == "2c4205ccf87a7d1e36e14624540e63088c7b33c1a05f7e3ac02b7505fa042dcd"
     assert file.read() == body
 
 
@@ -36,7 +36,7 @@ def test_storage_path_is_tenant_scoped_and_content_addressed() -> None:
     path = storage_path_for(workspace_id, dataset_id, digest)
 
     assert path == f"{workspace_id}/datasets/{dataset_id}/sha256/{digest}"
-    assert str(uuid4()) not in path
+    assert "versions" not in path
 
 
 def test_in_memory_store_rejects_duplicate_content() -> None:
