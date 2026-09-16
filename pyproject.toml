@@ -95,7 +95,7 @@ testpaths = [
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short --ignore=researchos/tests/test_cpp_backtest_regression.py --ignore=cpp_quant_engine"
+addopts = "-v --tb=short"
 markers = [
     "fast: default development feedback tests",
     "frozen: expensive validated evidence tests; run on demand or when dependencies change",
