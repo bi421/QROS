@@ -132,6 +132,7 @@ def create_app(
             dataset_id=request.dataset_id,
             workflow_id=request.workflow_id,
             status=ResearchJobStatus.QUEUED,
+            created_by=tenant.user_id,
         )
         return store.create(job)
 
@@ -146,7 +147,6 @@ def create_app(
     ) -> ResearchJob:
         job = store.get(tenant.workspace_id, job_id)
         if job is None:
-            # Do not reveal whether another tenant owns this ID.
             raise HTTPException(status_code=404, detail="research run not found")
         return job
 
