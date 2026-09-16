@@ -110,9 +110,34 @@ jobs:
           PYTHONPATH: researchos/engines/quant/python
         run: python -m pytest researchos/tests/ -k quant -v
 
+  saas:
+    name: SaaS Application Contract + Container
+    needs: [python-primary]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install SaaS dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,test,saas]"
+          python -m pip install pytest pytest-cov ruff
+      - name: Run SaaS unit and integration tests
+        run: python -m pytest researchos/saas/tests -v
+      - name: Lint SaaS package
+        run: python -m ruff check researchos/saas
+      - name: Build production API image
+        run: docker build --file Dockerfile.saas --tag researchos-saas:ci .
+      - name: Smoke-test container configuration
+        run: docker image inspect researchos-saas:ci > /dev/null
+
   health-evidence:
     name: Health Evidence + Scope Gate
-    needs: [python-primary, quant-engine]
+    needs: [python-primary, quant-engine, saas]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
