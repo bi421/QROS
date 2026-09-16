@@ -24,22 +24,14 @@ class ClaimEvidenceGraph:
     evidence_hashes: tuple[str, ...]
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "object_type": "ClaimEvidenceGraph",
-            "claim_id": self.claim_id,
-            "claim_hash": self.claim_hash,
-            "plan_hash": self.plan_hash,
-            "evidence_hashes": list(self.evidence_hashes),
-        }
+        return {"object_type": "ClaimEvidenceGraph", "claim_id": self.claim_id, "claim_hash": self.claim_hash, "plan_hash": self.plan_hash, "evidence_hashes": list(self.evidence_hashes)}
 
 
 class ResearchClaimEvidenceGraph:
-    """Build and verify a claim → plan → evidence projection.
+    """Build, persist, verify, and trace a claim → plan → evidence projection.
 
-    Evidence artifacts remain append-only and are never rewritten merely to
-    attach research intent. The projection is persisted as an ordinary
-    ResearchOS object so it can later be migrated to a tenant-scoped SaaS
-    store without changing the research contract.
+    Historical evidence envelopes remain append-only. The projection references
+    immutable artifact hashes and never rewrites those artifacts.
     """
 
     def __init__(self, repository: ResearchRepository | None = None) -> None:
@@ -66,12 +58,7 @@ class ResearchClaimEvidenceGraph:
             claim_copy.add_evidence(evidence_hash)
         self._repository.save_object(claim_copy)
 
-        graph = ClaimEvidenceGraph(
-            claim_id=claim_copy.id,
-            claim_hash=claim_copy.claim_hash,
-            plan_hash=claim_copy.plan_hash,
-            evidence_hashes=normalized,
-        )
+        graph = ClaimEvidenceGraph(claim_id=claim_copy.id, claim_hash=claim_copy.claim_hash, plan_hash=claim_copy.plan_hash, evidence_hashes=normalized)
         self._repository.save_object(_GraphObject(graph))
         return graph
 
@@ -79,12 +66,31 @@ class ResearchClaimEvidenceGraph:
         data = self._repository.load_by_id(f"claim-evidence:{claim_id}")
         if data is None:
             return None
-        return ClaimEvidenceGraph(
-            claim_id=data["claim_id"],
-            claim_hash=data["claim_hash"],
-            plan_hash=data["plan_hash"],
-            evidence_hashes=tuple(data.get("evidence_hashes", [])),
-        )
+        return ClaimEvidenceGraph(claim_id=data["claim_id"], claim_hash=data["claim_hash"], plan_hash=data["plan_hash"], evidence_hashes=tuple(data.get("evidence_hashes", [])))
+
+    def trace(self, claim_id: str) -> dict[str, Any]:
+        """Return a deterministic downstream traversal of linked evidence."""
+        graph = self.get(claim_id)
+        if graph is None:
+            raise KeyError(f"Unknown claim {claim_id}")
+
+        nodes: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        queue = list(graph.evidence_hashes)
+        while queue:
+            artifact_hash = queue.pop(0)
+            if artifact_hash in seen:
+                continue
+            seen.add(artifact_hash)
+            artifact = self._evidence.get_artifact(artifact_hash)
+            if artifact is None:
+                continue
+            children = self._evidence.get_children(artifact_hash)
+            nodes.append({"artifact_hash": artifact.artifact_hash, "artifact_type": artifact.artifact_type, "version": artifact.version, "parents": self._evidence.get_parents(artifact_hash), "children": children})
+            queue.extend(children)
+
+        nodes.sort(key=lambda node: (node["artifact_type"], node["artifact_hash"]))
+        return {"claim_id": graph.claim_id, "claim_hash": graph.claim_hash, "plan_hash": graph.plan_hash, "evidence_hashes": list(graph.evidence_hashes), "nodes": nodes}
 
     def verify(self, claim_id: str) -> bool:
         graph = self.get(claim_id)
