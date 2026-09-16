@@ -6,6 +6,7 @@ It creates tenant-scoped jobs and leaves execution to a worker adapter.
 
 from __future__ import annotations
 
+import logging
 from typing import Protocol
 from uuid import UUID, uuid4
 
@@ -15,27 +16,62 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
+from researchos.saas.config import SaaSSettings
 from researchos.saas.contracts import (
     DEFAULT_USAGE_POLICIES,
     ResearchJob,
     ResearchJobStatus,
     TenantContext,
 )
+from researchos.saas.observability import configure_logging
 from researchos.saas.store import InMemoryResearchJobStore, ResearchJobStore
 
 REQUEST_ID_HEADER = "X-Request-ID"
-MAX_REQUEST_ID_LENGTH = 128
 
 
 class RequestCorrelationMiddleware(BaseHTTPMiddleware):
     """Attach one bounded correlation ID to every HTTP request and response."""
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    def __init__(self, app: object, max_request_id_length: int = 128) -> None:
+        super().__init__(app)
+        self._max_request_id_length = max_request_id_length
+
+    async def dispatch(self, request: Request, call_next: object) -> Response:
         supplied = request.headers.get(REQUEST_ID_HEADER, "").strip()
-        request_id = supplied[:MAX_REQUEST_ID_LENGTH] if supplied else str(uuid4())
+        request_id = (
+            supplied[: self._max_request_id_length]
+            if supplied
+            else str(uuid4())
+        )
         request.state.request_id = request_id
         response = await call_next(request)
         response.headers[REQUEST_ID_HEADER] = request_id
+        return response
+
+
+class RequestSecurityMiddleware(BaseHTTPMiddleware):
+    """Apply conservative HTTP security headers and a bounded body-size guard."""
+
+    def __init__(self, app: object, max_body_bytes: int) -> None:
+        super().__init__(app)
+        self._max_body_bytes = max_body_bytes
+
+    async def dispatch(self, request: Request, call_next: object) -> Response:
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                declared_length = int(content_length)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="invalid content-length") from None
+            if declared_length > self._max_body_bytes:
+                raise HTTPException(status_code=413, detail="request body too large")
+
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Cache-Control"] = "no-store"
         return response
 
 
@@ -73,8 +109,13 @@ def create_app(
     *,
     auth_provider: AuthProvider | None = None,
     job_store: ResearchJobStore | None = None,
+    settings: SaaSSettings | None = None,
 ) -> FastAPI:
-    """Build the SaaS API with explicit dependency injection for testing/deployment."""
+    """Build the SaaS API with explicit dependency injection for deployment/tests."""
+
+    runtime = settings or SaaSSettings.from_env()
+    configure_logging(runtime.log_level)
+    logger = logging.getLogger("researchos.saas.api")
 
     auth = auth_provider or UnconfiguredAuthProvider()
     store = job_store or InMemoryResearchJobStore()
@@ -82,10 +123,30 @@ def create_app(
         title="ResearchOS SaaS API",
         version="1.0.0",
         description="Multi-tenant delivery API for auditable financial research.",
+        docs_url="/docs" if runtime.environment != "production" else None,
+        redoc_url="/redoc" if runtime.environment != "production" else None,
     )
-    app.add_middleware(RequestCorrelationMiddleware)
+    app.add_middleware(
+        RequestCorrelationMiddleware,
+        max_request_id_length=runtime.request_id_max_length,
+    )
+    app.add_middleware(
+        RequestSecurityMiddleware,
+        max_body_bytes=runtime.max_request_body_bytes,
+    )
+
+    @app.middleware("http")
+    async def access_log(request: Request, call_next: object) -> Response:
+        response = await call_next(request)
+        logger.info(
+            "http_request",
+            extra={"request_id": getattr(request.state, "request_id", None)},
+        )
+        return response
 
     def current_tenant(authorization: str | None = Header(default=None)) -> TenantContext:
+        if runtime.auth_required or authorization:
+            return auth.authenticate(authorization)
         return auth.authenticate(authorization)
 
     @app.get("/healthz", tags=["system"])
@@ -155,4 +216,10 @@ def create_app(
 
 app = create_app()
 
-__all__ = ["AuthProvider", "RequestCorrelationMiddleware", "app", "create_app"]
+__all__ = [
+    "AuthProvider",
+    "RequestCorrelationMiddleware",
+    "RequestSecurityMiddleware",
+    "app",
+    "create_app",
+]
