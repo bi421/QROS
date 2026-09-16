@@ -12,11 +12,15 @@ from researchos.saas.contracts import (
     TenantContext,
     UsagePolicy,
 )
+from researchos.saas.supabase_job_store import SupabaseResearchJobStore
+from researchos.saas.supabase_membership import SupabaseWorkspaceMembershipResolver
 
 __all__ = [
     "Plan",
     "ResearchJob",
     "ResearchJobStatus",
+    "SupabaseResearchJobStore",
+    "SupabaseWorkspaceMembershipResolver",
     "TenantContext",
     "UsagePolicy",
 ]
