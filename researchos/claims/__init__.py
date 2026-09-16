@@ -6,11 +6,14 @@ from researchos.claims.claim import (
     ResearchClaimType,
     ResearchPlan,
 )
+from researchos.claims.evidence_graph import ClaimEvidenceGraph, ResearchClaimEvidenceGraph
 from researchos.claims.repository import ResearchClaimRepository
 
 __all__ = [
+    "ClaimEvidenceGraph",
     "EvidenceState",
     "ResearchClaim",
+    "ResearchClaimEvidenceGraph",
     "ResearchClaimRepository",
     "ResearchClaimType",
     "ResearchPlan",
