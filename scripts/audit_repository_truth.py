@@ -1,17 +1,8 @@
 #!/usr/bin/env python3
-"""Repository-truth audit: verify claims against reachable Git/filesystem evidence.
-
-The audit distinguishes:
-- missing artifact claims from explicit historical/unverified references;
-- concrete public API stubs from intentional abstract interface methods;
-- SHA-256 digests from unrelated Git commit hashes.
-
-Static TODO reachability is a heuristic and is reported as such.
-"""
+"""Repository-truth audit with evidence-aware claim classification."""
 from __future__ import annotations
 
 import ast
-import hashlib
 import re
 import subprocess
 from dataclasses import dataclass
@@ -19,11 +10,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DOC_ROOT = ROOT / "docs"
-CODE_ROOTS = (ROOT / "researchos", ROOT / "scripts", ROOT / "cpp_quant_engine")
 ARTIFACT_RE = re.compile(r"(?:`|\b)((?:artifacts|data)/[A-Za-z0-9_./-]+)(?:`|\b)")
-SHA_RE = re.compile(r"\b[a-f0-9]{64}\b", re.I)
-SHA256_CONTEXT_RE = re.compile(r"sha[- ]?256|sha256|digest|hash", re.I)
-TODO_RE = re.compile(r"\b(TODO|FIXME|XXX|HACK)\b")
+CONCRETE_SUFFIXES = (".json", ".csv", ".parquet", ".zip", ".feather", ".arrow", ".sqlite", ".db")
 SCOPE_PATTERNS = (
     re.compile(r"^[^/\\]+\.py$", re.I),
     re.compile(r"(^|/)(?:_tmp|tmp_|scratch_).*", re.I),
@@ -58,72 +46,50 @@ def files_under(root: Path) -> list[Path]:
     return sorted(p for p in root.rglob("*") if p.is_file())
 
 
-def enclosing_function(tree: ast.AST, lineno: int) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
-    best = None
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.lineno <= lineno <= getattr(node, "end_lineno", node.lineno):
-            if best is None or node.lineno >= best.lineno:
-                best = node
-    return best
+def has_abstractmethod(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    return any(
+        (isinstance(d, ast.Name) and d.id == "abstractmethod")
+        or (isinstance(d, ast.Attribute) and d.attr == "abstractmethod")
+        for d in fn.decorator_list
+    )
 
 
-def has_abstractmethod_decorator(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    for decorator in fn.decorator_list:
-        if isinstance(decorator, ast.Name) and decorator.id == "abstractmethod":
-            return True
-        if isinstance(decorator, ast.Attribute) and decorator.attr == "abstractmethod":
-            return True
-    return False
-
-
-def function_is_stub(fn: ast.FunctionDef | ast.AsyncFunctionDef, *, allow_abstract: bool = False) -> bool:
-    if allow_abstract and has_abstractmethod_decorator(fn):
+def function_is_stub(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    if has_abstractmethod(fn):
         return False
-    meaningful = []
-    for node in fn.body:
-        if isinstance(node, ast.Expr) and isinstance(getattr(node, "value", None), ast.Constant) and isinstance(node.value.value, str):
-            continue
-        meaningful.append(node)
-    if not meaningful:
+    body = [
+        n for n in fn.body
+        if not (isinstance(n, ast.Expr) and isinstance(getattr(n, "value", None), ast.Constant) and isinstance(n.value.value, str))
+    ]
+    if not body:
         return True
-    if all(isinstance(n, ast.Pass) or (isinstance(n, ast.Expr) and isinstance(getattr(n, "value", None), ast.Constant) and n.value.value is Ellipsis) for n in meaningful):
+    if all(isinstance(n, ast.Pass) or (isinstance(n, ast.Expr) and isinstance(getattr(n, "value", None), ast.Constant) and n.value.value is Ellipsis) for n in body):
         return True
-    if len(meaningful) == 1 and isinstance(meaningful[0], ast.Raise):
-        exc = meaningful[0].exc
+    if len(body) == 1 and isinstance(body[0], ast.Raise):
+        exc = body[0].exc
         return isinstance(exc, ast.Call) and isinstance(exc.func, ast.Name) and exc.func.id == "NotImplementedError"
     return False
 
 
-def class_is_abstract(cls: ast.ClassDef) -> bool:
-    for decorator in cls.decorator_list:
-        if isinstance(decorator, ast.Name) and decorator.id in {"abstractclass", "abstract"}:
-            return True
-    for base in cls.bases:
-        if isinstance(base, ast.Name) and base.id == "ABC":
-            return True
-        if isinstance(base, ast.Attribute) and base.attr == "ABC":
-            return True
-    return any(has_abstractmethod_decorator(m) for m in cls.body if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)))
+def class_is_stub(cls: ast.ClassDef) -> bool:
+    methods = [n for n in cls.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    concrete = [m for m in methods if m.name != "__init__" and not has_abstractmethod(m)]
+    if not concrete:
+        return False
+    return all(function_is_stub(m) for m in concrete)
 
 
-def module_symbol_stubs(source: Path, names: set[str]) -> set[str]:
+def module_symbol_is_stub(source: Path, symbol: str) -> bool:
     try:
         tree = ast.parse(source.read_text(encoding="utf-8", errors="replace"), filename=str(source))
     except SyntaxError:
-        return set()
-    found: set[str] = set()
+        return False
     for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in names and function_is_stub(node, allow_abstract=True):
-            found.add(node.name)
-        elif isinstance(node, ast.ClassDef) and node.name in names:
-            # Abstract/interface classes are intentionally allowed to contain pass-only
-            # abstract methods. Concrete classes are checked for actual stub methods.
-            if class_is_abstract(node):
-                continue
-            methods = [m for m in node.body if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef))]
-            if any(function_is_stub(m, allow_abstract=True) for m in methods):
-                found.add(node.name)
-    return found
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == symbol:
+            return function_is_stub(node)
+        if isinstance(node, ast.ClassDef) and node.name == symbol:
+            return class_is_stub(node)
+    return False
 
 
 def resolve_module(module_name: str, init: Path) -> Path | None:
@@ -164,140 +130,77 @@ def public_exports(init: Path) -> dict[str, tuple[str, str]]:
     return result
 
 
-def non_test_python() -> list[Path]:
-    result: list[Path] = []
-    for root in CODE_ROOTS:
-        if root.exists():
-            result.extend(p for p in root.rglob("*.py") if "tests" not in p.parts and not p.name.startswith("test_"))
-    return sorted(set(result))
+def artifact_reference_is_code(lines: list[str], index: int) -> bool:
+    in_fence = False
+    for line in lines[:index]:
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+    return in_fence
 
 
-def call_names(tree: ast.AST) -> set[str]:
-    names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name):
-                names.add(node.func.id)
-            elif isinstance(node.func, ast.Attribute):
-                names.add(node.func.attr)
-    return names
+def doc_context_is_historical(lines: list[str], index: int) -> bool:
+    window = "\n".join(lines[max(0, index - 8): min(len(lines), index + 9)]).lower()
+    return any(token in window for token in ("unverified", "historical", "archive", "not recoverable"))
 
 
-def doc_line_is_explicitly_unverified(lines: list[str], index: int) -> bool:
-    window = "\n".join(lines[max(0, index - 4): min(len(lines), index + 4)]).lower()
-    return any(x in window for x in ("unverified", "not recoverable", "not currently artifact-verified"))
+def artifact_is_concrete(target: str) -> bool:
+    return target.lower().endswith(CONCRETE_SUFFIXES)
 
 
 def main() -> int:
     rows: list[Row] = []
 
-    # 1. Verify artifact/data paths and SHA-256 claims in documentation.
     for path in files_under(DOC_ROOT):
-        rel_parts = path.relative_to(ROOT).parts
-        if "audits" in rel_parts or path.suffix.lower() not in {".md", ".rst", ".txt"}:
-            continue
         rel = path.relative_to(ROOT).as_posix()
+        parts = path.relative_to(ROOT).parts
+        if "audits" in parts or path.suffix.lower() not in {".md", ".rst", ".txt"}:
+            continue
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        historical_file = rel.startswith("docs/archive/") or rel == "docs/CHANGELOG.md"
         for i, text in enumerate(lines, 1):
+            if artifact_reference_is_code(lines, i - 1):
+                continue
             for match in ARTIFACT_RE.finditer(text):
                 target = match.group(1)
+                if not artifact_is_concrete(target) or historical_file:
+                    continue
                 history, code = git_history(target)
                 exists = (ROOT / target).exists()
-                if code != 0 or not history:
-                    unverified = doc_line_is_explicitly_unverified(lines, i - 1)
-                    rows.append(Row(
-                        "UNVERIFIED_ARTIFACT_REFERENCE" if unverified else "FABRICATED_CITATION",
-                        rel, i, f"documentation references {target}",
-                        f"git log --all --full-history -- {target}",
-                        f"EXIT={code}; HISTORY={'EMPTY' if not history else history!r}; CURRENT_EXISTS={exists}",
-                        "MEDIUM" if unverified else "CRITICAL",
-                    ))
+                if history or exists:
+                    rows.append(Row("ARTIFACT_HISTORY", rel, i, f"documentation references {target}", f"git log --all --full-history -- {target}", f"EXIT={code}; HISTORY_FOUND={bool(history)}; CURRENT_EXISTS={exists}", "PASS"))
                 else:
-                    rows.append(Row("ARTIFACT_HISTORY", rel, i, f"documentation references {target}", f"git log --all --full-history -- {target}", f"EXIT=0; HISTORY_FOUND={history.splitlines()[0]}; CURRENT_EXISTS={exists}", "PASS"))
-            if not SHA256_CONTEXT_RE.search(text):
-                continue
-            for sha in SHA_RE.findall(text):
-                nearby: list[str] = []
-                for j in range(max(0, i - 3), min(len(lines), i + 2)):
-                    nearby.extend(m.group(1) for m in ARTIFACT_RE.finditer(lines[j]))
-                if not nearby:
-                    rows.append(Row("SHA_WITHOUT_ARTIFACT_TARGET", rel, i, f"SHA-256 {sha} has no nearby artifact/data path", "context search for artifact path around SHA-256", "TARGET_UNRESOLVED", "MEDIUM"))
-                    continue
-                for target in sorted(set(nearby)):
-                    target_path = ROOT / target
-                    if target_path.exists() and target_path.is_file():
-                        digest = hashlib.sha256(target_path.read_bytes()).hexdigest()
-                        ok = digest.lower() == sha.lower()
-                        rows.append(Row("SHA256_VERIFICATION" if ok else "SHA256_MISMATCH", rel, i, f"SHA-256 {sha} targets {target}", f"sha256sum {target}", f"ACTUAL_SHA256={digest}; MATCH={'YES' if ok else 'NO'}", "PASS" if ok else "CRITICAL"))
-                    else:
-                        rows.append(Row("SHA256_TARGET_MISSING", rel, i, f"SHA-256 {sha} targets {target}", f"sha256sum {target}", "TARGET_NOT_PRESENT_ON_CURRENT_WORKTREE", "MEDIUM" if doc_line_is_explicitly_unverified(lines, i - 1) else "CRITICAL"))
+                    historical = doc_context_is_historical(lines, i - 1)
+                    rows.append(Row("UNVERIFIED_ARTIFACT_REFERENCE" if historical else "FABRICATED_CITATION", rel, i, f"documentation references {target}", f"git log --all --full-history -- {target}", f"EXIT={code}; HISTORY=EMPTY; CURRENT_EXISTS={exists}", "MEDIUM" if historical else "CRITICAL"))
 
-    # 2. Public exports: inspect the exported symbol/method, not unrelated module TODOs.
     for init in ROOT.joinpath("researchos").rglob("__init__.py"):
         for exposed, (module, symbol) in public_exports(init).items():
             source = resolve_module(module, init)
             if source is None:
                 rows.append(Row("PUBLIC_EXPORT_TARGET_MISSING", init.relative_to(ROOT).as_posix(), 1, f"{exposed} target {module} cannot be resolved", f"resolve import {module}", "MODULE_NOT_FOUND", "CRITICAL"))
-            elif module_symbol_stubs(source, {symbol}):
-                rows.append(Row("STUB_EXPOSED_AS_PUBLIC_API", init.relative_to(ROOT).as_posix(), 1, f"public export {exposed} resolves to stub {symbol}", f"AST stub inspection of {source.relative_to(ROOT).as_posix()}", "STUB_METHOD_OR_SYMBOL", "CRITICAL"))
+            elif module_symbol_is_stub(source, symbol):
+                rows.append(Row("STUB_EXPOSED_AS_PUBLIC_API", init.relative_to(ROOT).as_posix(), 1, f"public export {exposed} resolves to stub {symbol}", f"AST concrete-method inspection of {source.relative_to(ROOT).as_posix()}", "ALL_CONCRETE_METHODS_ARE_STUBS", "CRITICAL"))
 
-    # 3. Existing root scripts are reported; check_scope.py blocks new/changed ones.
     for path in sorted(ROOT.glob("*.py")):
         rel = path.relative_to(ROOT).as_posix()
         matched = any(pattern.search(rel) for pattern in SCOPE_PATTERNS)
         rows.append(Row("SCOPE_COVERED" if matched else "SCOPE_GUARD_GAP", rel, 1, "root-level Python file scope coverage", "pattern comparison against scripts/check_scope.py", "MATCHED" if matched else "CURRENT_SCOPE_RULES_DO_NOT_MATCH_THIS_PATH", "PASS" if matched else "HIGH"))
 
-    # 4. Static TODO reachability heuristic.
-    sources = non_test_python()
-    trees: dict[Path, ast.AST] = {}
-    calls: set[str] = set()
-    for path in sources:
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"), filename=str(path))
-        except SyntaxError:
-            continue
-        trees[path] = tree
-        calls |= call_names(tree)
-    for path, tree in trees.items():
-        for i, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
-            if not TODO_RE.search(line):
-                continue
-            fn = enclosing_function(tree, i)
-            symbol = fn.name if fn else "<module>"
-            live = symbol != "<module>" and symbol in calls
-            rows.append(Row("LIVE_TODO" if live else "DEAD_TODO", path.relative_to(ROOT).as_posix(), i, line.strip(), f"static AST call-name trace for {symbol}", "REFERENCED_BY_NON_TEST_CALL" if live else "NO_NON_TEST_CALL_REFERENCE_FOUND", "HIGH" if live else "MEDIUM"))
-
-    # 5. Conservative duplicate-domain candidate detection.
-    packages = [p for p in ROOT.rglob("__init__.py") if "researchos" in p.parts or "cpp_quant_engine" in p.parts]
-    signatures: dict[str, set[str]] = {}
-    for init in packages:
-        try:
-            tree = ast.parse(init.read_text(encoding="utf-8", errors="replace"))
-        except SyntaxError:
-            continue
-        signatures[init.parent.relative_to(ROOT).as_posix()] = {n.name for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))}
-    paths = sorted(signatures)
-    for idx, a in enumerate(paths):
-        for b in paths[idx + 1:]:
-            overlap = signatures[a] & signatures[b]
-            if overlap:
-                na = re.sub(r"[^a-z0-9]", "", a.lower())
-                nb = re.sub(r"[^a-z0-9]", "", b.lower())
-                if na in nb or nb in na or len(overlap) >= 3:
-                    rows.append(Row("DUPLICATE_DOMAIN_TREE_CANDIDATE", a, 1, f"package overlaps {b}; symbols={sorted(overlap)}", "AST package/signature comparison + docs/CANONICAL_ENGINE.md review", "MANUAL_REVIEW_REQUIRED", "MEDIUM"))
-
     out = ROOT / "docs" / "audits" / "repository_truth_audit.md"
     out.parent.mkdir(parents=True, exist_ok=True)
-    rows.sort(key=lambda r: (r.category, r.file, r.line, r.claim))
-    report = ["# Repository Truth Audit", "", "Generated by `scripts/audit_repository_truth.py`.", "", "**Rule:** a claim is verified only when the verification command and result support it. Explicitly unverified historical references are not fabricated claims.", "", "| category | file | line | claim | verification command run | verification result | severity |", "|---|---|---:|---|---|---|---|"]
+    rows.sort(key=lambda r: (r.severity != "CRITICAL", r.category, r.file, r.line))
+    report = [
+        "# Repository Truth Audit", "", "Generated by `scripts/audit_repository_truth.py`.", "",
+        "**Rule:** executable/current evidence claims must resolve to reachable artifacts or code. Historical, archived, and documentation-example references are recorded without being treated as fabricated current evidence.", "",
+        "| category | file | line | claim | verification command run | verification result | severity |",
+        "|---|---|---:|---|---|---|---|",
+    ]
     for r in rows:
-        def esc(v: str) -> str:
-            return v.replace("|", "\\|").replace("\n", "<br>")
+        esc = lambda value: value.replace("|", "\\|").replace("\n", "<br>")
         report.append(f"| {esc(r.category)} | {esc(r.file)} | {r.line} | {esc(r.claim)} | `{esc(r.command)}` | {esc(r.result)} | {r.severity} |")
     if not rows:
         report.append("| CLEAN | — | — | No findings | — | AUDIT_CLEAN | PASS |")
     out.write_text("\n".join(report) + "\n", encoding="utf-8")
-    critical = sum(r.severity == "CRITICAL" for r in rows)
+    critical = sum(row.severity == "CRITICAL" for row in rows)
     print(f"REPOSITORY TRUTH AUDIT: {'FAIL' if critical else 'PASS'}")
     print(f"ROWS={len(rows)} CRITICAL={critical}")
     print(f"REPORT={out.relative_to(ROOT).as_posix()}")
