@@ -148,7 +148,7 @@ def calculate_reference_metrics(returns: pd.Series, equity_curve: list[float]) -
         if len(losses) and np.sum(losses) != 0.0
         else (float("inf") if len(wins) else 0.0)
     )
-    max_drawdown = calculate_reference_max_drawdown(equity_curve)
+    max_drawdown = round(calculate_reference_max_drawdown(equity_curve), 8)
 
     return {
         "total_return": float(np.sum(values)),
