@@ -1,4 +1,4 @@
-"""Research Claim domain objects and contracts."""
+"""Research Claim domain objects and persistence contracts."""
 
 from researchos.claims.claim import (
     EvidenceState,
@@ -6,10 +6,12 @@ from researchos.claims.claim import (
     ResearchClaimType,
     ResearchPlan,
 )
+from researchos.claims.repository import ResearchClaimRepository
 
 __all__ = [
     "EvidenceState",
     "ResearchClaim",
+    "ResearchClaimRepository",
     "ResearchClaimType",
     "ResearchPlan",
 ]
