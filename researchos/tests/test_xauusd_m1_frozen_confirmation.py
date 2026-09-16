@@ -4,11 +4,11 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from scripts.confirm_xauusd_m1_frozen_candidate import (
+from scripts._confirm_xauusd_m1_frozen_candidate_impl import (
     _evaluate_fold,
     _select_frozen_candidate,
-    run,
 )
+from scripts.confirm_xauusd_m1_frozen_candidate import run
 
 
 def _event(index: int, label: bool, *, session: str = "US", direction: str = "bullish") -> dict:
