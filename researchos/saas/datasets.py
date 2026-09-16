@@ -8,11 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from hashlib import sha256
-from io import BytesIO
-from pathlib import Path
-from tempfile import NamedTemporaryFile
 from typing import BinaryIO, Protocol
-from uuid import UUID, uuid4
+from uuid import UUID
 
 
 @dataclass(frozen=True)
