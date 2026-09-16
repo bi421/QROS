@@ -32,12 +32,10 @@ as $$
     );
 $$;
 
-revoke all on function public.is_workspace_member(uuid) from public;
-drop function if exists public.is_workspace_member(uuid);
 revoke all on function private.is_workspace_member(uuid) from public;
 grant execute on function private.is_workspace_member(uuid) to authenticated;
 
--- Rebind policies to the non-exposed helper schema.
+-- Rebind policies before removing the exposed public helper.
 alter policy workspace_member_select on public.workspace
     using ((select private.is_workspace_member(id)));
 
@@ -109,3 +107,6 @@ alter policy usage_event_member_select on public.usage_event
 
 alter policy audit_log_member_select on public.audit_log
     using ((select private.is_workspace_member(workspace_id)));
+
+revoke all on function public.is_workspace_member(uuid) from public;
+drop function public.is_workspace_member(uuid);
