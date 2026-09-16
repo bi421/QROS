@@ -69,6 +69,7 @@ class ResearchJob:
     dataset_id: str
     workflow_id: str
     status: ResearchJobStatus
+    created_by: UUID | None = None
 
     def __post_init__(self) -> None:
         if not self.dataset_id.strip():
