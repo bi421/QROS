@@ -50,9 +50,11 @@ class Query:
 
 class Client:
     def table(self, name):
-        if name == "workspace_member":
+        if name == "workspace_members":
             return Query([{"workspace_id": str(WORKSPACE_ID)}])
-        return Query([{"plan": "team", "status": "active"}])
+        if name == "billing_subscriptions":
+            return Query([{"plan": "team", "status": "active"}])
+        raise AssertionError(f"unexpected table: {name}")
 
 
 def test_supabase_membership_resolver_uses_server_subscription_state() -> None:
