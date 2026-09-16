@@ -19,13 +19,6 @@ _TRUE = {"1", "true", "yes", "on"}
 _FALSE = {"0", "false", "no", "off"}
 
 
-def _required(name: str) -> str:
-    value = os.getenv(name, "").strip()
-    if not value:
-        raise ConfigurationError(f"required environment variable is missing: {name}")
-    return value
-
-
 def _bool(name: str, default: bool) -> bool:
     raw = os.getenv(name)
     if raw is None:
@@ -65,6 +58,7 @@ class SaaSSettings:
     rate_limit_per_minute: int
     supabase_url: str | None
     supabase_publishable_key: str | None
+    supabase_service_role_key: str | None
 
     @classmethod
     def from_env(cls) -> "SaaSSettings":
@@ -74,13 +68,14 @@ class SaaSSettings:
 
         auth_required = _bool("RESEARCHOS_AUTH_REQUIRED", environment == "production")
         supabase_url = os.getenv("SUPABASE_URL", "").strip() or None
-        supabase_key = os.getenv("SUPABASE_PUBLISHABLE_KEY", "").strip() or None
+        publishable_key = os.getenv("SUPABASE_PUBLISHABLE_KEY", "").strip() or None
+        service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip() or None
 
         if environment == "production" and auth_required:
             if not supabase_url:
                 raise ConfigurationError("SUPABASE_URL is required in production")
-            if not supabase_key:
-                raise ConfigurationError("SUPABASE_PUBLISHABLE_KEY is required in production")
+            if not service_role_key:
+                raise ConfigurationError("SUPABASE_SERVICE_ROLE_KEY is required in production")
 
         return cls(
             environment=environment,
@@ -95,7 +90,8 @@ class SaaSSettings:
             request_id_max_length=_positive_int("RESEARCHOS_REQUEST_ID_MAX_LENGTH", 128),
             rate_limit_per_minute=_positive_int("RESEARCHOS_RATE_LIMIT_PER_MINUTE", 60),
             supabase_url=supabase_url,
-            supabase_publishable_key=supabase_key,
+            supabase_publishable_key=publishable_key,
+            supabase_service_role_key=service_role_key,
         )
 
 
