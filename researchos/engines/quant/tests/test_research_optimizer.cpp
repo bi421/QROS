@@ -142,13 +142,14 @@ FunctionSignalGenerator interval_gen() {
 }
 
 // Maps `stop` and `tp` parameters onto the trade config.
-FunctionConfigProvider stop_tp_provider() {
-  return FunctionConfigProvider([](const ParamSet& p) {
+const FunctionConfigProvider& stop_tp_provider() {
+  static const FunctionConfigProvider provider([](const ParamSet& p) {
     strategy::StrategyConfig cfg = zero_cost();
     cfg.trade.stop_loss = p.get("stop", 2.0);
     cfg.trade.take_profit = p.get("tp", 4.0);
     return cfg;
   });
+  return provider;
 }
 
 OptimizerConfig grid_cfg(OptimizationMetric metric = OptimizationMetric::NetProfit,

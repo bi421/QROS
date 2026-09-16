@@ -32,8 +32,12 @@ TimePoint DataLoader::parse_datetime(const std::string& str, const std::string& 
 
 std::string DataLoader::format_datetime(TimePoint tp, const std::string& fmt) {
   auto time_t = std::chrono::system_clock::to_time_t(tp);
-  std::tm tm;
+  std::tm tm{};
+#ifdef _WIN32
   gmtime_s(&tm, &time_t);
+#else
+  gmtime_r(&time_t, &tm);
+#endif
   std::ostringstream ss;
   ss << std::put_time(&tm, fmt.c_str());
   return ss.str();

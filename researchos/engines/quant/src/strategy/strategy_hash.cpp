@@ -1,3 +1,4 @@
+#include <cmath>
 #include "strategy_internal.h"
 
 #include <algorithm>

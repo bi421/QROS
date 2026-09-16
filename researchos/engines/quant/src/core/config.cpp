@@ -1,3 +1,4 @@
+#include <cmath>
 #include "quant/core/config.h"
 #include <format>
 #include <optional>
