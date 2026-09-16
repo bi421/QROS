@@ -54,8 +54,11 @@ begin
 end;
 $$;
 
+-- This function is a server-side persistence primitive. Do not expose it to
+-- authenticated browser clients, because p_created_by is intentionally supplied
+-- by the trusted API service rather than derived from an end-user RPC payload.
 revoke all on function public.create_dataset_version(uuid, text, text, bigint, uuid) from public;
-grant execute on function public.create_dataset_version(uuid, text, text, bigint, uuid) to authenticated;
+grant execute on function public.create_dataset_version(uuid, text, text, bigint, uuid) to service_role;
 
 create or replace function public.prevent_dataset_version_mutation()
 returns trigger
@@ -75,6 +78,6 @@ before update or delete on public.dataset_version
 for each row execute function public.prevent_dataset_version_mutation();
 
 comment on function public.create_dataset_version(uuid, text, text, bigint, uuid)
-is 'Atomically allocates the next dataset version number and creates an immutable dataset version.';
+is 'Server-side atomic allocator for immutable dataset versions.';
 comment on function public.prevent_dataset_version_mutation()
 is 'Prevents UPDATE and DELETE of dataset_version rows.';
