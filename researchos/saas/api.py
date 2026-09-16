@@ -118,17 +118,16 @@ def create_app(
         file: UploadFile,
     ) -> DatasetVersion:
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
-        version_id = uuid4()
         try:
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
-            storage_path = storage_path_for(tenant.workspace_id, dataset_id, version_id, digest)
+            storage_path = storage_path_for(tenant.workspace_id, dataset_id, digest)
             storage.put(storage_path, file.file)
             try:
                 version = datasets.create_version(
                     DatasetVersion(
-                        id=version_id,
+                        id=uuid4(),
                         dataset_id=dataset_id,
                         version_no=len(datasets.list_versions(tenant.workspace_id, dataset_id)) + 1,
                         content_sha256=digest,
@@ -184,21 +183,18 @@ def create_app(
             name=name.strip(),
             created_by=tenant.user_id,
         )
-        # Persist the metadata only after the content has been accepted, so a
-        # rejected/failed upload cannot leave an empty tenant dataset behind.
-        version_id = uuid4()
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         try:
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
-            storage_path = storage_path_for(tenant.workspace_id, dataset.id, version_id, digest)
+            storage_path = storage_path_for(tenant.workspace_id, dataset.id, digest)
             storage.put(storage_path, file.file)
             try:
                 persisted_dataset = datasets.create_dataset(dataset)
                 version = datasets.create_version(
                     DatasetVersion(
-                        id=version_id,
+                        id=uuid4(),
                         dataset_id=dataset.id,
                         version_no=1,
                         content_sha256=digest,
