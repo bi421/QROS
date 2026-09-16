@@ -24,6 +24,7 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: Other/Proprietary License",
     "Operating System :: OS Independent",
+    "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -45,6 +46,10 @@ cli = [
     "click>=8.0",
 ]
 api = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+]
+saas = [
     "fastapi>=0.100.0",
     "uvicorn>=0.20.0",
     "python-multipart>=0.0.9",
