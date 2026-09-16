@@ -1,7 +1,7 @@
 # QROS SaaS database contract
 
 **Target:** Supabase Postgres 17
-**Status:** Implemented by `supabase/migrations/202609170001_saas_core.sql` and `202609170002_dataset_immutability.sql`.
+**Status:** Implemented by migrations `202609170001_saas_core` through `202609170005_saas_fk_indexes` and applied to the active Supabase project.
 
 ## Tables
 
@@ -107,7 +107,11 @@ audit_log
 
 Every customer-owned table has `workspace_id`, directly or through its parent relation. RLS is enabled on all SaaS tables. Authorization is resolved through `workspace_member`; request-body workspace identifiers are never trusted.
 
-The initial migration grants authenticated workspace members tenant-scoped access to research resources. Role-sensitive write restrictions are a later hardening gate; server-side subscription, usage-event, and audit-log writes are not exposed by browser policies.
+The server-side application uses the privileged Supabase client for writes and membership/subscription resolution. `anon` and `authenticated` have no table grants for these SaaS tables, so the browser cannot bypass the application API through PostgREST. RLS remains enabled as defense-in-depth.
+
+The membership helper is `private.is_workspace_member(...)`, a `SECURITY DEFINER` function with a pinned empty `search_path`; it is not exposed in the public Data API.
+
+Cross-resource policies additionally require research runs to reference a dataset version belonging to the same workspace, artifacts to reference runs in the same workspace, and evidence to reference matching runs/artifacts.
 
 ## Dataset immutability
 
@@ -152,3 +156,4 @@ The worker reloads the authoritative database record and verifies workspace owne
 - Keep raw source files private.
 - Preserve content hashes in the database and evidence artifacts.
 - Treat subscription state as server-authoritative.
+- Enable leaked-password protection in Supabase Auth before production auth rollout.
