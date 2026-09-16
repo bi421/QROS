@@ -247,14 +247,8 @@ def stream_sha256(file: BinaryIO, max_bytes: int) -> tuple[str, int]:
     return digest.hexdigest(), size
 
 
-def storage_path_for(workspace_id: UUID, dataset_id: UUID, version_id: UUID, digest: str) -> str:
-    """Return a content-addressed, tenant-scoped path.
-
-    ``version_id`` remains in the signature for call-site compatibility, but the
-    object path is keyed by the immutable content digest rather than a mutable
-    upload sequence number.
-    """
-    del version_id
+def storage_path_for(workspace_id: UUID, dataset_id: UUID, digest: str) -> str:
+    """Return a tenant-scoped content-addressed object path."""
     return f"{workspace_id}/datasets/{dataset_id}/sha256/{digest}"
 
 
