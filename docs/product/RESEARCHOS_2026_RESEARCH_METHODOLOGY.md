@@ -1,6 +1,6 @@
 # ResearchOS 2026 Research Methodology
 
-**Status:** Proposed product standard 0.1  
+**Status:** Proposed product standard 0.2  
 **Date:** 2026-09-17  
 **Scope:** Quantitative research SaaS methodology and architecture contract
 
@@ -32,26 +32,75 @@ Evidence-producing datasets carry source identity/version, retrieval time, cover
 
 The gate checks look-ahead leakage, future joins, publication timestamp mismatch, feature availability timing, label overlap, train/test contamination, survivorship/selection bias, corporate-action leakage and timezone/session boundary errors. A favorable metric cannot override a failed integrity gate.
 
-## 7. Experiment classes
+## 7. Probability & Trading-Edge Methodology
+
+ResearchOS does not treat win rate as a sufficient measure of edge. Probability and edge analysis is a layered scientific measurement system. The complete standard is defined in `docs/product/RESEARCHOS_PROBABILITY_AND_EDGE_FRAMEWORK_2026.md`.
+
+```text
+OBSERVATIONS
+  ↓
+EVENT / RETURN DISTRIBUTION
+  ↓
+CONDITIONAL PROBABILITY
+  ↓
+EXPECTED PAYOFF + RISK
+  ↓
+ESTIMATION UNCERTAINTY
+  ↓
+DEPENDENCE + TIME-SERIES EFFECTS
+  ↓
+TAIL + EXTREME-EVENT ANALYSIS
+  ↓
+MULTIPLE TESTING / SELECTION BIAS
+  ↓
+OUT-OF-SAMPLE + ROBUSTNESS
+  ↓
+REPLICATION + CALIBRATION
+  ↓
+ECONOMIC EDGE ASSESSMENT
+```
+
+The framework includes, where justified by the research question:
+
+- probability, Bayes, expected value, effect sizes and uncertainty intervals;
+- Kelly/log-growth analysis with explicit estimation-risk caveats;
+- time-series econometrics, stationarity, autocorrelation and volatility models including GARCH-family models;
+- VaR and Expected Shortfall with declared sign conventions and tail assumptions;
+- stochastic-process benchmarks such as GBM and Ornstein-Uhlenbeck, explicitly labeled as model assumptions rather than market truth;
+- Student-t/heavy-tail models, Extreme Value Theory and copulas for non-Gaussian tails and dependence;
+- Shannon entropy, conditional entropy, mutual information and information gain, without equating information-theoretic dependence to economic profitability;
+- dependence-aware bootstrap/resampling;
+- Sharpe uncertainty, Probabilistic Sharpe Ratio and Deflated Sharpe Ratio where appropriate;
+- multiple-testing accounting, Probability of Backtest Overfitting, CPCV, purging/embargo, White Reality Check and Hansen SPA where appropriate;
+- probability calibration using proper scoring rules such as Brier score and log loss;
+- regime-conditional analysis and economic validation after costs, slippage, fees, financing, turnover and capacity assumptions.
+
+The central rule is:
+
+> **A probability estimate is not evidence of edge until its definition, uncertainty, dependence, search history, economic meaning and out-of-sample behavior are inspectable.**
+
+No single statistic, p-value, Sharpe ratio, entropy measure, volatility model or Bayesian posterior is sufficient by itself.
+
+## 8. Experiment classes
 
 - **Exploratory:** hypothesis-generating; not automatically confirmatory evidence.
 - **Confirmatory:** executed against a locked plan with predeclared primary tests.
 - **Robustness:** tests reasonable changes in assumptions, parameters, periods, costs, universes and regimes.
 - **Replication:** re-executes a claim using an independently defined dataset, period, implementation or researcher path as required.
 
-## 8. Anti-overfitting methodology
+## 9. Anti-overfitting methodology
 
 Where appropriate, ResearchOS supports holdouts, walk-forward evaluation, purged/embargoed CV, CPCV, Probability of Backtest Overfitting diagnostics, Deflated Sharpe Ratio or equivalent adjustment, White Reality Check/Hansen SPA, multiple-hypothesis correction, parameter sensitivity, placebo/falsification tests, and benchmark/naive comparisons. No single statistic is sufficient evidence of robustness.
 
-## 9. Research Budget and Multiple Testing Ledger
+## 10. Research Budget and Multiple Testing Ledger
 
 Each workspace records materially distinct hypotheses, parameterizations, datasets, model families and selection attempts contributing to a result. The ledger distinguishes planned, exploratory, failed, discarded, selected and duplicated/reproduced tests. Exploration is allowed; hidden search history is not.
 
-## 10. Contradiction as first-class evidence
+## 11. Contradiction as first-class evidence
 
 Evidence storage represents `SUPPORTING`, `CONTRADICTING`, `INCONCLUSIVE`, `FAILED_VALIDATION`, `REPLICATED`, and `NOT_REPLICATED`. Contradictory evidence remains attached to a claim even after later positive evidence.
 
-## 11. Evidence State Machine
+## 12. Evidence State Machine
 
 ```text
 UNTESTED → TESTED
@@ -62,11 +111,11 @@ UNTESTED → TESTED
 
 `REJECTED` is reserved for an explicit failed gate or declared falsification rule. Transition rules are versioned and auditable.
 
-## 12. Evidence Independence
+## 13. Evidence Independence
 
 Repeated experiments using the same data, feature construction, period or materially identical code are not automatically independent evidence. ResearchOS should display evidence-dependence metadata.
 
-## 13. Evidence Graph
+## 14. Evidence Graph
 
 ```text
 Claim
@@ -77,6 +126,12 @@ Claim
  │    ├── Runs
  │    ├── Metrics
  │    └── Artifacts
+ ├── Probability analyses
+ │    ├── Distribution estimates
+ │    ├── Conditional probabilities
+ │    ├── Risk/tail estimates
+ │    ├── Inference results
+ │    └── Calibration results
  ├── Validation gates
  ├── Findings
  ├── Replications
@@ -86,11 +141,11 @@ Claim
 
 Every derived artifact has machine-readable parent lineage.
 
-## 14. Reproduction contract
+## 15. Reproduction contract
 
 A result is reproducible only when source data, dataset version/hash, code/version, environment/dependencies, configuration, seeds where applicable, plan version, engine version and output artifact hashes are identifiable. Status is `REPRODUCIBLE`, `PARTIALLY_REPRODUCIBLE`, or `NOT_REPRODUCIBLE`.
 
-## 15. Knowledge promotion
+## 16. Knowledge promotion
 
 Durable Knowledge is not an AI-summary cache. Promotion requires a validated Finding with complete lineage and a configured evidence threshold:
 
@@ -100,47 +155,49 @@ Experiment → Run → Result → Validation → Finding → Knowledge
 
 This preserves the existing boundary between learning and justified durable knowledge.
 
-## 16. AI boundary
+## 17. AI boundary
 
 Agents may search prior research, propose hypotheses, draft plans, generate code, identify possible contradictions, suggest robustness tests, summarize evidence and explain results. Agents may not silently modify locked plans, change datasets, hide failures, promote unvalidated findings, convert uncertainty into certainty, or claim reproduction without a reproduction artifact. State-changing agent actions are logged.
 
-## 17. Human control
+## 18. Human control
 
 High-impact transitions require explicit researcher approval unless workspace policy delegates them: locking plans, declaring primary metrics, accepting dataset transformations, promoting Findings to Knowledge and changing evidence thresholds.
 
-## 18. Reproducible execution architecture
+## 19. Reproducible execution architecture
 
 The execution layer should be content-addressed where practical and support immutable artifacts, append-only event history, deterministic manifests, versioned contracts, idempotent execution, retry-safe jobs, explicit failures and replay from recorded inputs.
 
-## 19. Multi-tenant SaaS boundary
+## 20. Multi-tenant SaaS boundary
 
 Tenant isolation is a correctness property. Tenant-owned objects need explicit ownership and authorization boundaries. The platform must support workspace isolation, RBAC, row-level authorization, immutable audit events, encrypted secrets, metering, export/deletion and disaster recovery. Shared cache/search/vector/job/artifact stores may not rely on implicit tenant context.
 
-## 20. Version everything that can change meaning
+## 21. Version everything that can change meaning
 
 Version data schema, dataset, feature, label, experiment, plan, validation policy, evidence-state rules, metric definition, execution engine, AI agent/prompt/tool policy and report format. Reports identify the versions that produced them.
 
-## 21. Failure philosophy
+## 22. Failure philosophy
 
 ResearchOS fails closed for evidence integrity. If a required condition cannot be established, return explicit `UNKNOWN`/`BLOCKED` rather than silently guessing, repairing or downgrading it. Examples include unknown timestamp provenance, incomplete coverage, unverifiable hashes, missing dependency locks, failed reproduction and ambiguous train/test boundaries.
 
-## 22. Future-proofing rule
+## 23. Future-proofing rule
 
 No architecture can guarantee that future errors never occur. ResearchOS instead aims to make important errors difficult to introduce, difficult to hide, easy to detect, easy to reproduce, impossible to reinterpret silently, and recoverable without destroying historical evidence.
 
-## 23. Product acceptance test
+## 24. Product acceptance test
 
 ```text
 Create Claim → Define Plan → Lock Plan → Attach Validated Dataset →
 Exploratory Research → Confirmatory Experiment → Integrity Gates →
-Robustness → Replication → Supporting + Contradicting Evidence →
-Research Search Budget → Missing Evidence → Evidence State →
-Knowledge Promotion → Later Reproduction
+Probability / Risk / Tail Analysis → Multiple-Testing Accounting →
+Out-of-Sample → Robustness → Replication → Calibration where applicable →
+Supporting + Contradicting Evidence → Research Search Budget →
+Missing Evidence → Evidence State → Knowledge Promotion →
+Later Reproduction
 ```
 
 The workflow must be executable without manually stitching files together.
 
-## 24. Implementation order
+## 25. Implementation order
 
 ### Phase 0 — Contract
 Freeze domain contracts and invariants before UI work.
@@ -149,24 +206,27 @@ Freeze domain contracts and invariants before UI work.
 Implement claim identity, versioning, plan lock and lineage.
 
 ### Phase 2 — Evidence Graph
-Unify experiment/run/result/validation/finding relationships into a queryable claim history.
+Unify experiment/run/result/validation/finding relationships into a queryable claim history, including probability-analysis artifacts.
 
 ### Phase 3 — Integrity Engine
 Implement temporal integrity, provenance, reproducibility and data-quality gates.
 
-### Phase 4 — Research Memory
+### Phase 4 — Probability & Edge Engine
+Implement deterministic probability primitives, uncertainty estimation, time-series diagnostics, tail/dependence analysis, calibration and selection-aware performance inference as composable services. No opaque single edge score.
+
+### Phase 5 — Research Memory
 Implement related-claim discovery, contradiction tracking, evidence dependence and search-budget accounting.
 
-### Phase 5 — Replication
+### Phase 6 — Replication
 Implement independent replication contracts and reproducibility reports.
 
-### Phase 6 — SaaS
+### Phase 7 — SaaS
 Add tenant isolation, authentication, authorization, billing, metering, jobs and audit infrastructure.
 
-### Phase 7 — AI
-Add grounded research agents only after deterministic evidence APIs are stable.
+### Phase 8 — AI
+Add grounded research agents only after deterministic evidence and probability APIs are stable.
 
-## 25. Core invariant
+## 26. Core invariant
 
 > **ResearchOS must never become more certain than its evidence.**
 
