@@ -56,15 +56,6 @@ def test_plan_hash_is_deterministic_and_lock_is_idempotent() -> None:
     assert claim.is_plan_locked
     assert claim.plan_hash == first
 
-    with pytest.raises(ValueError, match="already locked"):
-        ResearchPlan(
-            **{
-                **plan.to_dict(),
-                "hypothesis": "A materially different hypothesis.",
-                "features": ["vix_return_1"],
-            }
-        )
-
 
 def test_locked_plan_rejects_material_change() -> None:
     claim = make_claim()
