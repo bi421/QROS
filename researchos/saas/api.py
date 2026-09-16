@@ -22,6 +22,7 @@ from researchos.saas.datasets import (
     storage_path_for,
     stream_sha256,
 )
+from researchos.saas.queue import InMemoryResearchJobQueue, ResearchJobQueue
 from researchos.saas.store import InMemoryResearchJobStore, ResearchJobStore
 
 REQUEST_ID_HEADER = "X-Request-ID"
@@ -84,6 +85,7 @@ def create_app(
     job_store: ResearchJobStore | None = None,
     dataset_store: DatasetStore | None = None,
     dataset_storage: DatasetStorage | None = None,
+    job_queue: ResearchJobQueue | None = None,
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
@@ -91,6 +93,7 @@ def create_app(
     store = job_store or InMemoryResearchJobStore()
     datasets = dataset_store or InMemoryDatasetStore()
     storage = dataset_storage or InMemoryDatasetStorage()
+    queue = job_queue or InMemoryResearchJobQueue()
     app = FastAPI(
         title="QROS SaaS API",
         version="1.0.0",
@@ -138,7 +141,7 @@ def create_app(
 
     @app.get("/readyz", tags=["system"])
     def readyz() -> dict[str, str]:
-        if store is None or datasets is None or storage is None:
+        if store is None or datasets is None or storage is None or queue is None:
             raise HTTPException(status_code=503, detail="SaaS persistence is not configured")
         return {"status": "ready"}
 
@@ -223,6 +226,7 @@ def create_app(
             raise HTTPException(status_code=429, detail="concurrent research run limit reached")
         if not datasets.list_versions(tenant.workspace_id, request.dataset_version_id):
             raise HTTPException(status_code=404, detail="dataset version not found")
+
         job = ResearchJob(
             id=uuid4(),
             workspace_id=tenant.workspace_id,
@@ -231,7 +235,21 @@ def create_app(
             status=ResearchJobStatus.QUEUED,
             created_by=tenant.user_id,
         )
-        return store.create(job)
+        created = store.create(job)
+        try:
+            queue.enqueue(tenant.workspace_id, created.id)
+        except Exception as exc:
+            try:
+                store.transition(
+                    tenant.workspace_id,
+                    created.id,
+                    ResearchJobStatus.QUEUED,
+                    ResearchJobStatus.FAILED,
+                )
+            except Exception:
+                pass
+            raise HTTPException(status_code=503, detail="research job queue unavailable") from exc
+        return created
 
     @app.get("/v1/research-runs/{job_id}", response_model=ResearchJobResponse, tags=["research"])
     def get_research_run(job_id: UUID, tenant: TenantContext = Depends(current_tenant)) -> ResearchJob:
