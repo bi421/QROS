@@ -1,4 +1,4 @@
-"""Application contracts for a multi-tenant ResearchOS SaaS.
+"""Application contracts for a multi-tenant QROS SaaS.
 
 No scientific calculation belongs here. These contracts make the product
 boundary explicit and give API, workers, and persistence layers one stable
@@ -62,18 +62,18 @@ class UsagePolicy:
 
 @dataclass(frozen=True)
 class ResearchJob:
-    """Tenant-owned research execution record."""
+    """Tenant-owned research execution record bound to an immutable dataset version."""
 
     id: UUID
     workspace_id: UUID
-    dataset_id: str
+    dataset_version_id: UUID
     workflow_id: str
     status: ResearchJobStatus
     created_by: UUID | None = None
 
     def __post_init__(self) -> None:
-        if not self.dataset_id.strip():
-            raise ValueError("dataset_id must not be empty")
+        if not isinstance(self.dataset_version_id, UUID):
+            raise TypeError("dataset_version_id must be a UUID")
         if not self.workflow_id.strip():
             raise ValueError("workflow_id must not be empty")
 
