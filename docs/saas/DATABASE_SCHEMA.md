@@ -6,6 +6,37 @@
 ## Tables
 
 ```text
+workspace
+  id uuid PK
+  name text
+  created_at timestamptz
+
+workspace_member
+  workspace_id uuid FK workspace
+  user_id uuid FK auth.users
+  role text CHECK (owner|admin|researcher|viewer)
+  created_at timestamptz
+  PK (workspace_id, user_id)
+
+subscription
+  id uuid PK
+  workspace_id uuid UNIQUE FK workspace
+  plan text CHECK (free|pro|team|enterprise)
+  status text CHECK (trialing|active|past_due|cancelled|incomplete)
+  provider text
+  provider_customer_id text
+  provider_subscription_id text
+  current_period_end timestamptz
+  created_at timestamptz
+  updated_at timestamptz
+
+dataset
+  id uuid PK
+  workspace_id uuid FK workspace
+  name text
+  created_by uuid FK auth.users
+  created_at timestamptz
+
 dataset_version
   id uuid PK
   dataset_id uuid FK dataset
@@ -17,9 +48,60 @@ dataset_version
   created_at timestamptz
   UNIQUE (dataset_id, version_no)
   UNIQUE (dataset_id, content_sha256)
-```
 
-The remaining SaaS tables are `workspace`, `workspace_member`, `subscription`, `dataset`, `research_run`, `artifact`, `evidence`, `usage_event`, and `audit_log`; their tenant relationships and constraints are defined by the migrations.
+research_run
+  id uuid PK
+  workspace_id uuid FK workspace
+  dataset_version_id uuid FK dataset_version
+  workflow_id text
+  status text CHECK (queued|running|succeeded|failed|cancelled)
+  attempt_count integer
+  error_code text
+  created_by uuid FK auth.users
+  created_at timestamptz
+  started_at timestamptz
+  finished_at timestamptz
+
+artifact
+  id uuid PK
+  workspace_id uuid FK workspace
+  research_run_id uuid FK research_run
+  kind text
+  content_sha256 text
+  storage_path text
+  byte_size bigint
+  created_at timestamptz
+  UNIQUE (research_run_id, content_sha256)
+
+evidence
+  id uuid PK
+  workspace_id uuid FK workspace
+  research_run_id uuid FK research_run
+  artifact_id uuid FK artifact
+  claim text
+  status text CHECK (proven|rejected|inconclusive|unverified)
+  provenance jsonb
+  created_at timestamptz
+
+usage_event
+  id uuid PK
+  workspace_id uuid FK workspace
+  user_id uuid FK auth.users
+  event_type text
+  quantity bigint
+  research_run_id uuid FK research_run
+  created_at timestamptz
+
+audit_log
+  id uuid PK
+  workspace_id uuid FK workspace
+  user_id uuid FK auth.users
+  action text
+  resource_type text
+  resource_id uuid
+  metadata jsonb
+  created_at timestamptz
+```
 
 ## Tenant isolation contract
 
