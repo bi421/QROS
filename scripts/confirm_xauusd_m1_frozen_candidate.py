@@ -11,12 +11,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from scripts._confirm_xauusd_m1_frozen_candidate_impl import (
-    Candidate,
-    _evaluate_fold,
-    _select_frozen_candidate,
-    run as _run_impl,
-)
+from scripts._confirm_xauusd_m1_frozen_candidate_impl import run as _run_impl
 
 
 def _finalize_scientific_gate(result: dict) -> dict:
