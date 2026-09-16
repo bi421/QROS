@@ -119,12 +119,14 @@ def create_app(
 
     auth = auth_provider or UnconfiguredAuthProvider()
     store = job_store or InMemoryResearchJobStore()
+    production = runtime.environment == "production"
     app = FastAPI(
         title="ResearchOS SaaS API",
         version="1.0.0",
         description="Multi-tenant delivery API for auditable financial research.",
-        docs_url="/docs" if runtime.environment != "production" else None,
-        redoc_url="/redoc" if runtime.environment != "production" else None,
+        docs_url=None if production else "/docs",
+        redoc_url=None if production else "/redoc",
+        openapi_url=None if production else "/openapi.json",
     )
     app.add_middleware(
         RequestCorrelationMiddleware,
@@ -145,8 +147,6 @@ def create_app(
         return response
 
     def current_tenant(authorization: str | None = Header(default=None)) -> TenantContext:
-        if runtime.auth_required or authorization:
-            return auth.authenticate(authorization)
         return auth.authenticate(authorization)
 
     @app.get("/healthz", tags=["system"])
