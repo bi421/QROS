@@ -73,6 +73,17 @@ def test_locked_plan_rejects_material_change() -> None:
         claim.lock_plan(changed)
 
 
+def test_locked_claim_rejects_direct_semantic_mutation() -> None:
+    claim = make_claim()
+    claim.lock_plan(make_plan())
+
+    with pytest.raises(AttributeError, match="immutable after plan lock"):
+        claim.statement = "A silently changed claim."
+
+    with pytest.raises(AttributeError, match="immutable after plan lock"):
+        claim.research_plan = make_plan()
+
+
 def test_claim_versioning_creates_new_identity_without_mutating_parent() -> None:
     claim = make_claim()
     claim.lock_plan(make_plan())
