@@ -1,0 +1,52 @@
+from io import BytesIO
+from uuid import uuid4
+
+import pytest
+
+from researchos.saas.datasets import (
+    Dataset,
+    DatasetVersion,
+    InMemoryDatasetStore,
+    storage_path_for,
+    stream_sha256,
+)
+
+
+def test_stream_sha256_returns_digest_size_and_rewinds_file() -> None:
+    body = b"xauusd,test\n1,100\n"
+    file = BytesIO(body)
+
+    digest, size = stream_sha256(file, max_bytes=1024)
+
+    assert size == len(body)
+    assert digest == "a2eaf8cdeaa86a7f4cde7e4bbab8a0b4df3c0fbd6e2d6e5f2e9c9b3e0a4f6a0a"
+    assert file.read() == body
+
+
+def test_stream_sha256_rejects_over_limit() -> None:
+    with pytest.raises(ValueError, match="dataset exceeds plan upload limit"):
+        stream_sha256(BytesIO(b"12345"), max_bytes=4)
+
+
+def test_storage_path_is_tenant_scoped_and_content_addressed() -> None:
+    workspace_id = uuid4()
+    dataset_id = uuid4()
+    digest = "a" * 64
+
+    path = storage_path_for(workspace_id, dataset_id, digest)
+
+    assert path == f"{workspace_id}/datasets/{dataset_id}/sha256/{digest}"
+    assert str(uuid4()) not in path
+
+
+def test_in_memory_store_rejects_duplicate_content() -> None:
+    store = InMemoryDatasetStore()
+    dataset = Dataset(uuid4(), uuid4(), "sample", uuid4())
+    store.create_dataset(dataset)
+    first = DatasetVersion(uuid4(), dataset.id, 1, "a" * 64, "path/a", 1, dataset.created_by)
+    second = DatasetVersion(uuid4(), dataset.id, 2, "a" * 64, "path/b", 1, dataset.created_by)
+
+    store.create_version(first)
+
+    with pytest.raises(ValueError, match="dataset content already exists"):
+        store.create_version(second)
