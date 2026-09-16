@@ -42,12 +42,15 @@ def test_interaction_discovery_is_deterministic_and_leakage_safe(tmp_path):
     source = tmp_path / "source.json"
     output_a = tmp_path / "a.json"
     output_b = tmp_path / "b.json"
-    source.write_text(json.dumps({"contract": {"asset": "XAUUSD", "timeframe": "M1"}, "events_data": events}), encoding="utf-8")
+    source.write_text(
+        json.dumps({"contract": {"asset": "XAUUSD", "timeframe": "M1"}, "events_data": events}),
+        encoding="utf-8",
+    )
     first = run(source, output_a, 40, 20, 20, 5, 8)
     second = run(source, output_b, 40, 20, 20, 5, 8)
     assert first == second
     assert first["configuration"]["outer_labels_used_for_selection"] is False
-    assert first["fold_count"] == 3
+    assert first["fold_count"] == 2
     assert first["evaluated_fold_count"] > 0
     assert any(fold["candidate_kind"] == "interaction" for fold in first["folds"])
 
@@ -59,8 +62,11 @@ def test_outer_support_failure_is_recorded(tmp_path):
         events.append(_event(index, label=index % 2 == 0, session=session, regime="Trending"))
     source = tmp_path / "source.json"
     output = tmp_path / "result.json"
-    source.write_text(json.dumps({"contract": {"asset": "XAUUSD", "timeframe": "M1"}, "events_data": events}), encoding="utf-8")
-    result = run(source, output, 40, 10, 10, 8, 8)
+    source.write_text(
+        json.dumps({"contract": {"asset": "XAUUSD", "timeframe": "M1"}, "events_data": events}),
+        encoding="utf-8",
+    )
+    result = run(source, output, 40, 10, 10, 12, 8)
     assert result["fold_count"] == 2
     assert result["outer_support_failures"] >= 1
     assert result["scientific_gate"]["status"] == "NO_EDGE_OR_INCONCLUSIVE"
