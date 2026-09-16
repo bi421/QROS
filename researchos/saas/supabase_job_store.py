@@ -1,10 +1,4 @@
-"""Supabase-backed persistence for tenant-scoped research jobs.
-
-This adapter is server-side only. The supplied client must never be exposed to
-browser code and must be configured with the application's privileged backend
-credential. Authorization still requires an explicit workspace scope on every
-read/write; the database RLS layer remains the final isolation boundary.
-"""
+"""Supabase-backed persistence for tenant-scoped research jobs."""
 
 from __future__ import annotations
 
@@ -30,6 +24,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
             dataset_id=str(row["dataset_version_id"]),
             workflow_id=str(row["workflow_id"]),
             status=ResearchJobStatus(str(row["status"])),
+            created_by=UUID(str(row["created_by"])) if row.get("created_by") else None,
         )
 
     def create(self, job: ResearchJob) -> ResearchJob:
@@ -37,6 +32,8 @@ class SupabaseResearchJobStore(ResearchJobStore):
             dataset_version_id = UUID(job.dataset_id)
         except ValueError as exc:
             raise ValueError("Supabase research jobs require a dataset version UUID") from exc
+        if job.created_by is None:
+            raise ValueError("Supabase research jobs require created_by")
 
         result = (
             self._client.table("research_run")
@@ -47,9 +44,10 @@ class SupabaseResearchJobStore(ResearchJobStore):
                     "dataset_version_id": str(dataset_version_id),
                     "workflow_id": job.workflow_id,
                     "status": job.status.value,
+                    "created_by": str(job.created_by),
                 }
             )
-            .select("id,workspace_id,dataset_version_id,workflow_id,status")
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,created_by")
             .execute()
         )
         rows = result.data or []
@@ -60,7 +58,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
     def get(self, workspace_id: UUID, job_id: UUID) -> ResearchJob | None:
         result = (
             self._client.table("research_run")
-            .select("id,workspace_id,dataset_version_id,workflow_id,status")
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,created_by")
             .eq("workspace_id", str(workspace_id))
             .eq("id", str(job_id))
             .limit(1)
@@ -104,14 +102,13 @@ class SupabaseResearchJobStore(ResearchJobStore):
             .eq("workspace_id", str(workspace_id))
             .eq("id", str(job_id))
             .eq("status", expected.value)
-            .select("id,workspace_id,dataset_version_id,workflow_id,status")
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,created_by")
             .execute()
         )
         rows = result.data or []
         if not rows:
             raise ValueError(
-                f"invalid or missing research job transition: "
-                f"{expected.value} -> {target.value}"
+                f"invalid or missing research job transition: {expected.value} -> {target.value}"
             )
         if len(rows) != 1:
             raise RuntimeError("Supabase research job transition was not unique")
