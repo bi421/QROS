@@ -89,25 +89,25 @@ jobs:
           path: |
             ~/.cache/pip
             ~/.ccache
-            cpp_quant_engine/build
-          key: quant-${{ runner.os }}-${{ hashFiles('cpp_quant_engine/CMakeLists.txt', 'cpp_quant_engine/**/*.cpp', 'cpp_quant_engine/**/*.h', 'pyproject.toml') }}
+            researchos/engines/quant/build
+          key: quant-${{ runner.os }}-${{ hashFiles('researchos/engines/quant/CMakeLists.txt', 'researchos/engines/quant/**/*.cpp', 'researchos/engines/quant/**/*.h', 'pyproject.toml') }}
           restore-keys: quant-${{ runner.os }}-
       - name: Configure C++ Quant Engine
         run: |
-          cmake -S cpp_quant_engine -B cpp_quant_engine/build -G Ninja \
+          cmake -S researchos/engines/quant -B researchos/engines/quant/build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
       - name: Build C++ Quant Engine
-        run: cmake --build cpp_quant_engine/build -j
+        run: cmake --build researchos/engines/quant/build -j
       - name: Test C++ Quant Engine
-        run: ctest --test-dir cpp_quant_engine/build -V
+        run: ctest --test-dir researchos/engines/quant/build -V
       - name: Benchmark C++ fast path
         env:
-          PYTHONPATH: cpp_quant_engine/python
-        run: python cpp_quant_engine/benchmarks/bench_fast_numeric.py --rows 1000000 --repeat 3
+          PYTHONPATH: researchos/engines/quant/python
+        run: python researchos/engines/quant/benchmarks/bench_fast_numeric.py --rows 1000000 --repeat 3
       - name: Test Python Quant Integration
         env:
-          PYTHONPATH: cpp_quant_engine/python
+          PYTHONPATH: researchos/engines/quant/python
         run: python -m pytest researchos/tests/ -k quant -v
 
   health-evidence:
