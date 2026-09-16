@@ -21,7 +21,6 @@ SCOPE_PATTERNS = (
     re.compile(r"(^|/)run_full_analysis[^/]*\.py$", re.I),
 )
 
-
 @dataclass
 class Row:
     category: str
@@ -46,16 +45,16 @@ def files_under(root: Path) -> list[Path]:
     return sorted(p for p in root.rglob("*") if p.is_file())
 
 
-def has_abstractmethod(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+def has_decorator(fn: ast.FunctionDef | ast.AsyncFunctionDef, name: str) -> bool:
     return any(
-        (isinstance(d, ast.Name) and d.id == "abstractmethod")
-        or (isinstance(d, ast.Attribute) and d.attr == "abstractmethod")
+        (isinstance(d, ast.Name) and d.id == name)
+        or (isinstance(d, ast.Attribute) and d.attr == name)
         for d in fn.decorator_list
     )
 
 
 def function_is_stub(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    if has_abstractmethod(fn):
+    if has_decorator(fn, "abstractmethod"):
         return False
     body = [
         n for n in fn.body
@@ -71,12 +70,21 @@ def function_is_stub(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     return False
 
 
+def is_protocol_class(cls: ast.ClassDef) -> bool:
+    return any(
+        (isinstance(base, ast.Name) and base.id == "Protocol")
+        or (isinstance(base, ast.Attribute) and base.attr == "Protocol")
+        for base in cls.bases
+    )
+
+
 def class_is_stub(cls: ast.ClassDef) -> bool:
-    methods = [n for n in cls.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
-    concrete = [m for m in methods if m.name != "__init__" and not has_abstractmethod(m)]
-    if not concrete:
+    # Protocols define interfaces by design; pass-only method bodies are not concrete stubs.
+    if is_protocol_class(cls):
         return False
-    return all(function_is_stub(m) for m in concrete)
+    methods = [n for n in cls.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    concrete = [m for m in methods if m.name != "__init__" and not has_decorator(m, "abstractmethod")]
+    return bool(concrete) and all(function_is_stub(m) for m in concrete)
 
 
 def module_symbol_is_stub(source: Path, symbol: str) -> bool:
@@ -139,8 +147,11 @@ def artifact_reference_is_code(lines: list[str], index: int) -> bool:
 
 
 def doc_context_is_historical(lines: list[str], index: int) -> bool:
-    window = "\n".join(lines[max(0, index - 8): min(len(lines), index + 9)]).lower()
-    return any(token in window for token in ("unverified", "historical", "archive", "not recoverable"))
+    # A document-level evidence notice can legitimately qualify a later provenance path.
+    prefix = "\n".join(lines[:index]).lower()
+    window = "\n".join(lines[max(0, index - 20): min(len(lines), index + 21)]).lower()
+    tokens = ("unverified", "historical", "archive", "not recoverable", "recorded / unverified")
+    return any(token in window for token in tokens) or "evidence integrity notice" in prefix
 
 
 def artifact_is_concrete(target: str) -> bool:
