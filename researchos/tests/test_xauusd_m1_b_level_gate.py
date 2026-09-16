@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from scripts.evaluate_xauusd_m1_b_level_gate import (
@@ -36,11 +37,26 @@ def test_bootstrap_ci_is_deterministic_and_tracks_positive_effect() -> None:
 
 def test_gate_script_supports_direct_help_execution() -> None:
     script = Path(__file__).resolve().parents[2] / "scripts" / "evaluate_xauusd_m1_b_level_gate.py"
-    completed = subprocess.run(
-        [sys.executable, str(script), "--help"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert completed.returncode == 0, completed.stderr
-    assert "--source-artifact" in completed.stdout
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        stdout_path = Path(temp_dir) / "stdout.txt"
+        stderr_path = Path(temp_dir) / "stderr.txt"
+
+        with (
+            stdout_path.open("w", encoding="utf-8") as stdout_file,
+            stderr_path.open("w", encoding="utf-8") as stderr_file,
+        ):
+            completed = subprocess.run(
+                [sys.executable, str(script), "--help"],
+                check=False,
+                stdin=subprocess.DEVNULL,
+                stdout=stdout_file,
+                stderr=stderr_file,
+                text=True,
+            )
+
+        stdout = stdout_path.read_text(encoding="utf-8")
+        stderr = stderr_path.read_text(encoding="utf-8")
+
+    assert completed.returncode == 0, stderr
+    assert "--source-artifact" in stdout
