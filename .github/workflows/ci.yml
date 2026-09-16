@@ -10,9 +10,6 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Keep the PR path fast while preserving the full compatibility matrix on main/manual runs.
-# Feature/fix/refactor pushes are validated before a PR is opened.
-# New pushes cancel stale PR runs so obsolete commits do not consume runner time.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -130,6 +127,8 @@ jobs:
           python -m pip install pytest ruff nanobind scikit-build-core cmake
       - name: Scope guard
         run: python scripts/check_scope.py --base origin/main
+      - name: QROS governance guard
+        run: python scripts/check_qros_governance.py --base origin/main
       - name: Text integrity guard
         run: python scripts/check_text_integrity.py .github/workflows/ci.yml .pre-commit-config.yaml pyproject.toml
       - name: Run canonical health check
