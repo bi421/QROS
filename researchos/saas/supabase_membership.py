@@ -1,7 +1,7 @@
 """Server-side workspace membership resolver for Supabase Postgres.
 
-Use a server-only Supabase client here. The service-role credential must never
-be sent to a browser or accepted from a request.
+Use a server-only Supabase client here. A service-role credential must never be
+sent to a browser or accepted from a request.
 """
 
 from __future__ import annotations
@@ -13,14 +13,16 @@ from researchos.saas.contracts import Plan
 
 
 class SupabaseWorkspaceMembershipResolver:
-    """Resolve one active workspace membership and server-side subscription plan."""
+    """Resolve an authorized workspace and server-side subscription plan."""
 
     def __init__(self, supabase_client: Any) -> None:
         self._client = supabase_client
 
     def resolve(self, user_id: UUID) -> tuple[UUID, Plan] | None:
+        """Resolve the first workspace membership for the authenticated user."""
+
         membership = (
-            self._client.table("workspace_member")
+            self._client.table("workspace_members")
             .select("workspace_id")
             .eq("user_id", str(user_id))
             .limit(1)
@@ -30,9 +32,13 @@ class SupabaseWorkspaceMembershipResolver:
         if not rows:
             return None
 
-        workspace_id = UUID(str(rows[0]["workspace_id"]))
+        try:
+            workspace_id = UUID(str(rows[0]["workspace_id"]))
+        except (KeyError, TypeError, ValueError):
+            return None
+
         subscription = (
-            self._client.table("subscription")
+            self._client.table("billing_subscriptions")
             .select("plan,status")
             .eq("workspace_id", str(workspace_id))
             .limit(1)
