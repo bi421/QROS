@@ -45,10 +45,14 @@ class SupabaseWorkspaceMembershipResolver:
         row = subscriptions[0]
         if row.get("status") not in {"active", "trialing"}:
             return workspace_id, Plan.FREE
+
         try:
             return workspace_id, Plan(str(row["plan"]))
-        except (KeyError, ValueError):
-            return workspace_id, Plan.FREE
+        except (KeyError, ValueError) as exc:
+            # Never downgrade malformed billing state to FREE. A bad
+            # entitlement record must fail closed rather than grant access
+            # under an unintended plan.
+            raise RuntimeError("invalid active subscription entitlement") from exc
 
 
 __all__ = ["SupabaseWorkspaceMembershipResolver"]
