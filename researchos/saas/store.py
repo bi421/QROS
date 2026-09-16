@@ -11,7 +11,11 @@ from dataclasses import replace
 from threading import Lock
 from uuid import UUID
 
-from researchos.saas.contracts import ResearchJob, ResearchJobStatus
+from researchos.saas.contracts import (
+    ResearchJob,
+    ResearchJobStatus,
+    is_valid_job_transition,
+)
 
 
 class ResearchJobStore:
@@ -88,6 +92,10 @@ class InMemoryResearchJobStore(ResearchJobStore):
                 raise ValueError(
                     f"invalid job transition: {job.status.value} -> {target.value}; "
                     f"expected {expected.value}"
+                )
+            if not is_valid_job_transition(expected, target):
+                raise ValueError(
+                    f"illegal job transition: {expected.value} -> {target.value}"
                 )
             updated = replace(job, status=target)
             self._jobs[job_id] = updated
