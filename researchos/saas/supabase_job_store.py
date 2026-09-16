@@ -21,17 +21,13 @@ class SupabaseResearchJobStore(ResearchJobStore):
         return ResearchJob(
             id=UUID(str(row["id"])),
             workspace_id=UUID(str(row["workspace_id"])),
-            dataset_id=str(row["dataset_version_id"]),
+            dataset_version_id=UUID(str(row["dataset_version_id"])),
             workflow_id=str(row["workflow_id"]),
             status=ResearchJobStatus(str(row["status"])),
             created_by=UUID(str(row["created_by"])) if row.get("created_by") else None,
         )
 
     def create(self, job: ResearchJob) -> ResearchJob:
-        try:
-            dataset_version_id = UUID(job.dataset_id)
-        except ValueError as exc:
-            raise ValueError("Supabase research jobs require a dataset version UUID") from exc
         if job.created_by is None:
             raise ValueError("Supabase research jobs require created_by")
 
@@ -41,7 +37,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
                 {
                     "id": str(job.id),
                     "workspace_id": str(job.workspace_id),
-                    "dataset_version_id": str(dataset_version_id),
+                    "dataset_version_id": str(job.dataset_version_id),
                     "workflow_id": job.workflow_id,
                     "status": job.status.value,
                     "created_by": str(job.created_by),
