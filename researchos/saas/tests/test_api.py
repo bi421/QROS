@@ -38,6 +38,15 @@ def _client(workspace_id: UUID | None = None):
     return client, context, dataset_store, dataset_storage
 
 
+def _upload(client: TestClient, name: str, body: bytes):
+    return client.post(
+        "/v1/datasets",
+        headers={"Authorization": "Bearer test"},
+        data={"name": name},
+        files={"file": (f"{name}.csv", BytesIO(body), "text/csv")},
+    )
+
+
 def test_health_does_not_require_authentication() -> None:
     client = TestClient(create_app())
     response = client.get("/healthz")
@@ -75,12 +84,7 @@ def test_unconfigured_saas_auth_fails_closed() -> None:
 def test_dataset_upload_creates_immutable_version_and_stores_bytes() -> None:
     client, context, store, storage = _client()
     body = b"timestamp,open,high,low,close\n1,10,11,9,10\n"
-    response = client.post(
-        "/v1/datasets",
-        headers={"Authorization": "Bearer test"},
-        data={"name": "sample-xauusd"},
-        files={"file": ("sample.csv", BytesIO(body), "text/csv")},
-    )
+    response = _upload(client, "sample-xauusd", body)
     assert response.status_code == 201
     payload = response.json()
     assert payload["workspace_id"] == str(context.workspace_id)
@@ -102,28 +106,24 @@ def test_dataset_upload_creates_immutable_version_and_stores_bytes() -> None:
 
 def test_dataset_versions_are_append_only() -> None:
     client, _, _, _ = _client()
-    first = client.post(
-        "/v1/datasets",
-        headers={"Authorization": "Bearer test"},
-        data={"name": "sample"},
-        files={"file": ("a.csv", BytesIO(b"a"), "text/csv")},
-    )
+    first = _upload(client, "sample", b"a")
     assert first.status_code == 201
     dataset_id = first.json()["id"]
 
     second = client.post(
-        "/v1/datasets",
+        f"/v1/datasets/{dataset_id}/versions",
         headers={"Authorization": "Bearer test"},
-        data={"name": "sample-2"},
-        files={"file": ("b.csv", BytesIO(b"b"), "text/csv")},
+        files={"file": ("sample-v2.csv", BytesIO(b"b"), "text/csv")},
     )
     assert second.status_code == 201
+    assert second.json()["version_no"] == 2
+
     versions = client.get(
         f"/v1/datasets/{dataset_id}/versions",
         headers={"Authorization": "Bearer test"},
     )
     assert versions.status_code == 200
-    assert [item["version_no"] for item in versions.json()] == [1]
+    assert [item["version_no"] for item in versions.json()] == [1, 2]
 
 
 def test_create_research_job_requires_existing_tenant_dataset_version() -> None:
@@ -138,12 +138,7 @@ def test_create_research_job_requires_existing_tenant_dataset_version() -> None:
 
 def test_create_and_get_research_job_are_tenant_scoped() -> None:
     client, context, _, _ = _client()
-    uploaded = client.post(
-        "/v1/datasets",
-        headers={"Authorization": "Bearer test"},
-        data={"name": "sample"},
-        files={"file": ("sample.csv", BytesIO(b"x"), "text/csv")},
-    )
+    uploaded = _upload(client, "sample", b"x")
     version_id = uploaded.json()["version"]["id"]
     response = client.post(
         "/v1/research-runs",
@@ -198,12 +193,7 @@ def test_cross_tenant_job_lookup_returns_404() -> None:
             dataset_storage=owner_storage,
         )
     )
-    created_dataset = owner_client.post(
-        "/v1/datasets",
-        headers={"Authorization": "Bearer test"},
-        data={"name": "sample"},
-        files={"file": ("sample.csv", BytesIO(b"x"), "text/csv")},
-    )
+    created_dataset = _upload(owner_client, "sample", b"x")
     created = owner_client.post(
         "/v1/research-runs",
         headers={"Authorization": "Bearer test"},
