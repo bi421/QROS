@@ -27,6 +27,34 @@ class ResearchJobStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+ALLOWED_JOB_TRANSITIONS: dict[ResearchJobStatus, frozenset[ResearchJobStatus]] = {
+    ResearchJobStatus.QUEUED: frozenset(
+        {ResearchJobStatus.RUNNING, ResearchJobStatus.CANCELLED}
+    ),
+    ResearchJobStatus.RUNNING: frozenset(
+        {
+            ResearchJobStatus.SUCCEEDED,
+            ResearchJobStatus.FAILED,
+            ResearchJobStatus.CANCELLED,
+        }
+    ),
+    # Retry is explicit and bounded by the execution layer; persistence only
+    # permits the state transition itself.
+    ResearchJobStatus.FAILED: frozenset({ResearchJobStatus.QUEUED}),
+    ResearchJobStatus.SUCCEEDED: frozenset(),
+    ResearchJobStatus.CANCELLED: frozenset(),
+}
+
+
+def is_valid_job_transition(
+    current: ResearchJobStatus,
+    target: ResearchJobStatus,
+) -> bool:
+    """Return whether the requested job state transition is legal."""
+
+    return target in ALLOWED_JOB_TRANSITIONS[current]
+
+
 @dataclass(frozen=True)
 class TenantContext:
     """Authenticated workspace context; never inferred from request payloads."""
@@ -78,18 +106,36 @@ class ResearchJob:
 
 
 DEFAULT_USAGE_POLICIES: dict[Plan, UsagePolicy] = {
-    Plan.FREE: UsagePolicy(monthly_research_runs=5, max_dataset_bytes=50_000_000, max_concurrent_runs=1),
-    Plan.PRO: UsagePolicy(monthly_research_runs=100, max_dataset_bytes=2_000_000_000, max_concurrent_runs=2),
-    Plan.TEAM: UsagePolicy(monthly_research_runs=1_000, max_dataset_bytes=10_000_000_000, max_concurrent_runs=8),
-    Plan.ENTERPRISE: UsagePolicy(monthly_research_runs=0, max_dataset_bytes=0, max_concurrent_runs=0),
+    Plan.FREE: UsagePolicy(
+        monthly_research_runs=5,
+        max_dataset_bytes=50_000_000,
+        max_concurrent_runs=1,
+    ),
+    Plan.PRO: UsagePolicy(
+        monthly_research_runs=100,
+        max_dataset_bytes=2_000_000_000,
+        max_concurrent_runs=2,
+    ),
+    Plan.TEAM: UsagePolicy(
+        monthly_research_runs=1_000,
+        max_dataset_bytes=10_000_000_000,
+        max_concurrent_runs=8,
+    ),
+    Plan.ENTERPRISE: UsagePolicy(
+        monthly_research_runs=0,
+        max_dataset_bytes=0,
+        max_concurrent_runs=0,
+    ),
 }
 
 
 __all__ = [
+    "ALLOWED_JOB_TRANSITIONS",
     "DEFAULT_USAGE_POLICIES",
     "Plan",
     "ResearchJob",
     "ResearchJobStatus",
     "TenantContext",
     "UsagePolicy",
+    "is_valid_job_transition",
 ]
