@@ -31,7 +31,7 @@ target_compile_features(quant_engine PUBLIC cxx_std_20)
 # MSVC: structured exceptions + UTF-8 source. Others: disable exceptions/RTTI.
 target_compile_options(quant_engine PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/EHsc /utf-8>
-    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fno-exceptions -fno-rtti>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fexceptions -frtti>
 )
 
 # ── Python Bindings (optional) ───────────────────────────────────────────────
