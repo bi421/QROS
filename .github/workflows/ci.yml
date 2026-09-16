@@ -152,7 +152,7 @@ jobs:
       - name: Run canonical health check
         run: python scripts/final_health_check.py
       - name: Upload health evidence
-        if: always()
+        if: always() && hashFiles('.health/last_run.json') != ''
         uses: actions/upload-artifact@v4
         with:
           name: researchos-health-${{ github.sha }}
