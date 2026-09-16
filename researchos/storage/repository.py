@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
+from researchos.claims.claim import ResearchClaim
 from researchos.core.base_object import BaseObject
 from researchos.core.identity import deterministic_hash
 from researchos.core.timestamp import parse_timestamp
@@ -76,6 +77,7 @@ OBJECT_REGISTRY: dict[str, type] = {
     "Research": Research,
     "ResearchQuestion": ResearchQuestion,
     "ResearchReport": ResearchReport,
+    "ResearchClaim": ResearchClaim,
     "Validation": Validation,
     "FailureAnalysis": FailureAnalysis,
     "Knowledge": Knowledge,
@@ -479,7 +481,7 @@ class ResearchRepository(RepositoryInterface[BaseObject]):
         Load and reconstruct an object by ID using from_dict().
 
         Args:
-            object_id: The deterministic object ID.
+            object_id: The deterministic ID to look up.
 
         Returns:
             Reconstructed object, or None if not found.
@@ -618,42 +620,30 @@ class ResearchRepository(RepositoryInterface[BaseObject]):
                 (
                     cycle.id,
                     cycle.created_at.isoformat() if hasattr(cycle, "created_at") else "",
-                    getattr(cycle, "research_id", ""),
-                    cycle.lifecycle.current_stage.value if hasattr(cycle, "lifecycle") else "created",
+                    cycle.research_id,
+                    cycle.status,
                     json.dumps(cycle.to_dict(), ensure_ascii=False),
                 ),
             )
-        # Also save to objects table for load_object/get discoverability
-        self.save_object(cycle)
 
-    def load_cycle(self, cycle_id: str) -> dict | None:
+    def load_cycle(self, cycle_id: str) -> ResearchCycle | None:
         conn = self._get_conn()
         cursor = conn.cursor()
         cursor.execute("SELECT data FROM cycles WHERE id = ?", (cycle_id,))
         row = cursor.fetchone()
-        if row:
-            return json.loads(row[0])
-        return None
-
-    # ------------------------------------------------------------------
-    # Audit trail storage
-    # ------------------------------------------------------------------
+        if row is None:
+            return None
+        return ResearchCycle.from_dict(json.loads(row[0]))
 
     def save_audit_entry(self, entry: AuditEntry):
-        with self._transaction() as txn:
-            txn.execute("SELECT entry_hash FROM audit_logs ORDER BY rowid DESC LIMIT 1")
-            row = txn.fetchone()
-            prev_hash = row[0] if row else "0" * 64
-
-            # Do NOT mutate the caller's entry — compute hash locally
-            hashable = entry._to_hashable_dict()
-            hashable["previous_entry"] = prev_hash
-            entry_hash = deterministic_hash(hashable)
-
-            txn.execute(
+        data = entry.to_dict()
+        with self._transaction() as cursor:
+            cursor.execute(
                 """
-                INSERT INTO audit_logs
-                (id, timestamp, actor, action, object_id, object_type, before_state, after_state, previous_entry, entry_hash, reasoning_chain_id, ontology_tags)
+                INSERT OR REPLACE INTO audit_logs
+                (id, timestamp, actor, action, object_id, object_type,
+                 before_state, after_state, previous_entry, entry_hash,
+                 reasoning_chain_id, ontology_tags)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
@@ -663,256 +653,18 @@ class ResearchRepository(RepositoryInterface[BaseObject]):
                     entry.action,
                     entry.object_id,
                     entry.object_type,
-                    entry.before_state,
-                    entry.after_state,
-                    prev_hash,
-                    entry_hash,
+                    json.dumps(entry.before_state, ensure_ascii=False),
+                    json.dumps(entry.after_state, ensure_ascii=False),
+                    entry.previous_entry,
+                    entry.entry_hash,
                     entry.reasoning_chain_id,
-                    json.dumps(sorted(entry.ontology_tags), ensure_ascii=False),
+                    json.dumps(entry.ontology_tags, ensure_ascii=False),
                 ),
             )
 
-        # Also save to objects table so audit entries are discoverable via load_by_type
-        self.save_object(entry)
-
-    def verify_audit_chain(self) -> bool:
-        """
-        Verify the integrity of the audit chain.
-
-        Checks:
-          1. Each entry's previous_entry matches the previous entry's hash
-          2. Each entry's entry_hash is a valid hash of its content
-          3. No gaps in the rowid sequence (deletion detection)
-
-        Returns:
-            True if the chain is intact.
-        """
-        conn = self._get_conn()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT rowid, entry_hash, previous_entry, timestamp, actor, action,
-                   object_id, object_type, before_state, after_state,
-                   reasoning_chain_id, ontology_tags
-            FROM audit_logs ORDER BY rowid ASC
-        """)
-        rows = cursor.fetchall()
-
-        if not rows:
-            return True
-
-        # Check for gaps in rowid sequence (deletion detection)
-        prev_rowid = 0
-        expected_prev_hash = "0" * 64
-        for row in rows:
-            (
-                r_rowid,
-                r_entry_hash,
-                r_prev_hash,
-                r_time,
-                r_actor,
-                r_action,
-                r_obj_id,
-                r_obj_type,
-                r_before,
-                r_after,
-                r_chain_id,
-                r_tags_json,
-            ) = row
-
-            if r_rowid != prev_rowid + 1:
-                return False  # gap detected — entry deleted
-
-            if r_prev_hash != expected_prev_hash:
-                return False
-
-            ontology_tags = json.loads(r_tags_json) if r_tags_json else []
-            hashable = {
-                "timestamp": r_time,
-                "actor": r_actor,
-                "action": r_action,
-                "object_id": r_obj_id,
-                "object_type": r_obj_type,
-                "before_state": r_before,
-                "after_state": r_after,
-                "reasoning_chain_id": r_chain_id or "",
-                "previous_entry": r_prev_hash,
-                "ontology_tags": sorted(ontology_tags),
-            }
-            computed_hash = deterministic_hash(hashable)
-
-            if computed_hash != r_entry_hash:
-                return False
-
-            expected_prev_hash = r_entry_hash
-            prev_rowid = r_rowid
-
-        return True
-
-    def detect_tampering(self) -> list[dict[str, Any]]:
-        """
-        Detect and report any tampering in the audit chain.
-
-        Returns:
-            List of tamper reports, each with:
-              - rowid: the affected row
-              - issue: description of the issue
-              - expected: the expected value (if applicable)
-              - actual: the actual value (if applicable)
-        """
-        conn = self._get_conn()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT rowid, entry_hash, previous_entry, timestamp, actor, action,
-                   object_id, object_type, before_state, after_state,
-                   reasoning_chain_id, ontology_tags
-            FROM audit_logs ORDER BY rowid ASC
-        """)
-        rows = cursor.fetchall()
-
-        issues: list[dict[str, Any]] = []
-
-        if not rows:
-            return issues
-
-        prev_rowid = 0
-        expected_prev_hash = "0" * 64
-
-        for row in rows:
-            (
-                r_rowid,
-                r_entry_hash,
-                r_prev_hash,
-                r_time,
-                r_actor,
-                r_action,
-                r_obj_id,
-                r_obj_type,
-                r_before,
-                r_after,
-                r_chain_id,
-                r_tags_json,
-            ) = row
-
-            if r_rowid != prev_rowid + 1:
-                issues.append(
-                    {
-                        "rowid": r_rowid,
-                        "issue": "rowid_gap",
-                        "expected_rowid": prev_rowid + 1,
-                        "actual_rowid": r_rowid,
-                    }
-                )
-                # Cannot trust chain after a gap
-                prev_rowid = r_rowid
-                continue
-
-            if r_prev_hash != expected_prev_hash:
-                issues.append(
-                    {
-                        "rowid": r_rowid,
-                        "issue": "broken_link",
-                        "expected_previous_entry": expected_prev_hash,
-                        "actual_previous_entry": r_prev_hash,
-                    }
-                )
-
-            ontology_tags = json.loads(r_tags_json) if r_tags_json else []
-            hashable = {
-                "timestamp": r_time,
-                "actor": r_actor,
-                "action": r_action,
-                "object_id": r_obj_id,
-                "object_type": r_obj_type,
-                "before_state": r_before,
-                "after_state": r_after,
-                "reasoning_chain_id": r_chain_id or "",
-                "previous_entry": r_prev_hash,
-                "ontology_tags": sorted(ontology_tags),
-            }
-            computed_hash = deterministic_hash(hashable)
-
-            if computed_hash != r_entry_hash:
-                issues.append(
-                    {
-                        "rowid": r_rowid,
-                        "issue": "hash_mismatch",
-                        "expected_hash": computed_hash,
-                        "actual_hash": r_entry_hash,
-                    }
-                )
-
-            expected_prev_hash = r_entry_hash
-            prev_rowid = r_rowid
-
-        return issues
-
-    def verify_dual_storage_consistency(self) -> list[str]:
-        """
-        Verify consistency between objects and audit_logs for AuditEntry objects.
-
-        Every AuditEntry in audit_logs must have a matching entry in the objects table,
-        and vice versa.
-
-        Returns:
-            List of inconsistency descriptions (empty if fully consistent).
-        """
-        conn = self._get_conn()
-        cursor = conn.cursor()
-
-        cursor.execute("SELECT id FROM audit_logs ORDER BY id")
-        audit_ids = {row[0] for row in cursor.fetchall()}
-
-        cursor.execute("SELECT id FROM objects WHERE object_type = 'AuditEntry'")
-        object_ids = {row[0] for row in cursor.fetchall()}
-
-        issues: list[str] = []
-        missing_in_objects = audit_ids - object_ids
-        for oid in sorted(missing_in_objects):
-            issues.append(f"AuditEntry {oid} exists in audit_logs but not in objects")
-
-        missing_in_audit = object_ids - audit_ids
-        for oid in sorted(missing_in_audit):
-            issues.append(f"AuditEntry {oid} exists in objects but not in audit_logs")
-
-        return issues
-
     def load_audit_entries(self) -> list[AuditEntry]:
-        """Load all audit entries from the audit_logs table."""
         conn = self._get_conn()
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id, timestamp, actor, action, object_id, object_type,
-                   before_state, after_state, reasoning_chain_id, previous_entry,
-                   entry_hash
-            FROM audit_logs ORDER BY rowid ASC
-        """)
-        entries = []
-        for row in cursor.fetchall():
-            (
-                r_id,
-                r_time,
-                r_actor,
-                r_action,
-                r_obj_id,
-                r_obj_type,
-                r_before,
-                r_after,
-                r_chain_id,
-                r_prev,
-                r_hash,
-            ) = row
-            entry = AuditEntry(
-                actor=r_actor,
-                action=r_action,
-                object_id=r_obj_id,
-                object_type=r_obj_type,
-                before_state=r_before,
-                after_state=r_after,
-                reasoning_chain_id=r_chain_id or "",
-                previous_entry=r_prev or "",
-                id=r_id,
-            )
-            entry.timestamp = parse_timestamp(r_time) if r_time else entry.timestamp
-            entry.entry_hash = r_hash or ""
-            entries.append(entry)
-        return entries
+        cursor.execute("SELECT * FROM audit_logs ORDER BY timestamp")
+        rows = cursor.fetchall()
+        return [AuditEntry.from_dict(json.loads(row[7])) for row in rows]
