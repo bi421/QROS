@@ -17,7 +17,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from enum import StrEnum
+from enum import Enum
 from typing import Any, Mapping
 
 from researchos.core.base_object import BaseObject
@@ -25,7 +25,7 @@ from researchos.core.identity import generate_id
 from researchos.core.timestamp import parse_timestamp, utc_now
 
 
-class ResearchClaimType(StrEnum):
+class ResearchClaimType(str, Enum):
     """Allowed semantic classes for a research claim."""
 
     EMPIRICAL = "empirical"
@@ -35,7 +35,7 @@ class ResearchClaimType(StrEnum):
     ROBUSTNESS = "robustness"
 
 
-class EvidenceState(StrEnum):
+class EvidenceState(str, Enum):
     """Evidence state of a claim; absence of evidence is never treated as support."""
 
     UNTESTED = "UNTESTED"
@@ -157,7 +157,7 @@ class ResearchClaim(BaseObject):
 
         normalized_type = ResearchClaimType(claim_type)
         if id is None:
-            seed = f"ResearchClaim|{workspace_id}|{statement}|{normalized_type}|{version}|{parent_claim_id or ''}"
+            seed = f"ResearchClaim|{workspace_id}|{statement}|{normalized_type.value}|{version}|{parent_claim_id or ''}"
             id = generate_id(seed)
 
         super().__init__(id=id, ontology_tags=ontology_tags)
@@ -189,7 +189,7 @@ class ResearchClaim(BaseObject):
 
     @property
     def claim_hash(self) -> str:
-        """Hash of the semantic claim contract, excluding mutable evidence state."""
+        """Hash of the semantic claim contract and its recorded evidence state."""
         return self.compute_hash()
 
     def lock_plan(self, plan: ResearchPlan) -> str:
@@ -221,7 +221,7 @@ class ResearchClaim(BaseObject):
             self._hash = None
 
     def set_evidence_state(self, state: EvidenceState | str) -> None:
-        """Set the observed evidence state; callers must perform gate validation separately."""
+        """Record the observed evidence state; gate logic is enforced elsewhere."""
         self.evidence_state = EvidenceState(state)
         self._hash = None
 
