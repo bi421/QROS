@@ -1,0 +1,115 @@
+"""Supabase-backed persistence for tenant-scoped research jobs.
+
+This adapter is server-side only. The supplied client must never be exposed to
+browser code and must be configured with the application's privileged backend
+credential. Authorization still requires an explicit workspace scope on every
+read/write; the database RLS layer remains the final isolation boundary.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any
+from uuid import UUID
+
+from researchos.saas.contracts import ResearchJob, ResearchJobStatus
+from researchos.saas.store import ResearchJobStore
+
+
+class SupabaseResearchJobStore(ResearchJobStore):
+    """Persist research jobs in ``public.research_run`` with tenant scoping."""
+
+    def __init__(self, supabase_client: Any) -> None:
+        self._client = supabase_client
+
+    @staticmethod
+    def _row_to_job(row: dict[str, Any]) -> ResearchJob:
+        return ResearchJob(
+            id=UUID(str(row["id"])),
+            workspace_id=UUID(str(row["workspace_id"])),
+            dataset_id=str(row["dataset_id"]),
+            workflow_id=str(row["workflow_id"]),
+            status=ResearchJobStatus(str(row["status"])),
+        )
+
+    def create(self, job: ResearchJob) -> ResearchJob:
+        result = (
+            self._client.table("research_run")
+            .insert(
+                {
+                    "id": str(job.id),
+                    "workspace_id": str(job.workspace_id),
+                    "dataset_version_id": job.dataset_id,
+                    "workflow_id": job.workflow_id,
+                    "status": job.status.value,
+                }
+            )
+            .execute()
+        )
+        rows = result.data or []
+        if len(rows) != 1:
+            raise RuntimeError("Supabase research job insert returned no unique row")
+        return self._row_to_job(rows[0])
+
+    def get(self, workspace_id: UUID, job_id: UUID) -> ResearchJob | None:
+        result = (
+            self._client.table("research_run")
+            .select("id,workspace_id,dataset_version_id,workflow_id,status")
+            .eq("workspace_id", str(workspace_id))
+            .eq("id", str(job_id))
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        return self._row_to_job(rows[0]) if rows else None
+
+    def count_active(self, workspace_id: UUID) -> int:
+        result = (
+            self._client.table("research_run")
+            .select("id", count="exact", head=True)
+            .eq("workspace_id", str(workspace_id))
+            .in_("status", [ResearchJobStatus.QUEUED.value, ResearchJobStatus.RUNNING.value])
+            .execute()
+        )
+        return int(result.count or 0)
+
+    def count_monthly(self, workspace_id: UUID) -> int:
+        now = datetime.now(timezone.utc)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        result = (
+            self._client.table("research_run")
+            .select("id", count="exact", head=True)
+            .eq("workspace_id", str(workspace_id))
+            .gte("created_at", month_start.isoformat())
+            .execute()
+        )
+        return int(result.count or 0)
+
+    def transition(
+        self,
+        workspace_id: UUID,
+        job_id: UUID,
+        expected: ResearchJobStatus,
+        target: ResearchJobStatus,
+    ) -> ResearchJob:
+        result = (
+            self._client.table("research_run")
+            .update({"status": target.value})
+            .eq("workspace_id", str(workspace_id))
+            .eq("id", str(job_id))
+            .eq("status", expected.value)
+            .select("id,workspace_id,dataset_version_id,workflow_id,status")
+            .execute()
+        )
+        rows = result.data or []
+        if not rows:
+            raise ValueError(
+                f"invalid or missing research job transition: "
+                f"{expected.value} -> {target.value}"
+            )
+        if len(rows) != 1:
+            raise RuntimeError("Supabase research job transition was not unique")
+        return self._row_to_job(rows[0])
+
+
+__all__ = ["SupabaseResearchJobStore"]
