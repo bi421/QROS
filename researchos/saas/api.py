@@ -1,7 +1,8 @@
-"""Secure HTTP boundary for the ResearchOS SaaS MVP.
+"""Secure HTTP boundary for the QROS SaaS MVP.
 
 This module deliberately does not execute scientific work in an HTTP request.
-It creates tenant-scoped jobs and leaves execution to a worker adapter.
+It creates tenant-scoped jobs and persists immutable dataset versions through
+injected storage/persistence adapters.
 """
 
 from __future__ import annotations
@@ -9,7 +10,7 @@ from __future__ import annotations
 from typing import Protocol
 from uuid import UUID, uuid4
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
@@ -20,6 +21,16 @@ from researchos.saas.contracts import (
     ResearchJob,
     ResearchJobStatus,
     TenantContext,
+)
+from researchos.saas.datasets import (
+    Dataset,
+    DatasetStorage,
+    DatasetStore,
+    DatasetVersion,
+    InMemoryDatasetStorage,
+    InMemoryDatasetStore,
+    storage_path_for,
+    stream_sha256,
 )
 from researchos.saas.store import InMemoryResearchJobStore, ResearchJobStore
 
@@ -57,29 +68,41 @@ class UnconfiguredAuthProvider:
 
 
 class ResearchCreateRequest(BaseModel):
-    dataset_id: str = Field(min_length=1, max_length=256)
+    dataset_version_id: UUID
     workflow_id: str = Field(default=FROZEN_XAUUSD_M1_WORKFLOW, min_length=1, max_length=128)
 
 
 class ResearchJobResponse(BaseModel):
     id: UUID
     workspace_id: UUID
-    dataset_id: str
+    dataset_version_id: UUID
     workflow_id: str
     status: ResearchJobStatus
+
+
+class DatasetResponse(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    name: str
+    created_by: UUID
+    version: DatasetVersion
 
 
 def create_app(
     *,
     auth_provider: AuthProvider | None = None,
     job_store: ResearchJobStore | None = None,
+    dataset_store: DatasetStore | None = None,
+    dataset_storage: DatasetStorage | None = None,
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
     auth = auth_provider or UnconfiguredAuthProvider()
     store = job_store or InMemoryResearchJobStore()
+    datasets = dataset_store or InMemoryDatasetStore()
+    storage = dataset_storage or InMemoryDatasetStorage()
     app = FastAPI(
-        title="ResearchOS SaaS API",
+        title="QROS SaaS API",
         version="1.0.0",
         description="Multi-tenant delivery API for auditable financial research.",
     )
@@ -95,8 +118,8 @@ def create_app(
     @app.get("/readyz", tags=["system"])
     def readyz() -> dict[str, str]:
         """Report whether the configured application dependencies are usable."""
-        if store is None:
-            raise HTTPException(status_code=503, detail="research job store is not configured")
+        if store is None or datasets is None or storage is None:
+            raise HTTPException(status_code=503, detail="SaaS persistence is not configured")
         return {"status": "ready"}
 
     @app.get("/v1/me", response_model=dict[str, str], tags=["identity"])
@@ -106,6 +129,64 @@ def create_app(
             "workspace_id": str(tenant.workspace_id),
             "plan": tenant.plan.value,
         }
+
+    @app.post(
+        "/v1/datasets",
+        response_model=DatasetResponse,
+        status_code=status.HTTP_201_CREATED,
+        tags=["datasets"],
+    )
+    def upload_dataset(
+        name: str = Form(..., min_length=1, max_length=256),
+        file: UploadFile = File(...),
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> DatasetResponse:
+        policy = DEFAULT_USAGE_POLICIES[tenant.plan]
+        dataset_id = uuid4()
+        version_id = uuid4()
+        digest: str
+        size: int
+        try:
+            digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
+            if not policy.allows_dataset(size):
+                raise ValueError("dataset exceeds plan upload limit")
+            dataset = Dataset(
+                id=dataset_id,
+                workspace_id=tenant.workspace_id,
+                name=name.strip(),
+                created_by=tenant.user_id,
+            )
+            storage_path = storage_path_for(tenant.workspace_id, dataset_id, version_id, digest)
+            storage.put(storage_path, file.file)
+            try:
+                persisted_dataset = datasets.create_dataset(dataset)
+                version = datasets.create_version(
+                    DatasetVersion(
+                        id=version_id,
+                        dataset_id=dataset_id,
+                        version_no=0,
+                        content_sha256=digest,
+                        storage_path=storage_path,
+                        byte_size=size,
+                        created_by=tenant.user_id,
+                    )
+                )
+            except Exception:
+                storage.remove(storage_path)
+                raise
+        except ValueError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail="dataset persistence failed") from exc
+
+        return DatasetResponse(id=persisted_dataset.id, workspace_id=persisted_dataset.workspace_id, name=persisted_dataset.name, created_by=persisted_dataset.created_by, version=version)
+
+    @app.get("/v1/datasets/{dataset_id}/versions", response_model=list[DatasetVersion], tags=["datasets"])
+    def list_dataset_versions(
+        dataset_id: UUID,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> list[DatasetVersion]:
+        return datasets.list_versions(tenant.workspace_id, dataset_id)
 
     @app.post(
         "/v1/research-runs",
@@ -125,11 +206,13 @@ def create_app(
             raise HTTPException(status_code=402, detail="research run limit reached")
         if not policy.allows_concurrency(store.count_active(tenant.workspace_id)):
             raise HTTPException(status_code=429, detail="concurrent research run limit reached")
+        if not datasets.list_versions(tenant.workspace_id, request.dataset_version_id):
+            raise HTTPException(status_code=404, detail="dataset version not found")
 
         job = ResearchJob(
             id=uuid4(),
             workspace_id=tenant.workspace_id,
-            dataset_id=request.dataset_id,
+            dataset_version_id=request.dataset_version_id,
             workflow_id=request.workflow_id,
             status=ResearchJobStatus.QUEUED,
             created_by=tenant.user_id,
