@@ -111,6 +111,43 @@ def create_app(
     def current_tenant(authorization: str | None = Header(default=None)) -> TenantContext:
         return auth.authenticate(authorization)
 
+    def persist_version(
+        *,
+        dataset_id: UUID,
+        tenant: TenantContext,
+        file: UploadFile,
+    ) -> DatasetVersion:
+        policy = DEFAULT_USAGE_POLICIES[tenant.plan]
+        version_id = uuid4()
+        try:
+            digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
+            if not policy.allows_dataset(size):
+                raise ValueError("dataset exceeds plan upload limit")
+            storage_path = storage_path_for(tenant.workspace_id, dataset_id, version_id, digest)
+            storage.put(storage_path, file.file)
+            try:
+                version = datasets.create_version(
+                    DatasetVersion(
+                        id=version_id,
+                        dataset_id=dataset_id,
+                        version_no=len(datasets.list_versions(tenant.workspace_id, dataset_id)) + 1,
+                        content_sha256=digest,
+                        storage_path=storage_path,
+                        byte_size=size,
+                        created_by=tenant.user_id,
+                    )
+                )
+            except Exception:
+                storage.remove(storage_path)
+                raise
+            return version
+        except ValueError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail="dataset version persistence failed") from exc
+
     @app.get("/healthz", tags=["system"])
     def healthz() -> dict[str, str]:
         return {"status": "ok"}
@@ -141,30 +178,29 @@ def create_app(
         file: UploadFile = File(...),
         tenant: TenantContext = Depends(current_tenant),
     ) -> DatasetResponse:
-        policy = DEFAULT_USAGE_POLICIES[tenant.plan]
-        dataset_id = uuid4()
+        dataset = Dataset(
+            id=uuid4(),
+            workspace_id=tenant.workspace_id,
+            name=name.strip(),
+            created_by=tenant.user_id,
+        )
+        # Persist the metadata only after the content has been accepted, so a
+        # rejected/failed upload cannot leave an empty tenant dataset behind.
         version_id = uuid4()
-        digest: str
-        size: int
+        policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         try:
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
-            dataset = Dataset(
-                id=dataset_id,
-                workspace_id=tenant.workspace_id,
-                name=name.strip(),
-                created_by=tenant.user_id,
-            )
-            storage_path = storage_path_for(tenant.workspace_id, dataset_id, version_id, digest)
+            storage_path = storage_path_for(tenant.workspace_id, dataset.id, version_id, digest)
             storage.put(storage_path, file.file)
             try:
                 persisted_dataset = datasets.create_dataset(dataset)
                 version = datasets.create_version(
                     DatasetVersion(
                         id=version_id,
-                        dataset_id=dataset_id,
-                        version_no=0,
+                        dataset_id=dataset.id,
+                        version_no=1,
                         content_sha256=digest,
                         storage_path=storage_path,
                         byte_size=size,
@@ -179,9 +215,34 @@ def create_app(
         except Exception as exc:
             raise HTTPException(status_code=500, detail="dataset persistence failed") from exc
 
-        return DatasetResponse(id=persisted_dataset.id, workspace_id=persisted_dataset.workspace_id, name=persisted_dataset.name, created_by=persisted_dataset.created_by, version=version)
+        return DatasetResponse(
+            id=persisted_dataset.id,
+            workspace_id=persisted_dataset.workspace_id,
+            name=persisted_dataset.name,
+            created_by=persisted_dataset.created_by,
+            version=version,
+        )
 
-    @app.get("/v1/datasets/{dataset_id}/versions", response_model=list[DatasetVersion], tags=["datasets"])
+    @app.post(
+        "/v1/datasets/{dataset_id}/versions",
+        response_model=DatasetVersion,
+        status_code=status.HTTP_201_CREATED,
+        tags=["datasets"],
+    )
+    def upload_dataset_version(
+        dataset_id: UUID,
+        file: UploadFile = File(...),
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> DatasetVersion:
+        if datasets.get_dataset(tenant.workspace_id, dataset_id) is None:
+            raise HTTPException(status_code=404, detail="dataset not found")
+        return persist_version(dataset_id=dataset_id, tenant=tenant, file=file)
+
+    @app.get(
+        "/v1/datasets/{dataset_id}/versions",
+        response_model=list[DatasetVersion],
+        tags=["datasets"],
+    )
     def list_dataset_versions(
         dataset_id: UUID,
         tenant: TenantContext = Depends(current_tenant),
