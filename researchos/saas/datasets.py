@@ -1,8 +1,4 @@
-"""Tenant-scoped dataset persistence and storage boundaries.
-
-Dataset versions are immutable records. The HTTP layer never receives or exposes
-privileged storage credentials; production storage is injected at composition time.
-"""
+"""Tenant-scoped dataset persistence and storage boundaries."""
 
 from __future__ import annotations
 
@@ -35,6 +31,9 @@ class DatasetStore(Protocol):
     def create_dataset(self, dataset: Dataset) -> Dataset:
         ...
 
+    def delete_dataset(self, workspace_id: UUID, dataset_id: UUID) -> None:
+        ...
+
     def create_version(self, version: DatasetVersion) -> DatasetVersion:
         ...
 
@@ -65,6 +64,14 @@ class InMemoryDatasetStore:
             raise ValueError("dataset already exists")
         self._datasets[dataset.id] = dataset
         return dataset
+
+    def delete_dataset(self, workspace_id: UUID, dataset_id: UUID) -> None:
+        dataset = self.get_dataset(workspace_id, dataset_id)
+        if dataset is None:
+            return
+        if any(v.dataset_id == dataset_id for v in self._versions.values()):
+            raise ValueError("cannot delete dataset with versions")
+        del self._datasets[dataset_id]
 
     def create_version(self, version: DatasetVersion) -> DatasetVersion:
         if version.id in self._versions:
@@ -157,6 +164,11 @@ class SupabaseDatasetStore:
         if len(rows) != 1:
             raise RuntimeError("dataset insert returned no unique row")
         return self._dataset(rows[0])
+
+    def delete_dataset(self, workspace_id: UUID, dataset_id: UUID) -> None:
+        self._client.table("dataset").delete().eq("id", str(dataset_id)).eq(
+            "workspace_id", str(workspace_id)
+        ).execute()
 
     def create_version(self, version: DatasetVersion) -> DatasetVersion:
         """Insert a version; Postgres atomically allocates ``version_no``."""
