@@ -1,11 +1,11 @@
 from io import BytesIO
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
 from researchos.saas.api import create_app
 from researchos.saas.contracts import Plan, TenantContext
-from researchos.saas.datasets import Dataset, DatasetVersion, InMemoryDatasetStorage, InMemoryDatasetStore
+from researchos.saas.datasets import DatasetVersion, InMemoryDatasetStorage, InMemoryDatasetStore
 
 
 class StaticAuth:
@@ -42,6 +42,6 @@ def test_failed_initial_dataset_upload_rolls_back_metadata_and_object() -> None:
     )
 
     assert response.status_code == 500
-    assert store.get_dataset(context.workspace_id, UUID(response.json().get("id", str(uuid4())))) is None
-    assert store.list_versions(context.workspace_id, uuid4()) == []
+    assert store._datasets == {}
+    assert store._versions == {}
     assert storage._objects == {}
