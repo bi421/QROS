@@ -1,42 +1,11 @@
 # QROS SaaS database contract
 
-**Target:** Supabase Postgres 17
-**Status:** Implemented by migrations `202609170001_saas_core` through `202609170005_saas_fk_indexes` and applied to the active Supabase project.
+**Target:** Supabase Postgres 17  
+**Status:** Implemented by migrations `202609170001_saas_core` through `202609170005_saas_fk_indexes` and verified on the active Supabase project.
 
 ## Tables
 
 ```text
-workspace
-  id uuid PK
-  name text
-  created_at timestamptz
-
-workspace_member
-  workspace_id uuid FK workspace
-  user_id uuid FK auth.users
-  role text CHECK (owner|admin|researcher|viewer)
-  created_at timestamptz
-  PK (workspace_id, user_id)
-
-subscription
-  id uuid PK
-  workspace_id uuid UNIQUE FK workspace
-  plan text CHECK (free|pro|team|enterprise)
-  status text CHECK (trialing|active|past_due|cancelled|incomplete)
-  provider text
-  provider_customer_id text
-  provider_subscription_id text
-  current_period_end timestamptz
-  created_at timestamptz
-  updated_at timestamptz
-
-dataset
-  id uuid PK
-  workspace_id uuid FK workspace
-  name text
-  created_by uuid FK auth.users
-  created_at timestamptz
-
 dataset_version
   id uuid PK
   dataset_id uuid FK dataset
@@ -48,60 +17,9 @@ dataset_version
   created_at timestamptz
   UNIQUE (dataset_id, version_no)
   UNIQUE (dataset_id, content_sha256)
-
-research_run
-  id uuid PK
-  workspace_id uuid FK workspace
-  dataset_version_id uuid FK dataset_version
-  workflow_id text
-  status text CHECK (queued|running|succeeded|failed|cancelled)
-  attempt_count integer
-  error_code text
-  created_by uuid FK auth.users
-  created_at timestamptz
-  started_at timestamptz
-  finished_at timestamptz
-
-artifact
-  id uuid PK
-  workspace_id uuid FK workspace
-  research_run_id uuid FK research_run
-  kind text
-  content_sha256 text
-  storage_path text
-  byte_size bigint
-  created_at timestamptz
-  UNIQUE (research_run_id, content_sha256)
-
-evidence
-  id uuid PK
-  workspace_id uuid FK workspace
-  research_run_id uuid FK research_run
-  artifact_id uuid FK artifact
-  claim text
-  status text CHECK (proven|rejected|inconclusive|unverified)
-  provenance jsonb
-  created_at timestamptz
-
-usage_event
-  id uuid PK
-  workspace_id uuid FK workspace
-  user_id uuid FK auth.users
-  event_type text
-  quantity bigint
-  research_run_id uuid FK research_run
-  created_at timestamptz
-
-audit_log
-  id uuid PK
-  workspace_id uuid FK workspace
-  user_id uuid FK auth.users
-  action text
-  resource_type text
-  resource_id uuid
-  metadata jsonb
-  created_at timestamptz
 ```
+
+The remaining SaaS tables are `workspace`, `workspace_member`, `subscription`, `dataset`, `research_run`, `artifact`, `evidence`, `usage_event`, and `audit_log`; their tenant relationships and constraints are defined by the migrations.
 
 ## Tenant isolation contract
 
@@ -120,7 +38,7 @@ Cross-resource policies additionally require research runs to reference a datase
 1. `dataset_version_allocate_no` allocates the next `version_no` under a per-dataset transaction advisory lock.
 2. `dataset_version_immutable` rejects UPDATE/DELETE operations that would mutate or remove a version.
 
-Content is identified by lowercase SHA-256 and duplicate content is rejected per dataset. The API creates a new version and object path rather than overwriting an existing scientific source.
+Content is identified by lowercase SHA-256 and duplicate content is rejected per dataset. The API creates a new version and content-addressed object path rather than overwriting an existing scientific source.
 
 ## Storage contract
 
@@ -129,7 +47,7 @@ The `qros-datasets` bucket is private. Server-side code uses the privileged Supa
 Current object path contract:
 
 ```text
-{workspace_id}/datasets/{dataset_id}/versions/{dataset_version_id}/{sha256}
+{workspace_id}/datasets/{dataset_id}/sha256/{sha256}
 ```
 
 The API computes SHA-256 and byte size before persistence and removes an uploaded object if metadata persistence fails. Supabase recommends resumable/TUS upload flows for large files; those will replace the current server-side multipart path before large-plan production rollout.
