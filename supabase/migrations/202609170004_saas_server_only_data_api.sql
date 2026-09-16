@@ -41,6 +41,9 @@ grant execute on function private.is_workspace_member(uuid) to authenticated;
 alter policy workspace_member_select on public.workspace
     using ((select private.is_workspace_member(id)));
 
+alter policy workspace_member_self_select on public.workspace_member
+    using (user_id = (select auth.uid()) or (select private.is_workspace_member(workspace_id)));
+
 alter policy subscription_member_select on public.subscription
     using ((select private.is_workspace_member(workspace_id)));
 
