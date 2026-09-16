@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import json
+import math
+import random
+import statistics
+import pytest
 from datetime import datetime, timedelta, timezone
 
-from scripts.discover_xauusd_m1_interaction_edges import run
+from scripts.discover_xauusd_m1_interaction_edges import run, _probability, _brier
 
 
 def _event(index: int, *, label: bool, session: str, regime: str) -> dict:
@@ -70,3 +74,57 @@ def test_outer_support_failure_is_recorded(tmp_path):
     assert result["fold_count"] == 2
     assert result["outer_support_failures"] >= 1
     assert result["scientific_gate"]["status"] == "NO_EDGE_OR_INCONCLUSIVE"
+
+
+# ==============================================================================
+# DEEP VALIDATION TESTS: Numerical Stability, Statistical Correctness, Edge Cases
+# ==============================================================================
+
+
+def test_probability_jeffreys_smoothing_bounds():
+    rows_true = [{"outcome": {"hit_threshold_1d": True}} for _ in range(100)]
+    assert 0.0 < _probability(rows_true) < 1.0
+    rows_false = [{"outcome": {"hit_threshold_1d": False}} for _ in range(100)]
+    assert 0.0 < _probability(rows_false) < 1.0
+
+
+def test_brier_score_large_sample_numerical_stability():
+    rows = [{"outcome": {"hit_threshold_1d": True}} for _ in range(10**5)]
+    brier = _brier(0.5, rows)
+    assert math.isfinite(brier) and 0.0 <= brier <= 1.0
+
+
+def test_brier_score_extreme_probability_stability():
+    rows = [{"outcome": {"hit_threshold_1d": False}} for _ in range(100)]
+    brier = _brier(1e-10, rows)
+    assert math.isfinite(brier) and brier > 0.0
+
+
+def test_brier_score_statistical_unbiasedness():
+    true_p, target = 0.7, 0.21
+    scores = []
+    for _ in range(500):
+        sample = [{"outcome": {"hit_threshold_1d": random.random() < true_p}} for _ in range(1000)]
+        scores.append(_brier(_probability(sample), sample))
+    assert abs(statistics.mean(scores) - target) < 0.05
+
+
+def test_insufficient_events_raises_value_error(tmp_path):
+    events = [
+        {
+            "event_id": f"E{i:04d}",
+            "timestamp": f"2021-01-01T0{i}:00:00+00:00",
+            "outcome": {
+                "hit_threshold_1d": True,
+                "data_availability": {"realized_end_1d": "2021-01-01T00:00:00+00:00"},
+            },
+        }
+        for i in range(5)
+    ]
+    source = tmp_path / "source.json"
+    source.write_text(
+        json.dumps({"contract": {"asset": "XAUUSD", "timeframe": "M1"}, "events_data": events}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="insufficient complete events"):
+        run(source, tmp_path / "out.json", 40, 20, 20, 5, 8)
