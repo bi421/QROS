@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.api import create_app
+from researchos.saas.config import SaaSSettings
 from researchos.saas.contracts import Plan, TenantContext
 from researchos.saas.store import InMemoryResearchJobStore
 
@@ -31,6 +32,22 @@ def _client(workspace_id: UUID | None = None) -> TestClient:
     )
 
 
+def _production_settings() -> SaaSSettings:
+    return SaaSSettings(
+        environment="production",
+        service_name="researchos-saas",
+        log_level="INFO",
+        auth_required=True,
+        request_timeout_seconds=60,
+        max_request_body_bytes=10_000_000,
+        request_id_max_length=128,
+        rate_limit_per_minute=60,
+        supabase_url="https://example.supabase.co",
+        supabase_publishable_key=None,
+        supabase_service_role_key="server-secret",
+    )
+
+
 def test_health_does_not_require_authentication() -> None:
     client = TestClient(create_app())
     response = client.get("/healthz")
@@ -48,6 +65,14 @@ def test_security_headers_are_present() -> None:
     assert response.headers["Referrer-Policy"] == "no-referrer"
     assert response.headers["Permissions-Policy"] == "camera=(), microphone=(), geolocation=()"
     assert response.headers["Cache-Control"] == "no-store"
+
+
+def test_production_does_not_expose_interactive_api_docs() -> None:
+    client = TestClient(create_app(settings=_production_settings()))
+
+    assert client.get("/docs").status_code == 404
+    assert client.get("/redoc").status_code == 404
+    assert client.get("/openapi.json").status_code == 404
 
 
 def test_request_id_is_propagated_and_bounded() -> None:
