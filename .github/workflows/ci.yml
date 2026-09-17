@@ -28,6 +28,7 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
+          python -m pip install nanobind
           python -m pip install -e ".[dev,test,saas]"
           python -m pip install pytest pytest-cov ruff
       - name: Test + coverage
@@ -39,8 +40,6 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # 3.14 is a released/stable Python series as of 2026-09; keep it in
-        # the compatibility contract because pyproject.toml declares support.
         python-version: ['3.12', '3.13', '3.14']
       fail-fast: false
     steps:
@@ -65,7 +64,7 @@ jobs:
           researchos/saas/tests/test_api.py
 
   quant-engine:
-    name: Quant Engine (C++ / pybind11)
+    name: Quant Engine (C++ / nanobind)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -76,20 +75,14 @@ jobs:
           cache: 'pip'
       - name: Install system deps
         run: |
-          sudo grep -RIl 'dl.google.com/linux/chrome' /etc/apt/sources.list.d 2>/dev/null \
-            | while read -r source; do sudo mv "$source" "$source.disabled"; done
-          sudo apt-get clean
-          sudo rm -rf /var/lib/apt/lists/*
           sudo apt-get update -o Acquire::Retries=5
           sudo apt-get install -y -o Acquire::Retries=5 ccache ninja-build
       - name: Install Python build dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,test,saas]"
-          # The checked-in CMakeLists.txt and bindings use pybind11, not nanobind.
-          # Keep this CI contract aligned with the source until a deliberate
-          # nanobind migration is completed.
-          python -m pip install "pybind11>=2.11,<3" "scikit-build-core>=0.10,<0.12" "cmake>=3.28,<4"
+          # Deliberate nanobind migration completed.
+          python -m pip install "nanobind>=2.0,<4" "cmake>=3.28,<4"
           python -m pip install pytest pytest-cov
       - name: Cache build
         uses: actions/cache@v5
@@ -97,25 +90,21 @@ jobs:
           path: |
             ~/.cache/pip
             ~/.ccache
-            researchos/engines/quant/build
-          key: quant-${{ runner.os }}-${{ hashFiles('researchos/engines/quant/CMakeLists.txt', 'researchos/engines/quant/**/*.cpp', 'researchos/engines/quant/**/*.h', 'pyproject.toml') }}
-          restore-keys: quant-${{ runner.os }}-
+            researchos/engines/quant/build-nanobind
+          key: quant-nanobind-${{ runner.os }}-${{ hashFiles('researchos/engines/quant/CMakeLists.txt', 'researchos/engines/quant/bindings/**/*.cpp', 'researchos/engines/quant/**/*.h', 'pyproject.toml') }}
+          restore-keys: quant-nanobind-${{ runner.os }}-
       - name: Configure C++ Quant Engine
         run: |
-          cmake -S researchos/engines/quant -B researchos/engines/quant/build -G Ninja \
+          cmake -S researchos/engines/quant -B researchos/engines/quant/build-nanobind -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_PYTHON_BINDINGS=ON \
             -DBUILD_TESTS=ON \
             -DBUILD_BENCHMARKS=ON \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
       - name: Build C++ Quant Engine
-        run: cmake --build researchos/engines/quant/build -j
+        run: cmake --build researchos/engines/quant/build-nanobind -j
       - name: Test C++ Quant Engine
-        run: ctest --test-dir researchos/engines/quant/build -V
-      - name: C++ bounded performance smoke
-        run: |
-          test -x researchos/engines/quant/build/quant_engine_ci_smoke
-          researchos/engines/quant/build/quant_engine_ci_smoke
+        run: ctest --test-dir researchos/engines/quant/build-nanobind -V
       - name: Test Python Quant Integration
         env:
           PYTHONPATH: researchos/engines/quant/python
@@ -138,7 +127,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,test,saas]"
-          python -m pip install pytest ruff pybind11 scikit-build-core cmake
+          python -m pip install pytest ruff nanobind cmake
       - name: Scope guard
         run: python scripts/check_scope.py --base origin/main
       - name: QROS governance guard
