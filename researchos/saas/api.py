@@ -224,13 +224,14 @@ def create_app(
             raise HTTPException(status_code=402, detail="research run limit reached")
         if not policy.allows_concurrency(store.count_active(tenant.workspace_id)):
             raise HTTPException(status_code=429, detail="concurrent research run limit reached")
-        if not datasets.list_versions(tenant.workspace_id, request.dataset_version_id):
+        version = datasets.get_version(tenant.workspace_id, request.dataset_version_id)
+        if version is None:
             raise HTTPException(status_code=404, detail="dataset version not found")
 
         job = ResearchJob(
             id=uuid4(),
             workspace_id=tenant.workspace_id,
-            dataset_version_id=request.dataset_version_id,
+            dataset_version_id=version.id,
             workflow_id=request.workflow_id,
             status=ResearchJobStatus.QUEUED,
             created_by=tenant.user_id,
