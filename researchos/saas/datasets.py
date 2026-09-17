@@ -1,4 +1,8 @@
-"""Tenant-scoped dataset persistence and storage boundaries."""
+"""Tenant-scoped dataset persistence and storage boundaries.
+
+The store separates dataset identity from immutable version identity. Production
+authorization remains tenant-scoped in the persistence layer (Supabase/RLS).
+"""
 
 from __future__ import annotations
 
@@ -40,6 +44,9 @@ class DatasetStore(Protocol):
     def get_dataset(self, workspace_id: UUID, dataset_id: UUID) -> Dataset | None:
         ...
 
+    def get_version(self, workspace_id: UUID, version_id: UUID) -> DatasetVersion | None:
+        ...
+
     def list_versions(self, workspace_id: UUID, dataset_id: UUID) -> list[DatasetVersion]:
         ...
 
@@ -53,7 +60,7 @@ class DatasetStorage(Protocol):
 
 
 class InMemoryDatasetStore:
-    """Development/test implementation; never intended as production storage."""
+    """Deterministic development/test implementation; not production storage."""
 
     def __init__(self) -> None:
         self._datasets: dict[UUID, Dataset] = {}
@@ -91,6 +98,12 @@ class InMemoryDatasetStore:
         if dataset is None or dataset.workspace_id != workspace_id:
             return None
         return dataset
+
+    def get_version(self, workspace_id: UUID, version_id: UUID) -> DatasetVersion | None:
+        version = self._versions.get(version_id)
+        if version is None:
+            return None
+        return version if self.get_dataset(workspace_id, version.dataset_id) is not None else None
 
     def list_versions(self, workspace_id: UUID, dataset_id: UUID) -> list[DatasetVersion]:
         if self.get_dataset(workspace_id, dataset_id) is None:
@@ -171,7 +184,6 @@ class SupabaseDatasetStore:
         ).execute()
 
     def create_version(self, version: DatasetVersion) -> DatasetVersion:
-        """Insert a version; Postgres atomically allocates ``version_no``."""
         result = (
             self._client.table("dataset_version")
             .insert(
@@ -184,9 +196,7 @@ class SupabaseDatasetStore:
                     "created_by": str(version.created_by),
                 }
             )
-            .select(
-                "id,dataset_id,version_no,content_sha256,storage_path,byte_size,created_by"
-            )
+            .select("id,dataset_id,version_no,content_sha256,storage_path,byte_size,created_by")
             .execute()
         )
         rows = result.data or []
@@ -206,14 +216,26 @@ class SupabaseDatasetStore:
         rows = result.data or []
         return self._dataset(rows[0]) if rows else None
 
+    def get_version(self, workspace_id: UUID, version_id: UUID) -> DatasetVersion | None:
+        result = (
+            self._client.table("dataset_version")
+            .select("id,dataset_id,version_no,content_sha256,storage_path,byte_size,created_by")
+            .eq("id", str(version_id))
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        if not rows:
+            return None
+        version = self._version(rows[0])
+        return version if self.get_dataset(workspace_id, version.dataset_id) is not None else None
+
     def list_versions(self, workspace_id: UUID, dataset_id: UUID) -> list[DatasetVersion]:
         if self.get_dataset(workspace_id, dataset_id) is None:
             return []
         result = (
             self._client.table("dataset_version")
-            .select(
-                "id,dataset_id,version_no,content_sha256,storage_path,byte_size,created_by"
-            )
+            .select("id,dataset_id,version_no,content_sha256,storage_path,byte_size,created_by")
             .eq("dataset_id", str(dataset_id))
             .order("version_no")
             .execute()
