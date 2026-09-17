@@ -189,13 +189,10 @@ class ResearchClaim(BaseObject):
         self.plan_hash: str | None = None
         self.experiment_ids: tuple[str, ...] = ()
         self.evidence_hashes: tuple[str, ...] = ()
+        self._plan_lock_active = False
 
     def __setattr__(self, name: str, value: Any) -> None:
-        if (
-            name in self._SEMANTIC_FIELDS
-            and getattr(self, "plan_locked_at", None) is not None
-            and getattr(self, name, value) != value
-        ):
+        if name in self._SEMANTIC_FIELDS and getattr(self, "_plan_lock_active", False):
             raise AttributeError(
                 f"ResearchClaim.{name} is immutable after plan lock; fork a new claim version"
             )
@@ -219,6 +216,7 @@ class ResearchClaim(BaseObject):
         self.plan_hash = plan.content_hash
         self.plan_locked_at = utc_now()
         self._hash = None
+        self._plan_lock_active = True
         return self.plan_hash
 
     def add_experiment(self, experiment_id: str) -> None:
@@ -339,6 +337,7 @@ class ResearchClaim(BaseObject):
         obj.evidence_hashes = tuple(data.get("evidence_hashes", []))
         locked_at = data.get("plan_locked_at")
         obj.plan_locked_at = parse_timestamp(locked_at) if locked_at else None
+        obj._plan_lock_active = obj.plan_locked_at is not None
         return obj
 
     def clone(self) -> "ResearchClaim":
