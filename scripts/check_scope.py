@@ -10,6 +10,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 FORBIDDEN_NEW_PATHS = (
+    # Root-level Python scripts are intentionally not an allowed extension point.
+    # Existing legacy files are audited separately; new/changed root scripts must
+    # live under an owned directory such as scripts/ or examples/.
+    re.compile(r"^[^/]+\.py$", re.I),
     re.compile(r"(^|/)(?:_tmp|tmp_|scratch_).*", re.I),
     re.compile(r"(^|/).*\.bak$", re.I),
     re.compile(r"(^|/)(?:pytest_|ruff_).*\.txt$", re.I),
