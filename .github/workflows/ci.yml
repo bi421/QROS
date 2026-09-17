@@ -39,7 +39,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.10', '3.14']
+        # 3.14 is a released/stable Python series as of 2026-09; keep it in
+        # the compatibility contract because pyproject.toml declares support.
+        python-version: ['3.12', '3.13', '3.14']
       fail-fast: false
     steps:
       - uses: actions/checkout@v5
@@ -57,7 +59,7 @@ jobs:
         run: python -m pytest -v
 
   quant-engine:
-    name: Quant Engine (C++ / nanobind)
+    name: Quant Engine (C++ / pybind11)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -78,7 +80,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,test,saas]"
-          python -m pip install nanobind scikit-build-core cmake
+          # The checked-in CMakeLists.txt and bindings use pybind11, not nanobind.
+          # Keep this CI contract aligned with the source until a deliberate
+          # nanobind migration is completed.
+          python -m pip install "pybind11>=2.11,<3" "scikit-build-core>=0.10,<0.12" "cmake>=3.28,<4"
           python -m pip install pytest pytest-cov
       - name: Cache build
         uses: actions/cache@v5
@@ -93,6 +98,9 @@ jobs:
         run: |
           cmake -S researchos/engines/quant -B researchos/engines/quant/build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_PYTHON_BINDINGS=ON \
+            -DBUILD_TESTS=ON \
+            -DBUILD_BENCHMARKS=ON \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
       - name: Build C++ Quant Engine
         run: cmake --build researchos/engines/quant/build -j
@@ -124,7 +132,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,test,saas]"
-          python -m pip install pytest ruff nanobind scikit-build-core cmake
+          python -m pip install pytest ruff pybind11 scikit-build-core cmake
       - name: Scope guard
         run: python scripts/check_scope.py --base origin/main
       - name: QROS governance guard
