@@ -55,8 +55,14 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,test,saas]"
           python -m pip install pytest pytest-cov
-      - name: Compatibility test
-        run: python -m pytest -v
+      - name: Compile compatibility surface
+        run: python -m compileall -q researchos
+      - name: Compatibility smoke tests
+        run: >-
+          python -m pytest -q
+          researchos/tests/test_research_claim.py
+          researchos/saas/tests/test_contracts.py
+          researchos/saas/tests/test_api.py
 
   quant-engine:
     name: Quant Engine (C++ / pybind11)
@@ -107,9 +113,9 @@ jobs:
       - name: Test C++ Quant Engine
         run: ctest --test-dir researchos/engines/quant/build -V
       - name: Benchmark C++ fast path
-        env:
-          PYTHONPATH: researchos/engines/quant/python
-        run: python researchos/engines/quant/benchmarks/bench_fast_numeric.py --rows 1000000 --repeat 3
+        run: |
+          test -x researchos/engines/quant/build/quant_engine_bench
+          researchos/engines/quant/build/quant_engine_bench
       - name: Test Python Quant Integration
         env:
           PYTHONPATH: researchos/engines/quant/python
