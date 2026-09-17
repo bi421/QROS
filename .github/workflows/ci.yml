@@ -112,10 +112,10 @@ jobs:
         run: cmake --build researchos/engines/quant/build -j
       - name: Test C++ Quant Engine
         run: ctest --test-dir researchos/engines/quant/build -V
-      - name: Benchmark C++ fast path
+      - name: C++ bounded performance smoke
         run: |
-          test -x researchos/engines/quant/build/quant_engine_bench
-          researchos/engines/quant/build/quant_engine_bench
+          test -x researchos/engines/quant/build/quant_engine_ci_smoke
+          researchos/engines/quant/build/quant_engine_ci_smoke
       - name: Test Python Quant Integration
         env:
           PYTHONPATH: researchos/engines/quant/python
@@ -151,7 +151,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: researchos-health-${{ github.sha }}
+          name: qros-health-${{ github.sha }}
           path: .health/last_run.json
           if-no-files-found: error
           retention-days: 30
