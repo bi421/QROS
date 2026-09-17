@@ -128,7 +128,10 @@ jobs:
             - name: Install system cmake for health check
         run: sudo apt-get install -y cmake
 
-            - name: Install health-check dependencies
+            - name: Install system cmake
+        run: sudo apt-get update && sudo apt-get install -y cmake
+
+      - name: Install health-check dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,test,saas]"
