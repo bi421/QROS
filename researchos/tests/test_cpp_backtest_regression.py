@@ -199,7 +199,7 @@ def test_sma_20_50_winrate(
 def test_sma_20_50_trades_count(
     cpp_engine: CppQuantAdapter,
 ):
-    df = load_xauusd_1d()
+    df = load_regression_market()
 
     _, returns, trades = build_sma_strategy(df)
 
@@ -215,7 +215,7 @@ def test_sma_20_50_trades_count(
 def test_sma_20_50_total_return_range(
     cpp_engine: CppQuantAdapter,
 ):
-    df = load_xauusd_1d()
+    df = load_regression_market()
 
     _, returns, trades = build_sma_strategy(df)
 
