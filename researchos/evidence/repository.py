@@ -155,7 +155,7 @@ class EvidenceRepository:
         conn = self._repo._get_conn()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT child_hash FROM lineage WHERE parent_hash = ? ORDER BY child_hash",
+            "SELECT DISTINCT child_hash FROM lineage WHERE parent_hash = ? ORDER BY child_hash",
             (artifact_hash,),
         )
         return [row[0] for row in cursor.fetchall()]
@@ -164,7 +164,7 @@ class EvidenceRepository:
         conn = self._repo._get_conn()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT parent_hash FROM lineage WHERE child_hash = ? ORDER BY parent_hash",
+            "SELECT DISTINCT parent_hash FROM lineage WHERE child_hash = ? ORDER BY parent_hash",
             (artifact_hash,),
         )
         return [row[0] for row in cursor.fetchall()]
@@ -241,19 +241,13 @@ class EvidenceRepository:
         """
         cursor.execute(
             """
-            SELECT relation
+            SELECT 1
             FROM lineage
-            WHERE parent_hash = ? AND child_hash = ?
+            WHERE parent_hash = ? AND child_hash = ? AND relation = ?
             """,
-            (parent_hash, child_hash),
+            (parent_hash, child_hash, relation),
         )
-        existing = cursor.fetchone()
-        if existing is not None:
-            if existing[0] != relation:
-                raise ValueError(
-                    f"Lineage edge {parent_hash} -> {child_hash} already exists with relation "
-                    f"'{existing[0]}', cannot replace with '{relation}'"
-                )
+        if cursor.fetchone() is not None:
             return
 
         now = datetime.now(timezone.utc).isoformat()
