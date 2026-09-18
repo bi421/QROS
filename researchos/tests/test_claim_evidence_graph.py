@@ -75,6 +75,7 @@ def test_graph_trace_can_filter_artifact_types():
     graph.attach(claim, [evidence.artifact_hash])
     trace = graph.trace(claim.id, artifact_types={"Validation"})
     assert trace["nodes"] == []
+    assert graph.trace_artifact_type(claim.id, "Finding")["nodes"][0]["artifact_type"] == "Finding"
     repo.close()
 
 
