@@ -93,3 +93,36 @@ def test_graph_supports_contradiction_and_replication_relations():
     assert graph.evidence_repository.verify_evidence() is True
     assert graph.evidence_repository.get_children(first.artifact_hash) == sorted([second.artifact_hash, third.artifact_hash])
     repo.close()
+
+
+def test_lineage_supports_multiple_relations_for_same_parent_and_child():
+    repo = ResearchRepository(db_path=":memory:")
+    graph = ResearchClaimEvidenceGraph(repo)
+    parent = build_envelope("Finding", {"finding": "baseline"}, version="1")
+    child = build_envelope(
+        "Finding",
+        {"finding": "same evidence, different interpretation"},
+        version="1",
+        parent_hashes=(parent.artifact_hash,),
+    )
+    graph.evidence_repository.append_artifact(parent)
+    graph.evidence_repository.append_artifact(child)
+
+    graph.evidence_repository.add_lineage_edge(
+        parent.artifact_hash, child.artifact_hash, "replicates"
+    )
+    graph.evidence_repository.add_lineage_edge(
+        parent.artifact_hash, child.artifact_hash, "contradicts"
+    )
+
+    assert graph.evidence_repository.verify_evidence() is True
+    conn = repo._get_conn()
+    rows = conn.execute(
+        "SELECT relation FROM lineage WHERE parent_hash = ? AND child_hash = ? ORDER BY relation",
+        (parent.artifact_hash, child.artifact_hash),
+    ).fetchall()
+    assert [row[0] for row in rows] == ["contradicts", "derives", "replicates"]
+    assert graph.evidence_repository.get_children(parent.artifact_hash) == [
+        child.artifact_hash
+    ]
+    repo.close()
