@@ -26,6 +26,35 @@ class SupabaseResearchJobStore(ResearchJobStore):
             ),
         )
 
+    def create_idempotent(
+        self,
+        job: ResearchJob,
+        idempotency_key: str,
+        request_fingerprint: str,
+        response_body: dict[str, object],
+    ) -> tuple[ResearchJob, bool]:
+        if job.created_by is None:
+            raise ValueError("Supabase research jobs require created_by")
+        result = self._client.rpc(
+            "create_research_run_idempotent",
+            {
+                "p_research_run_id": str(job.id),
+                "p_workspace_id": str(job.workspace_id),
+                "p_dataset_version_id": str(job.dataset_version_id),
+                "p_workflow_id": job.workflow_id,
+                "p_created_by": str(job.created_by),
+                "p_idempotency_key": idempotency_key,
+                "p_request_fingerprint": request_fingerprint,
+                "p_response_body": response_body,
+            },
+        ).execute()
+        rows = result.data or []
+        if len(rows) != 1:
+            raise RuntimeError("idempotent research run creation returned no unique row")
+        row = rows[0]
+        job_row = row.get("job", row)
+        return self._row_to_job(job_row), bool(row.get("replayed", False))
+
     def create(self, job: ResearchJob) -> ResearchJob:
         if job.created_by is None:
             raise ValueError("Supabase research jobs require created_by")
