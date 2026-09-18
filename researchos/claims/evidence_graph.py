@@ -93,6 +93,10 @@ class ResearchClaimEvidenceGraph:
         nodes.sort(key=lambda node: (node["artifact_type"], node["artifact_hash"]))
         return {"claim_id": graph.claim_id, "claim_hash": graph.claim_hash, "plan_hash": graph.plan_hash, "evidence_hashes": list(graph.evidence_hashes), "nodes": nodes}
 
+    def trace_artifact_type(self, claim_id: str, artifact_type: str) -> dict[str, Any]:
+        """Return only one governed research stage from the claim projection."""
+        return self.trace(claim_id, artifact_types={artifact_type})
+
     def integrity(self, claim_id: str) -> dict[str, Any]:
         graph = self.get(claim_id)
         if graph is None:
