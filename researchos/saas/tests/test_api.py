@@ -187,6 +187,25 @@ def test_create_research_job_requires_existing_tenant_dataset_version() -> None:
     assert response.status_code == 404
 
 
+def test_research_run_idempotency_replays_without_creating_or_enqueueing_twice() -> None:
+    client, _, _, _ = _client()
+    uploaded = _upload(client, "sample-idempotent", b"x")
+    version_id = uploaded.json()["version"]["id"]
+    headers = {"Authorization": "Bearer test", "Idempotency-Key": "same-run"}
+    first = client.post(
+        "/v1/research-runs",
+        headers=headers,
+        json={"dataset_version_id": version_id},
+    )
+    second = client.post(
+        "/v1/research-runs",
+        headers=headers,
+        json={"dataset_version_id": version_id},
+    )
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert first.json()["id"] == second.json()["id"]
+
 def test_create_and_get_research_job_are_tenant_scoped() -> None:
     client, context, _, _ = _client()
     uploaded = _upload(client, "sample", b"x")
