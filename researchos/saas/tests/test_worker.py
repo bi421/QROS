@@ -128,3 +128,20 @@ def test_expired_worker_lease_can_be_reclaimed():
     with pytest.raises(RuntimeError, match="stale or invalid worker lease"):
         store.finish(workspace_id, job.id, first.token, ResearchJobStatus.SUCCEEDED)
     store.finish(workspace_id, job.id, second.token, ResearchJobStatus.SUCCEEDED)
+
+
+def test_worker_lease_can_be_renewed_before_expiry():
+    from datetime import datetime, timedelta, timezone
+
+    now = [datetime(2026, 9, 18, tzinfo=timezone.utc)]
+    store = InMemoryResearchJobStore(clock=lambda: now[0])
+    workspace_id = uuid4()
+    job = store.create(_job(workspace_id))
+    lease = store.claim(workspace_id, job.id, "worker-a", 10)
+
+    now[0] += timedelta(seconds=5)
+    renewed = store.renew(workspace_id, job.id, lease.token, 10)
+
+    assert renewed.token == lease.token
+    now[0] += timedelta(seconds=6)
+    store.finish(workspace_id, job.id, lease.token, ResearchJobStatus.SUCCEEDED)
