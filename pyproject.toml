@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10,<3.15"
 license = {text = "ResearchOS Scientific License"}
 authors = [
-    {name = "ResearchOS Team"},
+    {name = "QROS / ResearchOS Team"},
 ]
 keywords = [
     "market-research",
@@ -67,7 +67,7 @@ test = [
 researchos-health = "scripts.final_health_check:main"
 
 [project.urls]
-Homepage = "https://github.com/researchos/researchos"
+Homepage = "https://github.com/bi421/QROS"
 Documentation = "docs/"
 
 [tool.setuptools.packages.find]
