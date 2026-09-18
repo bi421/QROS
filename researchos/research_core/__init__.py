@@ -10,7 +10,8 @@ from researchos.research_core.contracts import (
     ResearchResult,
     ResearchRunner,
 )
-from researchos.research_core.evidence import EvidenceArtifact, EvidenceKind\nfrom researchos.research_core.execution import (
+from researchos.research_core.evidence import EvidenceArtifact, EvidenceKind
+from researchos.research_core.execution import (
     ExecutionBinding,
     ExecutionRegistry,
     registry_for_backend,
