@@ -80,7 +80,7 @@ class InMemoryDatasetStore:
             raise ValueError("cannot delete dataset with versions")
         del self._datasets[dataset_id]
 
-    def create_version(self, version: DatasetVersion) -> DatasetVersion:
+    def create_version(self, workspace_id: UUID, version: DatasetVersion) -> DatasetVersion:
         if version.id in self._versions:
             raise ValueError("dataset version already exists")
         if self.get_dataset(workspace_id, version.dataset_id) is None:
