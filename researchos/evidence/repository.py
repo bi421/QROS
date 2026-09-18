@@ -207,6 +207,13 @@ class EvidenceRepository:
 
         cursor.execute("SELECT parent_hash, child_hash, relation FROM lineage")
         actual_edges = set(cursor.fetchall())
+        row_by_hash = {row[1]: row for row in rows}
+        for parent_hash, child_hash, relation in actual_edges:
+            child = row_by_hash.get(child_hash)
+            if child is None or parent_hash not in tuple(json.loads(child[4])):
+                return False
+            if relation not in {_default_relation(child[0]), "contradicts", "replicates"}:
+                return False
         for row in rows:
             allowed = {_default_relation(row[0]), "contradicts", "replicates"}
             for parent in tuple(json.loads(row[4])):
