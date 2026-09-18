@@ -9,21 +9,43 @@ from researchos.research_core.contracts import (
     ResearchResult,
     ResearchRunner,
 )
-from researchos.research_core.intelligence import (\n    Backend,\n    CapabilityRegistry,\n    ComputePlan,\n    DEFAULT_CAPABILITIES,\n    Decision,\n    MethodDecision,\n    ResearchContext,\n    ResearchMethod,\n    ResearchPlanner,\n    ValidationPlan,\n)\nfrom researchos.research_core.runner import (
+from researchos.research_core.intelligence import (
+    Backend,
+    CapabilityRegistry,
+    ComputePlan,
+    DEFAULT_CAPABILITIES,
+    Decision,
+    MethodDecision,
+    ResearchContext,
+    ResearchMethod,
+    ResearchPlanner,
+    ValidationPlan,
+)
+from researchos.research_core.runner import (
     FrozenResearchPipeline,
     FrozenXauusdM1Runner,
     PipelineArtifact,
 )
 
 __all__ = [
-    "Backend",\n    "CapabilityRegistry",\n    "ComputePlan",\n    "DEFAULT_CAPABILITIES",\n    "Decision",\n    "DatasetProvenance",\n    "MethodDecision",\n    "ResearchContext",\n    "ResearchMethod",\n    "ResearchPlanner",\n    "ValidationPlan",
+    "Backend",
+    "CapabilityRegistry",
+    "ComputePlan",
+    "DEFAULT_CAPABILITIES",
+    "Decision",
+    "DatasetProvenance",
     "FROZEN_XAUUSD_M1_WORKFLOW",
     "FrozenResearchPipeline",
     "FrozenXauusdM1Runner",
+    "MethodDecision",
     "PipelineArtifact",
     "ResearchArtifact",
+    "ResearchContext",
     "ResearchDataset",
+    "ResearchMethod",
+    "ResearchPlanner",
     "ResearchRequest",
     "ResearchResult",
     "ResearchRunner",
+    "ValidationPlan",
 ]
