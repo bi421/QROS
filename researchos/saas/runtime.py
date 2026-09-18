@@ -9,6 +9,7 @@ from researchos.saas.datasets import SupabaseDatasetStorage, SupabaseDatasetStor
 from researchos.saas.queue import SupabaseResearchJobQueue
 from researchos.saas.supabase_job_store import SupabaseResearchJobStore
 from researchos.saas.idempotency import SupabaseIdempotencyStore
+from researchos.saas.billing import SupabaseBillingEventStore
 
 def build_production_app():
     url = os.environ["SUPABASE_URL"]
@@ -23,6 +24,8 @@ def build_production_app():
         dataset_storage=SupabaseDatasetStorage(client),
         job_queue=SupabaseResearchJobQueue(client),
         idempotency_store=SupabaseIdempotencyStore(client),
+        billing_store=SupabaseBillingEventStore(client),
+        billing_webhook_secret=os.environ.get("BILLING_WEBHOOK_SECRET"),
     )
 
 app = build_production_app()
