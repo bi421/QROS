@@ -1,24 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(cpp_quant_engine VERSION 1.1.0 LANGUAGES CXX)
 
-# Windows SDK Include Directories (MSVC fix)
-if(MSVC)
-    include_directories(
-        "C:/Program Files (x86)/Windows Kits/10/Include/10.0.22621.0/ucrt"
-        "C:/Program Files (x86)/Windows Kits/10/Include/10.0.22621.0/um"
-        "C:/Program Files (x86)/Windows Kits/10/Include/10.0.22621.0/shared"
-    )
-endif()
-
-# ── C++20 Standard ────────────────────────────────────────────────────────
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-# rest of file...
-cmake_minimum_required(VERSION 3.20)
-project(cpp_quant_engine VERSION 1.1.0 LANGUAGES CXX)
-
 # â”€â”€ C++20 Standard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -54,10 +36,6 @@ target_compile_options(quant_engine PRIVATE
 
 # â”€â”€ Python Bindings (optional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 if(BUILD_PYTHON_BINDINGS)
-    # nanobind 3.x requires the modern CMake Python package
-    # to be discovered before find_package(nanobind).
-    find_package(Python COMPONENTS Interpreter Development REQUIRED)
-
     find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 
     execute_process(
