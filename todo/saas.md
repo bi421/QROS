@@ -21,7 +21,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [x] Add regression tests for the claim/evidence bridge.
 - [ ] Connect graph projection to Experiment/Run/Result/Validation/Finding traversal APIs.
 - [ ] Add first-class contradiction/replication edges without mutating historical artifacts.
-- [ ] Add graph integrity and orphan detection gate.
+- [x] Add graph integrity and orphan detection gate.
 
 ## Phase 2 — Tenant-safe persistence
 - [ ] Make workspace/tenant identity mandatory at every SaaS boundary.
