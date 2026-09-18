@@ -51,3 +51,28 @@ def test_claim_attachment_requires_locked_plan():
         raise AssertionError("unlocked claims must not enter the evidence graph")
     finally:
         repo.close()
+
+
+def test_graph_integrity_reports_valid_closed_projection():
+    repo = ResearchRepository(db_path=":memory:")
+    graph = ResearchClaimEvidenceGraph(repo)
+    evidence = build_envelope("Finding", {"finding": "replicated"}, version="1")
+    graph.evidence_repository.append_artifact(evidence)
+    claim = _claim()
+    graph.attach(claim, [evidence.artifact_hash])
+    report = graph.integrity(claim.id)
+    assert report["valid"] is True
+    assert report["orphaned_evidence"] == []
+    repo.close()
+
+
+def test_graph_trace_can_filter_artifact_types():
+    repo = ResearchRepository(db_path=":memory:")
+    graph = ResearchClaimEvidenceGraph(repo)
+    evidence = build_envelope("Finding", {"finding": "filtered"}, version="1")
+    graph.evidence_repository.append_artifact(evidence)
+    claim = _claim()
+    graph.attach(claim, [evidence.artifact_hash])
+    trace = graph.trace(claim.id, artifact_types={"Validation"})
+    assert trace["nodes"] == []
+    repo.close()
