@@ -313,11 +313,6 @@ def create_app(
             "dataset_version_id": str(request.dataset_version_id),
             "workflow_id": request.workflow_id,
         })
-        replay = idempotency.get(tenant.workspace_id, idempotency_key)
-        if replay is not None:
-            if replay.request_fingerprint != fingerprint:
-                raise HTTPException(status_code=409, detail="idempotency key reused with different request")
-            return JSONResponse(status_code=replay.status_code, content=replay.response_body)
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         if not policy.allows_monthly_runs(store.count_monthly(tenant.workspace_id)):
             raise HTTPException(status_code=402, detail="research run limit reached")
