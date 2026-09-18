@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from typing import Protocol
 from uuid import UUID, uuid4
+import hashlib
+import json
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, ResearchJob, ResearchJobStatus, TenantContext
@@ -24,8 +26,24 @@ from researchos.saas.datasets import (
 )
 from researchos.saas.queue import InMemoryResearchJobQueue, ResearchJobQueue
 from researchos.saas.store import InMemoryResearchJobStore, ResearchJobStore
+from researchos.saas.idempotency import (
+    IdempotencyConflict,
+    IdempotencyRecord,
+    IdempotencyStore,
+    InMemoryIdempotencyStore,
+    MAX_IDEMPOTENCY_KEY_LENGTH,
+)
+from researchos.saas.rate_limit import FixedWindowRateLimiter, RateLimiter
+from researchos.saas.billing import (
+    BillingEventConflict,
+    BillingEventStore,
+    BillingSignatureError,
+    parse_billing_event,
+    verify_hmac_signature,
+)
 
 REQUEST_ID_HEADER = "X-Request-ID"
+IDEMPOTENCY_HEADER = "Idempotency-Key"
 MAX_REQUEST_ID_LENGTH = 128
 
 
@@ -79,6 +97,17 @@ class DatasetResponse(BaseModel):
     version: DatasetVersion
 
 
+def _research_job_response(job: ResearchJob) -> ResearchJobResponse:
+    """Serialize the domain dataclass explicitly at the HTTP boundary."""
+    return ResearchJobResponse(
+        id=job.id,
+        workspace_id=job.workspace_id,
+        dataset_version_id=job.dataset_version_id,
+        workflow_id=job.workflow_id,
+        status=job.status,
+    )
+
+
 def create_app(
     *,
     auth_provider: AuthProvider | None = None,
@@ -86,6 +115,10 @@ def create_app(
     dataset_store: DatasetStore | None = None,
     dataset_storage: DatasetStorage | None = None,
     job_queue: ResearchJobQueue | None = None,
+    idempotency_store: IdempotencyStore | None = None,
+    billing_store: BillingEventStore | None = None,
+    billing_webhook_secret: str | None = None,
+    rate_limiter: RateLimiter | None = None,
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
@@ -94,6 +127,9 @@ def create_app(
     datasets = dataset_store or InMemoryDatasetStore()
     storage = dataset_storage or InMemoryDatasetStorage()
     queue = job_queue or InMemoryResearchJobQueue()
+    idempotency = idempotency_store or InMemoryIdempotencyStore()
+    limiter = rate_limiter or FixedWindowRateLimiter(limit=120, window_seconds=60)
+    billing = billing_store
     app = FastAPI(
         title="QROS SaaS API",
         version="1.0.0",
@@ -103,6 +139,24 @@ def create_app(
 
     def current_tenant(authorization: str | None = Header(default=None)) -> TenantContext:
         return auth.authenticate(authorization)
+
+    def require_rate_limit(tenant: TenantContext) -> None:
+        principal = hashlib.sha256(
+            f"workspace:{tenant.workspace_id}".encode()
+        ).hexdigest()
+        try:
+            allowed = limiter.allow(principal)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="rate limiting service unavailable",
+            ) from exc
+        if not allowed:
+            raise HTTPException(status_code=429, detail="rate limit exceeded")
+
+    def request_fingerprint(payload: object) -> str:
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
+        return hashlib.sha256(encoded).hexdigest()
 
     def persist_version(*, dataset_id: UUID, tenant: TenantContext, file: UploadFile) -> DatasetVersion:
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
@@ -144,6 +198,33 @@ def create_app(
         if store is None or datasets is None or storage is None or queue is None:
             raise HTTPException(status_code=503, detail="SaaS persistence is not configured")
         return {"status": "ready"}
+
+    @app.post("/v1/billing/webhook", status_code=200, tags=["billing"])
+    async def billing_webhook(
+        request: Request,
+        x_billing_signature: str | None = Header(default=None, alias="X-Billing-Signature"),
+        x_billing_provider: str | None = Header(default=None, alias="X-Billing-Provider"),
+    ) -> dict[str, str]:
+        if billing is None or not billing_webhook_secret:
+            raise HTTPException(status_code=503, detail="billing webhook is not configured")
+        if not x_billing_signature or not x_billing_provider:
+            raise HTTPException(status_code=400, detail="billing signature and provider are required")
+        payload = await request.body()
+        try:
+            verify_hmac_signature(payload, x_billing_signature, billing_webhook_secret)
+            event = parse_billing_event(payload)
+        except BillingSignatureError as exc:
+            raise HTTPException(status_code=401, detail="invalid billing webhook signature") from exc
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise HTTPException(status_code=400, detail="invalid billing event") from exc
+        payload_sha256 = hashlib.sha256(payload).hexdigest()
+        try:
+            processed = billing.process(event, x_billing_provider.strip()[:64], payload_sha256)
+        except BillingEventConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail="billing event processing failed") from exc
+        return {"status": "processed" if processed else "replayed"}
 
     @app.get("/v1/me", response_model=dict[str, str], tags=["identity"])
     def me(tenant: TenantContext = Depends(current_tenant)) -> dict[str, str]:
@@ -216,9 +297,25 @@ def create_app(
     def create_research_run(
         request: ResearchCreateRequest,
         tenant: TenantContext = Depends(current_tenant),
-    ) -> ResearchJob:
+        idempotency_key: str | None = Header(default=None, alias=IDEMPOTENCY_HEADER),
+    ) -> Response:
+        require_rate_limit(tenant)
         if request.workflow_id != FROZEN_XAUUSD_M1_WORKFLOW:
             raise HTTPException(status_code=400, detail="unsupported workflow")
+        if not idempotency_key:
+            raise HTTPException(status_code=400, detail="Idempotency-Key header is required")
+        idempotency_key = idempotency_key.strip()
+        if not idempotency_key or len(idempotency_key) > MAX_IDEMPOTENCY_KEY_LENGTH:
+            raise HTTPException(status_code=400, detail="invalid Idempotency-Key")
+        fingerprint = request_fingerprint({
+            "dataset_version_id": str(request.dataset_version_id),
+            "workflow_id": request.workflow_id,
+        })
+        replay = idempotency.get(tenant.workspace_id, idempotency_key)
+        if replay is not None:
+            if replay.request_fingerprint != fingerprint:
+                raise HTTPException(status_code=409, detail="idempotency key reused with different request")
+            return JSONResponse(status_code=replay.status_code, content=replay.response_body)
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         if not policy.allows_monthly_runs(store.count_monthly(tenant.workspace_id)):
             raise HTTPException(status_code=402, detail="research run limit reached")
@@ -250,14 +347,19 @@ def create_app(
             except Exception:
                 pass
             raise HTTPException(status_code=503, detail="research job queue unavailable") from exc
-        return created
+        body = _research_job_response(created).model_dump(mode="json")
+        try:
+            idempotency.put(IdempotencyRecord(tenant.workspace_id, idempotency_key, fingerprint, 202, body))
+        except IdempotencyConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return JSONResponse(status_code=202, content=body)
 
     @app.get("/v1/research-runs/{job_id}", response_model=ResearchJobResponse, tags=["research"])
-    def get_research_run(job_id: UUID, tenant: TenantContext = Depends(current_tenant)) -> ResearchJob:
+    def get_research_run(job_id: UUID, tenant: TenantContext = Depends(current_tenant)) -> ResearchJobResponse:
         job = store.get(tenant.workspace_id, job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="research run not found")
-        return job
+        return _research_job_response(job)
 
     return app
 

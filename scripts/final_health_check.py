@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CPP_SOURCE = ROOT / "cpp_quant_engine"
+CPP_SOURCE = ROOT / "researchos" / "engines" / "quant"
 HEALTH_BUILD = ROOT / ".healthcheck" / "cpp"
 HEALTH_DIR = ROOT / ".health"
 HEALTH_JSON = HEALTH_DIR / "last_run.json"

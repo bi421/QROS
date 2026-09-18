@@ -9,7 +9,7 @@ from researchos.saas.worker import ResearchWorker
 
 
 class StubExecutor:
-    def __init__(self, result: ResearchResult | None = None, error: Exception | None = None) -> None:
+    def __init__(self, result=None, error=None):
         self.result = result
         self.error = error
         self.calls = 0
@@ -33,16 +33,19 @@ def _job(workspace_id):
 
 
 def _result(status="SUCCEEDED"):
+    artifacts = (
+        (ResearchArtifact("artifact-1", "evidence", "1" * 64),)
+        if status == "SUCCEEDED"
+        else ()
+    )
     return ResearchResult(
         status=status,
         source_dataset_sha256="0" * 64,
-        artifacts=(
-            ResearchArtifact("artifact-1", "evidence", "1" * 64),
-        ) if status == "SUCCEEDED" else (),
+        artifacts=artifacts,
     )
 
 
-def test_worker_moves_queued_job_to_succeeded() -> None:
+def test_worker_moves_queued_job_to_succeeded():
     workspace_id = uuid4()
     store = InMemoryResearchJobStore()
     job = store.create(_job(workspace_id))
@@ -55,7 +58,7 @@ def test_worker_moves_queued_job_to_succeeded() -> None:
     assert store.get(workspace_id, job.id).status == ResearchJobStatus.SUCCEEDED
 
 
-def test_worker_marks_job_failed_when_executor_raises() -> None:
+def test_worker_marks_job_failed_when_executor_raises():
     workspace_id = uuid4()
     store = InMemoryResearchJobStore()
     job = store.create(_job(workspace_id))
@@ -67,7 +70,7 @@ def test_worker_marks_job_failed_when_executor_raises() -> None:
     assert store.get(workspace_id, job.id).status == ResearchJobStatus.FAILED
 
 
-def test_worker_cannot_run_job_from_another_workspace() -> None:
+def test_worker_cannot_run_job_from_another_workspace():
     store = InMemoryResearchJobStore()
     owner = uuid4()
     other = uuid4()
@@ -75,3 +78,70 @@ def test_worker_cannot_run_job_from_another_workspace() -> None:
 
     with pytest.raises(KeyError):
         ResearchWorker(store, StubExecutor(_result())).run_once(other, job.id)
+
+
+def test_worker_cannot_double_claim_active_job():
+    workspace_id = uuid4()
+    store = InMemoryResearchJobStore()
+    job = store.create(_job(workspace_id))
+    first = store.claim(workspace_id, job.id, "worker-a", 900)
+
+    with pytest.raises(RuntimeError, match="already claimed"):
+        store.claim(workspace_id, job.id, "worker-b", 900)
+
+    store.finish(
+        workspace_id,
+        job.id,
+        first.token,
+        ResearchJobStatus.SUCCEEDED,
+    )
+
+
+def test_stale_lease_token_cannot_finish_job():
+    workspace_id = uuid4()
+    store = InMemoryResearchJobStore()
+    job = store.create(_job(workspace_id))
+    store.claim(workspace_id, job.id, "worker-a", 900)
+
+    with pytest.raises(RuntimeError, match="stale or invalid worker lease"):
+        store.finish(
+            workspace_id,
+            job.id,
+            uuid4(),
+            ResearchJobStatus.SUCCEEDED,
+        )
+
+
+def test_expired_worker_lease_can_be_reclaimed():
+    from datetime import datetime, timedelta, timezone
+
+    now = [datetime(2026, 9, 18, tzinfo=timezone.utc)]
+    store = InMemoryResearchJobStore(clock=lambda: now[0])
+    workspace_id = uuid4()
+    job = store.create(_job(workspace_id))
+    first = store.claim(workspace_id, job.id, "worker-a", 10)
+
+    now[0] += timedelta(seconds=11)
+    second = store.claim(workspace_id, job.id, "worker-b", 10)
+
+    assert second.token != first.token
+    with pytest.raises(RuntimeError, match="stale or invalid worker lease"):
+        store.finish(workspace_id, job.id, first.token, ResearchJobStatus.SUCCEEDED)
+    store.finish(workspace_id, job.id, second.token, ResearchJobStatus.SUCCEEDED)
+
+
+def test_worker_lease_can_be_renewed_before_expiry():
+    from datetime import datetime, timedelta, timezone
+
+    now = [datetime(2026, 9, 18, tzinfo=timezone.utc)]
+    store = InMemoryResearchJobStore(clock=lambda: now[0])
+    workspace_id = uuid4()
+    job = store.create(_job(workspace_id))
+    lease = store.claim(workspace_id, job.id, "worker-a", 10)
+
+    now[0] += timedelta(seconds=5)
+    renewed = store.renew(workspace_id, job.id, lease.token, 10)
+
+    assert renewed.token == lease.token
+    now[0] += timedelta(seconds=6)
+    store.finish(workspace_id, job.id, lease.token, ResearchJobStatus.SUCCEEDED)

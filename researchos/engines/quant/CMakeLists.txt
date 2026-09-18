@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.27)
 project(cpp_quant_engine VERSION 1.1.0 LANGUAGES CXX)
 
 # C++20 Standard

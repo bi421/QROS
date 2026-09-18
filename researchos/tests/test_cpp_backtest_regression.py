@@ -1,14 +1,11 @@
 """
-C++ backtest regression test for ResearchOS.
+C++ quant adapter regression test for QROS.
 
-Uses the current ResearchOS CppQuantAdapter.
-Does not depend on the legacy cpp_quant.CppQuant API.
+Uses deterministic synthetic market data and the current CppQuantAdapter.
+This validates the C++ bridge only; it is not market evidence.
 """
 
 from __future__ import annotations
-
-import glob
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -18,6 +15,8 @@ from researchos.quant_engine.cpp_backend import CppQuantAdapter
 
 SMA_FAST = 20
 SMA_SLOW = 50
+
+pytestmark = pytest.mark.cpp
 
 
 @pytest.fixture(scope="module")
@@ -30,85 +29,27 @@ def cpp_engine() -> CppQuantAdapter:
     return engine
 
 
-def load_xauusd_1d() -> pd.DataFrame:
-    project_root = Path(__file__).resolve().parents[2]
+def load_regression_market() -> pd.DataFrame:
+    """Build deterministic daily OHLCV data for the C++ regression harness.
 
-    data_path = project_root / "data" / "raw" / "histdata" / "xauusd"
+    This is an engine regression fixture, not market evidence. Keeping it
+    synthetic makes the test self-contained and independent of external data.
+    """
+    periods = 500
+    index = pd.date_range("2020-01-01", periods=periods, freq="D")
+    t = np.arange(periods, dtype=float)
+    close = 100.0 + 5.0 * np.sin(2.0 * np.pi * t / 80.0) + 0.02 * t
 
-    if not data_path.exists():
-        pytest.fail(f"XAUUSD data directory not found: {data_path}")
-
-    files = sorted(glob.glob(str(data_path / "DAT_ASCII_XAUUSD_M1_*.csv")))
-
-    if not files:
-        pytest.fail(f"No XAUUSD M1 CSV files found in: {data_path}")
-
-    frames = []
-
-    for file_path in files:
-        df = pd.read_csv(
-            file_path,
-            sep=";",
-            header=None,
-            names=[
-                "datetime",
-                "open",
-                "high",
-                "low",
-                "close",
-                "volume",
-            ],
-            dtype={"datetime": str},
-        )
-
-        df["datetime"] = pd.to_datetime(
-            df["datetime"],
-            format="%Y%m%d %H%M%S",
-            errors="coerce",
-        )
-
-        df = df.dropna(subset=["datetime", "close"])
-
-        if df.empty:
-            continue
-
-        df = df.set_index("datetime")
-
-        for column in ["open", "high", "low", "close", "volume"]:
-            df[column] = pd.to_numeric(
-                df[column],
-                errors="coerce",
-            )
-
-        frames.append(df)
-
-    if not frames:
-        pytest.fail("No valid XAUUSD data loaded.")
-
-    df = pd.concat(frames).sort_index()
-
-    df = df[~df.index.duplicated(keep="first")]
-
-    df = df.dropna(subset=["open", "high", "low", "close"])
-
-    daily = (
-        df.resample("1D")
-        .agg(
-            {
-                "open": "first",
-                "high": "max",
-                "low": "min",
-                "close": "last",
-                "volume": "sum",
-            }
-        )
-        .dropna(subset=["open", "high", "low", "close"])
+    return pd.DataFrame(
+        {
+            "open": close,
+            "high": close + 1.0,
+            "low": close - 1.0,
+            "close": close,
+            "volume": np.ones(periods),
+        },
+        index=index,
     )
-
-    if len(daily) <= SMA_SLOW + 2:
-        pytest.fail(f"Insufficient XAUUSD daily data: {len(daily)} rows")
-
-    return daily
 
 
 def build_sma_strategy(
@@ -234,7 +175,7 @@ def test_cpp_engine_is_active(
 def test_sma_20_50_winrate(
     cpp_engine: CppQuantAdapter,
 ):
-    df = load_xauusd_1d()
+    df = load_regression_market()
 
     _, returns, trades = build_sma_strategy(df)
 
@@ -258,7 +199,7 @@ def test_sma_20_50_winrate(
 def test_sma_20_50_trades_count(
     cpp_engine: CppQuantAdapter,
 ):
-    df = load_xauusd_1d()
+    df = load_regression_market()
 
     _, returns, trades = build_sma_strategy(df)
 
@@ -274,7 +215,7 @@ def test_sma_20_50_trades_count(
 def test_sma_20_50_total_return_range(
     cpp_engine: CppQuantAdapter,
 ):
-    df = load_xauusd_1d()
+    df = load_regression_market()
 
     _, returns, trades = build_sma_strategy(df)
 

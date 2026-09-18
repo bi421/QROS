@@ -1,10 +1,14 @@
 from io import BytesIO
 from uuid import UUID, uuid4
+import hashlib
+import hmac
+import json
 
 from fastapi.testclient import TestClient
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.api import create_app
+from researchos.saas.billing import InMemoryBillingEventStore
 from researchos.saas.contracts import Plan, TenantContext
 from researchos.saas.datasets import InMemoryDatasetStorage, InMemoryDatasetStore
 from researchos.saas.store import InMemoryResearchJobStore
@@ -19,7 +23,20 @@ class StaticAuth:
         return self.context
 
 
-def _client(workspace_id: UUID | None = None):
+class StaticRateLimiter:
+    def __init__(self, allowed: bool = True, error: Exception | None = None) -> None:
+        self.allowed = allowed
+        self.error = error
+        self.keys: list[str] = []
+
+    def allow(self, key: str) -> bool:
+        self.keys.append(key)
+        if self.error is not None:
+            raise self.error
+        return self.allowed
+
+
+def _client(workspace_id: UUID | None = None, *, billing_store=None, billing_secret=None, rate_limiter=None):
     context = TenantContext(
         user_id=uuid4(),
         workspace_id=workspace_id or uuid4(),
@@ -33,6 +50,9 @@ def _client(workspace_id: UUID | None = None):
             job_store=InMemoryResearchJobStore(),
             dataset_store=dataset_store,
             dataset_storage=dataset_storage,
+            billing_store=billing_store,
+            billing_webhook_secret=billing_secret,
+            rate_limiter=rate_limiter,
         )
     )
     return client, context, dataset_store, dataset_storage
@@ -41,7 +61,7 @@ def _client(workspace_id: UUID | None = None):
 def _upload(client: TestClient, name: str, body: bytes):
     return client.post(
         "/v1/datasets",
-        headers={"Authorization": "Bearer test"},
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "test-key"},
         data={"name": name},
         files={"file": (f"{name}.csv", BytesIO(body), "text/csv")},
     )
@@ -79,6 +99,37 @@ def test_unconfigured_saas_auth_fails_closed() -> None:
     client = TestClient(create_app())
     response = client.get("/v1/me", headers={"Authorization": "Bearer anything"})
     assert response.status_code == 503
+
+
+def test_rate_limit_is_workspace_scoped_and_enforced() -> None:
+    limiter = StaticRateLimiter(allowed=False)
+    client, context, _, _ = _client(rate_limiter=limiter)
+    response = client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "rate-limit"},
+        json={"dataset_version_id": str(uuid4())},
+    )
+    assert response.status_code == 429
+    assert limiter.keys == [hashlib.sha256(f"workspace:{context.workspace_id}".encode()).hexdigest()]
+
+
+def test_rate_limiter_failure_fails_closed_with_503() -> None:
+    client, _, _, _ = _client(rate_limiter=StaticRateLimiter(error=RuntimeError("db down")))
+    response = client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "rate-limit-failure"},
+        json={"dataset_version_id": str(uuid4())},
+    )
+    assert response.status_code == 503
+    assert response.json()["detail"] == "rate limiting service unavailable"
+
+
+def test_health_bypasses_rate_limiter() -> None:
+    limiter = StaticRateLimiter(allowed=False)
+    client, _, _, _ = _client(rate_limiter=limiter)
+    response = client.get("/healthz")
+    assert response.status_code == 200
+    assert limiter.keys == []
 
 
 def test_dataset_upload_creates_immutable_version_and_stores_bytes() -> None:
@@ -130,7 +181,7 @@ def test_create_research_job_requires_existing_tenant_dataset_version() -> None:
     client, _, _, _ = _client()
     response = client.post(
         "/v1/research-runs",
-        headers={"Authorization": "Bearer test"},
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "missing-version"},
         json={"dataset_version_id": str(uuid4())},
     )
     assert response.status_code == 404
@@ -142,7 +193,7 @@ def test_create_and_get_research_job_are_tenant_scoped() -> None:
     version_id = uploaded.json()["version"]["id"]
     response = client.post(
         "/v1/research-runs",
-        headers={"Authorization": "Bearer test"},
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "create-run"},
         json={"dataset_version_id": version_id},
     )
     assert response.status_code == 202
@@ -196,7 +247,7 @@ def test_cross_tenant_job_lookup_returns_404() -> None:
     created_dataset = _upload(owner_client, "sample", b"x")
     created = owner_client.post(
         "/v1/research-runs",
-        headers={"Authorization": "Bearer test"},
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "cross-tenant-create"},
         json={"dataset_version_id": created_dataset.json()["version"]["id"]},
     )
     job_id = created.json()["id"]
@@ -206,3 +257,38 @@ def test_cross_tenant_job_lookup_returns_404() -> None:
         headers={"Authorization": "Bearer test"},
     )
     assert response.status_code == 404
+
+
+def test_billing_webhook_processes_and_replays_identical_event() -> None:
+    billing = InMemoryBillingEventStore()
+    client, _, _, _ = _client(billing_store=billing, billing_secret="secret")
+    payload = json.dumps({
+        "event_id": "evt_1",
+        "workspace_id": str(uuid4()),
+        "plan": "pro",
+        "status": "active",
+    }).encode()
+    signature = hmac.new(b"secret", payload, hashlib.sha256).hexdigest()
+    headers = {
+        "X-Billing-Signature": signature,
+        "X-Billing-Provider": "test",
+    }
+
+    first = client.post("/v1/billing/webhook", content=payload, headers=headers)
+    replay = client.post("/v1/billing/webhook", content=payload, headers=headers)
+
+    assert first.status_code == 200
+    assert first.json() == {"status": "processed"}
+    assert replay.status_code == 200
+    assert replay.json() == {"status": "replayed"}
+
+
+def test_billing_webhook_rejects_invalid_signature() -> None:
+    billing = InMemoryBillingEventStore()
+    client, _, _, _ = _client(billing_store=billing, billing_secret="secret")
+    response = client.post(
+        "/v1/billing/webhook",
+        content=b'{"event_id":"evt_1","workspace_id":"w","plan":"pro","status":"active"}',
+        headers={"X-Billing-Signature": "bad", "X-Billing-Provider": "test"},
+    )
+    assert response.status_code == 401
