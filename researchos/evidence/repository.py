@@ -234,10 +234,10 @@ class EvidenceRepository:
         return cursor.fetchone()[0]
 
     def _insert_edge(self, cursor, parent_hash: str, child_hash: str, relation: str) -> None:
-        """Insert one canonical relation for a parent/child pair.
+        """Insert one typed relation for a parent/child pair.
 
-        Repeating the exact edge is idempotent. A different relation for the
-        same parent/child pair is rejected instead of being silently ignored.
+        Repeating the exact typed edge is idempotent. Distinct relations for
+        the same parent/child pair are valid and are stored independently.
         """
         cursor.execute(
             """
