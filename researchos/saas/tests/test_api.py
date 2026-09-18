@@ -3,6 +3,7 @@ from uuid import UUID, uuid4
 import hashlib
 import hmac
 import json
+import threading
 
 from fastapi.testclient import TestClient
 
@@ -205,6 +206,34 @@ def test_research_run_idempotency_replays_without_creating_or_enqueueing_twice()
     assert first.status_code == 202
     assert second.status_code == 202
     assert first.json()["id"] == second.json()["id"]
+
+def test_research_run_idempotency_is_atomic_under_concurrent_requests() -> None:
+    client, _, _, _ = _client()
+    uploaded = _upload(client, "sample-concurrent-idempotency", b"x")
+    version_id = uploaded.json()["version"]["id"]
+    headers = {"Authorization": "Bearer test", "Idempotency-Key": "concurrent-run"}
+    barrier = threading.Barrier(2)
+    responses = []
+
+    def submit() -> None:
+        barrier.wait()
+        responses.append(
+            client.post(
+                "/v1/research-runs",
+                headers=headers,
+                json={"dataset_version_id": version_id},
+            )
+        )
+
+    threads = [threading.Thread(target=submit) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert [response.status_code for response in responses] == [202, 202]
+    assert {response.json()["id"] for response in responses}.__len__() == 1
+
 
 def test_create_and_get_research_job_are_tenant_scoped() -> None:
     client, context, _, _ = _client()
