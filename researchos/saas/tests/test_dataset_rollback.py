@@ -18,7 +18,7 @@ class StaticAuth:
 
 
 class FailingVersionStore(InMemoryDatasetStore):
-    def create_version(self, version: DatasetVersion) -> DatasetVersion:
+    def create_version(self, workspace_id, version: DatasetVersion) -> DatasetVersion:
         raise RuntimeError("simulated version persistence failure")
 
 
