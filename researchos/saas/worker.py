@@ -94,4 +94,7 @@ class ResearchWorker:
                 pass
             raise
         self._store.finish(workspace_id, job_id, lease.token, target)
-        return result__all__ = ["ResearchExecutor", "ResearchWorker"]
+        return result
+
+
+__all__ = ["ResearchExecutor", "ResearchWorker"]
