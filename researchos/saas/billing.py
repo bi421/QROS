@@ -63,7 +63,9 @@ class SupabaseBillingEventStore:
         }
         try:
             self._client.table("billing_event").insert(row).execute()
-        except Exception:
+        except Exception as exc:
+            if getattr(exc, "code", None) != "23505":
+                raise
             existing = (
                 self._client.table("billing_event")
                 .select("event_id,payload_sha256,processed_at")
