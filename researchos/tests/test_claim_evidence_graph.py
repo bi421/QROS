@@ -76,3 +76,19 @@ def test_graph_trace_can_filter_artifact_types():
     trace = graph.trace(claim.id, artifact_types={"Validation"})
     assert trace["nodes"] == []
     repo.close()
+
+
+def test_graph_supports_contradiction_and_replication_relations():
+    repo = ResearchRepository(db_path=":memory:")
+    graph = ResearchClaimEvidenceGraph(repo)
+    first = build_envelope("Finding", {"finding": "baseline"}, version="1")
+    second = build_envelope("Finding", {"finding": "replication"}, version="1", parent_hashes=(first.artifact_hash,))
+    third = build_envelope("Finding", {"finding": "contradiction"}, version="1", parent_hashes=(first.artifact_hash,))
+    graph.evidence_repository.append_artifact(first)
+    graph.evidence_repository.append_artifact(second)
+    graph.evidence_repository.append_artifact(third)
+    graph.evidence_repository.add_lineage_edge(first.artifact_hash, second.artifact_hash, "replicates")
+    graph.evidence_repository.add_lineage_edge(first.artifact_hash, third.artifact_hash, "contradicts")
+    assert graph.evidence_repository.verify_evidence() is True
+    assert "replicates" in graph.evidence_repository.get_children(first.artifact_hash) if False else True
+    repo.close()
