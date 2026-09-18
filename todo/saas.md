@@ -53,7 +53,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [ ] Upload/download authorization.
 - [ ] Retention and deletion policy.
 - [ ] Dataset version registry.
-- [ ] Reproducibility manifest generation.
+- [x] Deterministic reproducibility artifact manifest generation.
 
 ## Phase 6 — Research services
 - [x] Add deterministic computational path planner v1 (method contracts, capability registry, prerequisite gates, immutable plan hash).
@@ -63,7 +63,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [x] Deterministic multiple-testing controls (Bonferroni and Benjamini-Hochberg).
 - [x] Governed OOS/replication state transitions with terminal-state protection and regression tests.
 - [x] Economic cost/slippage context contract.
-- [ ] Deterministic research artifact manifests.
+- [x] Deterministic research artifact manifests.
 
 ## Phase 7 — Product UI
 - [ ] Tenant/workspace shell.
