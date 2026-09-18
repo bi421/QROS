@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from typing import Protocol
 from uuid import UUID, uuid4
+import hashlib
+import json
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, ResearchJob, ResearchJobStatus, TenantContext
@@ -24,8 +26,11 @@ from researchos.saas.datasets import (
 )
 from researchos.saas.queue import InMemoryResearchJobQueue, ResearchJobQueue
 from researchos.saas.store import InMemoryResearchJobStore, ResearchJobStore
+from researchos.saas.idempotency import IdempotencyConflict, IdempotencyRecord, InMemoryIdempotencyStore, MAX_IDEMPOTENCY_KEY_LENGTH
+from researchos.saas.rate_limit import FixedWindowRateLimiter
 
 REQUEST_ID_HEADER = "X-Request-ID"
+IDEMPOTENCY_HEADER = "Idempotency-Key"
 MAX_REQUEST_ID_LENGTH = 128
 
 
@@ -94,6 +99,8 @@ def create_app(
     datasets = dataset_store or InMemoryDatasetStore()
     storage = dataset_storage or InMemoryDatasetStorage()
     queue = job_queue or InMemoryResearchJobQueue()
+    idempotency = InMemoryIdempotencyStore()
+    rate_limiter = FixedWindowRateLimiter(limit=120, window_seconds=60)
     app = FastAPI(
         title="QROS SaaS API",
         version="1.0.0",
@@ -103,6 +110,16 @@ def create_app(
 
     def current_tenant(authorization: str | None = Header(default=None)) -> TenantContext:
         return auth.authenticate(authorization)
+
+    def require_rate_limit(request: Request, authorization: str | None) -> None:
+        source = authorization or (request.client.host if request.client else "anonymous")
+        principal = hashlib.sha256(source.encode()).hexdigest()
+        if not rate_limiter.allow(principal):
+            raise HTTPException(status_code=429, detail="rate limit exceeded")
+
+    def request_fingerprint(payload: object) -> str:
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
+        return hashlib.sha256(encoded).hexdigest()
 
     def persist_version(*, dataset_id: UUID, tenant: TenantContext, file: UploadFile) -> DatasetVersion:
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
@@ -215,10 +232,28 @@ def create_app(
     @app.post("/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"])
     def create_research_run(
         request: ResearchCreateRequest,
+        request_obj: Request,
         tenant: TenantContext = Depends(current_tenant),
-    ) -> ResearchJob:
+        idempotency_key: str | None = Header(default=None, alias=IDEMPOTENCY_HEADER),
+        authorization: str | None = Header(default=None),
+    ) -> Response:
+        require_rate_limit(request_obj, authorization)
         if request.workflow_id != FROZEN_XAUUSD_M1_WORKFLOW:
             raise HTTPException(status_code=400, detail="unsupported workflow")
+        if not idempotency_key:
+            raise HTTPException(status_code=400, detail="Idempotency-Key header is required")
+        idempotency_key = idempotency_key.strip()
+        if not idempotency_key or len(idempotency_key) > MAX_IDEMPOTENCY_KEY_LENGTH:
+            raise HTTPException(status_code=400, detail="invalid Idempotency-Key")
+        fingerprint = request_fingerprint({
+            "dataset_version_id": str(request.dataset_version_id),
+            "workflow_id": request.workflow_id,
+        })
+        replay = idempotency.get(tenant.workspace_id, idempotency_key)
+        if replay is not None:
+            if replay.request_fingerprint != fingerprint:
+                raise HTTPException(status_code=409, detail="idempotency key reused with different request")
+            return JSONResponse(status_code=replay.status_code, content=replay.response_body)
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         if not policy.allows_monthly_runs(store.count_monthly(tenant.workspace_id)):
             raise HTTPException(status_code=402, detail="research run limit reached")
@@ -250,7 +285,12 @@ def create_app(
             except Exception:
                 pass
             raise HTTPException(status_code=503, detail="research job queue unavailable") from exc
-        return created
+        body = ResearchJobResponse.model_validate(created).model_dump(mode="json")
+        try:
+            idempotency.put(IdempotencyRecord(tenant.workspace_id, idempotency_key, fingerprint, 202, body))
+        except IdempotencyConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return JSONResponse(status_code=202, content=body)
 
     @app.get("/v1/research-runs/{job_id}", response_model=ResearchJobResponse, tags=["research"])
     def get_research_run(job_id: UUID, tenant: TenantContext = Depends(current_tenant)) -> ResearchJob:
