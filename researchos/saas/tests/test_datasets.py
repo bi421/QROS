@@ -42,7 +42,7 @@ def test_storage_path_is_tenant_scoped_and_content_addressed() -> None:
 def test_in_memory_store_rejects_duplicate_content() -> None:
     store = InMemoryDatasetStore()
     dataset = Dataset(uuid4(), uuid4(), "sample", uuid4())
-    store.create_dataset(dataset)
+    store.create_dataset(dataset.workspace_id, dataset)
     first = DatasetVersion(uuid4(), dataset.id, 1, "a" * 64, "path/a", 1, dataset.created_by)
     second = DatasetVersion(uuid4(), dataset.id, 2, "a" * 64, "path/b", 1, dataset.created_by)
 
@@ -57,7 +57,7 @@ def test_in_memory_store_rejects_version_write_from_other_workspace() -> None:
     other_workspace = uuid4()
     dataset = Dataset(uuid4(), owner_workspace, "sample", uuid4())
     store = InMemoryDatasetStore()
-    store.create_dataset(dataset)
+    store.create_dataset(dataset.workspace_id, dataset)
 
     version = DatasetVersion(
         uuid4(), dataset.id, 1, "b" * 64, "path/b", 1, dataset.created_by
@@ -65,3 +65,15 @@ def test_in_memory_store_rejects_version_write_from_other_workspace() -> None:
 
     with pytest.raises(KeyError, match="dataset not found for workspace"):
         store.create_version(other_workspace, version)
+
+
+def test_in_memory_store_rejects_dataset_write_from_other_workspace() -> None:
+    owner_workspace = uuid4()
+    other_workspace = uuid4()
+    dataset = Dataset(uuid4(), owner_workspace, "sample", uuid4())
+    store = InMemoryDatasetStore()
+
+    with pytest.raises(ValueError, match="dataset workspace does not match tenant"):
+        store.create_dataset(other_workspace, dataset)
+
+    assert store.get_dataset(owner_workspace, dataset.id) is None
