@@ -23,7 +23,20 @@ class StaticAuth:
         return self.context
 
 
-def _client(workspace_id: UUID | None = None, *, billing_store=None, billing_secret=None):
+class StaticRateLimiter:
+    def __init__(self, allowed: bool = True, error: Exception | None = None) -> None:
+        self.allowed = allowed
+        self.error = error
+        self.keys: list[str] = []
+
+    def allow(self, key: str) -> bool:
+        self.keys.append(key)
+        if self.error is not None:
+            raise self.error
+        return self.allowed
+
+
+def _client(workspace_id: UUID | None = None, *, billing_store=None, billing_secret=None, rate_limiter=None):
     context = TenantContext(
         user_id=uuid4(),
         workspace_id=workspace_id or uuid4(),
@@ -39,6 +52,7 @@ def _client(workspace_id: UUID | None = None, *, billing_store=None, billing_sec
             dataset_storage=dataset_storage,
             billing_store=billing_store,
             billing_webhook_secret=billing_secret,
+            rate_limiter=rate_limiter,
         )
     )
     return client, context, dataset_store, dataset_storage
@@ -85,6 +99,37 @@ def test_unconfigured_saas_auth_fails_closed() -> None:
     client = TestClient(create_app())
     response = client.get("/v1/me", headers={"Authorization": "Bearer anything"})
     assert response.status_code == 503
+
+
+def test_rate_limit_is_workspace_scoped_and_enforced() -> None:
+    limiter = StaticRateLimiter(allowed=False)
+    client, context, _, _ = _client(rate_limiter=limiter)
+    response = client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "rate-limit"},
+        json={"dataset_version_id": str(uuid4())},
+    )
+    assert response.status_code == 429
+    assert limiter.keys == [hashlib.sha256(f"workspace:{context.workspace_id}".encode()).hexdigest()]
+
+
+def test_rate_limiter_failure_fails_closed_with_503() -> None:
+    client, _, _, _ = _client(rate_limiter=StaticRateLimiter(error=RuntimeError("db down")))
+    response = client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "rate-limit-failure"},
+        json={"dataset_version_id": str(uuid4())},
+    )
+    assert response.status_code == 503
+    assert response.json()["detail"] == "rate limiting service unavailable"
+
+
+def test_health_bypasses_rate_limiter() -> None:
+    limiter = StaticRateLimiter(allowed=False)
+    client, _, _, _ = _client(rate_limiter=limiter)
+    response = client.get("/healthz")
+    assert response.status_code == 200
+    assert limiter.keys == []
 
 
 def test_dataset_upload_creates_immutable_version_and_stores_bytes() -> None:
