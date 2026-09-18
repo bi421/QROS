@@ -41,7 +41,7 @@ def _client(workspace_id: UUID | None = None):
 def _upload(client: TestClient, name: str, body: bytes):
     return client.post(
         "/v1/datasets",
-        headers={"Authorization": "Bearer test"},
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "test-key"},
         data={"name": name},
         files={"file": (f"{name}.csv", BytesIO(body), "text/csv")},
     )
