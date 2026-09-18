@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Any, Mapping
 
 from researchos.quant_engine.interface import QuantComputationInterface
+from researchos.quant_engine.router import BackendExecutionResult, BackendRouter
+from researchos.research_core.intelligence import ComputePlan
 
 
 @dataclass(frozen=True)
@@ -63,6 +65,25 @@ class ExecutionRegistry:
             )
 
 
+    def verify_compute_plan(self, plan: ComputePlan) -> None:
+        """Verify every selected method has an executable binding compatible with its plan."""
+        self.verify_plan(plan.selected_methods)
+        for method_id, planned_backend in plan.backend_by_method:
+            binding = self.get(method_id)
+            if planned_backend == "python" and binding.backend != "PythonQuantBackend":
+                raise ValueError(
+                    f"compute plan backend mismatch for {method_id}: "
+                    f"plan={planned_backend}, binding={binding.backend}"
+                )
+            if planned_backend not in {"python", "cpp"} and planned_backend != binding.backend:
+                raise ValueError(
+                    f"compute plan backend mismatch for {method_id}: "
+                    f"plan={planned_backend}, binding={binding.backend}"
+                )
+            if not binding.deterministic or not binding.requires_no_randomness:
+                raise ValueError(f"compute plan binding is not deterministic: {method_id}")
+
+
 def registry_for_backend(
     backend: QuantComputationInterface,
     method_versions: Mapping[str, str] | None = None,
@@ -112,9 +133,48 @@ def validate_backend_capability(
         )
 
 
+
+
+def execute_compute_plan(
+    plan: ComputePlan,
+    registry: ExecutionRegistry,
+    router: BackendRouter,
+    inputs_by_method: Mapping[str, Mapping[str, Any]],
+    expected_by_method: Mapping[str, Any] | None = None,
+) -> tuple[BackendExecutionResult, ...]:
+    """Execute only the immutable routes selected by a ComputePlan.
+
+    The registry is checked before any computation. Each method is then routed
+    through BackendRouter.execute_planned(), which forbids scheduler changes,
+    backend substitution, and fallback to a different implementation.
+    """
+    registry.verify_compute_plan(plan)
+    expected = expected_by_method or {}
+    results: list[BackendExecutionResult] = []
+    for method_id in plan.selected_methods:
+        binding = registry.get(method_id)
+        if method_id not in inputs_by_method:
+            raise ValueError(f"missing execution inputs for planned method: {method_id}")
+        result = router.execute_planned(
+            operation=binding.operation,
+            inputs=inputs_by_method[method_id],
+            required_backend=binding.backend,
+            required_version=binding.backend_version,
+            expected=expected.get(method_id),
+        )
+        if result.metadata.backend != binding.backend or result.metadata.version != binding.backend_version:
+            raise RuntimeError(
+                f"planned execution route changed for {method_id}: "
+                f"expected {binding.backend}@{binding.backend_version}, "
+                f"got {result.metadata.backend}@{result.metadata.version}"
+            )
+        results.append(result)
+    return tuple(results)
+
 __all__ = [
     "ExecutionBinding",
     "ExecutionRegistry",
     "registry_for_backend",
+    "execute_compute_plan",
     "validate_backend_capability",
 ]
