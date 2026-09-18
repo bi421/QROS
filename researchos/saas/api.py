@@ -168,6 +168,7 @@ def create_app(
             storage.put(storage_path, file.file)
             try:
                 version = datasets.create_version(
+                    tenant.workspace_id,
                     DatasetVersion(
                         id=uuid4(),
                         dataset_id=dataset_id,
@@ -247,6 +248,7 @@ def create_app(
             try:
                 persisted_dataset = datasets.create_dataset(dataset)
                 version = datasets.create_version(
+                    tenant.workspace_id,
                     DatasetVersion(
                         id=uuid4(),
                         dataset_id=dataset.id,
