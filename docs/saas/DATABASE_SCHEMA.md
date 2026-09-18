@@ -1,7 +1,7 @@
 # QROS SaaS database contract
 
 **Target:** Supabase Postgres 17  
-**Status:** Implemented by migrations through `202609180019_saas_result_rls` and verified on the active Supabase project.
+**Status:** Implemented by migrations through `202609180020_saas_result_server_only` and verified on the active Supabase project.
 
 ## Tables
 
