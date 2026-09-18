@@ -30,6 +30,7 @@ def _job(workspace_id, *, max_attempts=3):
         dataset_version_id=uuid4(),
         workflow_id="xauusd_m1_frozen_research_v1",
         status=ResearchJobStatus.QUEUED,
+        source_dataset_sha256="0" * 64,
         max_attempts=max_attempts,
     )
 
@@ -169,3 +170,35 @@ def test_worker_lease_can_be_renewed_before_expiry():
     assert renewed.token == lease.token
     now[0] += timedelta(seconds=6)
     store.finish(workspace_id, job.id, lease.token, ResearchJobStatus.SUCCEEDED)
+
+
+def test_worker_persists_provenance_before_succeeding():
+    workspace_id = uuid4()
+    store = InMemoryResearchJobStore()
+    job = store.create(_job(workspace_id))
+    result = ResearchWorker(store, StubExecutor(_result())).run_once(workspace_id, job.id)
+
+    saved_result = store.get_result(workspace_id, job.id)
+    assert saved_result is not None
+    assert saved_result.source_dataset_sha256 == result.source_dataset_sha256
+    assert saved_result.manifest_sha256
+    assert saved_result.artifacts == result.artifacts
+
+
+def test_worker_rejects_result_from_different_source_dataset():
+    workspace_id = uuid4()
+    store = InMemoryResearchJobStore()
+    job = store.create(_job(workspace_id))
+    mismatched = ResearchResult(
+        status="SUCCEEDED",
+        source_dataset_sha256="f" * 64,
+        artifacts=(ResearchArtifact("artifact-1", "evidence", "1" * 64),),
+    )
+
+    with pytest.raises(ValueError, match="source hash does not match"):
+        ResearchWorker(store, StubExecutor(mismatched)).run_once(workspace_id, job.id)
+
+    saved = store.get(workspace_id, job.id)
+    assert saved.status == ResearchJobStatus.FAILED
+    assert saved.error_code == "provenance_error"
+    assert store.get_result(workspace_id, job.id) is None
