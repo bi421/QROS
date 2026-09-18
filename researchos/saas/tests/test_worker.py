@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -22,13 +23,14 @@ class StubExecutor:
         return self.result
 
 
-def _job(workspace_id):
+def _job(workspace_id, *, max_attempts=3):
     return ResearchJob(
         id=uuid4(),
         workspace_id=workspace_id,
         dataset_version_id=uuid4(),
         workflow_id="xauusd_m1_frozen_research_v1",
         status=ResearchJobStatus.QUEUED,
+        max_attempts=max_attempts,
     )
 
 
@@ -55,7 +57,9 @@ def test_worker_moves_queued_job_to_succeeded():
 
     assert result.status == "SUCCEEDED"
     assert executor.calls == 1
-    assert store.get(workspace_id, job.id).status == ResearchJobStatus.SUCCEEDED
+    saved = store.get(workspace_id, job.id)
+    assert saved.status == ResearchJobStatus.SUCCEEDED
+    assert saved.attempt_count == 1
 
 
 def test_worker_marks_job_failed_when_executor_raises():
@@ -67,7 +71,10 @@ def test_worker_marks_job_failed_when_executor_raises():
     with pytest.raises(RuntimeError, match="scientific failure"):
         ResearchWorker(store, executor).run_once(workspace_id, job.id)
 
-    assert store.get(workspace_id, job.id).status == ResearchJobStatus.FAILED
+    saved = store.get(workspace_id, job.id)
+    assert saved.status == ResearchJobStatus.FAILED
+    assert saved.error_code == "executor_error"
+    assert saved.attempt_count == 1
 
 
 def test_worker_cannot_run_job_from_another_workspace():
@@ -89,12 +96,7 @@ def test_worker_cannot_double_claim_active_job():
     with pytest.raises(RuntimeError, match="already claimed"):
         store.claim(workspace_id, job.id, "worker-b", 900)
 
-    store.finish(
-        workspace_id,
-        job.id,
-        first.token,
-        ResearchJobStatus.SUCCEEDED,
-    )
+    store.finish(workspace_id, job.id, first.token, ResearchJobStatus.SUCCEEDED)
 
 
 def test_stale_lease_token_cannot_finish_job():
@@ -112,27 +114,49 @@ def test_stale_lease_token_cannot_finish_job():
         )
 
 
-def test_expired_worker_lease_can_be_reclaimed():
-    from datetime import datetime, timedelta, timezone
-
+def test_expired_worker_lease_can_be_reclaimed_until_attempt_budget_is_exhausted():
     now = [datetime(2026, 9, 18, tzinfo=timezone.utc)]
     store = InMemoryResearchJobStore(clock=lambda: now[0])
     workspace_id = uuid4()
-    job = store.create(_job(workspace_id))
+    job = store.create(_job(workspace_id, max_attempts=2))
+
+    first = store.claim(workspace_id, job.id, "worker-a", 10)
+    assert first.job.attempt_count == 1
+
+    now[0] += timedelta(seconds=11)
+    second = store.claim(workspace_id, job.id, "worker-b", 10)
+    assert second.token != first.token
+    assert second.job.attempt_count == 2
+
+    now[0] += timedelta(seconds=11)
+    with pytest.raises(RuntimeError, match="exhausted retry attempts"):
+        store.claim(workspace_id, job.id, "worker-c", 10)
+
+    saved = store.get(workspace_id, job.id)
+    assert saved.status == ResearchJobStatus.FAILED
+    assert saved.error_code == "max_attempts_exceeded"
+    assert saved.attempt_count == 2
+
+    with pytest.raises(RuntimeError, match="already claimed"):
+        store.claim(workspace_id, job.id, "worker-d", 10)
+
+
+def test_stale_lease_token_cannot_finish_after_reclaim():
+    now = [datetime(2026, 9, 18, tzinfo=timezone.utc)]
+    store = InMemoryResearchJobStore(clock=lambda: now[0])
+    workspace_id = uuid4()
+    job = store.create(_job(workspace_id, max_attempts=2))
     first = store.claim(workspace_id, job.id, "worker-a", 10)
 
     now[0] += timedelta(seconds=11)
     second = store.claim(workspace_id, job.id, "worker-b", 10)
 
-    assert second.token != first.token
     with pytest.raises(RuntimeError, match="stale or invalid worker lease"):
         store.finish(workspace_id, job.id, first.token, ResearchJobStatus.SUCCEEDED)
     store.finish(workspace_id, job.id, second.token, ResearchJobStatus.SUCCEEDED)
 
 
 def test_worker_lease_can_be_renewed_before_expiry():
-    from datetime import datetime, timedelta, timezone
-
     now = [datetime(2026, 9, 18, tzinfo=timezone.utc)]
     store = InMemoryResearchJobStore(clock=lambda: now[0])
     workspace_id = uuid4()

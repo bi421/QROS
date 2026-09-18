@@ -70,12 +70,21 @@ class ResearchJob:
     workflow_id: str
     status: ResearchJobStatus
     created_by: UUID | None = None
+    attempt_count: int = 0
+    max_attempts: int = 3
+    error_code: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.dataset_version_id, UUID):
             raise TypeError("dataset_version_id must be a UUID")
         if not self.workflow_id.strip():
             raise ValueError("workflow_id must not be empty")
+        if self.attempt_count < 0:
+            raise ValueError("attempt_count must not be negative")
+        if self.max_attempts < 1:
+            raise ValueError("max_attempts must be positive")
+        if self.attempt_count > self.max_attempts:
+            raise ValueError("attempt_count cannot exceed max_attempts")
 
 
 DEFAULT_USAGE_POLICIES: dict[Plan, UsagePolicy] = {

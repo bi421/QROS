@@ -21,9 +21,10 @@ class SupabaseResearchJobStore(ResearchJobStore):
             dataset_version_id=UUID(str(row["dataset_version_id"])),
             workflow_id=str(row["workflow_id"]),
             status=ResearchJobStatus(str(row["status"])),
-            created_by=(
-                UUID(str(row["created_by"])) if row.get("created_by") else None
-            ),
+            created_by=(UUID(str(row["created_by"])) if row.get("created_by") else None),
+            attempt_count=int(row.get("attempt_count", 0)),
+            max_attempts=int(row.get("max_attempts", 3)),
+            error_code=str(row["error_code"]) if row.get("error_code") else None,
         )
 
     def create_idempotent(
@@ -70,28 +71,18 @@ class SupabaseResearchJobStore(ResearchJobStore):
                     "created_by": str(job.created_by),
                 }
             )
-            .select(
-                "id,workspace_id,dataset_version_id,workflow_id,status,created_by"
-            )
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,created_by,attempt_count,max_attempts,error_code")
             .execute()
         )
         rows = result.data or []
         if len(rows) != 1:
-            raise RuntimeError(
-                "Supabase research job insert returned no unique row"
-            )
+            raise RuntimeError("Supabase research job insert returned no unique row")
         return self._row_to_job(rows[0])
 
-    def get(
-        self,
-        workspace_id: UUID,
-        job_id: UUID,
-    ) -> ResearchJob | None:
+    def get(self, workspace_id: UUID, job_id: UUID) -> ResearchJob | None:
         result = (
             self._client.table("research_run")
-            .select(
-                "id,workspace_id,dataset_version_id,workflow_id,status,created_by"
-            )
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,created_by,attempt_count,max_attempts,error_code")
             .eq("workspace_id", str(workspace_id))
             .eq("id", str(job_id))
             .limit(1)
@@ -112,13 +103,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
 
     def count_monthly(self, workspace_id: UUID) -> int:
         now = datetime.now(timezone.utc)
-        month_start = now.replace(
-            day=1,
-            hour=0,
-            minute=0,
-            second=0,
-            microsecond=0,
-        )
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         result = (
             self._client.table("research_run")
             .select("id", count="exact", head=True)
@@ -148,10 +133,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
         if len(rows) != 1:
             raise RuntimeError("research job is unavailable for claim")
         row = rows[0]
-        return WorkerLease(
-            self._row_to_job(row),
-            UUID(str(row["lease_token"])),
-        )
+        return WorkerLease(self._row_to_job(row), UUID(str(row["lease_token"])))
 
     def renew(
         self,
@@ -213,21 +195,16 @@ class SupabaseResearchJobStore(ResearchJobStore):
             .eq("workspace_id", str(workspace_id))
             .eq("id", str(job_id))
             .eq("status", expected.value)
-            .select(
-                "id,workspace_id,dataset_version_id,workflow_id,status,created_by"
-            )
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,created_by,attempt_count,max_attempts,error_code")
             .execute()
         )
         rows = result.data or []
         if not rows:
             raise ValueError(
-                f"invalid or missing research job transition: "
-                f"{expected.value} -> {target.value}"
+                f"invalid or missing research job transition: {expected.value} -> {target.value}"
             )
         if len(rows) != 1:
-            raise RuntimeError(
-                "Supabase research job transition was not unique"
-            )
+            raise RuntimeError("Supabase research job transition was not unique")
         return self._row_to_job(rows[0])
 
 

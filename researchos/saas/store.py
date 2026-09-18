@@ -56,31 +56,6 @@ class ResearchJobStore:
     ) -> WorkerLease:
         raise NotImplementedError
 
-    def renew(
-        self,
-        workspace_id: UUID,
-        job_id: UUID,
-        lease_token: UUID,
-        lease_seconds: int,
-    ) -> WorkerLease:
-        if lease_seconds < 1:
-            raise ValueError("invalid worker lease")
-        with self._lock:
-            job = self._jobs.get(job_id)
-            lease = self._leases.get(job_id)
-            if (
-                job is None
-                or job.workspace_id != workspace_id
-                or job.status != ResearchJobStatus.RUNNING
-                or lease is None
-                or lease[0] != lease_token
-                or lease[1] <= self._clock()
-            ):
-                raise RuntimeError("stale or invalid worker lease")
-            expires = self._clock() + timedelta(seconds=lease_seconds)
-            self._leases[job_id] = (lease_token, expires)
-            return WorkerLease(job, lease_token)
-
     def finish(
         self,
         workspace_id: UUID,
@@ -116,6 +91,28 @@ class InMemoryResearchJobStore(ResearchJobStore):
             self._jobs[job.id] = job
             return job
 
+    def create_idempotent(
+        self,
+        job: ResearchJob,
+        idempotency_key: str,
+        request_fingerprint: str,
+        response_body: dict[str, object],
+    ) -> tuple[ResearchJob, bool]:
+        del response_body
+        with self._lock:
+            key = (job.workspace_id, idempotency_key)
+            existing = self._idempotency.get(key)
+            if existing is not None:
+                existing_fingerprint, existing_job = existing
+                if existing_fingerprint != request_fingerprint:
+                    raise ValueError("idempotency key reused with different request")
+                return existing_job, True
+            if job.id in self._jobs:
+                raise ValueError("research job already exists")
+            self._jobs[job.id] = job
+            self._idempotency[key] = (request_fingerprint, job)
+            return job, False
+
     def get(self, workspace_id: UUID, job_id: UUID) -> ResearchJob | None:
         with self._lock:
             job = self._jobs.get(job_id)
@@ -127,17 +124,13 @@ class InMemoryResearchJobStore(ResearchJobStore):
         with self._lock:
             return sum(
                 job.workspace_id == workspace_id
-                and job.status
-                in {ResearchJobStatus.QUEUED, ResearchJobStatus.RUNNING}
+                and job.status in {ResearchJobStatus.QUEUED, ResearchJobStatus.RUNNING}
                 for job in self._jobs.values()
             )
 
     def count_monthly(self, workspace_id: UUID) -> int:
         with self._lock:
-            return sum(
-                job.workspace_id == workspace_id
-                for job in self._jobs.values()
-            )
+            return sum(job.workspace_id == workspace_id for job in self._jobs.values())
 
     def claim(
         self,
@@ -152,17 +145,62 @@ class InMemoryResearchJobStore(ResearchJobStore):
             job = self._jobs.get(job_id)
             if job is None or job.workspace_id != workspace_id:
                 raise KeyError("research job not found")
+            now = self._clock()
             existing_lease = self._leases.get(job_id)
             if job.status == ResearchJobStatus.RUNNING:
-                if existing_lease is None or existing_lease[1] > self._clock():
+                if existing_lease is None or existing_lease[1] > now:
                     raise RuntimeError("research job is already claimed")
             elif job.status != ResearchJobStatus.QUEUED:
                 raise RuntimeError("research job is already claimed")
+
+            if job.attempt_count >= job.max_attempts:
+                failed = replace(
+                    job,
+                    status=ResearchJobStatus.FAILED,
+                    error_code="max_attempts_exceeded",
+                )
+                self._jobs[job_id] = failed
+                self._leases.pop(job_id, None)
+                raise RuntimeError("research job exhausted retry attempts")
+
             token = uuid4()
-            updated = replace(job, status=ResearchJobStatus.RUNNING)
+            updated = replace(
+                job,
+                status=ResearchJobStatus.RUNNING,
+                attempt_count=job.attempt_count + 1,
+                error_code=None,
+            )
             self._jobs[job_id] = updated
-            self._leases[job_id] = (token, self._clock() + timedelta(seconds=lease_seconds))
+            self._leases[job_id] = (
+                token,
+                now + timedelta(seconds=lease_seconds),
+            )
             return WorkerLease(updated, token)
+
+    def renew(
+        self,
+        workspace_id: UUID,
+        job_id: UUID,
+        lease_token: UUID,
+        lease_seconds: int,
+    ) -> WorkerLease:
+        if lease_seconds < 1:
+            raise ValueError("invalid worker lease")
+        with self._lock:
+            job = self._jobs.get(job_id)
+            lease = self._leases.get(job_id)
+            if (
+                job is None
+                or job.workspace_id != workspace_id
+                or job.status != ResearchJobStatus.RUNNING
+                or lease is None
+                or lease[0] != lease_token
+                or lease[1] <= self._clock()
+            ):
+                raise RuntimeError("stale or invalid worker lease")
+            expires = self._clock() + timedelta(seconds=lease_seconds)
+            self._leases[job_id] = (lease_token, expires)
+            return WorkerLease(job, lease_token)
 
     def finish(
         self,
@@ -181,12 +219,13 @@ class InMemoryResearchJobStore(ResearchJobStore):
                 or self._leases.get(job_id, (None, None))[0] != lease_token
             ):
                 raise RuntimeError("stale or invalid worker lease")
-            if target not in {
-                ResearchJobStatus.SUCCEEDED,
-                ResearchJobStatus.FAILED,
-            }:
+            if target not in {ResearchJobStatus.SUCCEEDED, ResearchJobStatus.FAILED}:
                 raise ValueError("invalid terminal target")
-            updated = replace(job, status=target)
+            updated = replace(
+                job,
+                status=target,
+                error_code=error_code,
+            )
             self._jobs[job_id] = updated
             self._leases.pop(job_id, None)
             return updated
