@@ -35,7 +35,7 @@ jobs:
       - name: Run ruff
         run: ruff check . --exit-zero
       - name: Run pytest
-        run: python -m pytest researchos/tests/ researchos/saas/tests/ -v --tb=short -x
+        run: python -m pytest researchos/tests/ researchos/research_core/tests/ researchos/saas/tests/ -v --tb=short -x --import-mode=importlib
 
   quant-engine:
     name: Quant Engine (C++ / nanobind)
@@ -102,5 +102,5 @@ jobs:
         env:
           PYTHONPATH: researchos/engines/quant/python
         run: |
-          python -m pytest researchos/tests/ -v --tb=short -x
+          python -m pytest researchos/tests/ researchos/research_core/tests/ -v --tb=short -x
           ruff check . --exit-zero

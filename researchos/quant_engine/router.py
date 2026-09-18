@@ -450,6 +450,101 @@ class BackendRouter:
             decision=decision,
         )
 
+    def execute_planned(
+        self,
+        operation: str,
+        inputs: Mapping[str, Any],
+        required_backend: str,
+        required_version: str,
+        expected: Any = None,
+        atol: float = NumericalComparator.DEFAULT_ATOL,
+        rtol: float = NumericalComparator.DEFAULT_RTOL,
+        validation: str = "auto",
+    ) -> BackendExecutionResult:
+        """Execute exactly the backend/version fixed by an immutable compute plan.
+
+        Unlike normal router execution, this path never schedules, substitutes,
+        or falls back to another backend.  A governed research plan therefore
+        cannot silently execute a different computational route.
+        """
+        if not required_backend.strip() or not required_version.strip():
+            raise BackendRouterError("planned execution requires backend and version")
+        if not isinstance(inputs, Mapping):
+            raise BackendRouterError("inputs must be a mapping of keyword arguments")
+        if validation not in _VALIDATION_MODES:
+            raise BackendRouterError(
+                f"validation must be one of {_VALIDATION_MODES}, got {validation!r}"
+            )
+
+        target = None
+        target_caps = None
+        for candidate in [self._reference, *self._candidates]:
+            caps = self._safe_capabilities(candidate)
+            if caps is None:
+                continue
+            if caps.backend_name == required_backend and caps.version == required_version:
+                target = candidate
+                target_caps = caps
+                break
+        if target is None or target_caps is None:
+            raise BackendExecutionError(
+                f"planned backend unavailable: {required_backend}@{required_version}"
+            )
+        if not target_caps.supports(operation):
+            raise BackendCapabilityError(
+                f"planned backend does not support operation {operation!r}: "
+                f"{required_backend}@{required_version}"
+            )
+        if not self._trust_boundary_ok(target_caps):
+            raise BackendCapabilityError(
+                f"planned backend violates the trust boundary: {required_backend}@{required_version}"
+            )
+
+        input_hash = compute_input_hash(inputs)
+        start = time.perf_counter()
+        try:
+            output = self._invoke(target, operation, inputs)
+        except Exception as exc:
+            raise BackendExecutionError(
+                f"planned backend failed for {operation!r}: {exc}"
+            ) from exc
+
+        validation_status = ValidationStatus.NOT_REQUIRED.value
+        if expected is not None:
+            validation_result = self._validate(
+                NumericalComparator(), expected, output,
+                atol=atol, rtol=rtol, mode=validation,
+            )
+            if not validation_result.passed:
+                raise BackendValidationError(
+                    f"planned backend output failed validation for {operation!r}"
+                )
+            validation_status = ValidationStatus.PASSED.value
+
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        result_hash = compute_backend_result_hash(
+            operation, target_caps.backend_name, target_caps.version, input_hash, output
+        )
+        metadata = self._build_metadata(
+            operation=operation,
+            backend=target_caps.backend_name,
+            version=target_caps.version,
+            fallback_used=False,
+            validation_status=validation_status,
+            execution_time_ms=elapsed_ms,
+            result_hash=result_hash,
+            error_code=ERROR_OK,
+            caps=target_caps,
+            decision=None,
+            attempted=[],
+            fallback_count=0,
+        )
+        self._record(
+            operation, target_caps.backend_name, elapsed_ms,
+            validation_status, ERROR_OK, 0, inputs,
+        )
+        return BackendExecutionResult(metadata=metadata, output=output)
+
     # ── internals ────────────────────────────────────────────────────────
 
     def _reference_name(self) -> str:
