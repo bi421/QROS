@@ -3,9 +3,12 @@ from __future__ import annotations
 import pytest
 
 from researchos.quant_engine.backend import PythonQuantBackend
+from researchos.quant_engine.router import BackendExecutionError, BackendRouter
+from researchos.research_core.intelligence import ResearchContext, ResearchPlanner
 from researchos.research_core.execution import (
     ExecutionBinding,
     ExecutionRegistry,
+    execute_compute_plan,
     registry_for_backend,
     validate_backend_capability,
 )
@@ -76,3 +79,39 @@ def test_registry_is_derived_from_real_python_backend_capabilities() -> None:
     assert binding.operation == "calculate_statistics"
     assert binding.backend == "PythonQuantBackend"
     assert binding.backend_version == "1.0.0"
+
+
+
+def test_compute_plan_executes_only_its_immutable_backend_route() -> None:
+    backend = PythonQuantBackend()
+    registry = registry_for_backend(backend)
+    plan, _ = ResearchPlanner().plan(
+        ResearchContext(
+            analysis_class="statistics",
+            sample_size=3,
+            dataset_id="dataset-1",
+            dataset_sha256="d" * 64,
+        )
+    )
+    router = BackendRouter(reference_backend=backend)
+    results = execute_compute_plan(
+        plan,
+        registry,
+        router,
+        {"quant.calculate_statistics.v1": {"returns": [0.01, -0.005, 0.02]}},
+    )
+    assert len(results) == 1
+    assert results[0].metadata.backend == "PythonQuantBackend"
+    assert results[0].metadata.version == "1.0.0"
+    assert results[0].metadata.fallback_used is False
+
+
+def test_planned_execution_rejects_unavailable_exact_backend() -> None:
+    router = BackendRouter(reference_backend=PythonQuantBackend())
+    with pytest.raises(BackendExecutionError, match="planned backend unavailable"):
+        router.execute_planned(
+            operation="calculate_statistics",
+            inputs={"returns": [0.01, 0.02]},
+            required_backend="MissingBackend",
+            required_version="9.9.9",
+        )
