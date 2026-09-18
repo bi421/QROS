@@ -19,8 +19,10 @@ class Query:
         self.rows = rows or []
         self.insert_error = insert_error
         self.inserted = None
+        self._operation = None
 
     def select(self, *_):
+        self._operation = "select"
         return self
 
     def eq(self, *_):
@@ -33,11 +35,12 @@ class Query:
         return self
 
     def insert(self, payload):
+        self._operation = "insert"
         self.inserted = payload
         return self
 
     def execute(self):
-        if self.insert_error is not None and self.inserted is not None:
+        if self._operation == "insert" and self.insert_error is not None:
             raise self.insert_error
         return type("Response", (), {"data": self.rows})()
 
