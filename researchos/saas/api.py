@@ -140,10 +140,18 @@ def create_app(
     def current_tenant(authorization: str | None = Header(default=None)) -> TenantContext:
         return auth.authenticate(authorization)
 
-    def require_rate_limit(request: Request, authorization: str | None) -> None:
-        source = authorization or (request.client.host if request.client else "anonymous")
-        principal = hashlib.sha256(source.encode()).hexdigest()
-        if not limiter.allow(principal):
+    def require_rate_limit(tenant: TenantContext) -> None:
+        principal = hashlib.sha256(
+            f"workspace:{tenant.workspace_id}".encode()
+        ).hexdigest()
+        try:
+            allowed = limiter.allow(principal)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="rate limiting service unavailable",
+            ) from exc
+        if not allowed:
             raise HTTPException(status_code=429, detail="rate limit exceeded")
 
     def request_fingerprint(payload: object) -> str:
@@ -288,12 +296,10 @@ def create_app(
     @app.post("/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"])
     def create_research_run(
         request: ResearchCreateRequest,
-        request_obj: Request,
         tenant: TenantContext = Depends(current_tenant),
         idempotency_key: str | None = Header(default=None, alias=IDEMPOTENCY_HEADER),
-        authorization: str | None = Header(default=None),
     ) -> Response:
-        require_rate_limit(request_obj, authorization)
+        require_rate_limit(tenant)
         if request.workflow_id != FROZEN_XAUUSD_M1_WORKFLOW:
             raise HTTPException(status_code=400, detail="unsupported workflow")
         if not idempotency_key:
