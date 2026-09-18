@@ -1,5 +1,6 @@
 from researchos.research_core.edge_registry import (
     DEFAULT_EDGE_REGISTRY,
+    EdgeDefinition,
     EdgeRegistry,
     EdgeState,
 )
@@ -69,3 +70,62 @@ def test_duplicate_edge_ids_are_rejected() -> None:
         assert "duplicate edge_id" in str(exc)
     else:
         raise AssertionError("duplicate edge ids must be rejected")
+
+
+def _strict_edge() -> EdgeDefinition:
+    return EdgeDefinition(
+        edge_id="test.strict_edge.v1",
+        version="1",
+        outcome_definition="binary event",
+        null_definition="baseline rate",
+        minimum_effect_size=0.10,
+        minimum_sample_size=30,
+    )
+
+
+def _passing_evidence() -> dict[str, object]:
+    return {
+        "sample_size": 100,
+        "out_of_sample": True,
+        "replicated": True,
+        "observed_effect_size": 0.15,
+        "uncertainty_lower_bound": 0.12,
+        "out_of_sample_evidence_id": "oos-1",
+        "replication_evidence_id": "rep-1",
+    }
+
+
+def test_effect_below_minimum_blocks_eligibility() -> None:
+    edge = _strict_edge()
+    args = _passing_evidence()
+    args["observed_effect_size"] = 0.09
+    state, reasons = edge.evaluate(**args)
+    assert state is EdgeState.NOT_ELIGIBLE
+    assert reasons == ("effect_below_minimum:0.09<0.1",)
+
+
+def test_uncertainty_lower_bound_below_minimum_blocks_eligibility() -> None:
+    edge = _strict_edge()
+    args = _passing_evidence()
+    args["uncertainty_lower_bound"] = 0.09
+    state, reasons = edge.evaluate(**args)
+    assert state is EdgeState.NOT_ELIGIBLE
+    assert reasons == ("uncertainty_below_minimum:0.09<0.1",)
+
+
+def test_missing_oos_evidence_blocks_declared_oos() -> None:
+    edge = _strict_edge()
+    args = _passing_evidence()
+    args["out_of_sample_evidence_id"] = None
+    state, reasons = edge.evaluate(**args)
+    assert state is EdgeState.NOT_ELIGIBLE
+    assert reasons == ("out_of_sample_evidence_required",)
+
+
+def test_missing_replication_evidence_blocks_declared_replication() -> None:
+    edge = _strict_edge()
+    args = _passing_evidence()
+    args["replication_evidence_id"] = None
+    state, reasons = edge.evaluate(**args)
+    assert state is EdgeState.NOT_ELIGIBLE
+    assert reasons == ("replication_evidence_required",)
