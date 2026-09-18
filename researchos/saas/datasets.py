@@ -32,7 +32,8 @@ class DatasetVersion:
 
 
 class DatasetStore(Protocol):
-    def create_dataset(self, dataset: Dataset) -> Dataset:
+    def create_dataset(self, workspace_id: UUID, dataset: Dataset) -> Dataset:
+        """Create a dataset only when its tenant identity matches the boundary."""
         ...
 
     def delete_dataset(self, workspace_id: UUID, dataset_id: UUID) -> None:
@@ -66,7 +67,9 @@ class InMemoryDatasetStore:
         self._datasets: dict[UUID, Dataset] = {}
         self._versions: dict[UUID, DatasetVersion] = {}
 
-    def create_dataset(self, dataset: Dataset) -> Dataset:
+    def create_dataset(self, workspace_id: UUID, dataset: Dataset) -> Dataset:
+        if dataset.workspace_id != workspace_id:
+            raise ValueError("dataset workspace does not match tenant")
         if dataset.id in self._datasets:
             raise ValueError("dataset already exists")
         self._datasets[dataset.id] = dataset
@@ -159,7 +162,9 @@ class SupabaseDatasetStore:
             created_by=UUID(str(row["created_by"])),
         )
 
-    def create_dataset(self, dataset: Dataset) -> Dataset:
+    def create_dataset(self, workspace_id: UUID, dataset: Dataset) -> Dataset:
+        if dataset.workspace_id != workspace_id:
+            raise ValueError("dataset workspace does not match tenant")
         result = (
             self._client.table("dataset")
             .insert(
