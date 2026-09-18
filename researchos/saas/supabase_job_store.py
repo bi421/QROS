@@ -59,7 +59,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
         job_row = row.get("job", row)
         return self._row_to_job(job_row), bool(row.get("replayed", False))
 
-    def create(self, job: ResearchJob) -> ResearchJob:
+    def create(self, workspace_id: UUID, job: ResearchJob) -> ResearchJob:
         if job.created_by is None:
             raise ValueError("Supabase research jobs require created_by")
         result = (
