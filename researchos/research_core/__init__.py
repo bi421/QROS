@@ -1,6 +1,7 @@
 """Application-independent scientific research core contracts and runner."""
 
-from researchos.research_core.analysis_result import AnalysisResult, AnalysisState\nfrom researchos.research_core.contracts import (
+from researchos.research_core.analysis_result import AnalysisResult, AnalysisState
+from researchos.research_core.contracts import (
     FROZEN_XAUUSD_M1_WORKFLOW,
     DatasetProvenance,
     ResearchArtifact,
@@ -34,12 +35,13 @@ from researchos.research_core.runner import (
 )
 
 __all__ = [
-    "AnalysisResult",\n    "AnalysisState",\n    "Backend",
+    "AnalysisResult",
+    "AnalysisState",
+    "Backend",
     "CapabilityRegistry",
     "ComputePlan",
     "DEFAULT_CAPABILITIES",
     "DatasetProvenance",
-    "Decision",
     "ExecutionBinding",
     "ExecutionRegistry",
     "FROZEN_XAUUSD_M1_WORKFLOW",
