@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
+from researchos.research_core.contracts import ResearchResult
 from researchos.saas.contracts import ResearchJob, ResearchJobStatus
+from researchos.saas.provenance import ResearchRunResultRecord, build_result_record
 from researchos.saas.store import ResearchJobStore, WorkerLease
 
 
@@ -21,6 +23,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
             dataset_version_id=UUID(str(row["dataset_version_id"])),
             workflow_id=str(row["workflow_id"]),
             status=ResearchJobStatus(str(row["status"])),
+            source_dataset_sha256=str(row["source_dataset_sha256"]),
             created_by=(UUID(str(row["created_by"])) if row.get("created_by") else None),
             attempt_count=int(row.get("attempt_count", 0)),
             max_attempts=int(row.get("max_attempts", 3)),
@@ -68,16 +71,74 @@ class SupabaseResearchJobStore(ResearchJobStore):
                     "dataset_version_id": str(job.dataset_version_id),
                     "workflow_id": job.workflow_id,
                     "status": job.status.value,
+                    "source_dataset_sha256": job.source_dataset_sha256,
                     "created_by": str(job.created_by),
                 }
             )
-            .select("id,workspace_id,dataset_version_id,workflow_id,status,created_by,attempt_count,max_attempts,error_code")
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code")
             .execute()
         )
         rows = result.data or []
         if len(rows) != 1:
             raise RuntimeError("Supabase research job insert returned no unique row")
         return self._row_to_job(rows[0])
+
+    def record_result(self, workspace_id: UUID, job_id: UUID, lease_token: UUID, result: ResearchResult) -> ResearchRunResultRecord:
+        record = build_result_record(workspace_id, job_id, result)
+        response = self._client.rpc(
+            "record_research_run_result",
+            {
+                "p_workspace_id": str(workspace_id),
+                "p_research_run_id": str(job_id),
+                "p_lease_token": str(lease_token),
+                "p_status": result.status,
+                "p_manifest_sha256": record.manifest_sha256,
+                "p_artifacts": [
+                    {"artifact_id": a.artifact_id, "kind": a.kind, "content_sha256": a.content_sha256}
+                    for a in result.artifacts
+                ],
+                "p_failures": list(result.failures),
+            },
+        ).execute()
+        if response.data is None:
+            raise RuntimeError("research result persistence returned no record")
+        return record
+
+    def get_result(self, workspace_id: UUID, job_id: UUID) -> ResearchRunResultRecord | None:
+        result = (
+            self._client.table("research_run_result")
+            .select("workspace_id,research_run_id,source_dataset_sha256,status,manifest_sha256,failures")
+            .eq("workspace_id", str(workspace_id))
+            .eq("research_run_id", str(job_id))
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        if not rows:
+            return None
+        row = rows[0]
+        artifact_rows = (
+            self._client.table("research_run_artifact")
+            .select("artifact_id,kind,content_sha256")
+            .eq("workspace_id", str(workspace_id))
+            .eq("research_run_id", str(job_id))
+            .order("artifact_id")
+            .execute()
+        )
+        from researchos.research_core.contracts import ResearchArtifact
+        artifacts = tuple(
+            ResearchArtifact(str(item["artifact_id"]), str(item["kind"]), str(item["content_sha256"]))
+            for item in (artifact_rows.data or [])
+        )
+        return ResearchRunResultRecord(
+            workspace_id=UUID(str(row["workspace_id"])),
+            research_run_id=UUID(str(row["research_run_id"])),
+            source_dataset_sha256=str(row["source_dataset_sha256"]),
+            status=str(row["status"]),
+            manifest_sha256=str(row["manifest_sha256"]),
+            artifacts=artifacts,
+            failures=tuple(str(item) for item in (row.get("failures") or [])),
+        )
 
     def get(self, workspace_id: UUID, job_id: UUID) -> ResearchJob | None:
         result = (
