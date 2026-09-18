@@ -94,7 +94,24 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_PYTHON_BINDINGS=ON
           cmake --build researchos/engines/quant/build -j
-      - name: Run health check
+      - name: Run QROS governance gate
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            python scripts/check_qros_governance.py --base "${{ github.event.pull_request.base.sha }}"
+          elif [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            python scripts/check_qros_governance.py --base "${{ github.event.before }}"
+          else
+            python scripts/check_qros_governance.py
+          fi
+      - name: Run canonical health evidence gate
         env:
           PYTHONPATH: researchos/engines/quant/python
-        run: python -m pytest researchos/tests/ -v
+        run: python scripts/final_health_check.py
+      - name: Upload health evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qros-health-${{ github.sha }}
+          path: .health/last_run.json
+          if-no-files-found: error
