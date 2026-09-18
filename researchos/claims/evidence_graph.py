@@ -107,7 +107,7 @@ class ResearchClaimEvidenceGraph:
             for child in node["children"]:
                 if self._evidence.get_artifact(child) is None:
                     broken_edges.append((node["artifact_hash"], child))
-        valid = not orphaned and not broken_edges
+        valid = not orphaned and not broken_edges and self._evidence.verify_evidence()
         return {"valid": valid, "claim_id": claim_id, "orphaned_evidence": sorted(orphaned), "broken_edges": sorted(set(broken_edges)), "node_count": len(trace["nodes"])}
 
     def verify(self, claim_id: str) -> bool:
