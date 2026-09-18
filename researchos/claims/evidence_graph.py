@@ -68,7 +68,7 @@ class ResearchClaimEvidenceGraph:
             return None
         return ClaimEvidenceGraph(claim_id=data["claim_id"], claim_hash=data["claim_hash"], plan_hash=data["plan_hash"], evidence_hashes=tuple(data.get("evidence_hashes", [])))
 
-    def trace(self, claim_id: str) -> dict[str, Any]:
+    def trace(self, claim_id: str, *, artifact_types: set[str] | None = None) -> dict[str, Any]:
         """Return a deterministic downstream traversal of linked evidence."""
         graph = self.get(claim_id)
         if graph is None:
@@ -86,11 +86,29 @@ class ResearchClaimEvidenceGraph:
             if artifact is None:
                 continue
             children = self._evidence.get_children(artifact_hash)
-            nodes.append({"artifact_hash": artifact.artifact_hash, "artifact_type": artifact.artifact_type, "version": artifact.version, "parents": self._evidence.get_parents(artifact_hash), "children": children})
+            if artifact_types is None or artifact.artifact_type in artifact_types:
+                nodes.append({"artifact_hash": artifact.artifact_hash, "artifact_type": artifact.artifact_type, "version": artifact.version, "parents": self._evidence.get_parents(artifact_hash), "children": children})
             queue.extend(children)
 
         nodes.sort(key=lambda node: (node["artifact_type"], node["artifact_hash"]))
         return {"claim_id": graph.claim_id, "claim_hash": graph.claim_hash, "plan_hash": graph.plan_hash, "evidence_hashes": list(graph.evidence_hashes), "nodes": nodes}
+
+    def integrity(self, claim_id: str) -> dict[str, Any]:
+        graph = self.get(claim_id)
+        if graph is None:
+            return {"valid": False, "claim_id": claim_id, "orphaned_evidence": [], "broken_edges": []}
+        orphaned = [h for h in graph.evidence_hashes if self._evidence.get_artifact(h) is None]
+        trace = self.trace(claim_id)
+        broken_edges = []
+        for node in trace["nodes"]:
+            for parent in node["parents"]:
+                if self._evidence.get_artifact(parent) is None:
+                    broken_edges.append((parent, node["artifact_hash"]))
+            for child in node["children"]:
+                if self._evidence.get_artifact(child) is None:
+                    broken_edges.append((node["artifact_hash"], child))
+        valid = not orphaned and not broken_edges
+        return {"valid": valid, "claim_id": claim_id, "orphaned_evidence": sorted(orphaned), "broken_edges": sorted(set(broken_edges)), "node_count": len(trace["nodes"])}
 
     def verify(self, claim_id: str) -> bool:
         graph = self.get(claim_id)
