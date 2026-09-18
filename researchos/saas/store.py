@@ -37,6 +37,40 @@ class ResearchJobStore:
     ) -> WorkerLease:
         raise NotImplementedError
 
+    def renew(
+        self,
+        workspace_id: UUID,
+        job_id: UUID,
+        lease_token: UUID,
+        lease_seconds: int,
+    ) -> WorkerLease:
+        raise NotImplementedError
+
+    def renew(
+        self,
+        workspace_id: UUID,
+        job_id: UUID,
+        lease_token: UUID,
+        lease_seconds: int,
+    ) -> WorkerLease:
+        if lease_seconds < 1:
+            raise ValueError("invalid worker lease")
+        with self._lock:
+            job = self._jobs.get(job_id)
+            lease = self._leases.get(job_id)
+            if (
+                job is None
+                or job.workspace_id != workspace_id
+                or job.status != ResearchJobStatus.RUNNING
+                or lease is None
+                or lease[0] != lease_token
+                or lease[1] <= self._clock()
+            ):
+                raise RuntimeError("stale or invalid worker lease")
+            expires = self._clock() + timedelta(seconds=lease_seconds)
+            self._leases[job_id] = (lease_token, expires)
+            return WorkerLease(job, lease_token)
+
     def finish(
         self,
         workspace_id: UUID,
