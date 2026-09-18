@@ -26,7 +26,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 ## Phase 2 — Tenant-safe persistence
 - [ ] Make workspace/tenant identity mandatory at every SaaS boundary.
 - [ ] Implement canonical Supabase persistence adapters.
-- [ ] Enforce RLS for every tenant-owned table.
+- [x] Enforce RLS for every tenant-owned table.
 - [ ] Add tenant-isolation integration tests.
 - [ ] Add migration/version compatibility checks.
 
