@@ -26,16 +26,16 @@ This file is the execution contract for turning QROS into a research-grade multi
 ## Phase 2 — Tenant-safe persistence
 - [ ] Make workspace/tenant identity mandatory at every SaaS boundary.
 - [ ] Implement canonical Supabase persistence adapters.
-- [ ] Enforce RLS for every tenant-owned table.
+- [x] Enforce RLS for every tenant-owned table.
 - [ ] Add tenant-isolation integration tests.
 - [ ] Add migration/version compatibility checks.
 
 ## Phase 3 — Durable execution
-- [ ] Introduce idempotency keys for all mutating API operations.
-- [ ] Add durable job records and state transitions.
-- [ ] Add retry policy with bounded attempts and explicit terminal states.
-- [ ] Add worker heartbeat/lease semantics.
-- [ ] Ensure every job output is provenance-linked to its input artifact hashes.
+- [x] Introduce idempotency keys for research-run mutation with atomic durable reservation.
+- [x] Add durable job records and state transitions.
+- [x] Add retry policy with bounded attempts and explicit terminal states.
+- [x] Add worker heartbeat/lease semantics.
+- [x] Ensure every job output is provenance-linked to its input artifact hashes.
 
 ## Phase 4 — API productization
 - [ ] Stable versioned API surface.
@@ -44,7 +44,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [ ] Request validation and size limits.
 - [ ] Rate limiting and abuse controls.
 - [ ] Pagination/filter/sort contracts.
-- [ ] Idempotent mutation semantics.
+- [x] Idempotent research-run mutation semantics with atomic job/idempotency transaction.
 - [ ] Structured error model.
 
 ## Phase 5 — Data and artifact storage
@@ -56,10 +56,11 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [ ] Reproducibility manifest generation.
 
 ## Phase 6 — Research services
-- [ ] Governed analysis execution contract.
-- [ ] Probability/edge service registry.
-- [ ] Calibration and uncertainty outputs.
-- [ ] Multiple-testing controls.
+- [x] Add deterministic computational path planner v1 (method contracts, capability registry, prerequisite gates, immutable plan hash).
+- [x] Governed analysis execution contract (immutable AnalysisResult bound to planner output).
+- [x] Probability/edge service registry.
+- [x] Calibration and uncertainty diagnostics (Brier/log-loss/ECE/MCE with explicit sample gate).
+- [x] Deterministic multiple-testing controls (Bonferroni and Benjamini-Hochberg).
 - [ ] OOS/replication state tracking.
 - [ ] Economic cost/slippage context.
 - [ ] Deterministic research artifact manifests.
