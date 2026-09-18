@@ -12,8 +12,8 @@ def native_module() -> ModuleType:
     except ImportError as exc:
         raise ImportError(
             "QROS C++ backend is not built or is not importable. "
-            "Build researchos/engines/quant and add "
-            "researchos/engines/quant/python to PYTHONPATH."
+            "Install QROS with pip install -e . so scikit-build-core "
+            "can build and install the native extension."
         ) from exc
 
     return cpp_quant_backend
