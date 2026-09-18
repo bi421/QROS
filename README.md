@@ -1,8 +1,8 @@
-# ResearchOS
+# QROS (ResearchOS)
 
 **Institutional-Grade Market Research Platform**
 
-[![Health](https://github.com/bi421/ResearchOS/actions/workflows/ci.yml/badge.svg)](https://github.com/bi421/ResearchOS/actions/workflows/ci.yml)
+[![Health](https://github.com/bi421/QROS/actions/workflows/ci.yml/badge.svg)](https://github.com/bi421/QROS/actions/workflows/ci.yml)
 
 > **Health evidence rule:** a local or AI-reported "checked" state is **UNVERIFIED** until `scripts/final_health_check.py` produces `.health/last_run.json`, or the corresponding GitHub Actions Health Evidence Gate passes and uploads that artifact.
 
