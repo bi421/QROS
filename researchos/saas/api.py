@@ -334,6 +334,7 @@ def create_app(
         body = _research_job_response(job).model_dump(mode="json")
         try:
             created, replayed = store.create_idempotent(
+                tenant.workspace_id,
                 job,
                 idempotency_key,
                 fingerprint,
