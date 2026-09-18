@@ -22,6 +22,7 @@ as $$
 declare
     v_existing public.api_idempotency%rowtype;
     v_job public.research_run%rowtype;
+    v_inserted boolean;
 begin
     if p_research_run_id is null
        or p_workspace_id is null
@@ -44,6 +45,14 @@ begin
        and key = p_idempotency_key
        and expires_at <= clock_timestamp();
 
+    insert into public.api_idempotency(
+        workspace_id, key, request_fingerprint, status_code, response_body
+    )
+    values (
+        p_workspace_id, p_idempotency_key, p_request_fingerprint, 202, p_response_body
+    )
+    on conflict (workspace_id, key) do nothing;
+
     select *
       into v_existing
       from public.api_idempotency
@@ -51,12 +60,15 @@ begin
        and key = p_idempotency_key
      for update;
 
-    if found then
-        if v_existing.request_fingerprint <> p_request_fingerprint then
-            raise exception 'idempotency key reused with different request'
-                using errcode = '23505';
-        end if;
+    if v_existing.request_fingerprint <> p_request_fingerprint then
+        raise exception 'idempotency key reused with different request'
+            using errcode = '23505';
+    end if;
 
+    v_inserted := v_existing.request_fingerprint = p_request_fingerprint
+                  and (v_existing.response_body = p_response_body);
+
+    if not v_inserted then
         select *
           into v_job
           from public.research_run
@@ -80,13 +92,6 @@ begin
         p_workflow_id, 'queued', p_created_by
     )
     returning * into v_job;
-
-    insert into public.api_idempotency(
-        workspace_id, key, request_fingerprint, status_code, response_body
-    )
-    values (
-        p_workspace_id, p_idempotency_key, p_request_fingerprint, 202, p_response_body
-    );
 
     return query
     select to_jsonb(v_job), false;
