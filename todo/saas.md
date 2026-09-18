@@ -32,9 +32,9 @@ This file is the execution contract for turning QROS into a research-grade multi
 
 ## Phase 3 — Durable execution
 - [ ] Introduce idempotency keys for all mutating API operations.
-- [ ] Add durable job records and state transitions.
+- [x] Add durable job records and state transitions.
 - [ ] Add retry policy with bounded attempts and explicit terminal states.
-- [ ] Add worker heartbeat/lease semantics.
+- [x] Add worker heartbeat/lease semantics.
 - [ ] Ensure every job output is provenance-linked to its input artifact hashes.
 
 ## Phase 4 — API productization
