@@ -46,7 +46,7 @@ def test_in_memory_store_rejects_duplicate_content() -> None:
     first = DatasetVersion(uuid4(), dataset.id, 1, "a" * 64, "path/a", 1, dataset.created_by)
     second = DatasetVersion(uuid4(), dataset.id, 2, "a" * 64, "path/b", 1, dataset.created_by)
 
-    store.create_version(first)
+    store.create_version(dataset.workspace_id, first)
 
     with pytest.raises(ValueError, match="dataset content already exists"):
-        store.create_version(second)
+        store.create_version(dataset.workspace_id, second)
