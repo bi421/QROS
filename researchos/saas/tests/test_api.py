@@ -1,10 +1,14 @@
 from io import BytesIO
 from uuid import UUID, uuid4
+import hashlib
+import hmac
+import json
 
 from fastapi.testclient import TestClient
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.api import create_app
+from researchos.saas.billing import InMemoryBillingEventStore
 from researchos.saas.contracts import Plan, TenantContext
 from researchos.saas.datasets import InMemoryDatasetStorage, InMemoryDatasetStore
 from researchos.saas.store import InMemoryResearchJobStore
@@ -19,7 +23,7 @@ class StaticAuth:
         return self.context
 
 
-def _client(workspace_id: UUID | None = None):
+def _client(workspace_id: UUID | None = None, *, billing_store=None, billing_secret=None):
     context = TenantContext(
         user_id=uuid4(),
         workspace_id=workspace_id or uuid4(),
@@ -33,6 +37,8 @@ def _client(workspace_id: UUID | None = None):
             job_store=InMemoryResearchJobStore(),
             dataset_store=dataset_store,
             dataset_storage=dataset_storage,
+            billing_store=billing_store,
+            billing_webhook_secret=billing_secret,
         )
     )
     return client, context, dataset_store, dataset_storage
@@ -206,3 +212,38 @@ def test_cross_tenant_job_lookup_returns_404() -> None:
         headers={"Authorization": "Bearer test"},
     )
     assert response.status_code == 404
+
+
+def test_billing_webhook_processes_and_replays_identical_event() -> None:
+    billing = InMemoryBillingEventStore()
+    client, _, _, _ = _client(billing_store=billing, billing_secret="secret")
+    payload = json.dumps({
+        "event_id": "evt_1",
+        "workspace_id": str(uuid4()),
+        "plan": "pro",
+        "status": "active",
+    }).encode()
+    signature = hmac.new(b"secret", payload, hashlib.sha256).hexdigest()
+    headers = {
+        "X-Billing-Signature": signature,
+        "X-Billing-Provider": "test",
+    }
+
+    first = client.post("/v1/billing/webhook", content=payload, headers=headers)
+    replay = client.post("/v1/billing/webhook", content=payload, headers=headers)
+
+    assert first.status_code == 200
+    assert first.json() == {"status": "processed"}
+    assert replay.status_code == 200
+    assert replay.json() == {"status": "replayed"}
+
+
+def test_billing_webhook_rejects_invalid_signature() -> None:
+    billing = InMemoryBillingEventStore()
+    client, _, _, _ = _client(billing_store=billing, billing_secret="secret")
+    response = client.post(
+        "/v1/billing/webhook",
+        content=b'{"event_id":"evt_1","workspace_id":"w","plan":"pro","status":"active"}',
+        headers={"X-Billing-Signature": "bad", "X-Billing-Provider": "test"},
+    )
+    assert response.status_code == 401
