@@ -51,7 +51,7 @@ def _result(status="SUCCEEDED"):
 def test_worker_moves_queued_job_to_succeeded():
     workspace_id = uuid4()
     store = InMemoryResearchJobStore()
-    job = store.create(_job(workspace_id))
+    job = store.create(workspace_id, _job(workspace_id))
     executor = StubExecutor(_result())
 
     result = ResearchWorker(store, executor).run_once(workspace_id, job.id)
@@ -66,7 +66,7 @@ def test_worker_moves_queued_job_to_succeeded():
 def test_worker_marks_job_failed_when_executor_raises():
     workspace_id = uuid4()
     store = InMemoryResearchJobStore()
-    job = store.create(_job(workspace_id))
+    job = store.create(workspace_id, _job(workspace_id))
     executor = StubExecutor(error=RuntimeError("scientific failure"))
 
     with pytest.raises(RuntimeError, match="scientific failure"):
@@ -82,7 +82,7 @@ def test_worker_cannot_run_job_from_another_workspace():
     store = InMemoryResearchJobStore()
     owner = uuid4()
     other = uuid4()
-    job = store.create(_job(owner))
+    job = store.create(owner, _job(owner))
 
     with pytest.raises(KeyError):
         ResearchWorker(store, StubExecutor(_result())).run_once(other, job.id)
@@ -91,7 +91,7 @@ def test_worker_cannot_run_job_from_another_workspace():
 def test_worker_cannot_double_claim_active_job():
     workspace_id = uuid4()
     store = InMemoryResearchJobStore()
-    job = store.create(_job(workspace_id))
+    job = store.create(workspace_id, _job(workspace_id))
     first = store.claim(workspace_id, job.id, "worker-a", 900)
 
     with pytest.raises(RuntimeError, match="already claimed"):
@@ -103,7 +103,7 @@ def test_worker_cannot_double_claim_active_job():
 def test_stale_lease_token_cannot_finish_job():
     workspace_id = uuid4()
     store = InMemoryResearchJobStore()
-    job = store.create(_job(workspace_id))
+    job = store.create(workspace_id, _job(workspace_id))
     store.claim(workspace_id, job.id, "worker-a", 900)
 
     with pytest.raises(RuntimeError, match="stale or invalid worker lease"):
@@ -161,7 +161,7 @@ def test_worker_lease_can_be_renewed_before_expiry():
     now = [datetime(2026, 9, 18, tzinfo=timezone.utc)]
     store = InMemoryResearchJobStore(clock=lambda: now[0])
     workspace_id = uuid4()
-    job = store.create(_job(workspace_id))
+    job = store.create(workspace_id, _job(workspace_id))
     lease = store.claim(workspace_id, job.id, "worker-a", 10)
 
     now[0] += timedelta(seconds=5)
@@ -175,7 +175,7 @@ def test_worker_lease_can_be_renewed_before_expiry():
 def test_worker_persists_provenance_before_succeeding():
     workspace_id = uuid4()
     store = InMemoryResearchJobStore()
-    job = store.create(_job(workspace_id))
+    job = store.create(workspace_id, _job(workspace_id))
     result = ResearchWorker(store, StubExecutor(_result())).run_once(workspace_id, job.id)
 
     saved_result = store.get_result(workspace_id, job.id)
@@ -188,7 +188,7 @@ def test_worker_persists_provenance_before_succeeding():
 def test_worker_rejects_result_from_different_source_dataset():
     workspace_id = uuid4()
     store = InMemoryResearchJobStore()
-    job = store.create(_job(workspace_id))
+    job = store.create(workspace_id, _job(workspace_id))
     mismatched = ResearchResult(
         status="SUCCEEDED",
         source_dataset_sha256="f" * 64,
@@ -202,3 +202,11 @@ def test_worker_rejects_result_from_different_source_dataset():
     assert saved.status == ResearchJobStatus.FAILED
     assert saved.error_code == "provenance_error"
     assert store.get_result(workspace_id, job.id) is None
+
+
+def test_direct_job_write_rejects_mismatched_workspace():
+    store = InMemoryResearchJobStore()
+    owner = uuid4()
+    other = uuid4()
+    with pytest.raises(ValueError, match="workspace does not match tenant"):
+        store.create(other, _job(owner))
