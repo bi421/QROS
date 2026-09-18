@@ -62,7 +62,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [x] Calibration and uncertainty diagnostics (Brier/log-loss/ECE/MCE with explicit sample gate).
 - [x] Deterministic multiple-testing controls (Bonferroni and Benjamini-Hochberg).
 - [ ] OOS/replication state tracking.
-- [ ] Economic cost/slippage context.
+- [x] Economic cost/slippage context contract.
 - [ ] Deterministic research artifact manifests.
 
 ## Phase 7 — Product UI
