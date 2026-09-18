@@ -9,7 +9,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [x] Define Research Claim as the durable unit of research intent.
 - [x] Define immutable/content-hashed Research Plan and one-time lock semantics.
 - [x] Define evidence lineage and research-governance contracts.
-- [ ] Publish a single canonical SaaS product specification and API contract.
+- [x] Publish a single canonical SaaS product specification and API contract.
 
 ## Phase 1 — Evidence graph integration
 - [x] Add Research Claim domain model.
