@@ -8,6 +8,7 @@ from researchos.saas.supabase_membership import SupabaseWorkspaceMembershipResol
 from researchos.saas.datasets import SupabaseDatasetStorage, SupabaseDatasetStore
 from researchos.saas.queue import SupabaseResearchJobQueue
 from researchos.saas.supabase_job_store import SupabaseResearchJobStore
+from researchos.saas.idempotency import SupabaseIdempotencyStore
 
 def build_production_app():
     url = os.environ["SUPABASE_URL"]
@@ -21,6 +22,7 @@ def build_production_app():
         dataset_store=SupabaseDatasetStore(client),
         dataset_storage=SupabaseDatasetStorage(client),
         job_queue=SupabaseResearchJobQueue(client),
+        idempotency_store=SupabaseIdempotencyStore(client),
     )
 
 app = build_production_app()
