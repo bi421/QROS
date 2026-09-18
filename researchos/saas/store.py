@@ -38,7 +38,6 @@ class ResearchJobStore:
         raise NotImplementedError
 
     def get(self, workspace_id: UUID, job_id: UUID) -> ResearchJob | None:
-    def get(self, workspace_id: UUID, job_id: UUID) -> ResearchJob | None:
         raise NotImplementedError
 
     def count_active(self, workspace_id: UUID) -> int:
