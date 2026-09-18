@@ -1,43 +1,25 @@
 cmake_minimum_required(VERSION 3.20)
 project(cpp_quant_engine VERSION 1.1.0 LANGUAGES CXX)
 
-# Windows SDK Include Directories (MSVC fix)
-if(MSVC)
-    include_directories(
-        "C:/Program Files (x86)/Windows Kits/10/Include/10.0.22621.0/ucrt"
-        "C:/Program Files (x86)/Windows Kits/10/Include/10.0.22621.0/um"
-        "C:/Program Files (x86)/Windows Kits/10/Include/10.0.22621.0/shared"
-    )
-endif()
-
-# ── C++20 Standard ────────────────────────────────────────────────────────
+# C++20 Standard
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# rest of file...
-cmake_minimum_required(VERSION 3.20)
-project(cpp_quant_engine VERSION 1.1.0 LANGUAGES CXX)
-
-# â”€â”€ C++20 Standard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-# â”€â”€ Build Options â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Build Options
 option(BUILD_SHARED_LIBS "Build shared library" OFF)
 option(BUILD_TESTS "Build C++ unit tests" ON)
 option(BUILD_BENCHMARKS "Build benchmarks" ON)
-option(BUILD_PYTHON_BINDINGS "Build nanobind Python bindings" OFF)
+option(BUILD_PYTHON_BINDINGS "Build nanobind Python bindings" ON)
 
-# â”€â”€ Include Directories â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Include Directories
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-# â”€â”€ Sources â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Sources
 file(GLOB_RECURSE QUANT_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 
-# â”€â”€ Core Library â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Core Library
 add_library(quant_engine STATIC ${QUANT_SOURCES})
 
 target_include_directories(quant_engine PUBLIC
@@ -46,18 +28,15 @@ target_include_directories(quant_engine PUBLIC
 )
 target_compile_features(quant_engine PUBLIC cxx_std_20)
 
-# MSVC: structured exceptions + UTF-8 source. Others: disable exceptions/RTTI.
+# MSVC: structured exceptions + UTF-8 source
 target_compile_options(quant_engine PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/EHsc /utf-8>
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fexceptions -frtti>
 )
 
-# â”€â”€ Python Bindings (optional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Python Bindings (optional)
 if(BUILD_PYTHON_BINDINGS)
-    # nanobind 3.x requires the modern CMake Python package
-    # to be discovered before find_package(nanobind).
     find_package(Python COMPONENTS Interpreter Development REQUIRED)
-
     find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 
     execute_process(
@@ -75,24 +54,22 @@ if(BUILD_PYTHON_BINDINGS)
     endif()
 
     set(nanobind_ROOT "${NANOBIND_CMAKE_DIR}")
-
     find_package(nanobind CONFIG REQUIRED)
-
     add_subdirectory(bindings)
 endif()
 
-# â”€â”€ C++ Unit Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# C++ Unit Tests
 if(BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
 
-# â”€â”€ Benchmarks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Benchmarks
 if(BUILD_BENCHMARKS)
     add_subdirectory(benchmarks)
 endif()
 
-# â”€â”€ Install â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Install
 install(TARGETS quant_engine
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
