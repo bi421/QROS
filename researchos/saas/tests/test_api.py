@@ -307,6 +307,47 @@ def test_cross_tenant_job_lookup_returns_404() -> None:
     assert response.status_code == 404
 
 
+def test_cross_tenant_dataset_and_version_access_returns_not_found() -> None:
+    owner = TenantContext(uuid4(), uuid4(), Plan.PRO)
+    other = TenantContext(uuid4(), uuid4(), Plan.PRO)
+    store = InMemoryDatasetStore()
+    storage = InMemoryDatasetStorage()
+    owner_client = TestClient(create_app(
+        auth_provider=StaticAuth(owner),
+        dataset_store=store,
+        dataset_storage=storage,
+        job_store=InMemoryResearchJobStore(),
+    ))
+    other_client = TestClient(create_app(
+        auth_provider=StaticAuth(other),
+        dataset_store=store,
+        dataset_storage=storage,
+        job_store=InMemoryResearchJobStore(),
+    ))
+
+    created = _upload(owner_client, "tenant-owned", b"x")
+    assert created.status_code == 201
+    dataset_id = created.json()["id"]
+    version_id = created.json()["version"]["id"]
+
+    assert other_client.get(
+        f"/v1/datasets/{dataset_id}/versions",
+        headers={"Authorization": "Bearer test"},
+    ).json() == []
+    assert other_client.post(
+        f"/v1/datasets/{dataset_id}/versions",
+        headers={"Authorization": "Bearer test"},
+        files={"file": ("cross-tenant.csv", BytesIO(b"y"), "text/csv")},
+    ).status_code == 404
+
+    run = other_client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "cross-tenant-dataset"},
+        json={"dataset_version_id": version_id},
+    )
+    assert run.status_code == 404
+
+
 def test_billing_webhook_processes_and_replays_identical_event() -> None:
     billing = InMemoryBillingEventStore()
     client, _, _, _ = _client(billing_store=billing, billing_secret="secret")
