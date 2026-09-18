@@ -1,6 +1,6 @@
 -- Bounded retry policy for durable research jobs.
--- A lease may be reclaimed only while attempts remain; otherwise the job
--- becomes a terminal failure instead of being retried indefinitely.
+-- A stale lease may be reclaimed only while attempts remain; otherwise the
+-- job becomes a terminal failure instead of being retried indefinitely.
 
 alter table public.research_run
     add column if not exists max_attempts integer not null default 3;
@@ -12,7 +12,9 @@ alter table public.research_run
     add constraint research_run_max_attempts_check
     check (max_attempts between 1 and 100);
 
-create or replace function public.claim_research_run(
+drop function if exists public.claim_research_run(uuid, uuid, text, integer);
+
+create function public.claim_research_run(
     p_research_run_id uuid,
     p_workspace_id uuid,
     p_lease_owner text,

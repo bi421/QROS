@@ -33,7 +33,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 ## Phase 3 — Durable execution
 - [x] Introduce idempotency keys for research-run mutation with atomic durable reservation.
 - [x] Add durable job records and state transitions.
-- [ ] Add retry policy with bounded attempts and explicit terminal states.
+- [x] Add retry policy with bounded attempts and explicit terminal states.
 - [x] Add worker heartbeat/lease semantics.
 - [ ] Ensure every job output is provenance-linked to its input artifact hashes.
 
