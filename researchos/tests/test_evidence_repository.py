@@ -254,16 +254,17 @@ class TestEvidenceRepository:
         ev.add_lineage_edge(parent.artifact_hash, child.artifact_hash, relation="feeds")
         assert ev.count_edges() == 1
 
-    def test_conflicting_lineage_relation_rejected(self):
+    def test_distinct_lineage_relations_for_same_pair_are_independent(self):
         ev = self._make_repo()
         parent = build_envelope("Dataset", {"a": 1})
         child = build_envelope("Feature", {"b": 2})
         ev.append_artifact(parent)
         ev.append_artifact(child)
         ev.add_lineage_edge(parent.artifact_hash, child.artifact_hash, relation="feeds")
-        with pytest.raises(ValueError, match="already exists"):
-            ev.add_lineage_edge(parent.artifact_hash, child.artifact_hash, relation="produces")
-        assert ev.count_edges() == 1
+        ev.add_lineage_edge(parent.artifact_hash, child.artifact_hash, relation="produces")
+        assert ev.count_edges() == 2
+        assert ev.get_children(parent.artifact_hash) == [child.artifact_hash]
+        assert ev.get_parents(child.artifact_hash) == [parent.artifact_hash]
 
     def test_append_requires_all_declared_parents(self):
         ev = self._make_repo()
