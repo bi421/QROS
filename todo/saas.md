@@ -31,7 +31,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [ ] Add migration/version compatibility checks.
 
 ## Phase 3 — Durable execution
-- [ ] Introduce idempotency keys for all mutating API operations.
+- [x] Introduce idempotency keys for research-run mutation with atomic durable reservation.
 - [x] Add durable job records and state transitions.
 - [ ] Add retry policy with bounded attempts and explicit terminal states.
 - [x] Add worker heartbeat/lease semantics.
@@ -44,7 +44,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [ ] Request validation and size limits.
 - [ ] Rate limiting and abuse controls.
 - [ ] Pagination/filter/sort contracts.
-- [ ] Idempotent mutation semantics.
+- [x] Idempotent research-run mutation semantics with atomic job/idempotency transaction.
 - [ ] Structured error model.
 
 ## Phase 5 — Data and artifact storage
