@@ -119,7 +119,7 @@ def test_expired_worker_lease_can_be_reclaimed_until_attempt_budget_is_exhausted
     now = [datetime(2026, 9, 18, tzinfo=timezone.utc)]
     store = InMemoryResearchJobStore(clock=lambda: now[0])
     workspace_id = uuid4()
-    job = store.create(_job(workspace_id, max_attempts=2))
+    job = store.create(workspace_id, _job(workspace_id, max_attempts=2))
 
     first = store.claim(workspace_id, job.id, "worker-a", 10)
     assert first.job.attempt_count == 1
@@ -146,7 +146,8 @@ def test_stale_lease_token_cannot_finish_after_reclaim():
     now = [datetime(2026, 9, 18, tzinfo=timezone.utc)]
     store = InMemoryResearchJobStore(clock=lambda: now[0])
     workspace_id = uuid4()
-    job = store.create(_job(workspace_id, max_attempts=2))
+    job = store.create(workspace_id, _job(workspace_id, max_attempts=2))
+
     first = store.claim(workspace_id, job.id, "worker-a", 10)
 
     now[0] += timedelta(seconds=11)
