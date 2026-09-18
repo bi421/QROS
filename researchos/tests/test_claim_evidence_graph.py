@@ -95,6 +95,30 @@ def test_graph_supports_contradiction_and_replication_relations():
     repo.close()
 
 
+
+def test_graph_traverses_complete_research_stage_chain():
+    repo = ResearchRepository(db_path=":memory:")
+    graph = ResearchClaimEvidenceGraph(repo)
+    dataset = build_envelope("Dataset", {"name": "sample"}, version="1")
+    experiment = build_envelope("Experiment", {"name": "experiment"}, version="1", parent_hashes=(dataset.artifact_hash,))
+    run = build_envelope("Run", {"name": "run"}, version="1", parent_hashes=(experiment.artifact_hash,))
+    result = build_envelope("Result", {"name": "result"}, version="1", parent_hashes=(run.artifact_hash,))
+    validation = build_envelope("Validation", {"name": "validation"}, version="1", parent_hashes=(result.artifact_hash,))
+    finding = build_envelope("Finding", {"name": "finding"}, version="1", parent_hashes=(validation.artifact_hash,))
+    for artifact in (dataset, experiment, run, result, validation, finding):
+        graph.evidence_repository.append_artifact(artifact)
+    claim = _claim()
+    graph.attach(claim, [dataset.artifact_hash])
+
+    trace = graph.trace(claim.id)
+    assert [node["artifact_type"] for node in trace["nodes"]] == [
+        "Dataset", "Experiment", "Finding", "Result", "Run", "Validation"
+    ]
+    assert graph.trace_artifact_type(claim.id, "Finding")["nodes"][0]["artifact_hash"] == finding.artifact_hash
+    assert graph.trace_artifact_type(claim.id, "Validation")["nodes"][0]["artifact_hash"] == validation.artifact_hash
+    assert graph.integrity(claim.id)["valid"] is True
+    repo.close()
+
 def test_lineage_supports_multiple_relations_for_same_parent_and_child():
     repo = ResearchRepository(db_path=":memory:")
     graph = ResearchClaimEvidenceGraph(repo)
