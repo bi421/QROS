@@ -196,7 +196,7 @@ def test_cross_tenant_job_lookup_returns_404() -> None:
     created_dataset = _upload(owner_client, "sample", b"x")
     created = owner_client.post(
         "/v1/research-runs",
-        headers={"Authorization": "Bearer test"},
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "cross-tenant-create"},
         json={"dataset_version_id": created_dataset.json()["version"]["id"]},
     )
     job_id = created.json()["id"]
