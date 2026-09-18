@@ -34,6 +34,13 @@ from researchos.saas.idempotency import (
     MAX_IDEMPOTENCY_KEY_LENGTH,
 )
 from researchos.saas.rate_limit import FixedWindowRateLimiter
+from researchos.saas.billing import (
+    BillingEventConflict,
+    BillingEventStore,
+    BillingSignatureError,
+    parse_billing_event,
+    verify_hmac_signature,
+)
 
 REQUEST_ID_HEADER = "X-Request-ID"
 IDEMPOTENCY_HEADER = "Idempotency-Key"
@@ -109,6 +116,8 @@ def create_app(
     dataset_storage: DatasetStorage | None = None,
     job_queue: ResearchJobQueue | None = None,
     idempotency_store: IdempotencyStore | None = None,
+    billing_store: BillingEventStore | None = None,
+    billing_webhook_secret: str | None = None,
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
@@ -119,6 +128,7 @@ def create_app(
     queue = job_queue or InMemoryResearchJobQueue()
     idempotency = idempotency_store or InMemoryIdempotencyStore()
     rate_limiter = FixedWindowRateLimiter(limit=120, window_seconds=60)
+    billing = billing_store
     app = FastAPI(
         title="QROS SaaS API",
         version="1.0.0",
@@ -179,6 +189,33 @@ def create_app(
         if store is None or datasets is None or storage is None or queue is None:
             raise HTTPException(status_code=503, detail="SaaS persistence is not configured")
         return {"status": "ready"}
+
+    @app.post("/v1/billing/webhook", status_code=200, tags=["billing"])
+    async def billing_webhook(
+        request: Request,
+        x_billing_signature: str | None = Header(default=None, alias="X-Billing-Signature"),
+        x_billing_provider: str | None = Header(default=None, alias="X-Billing-Provider"),
+    ) -> dict[str, str]:
+        if billing is None or not billing_webhook_secret:
+            raise HTTPException(status_code=503, detail="billing webhook is not configured")
+        if not x_billing_signature or not x_billing_provider:
+            raise HTTPException(status_code=400, detail="billing signature and provider are required")
+        payload = await request.body()
+        try:
+            verify_hmac_signature(payload, x_billing_signature, billing_webhook_secret)
+            event = parse_billing_event(payload)
+        except BillingSignatureError as exc:
+            raise HTTPException(status_code=401, detail="invalid billing webhook signature") from exc
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise HTTPException(status_code=400, detail="invalid billing event") from exc
+        payload_sha256 = hashlib.sha256(payload).hexdigest()
+        try:
+            processed = billing.process(event, x_billing_provider.strip()[:64], payload_sha256)
+        except BillingEventConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail="billing event processing failed") from exc
+        return {"status": "processed" if processed else "replayed"}
 
     @app.get("/v1/me", response_model=dict[str, str], tags=["identity"])
     def me(tenant: TenantContext = Depends(current_tenant)) -> dict[str, str]:
