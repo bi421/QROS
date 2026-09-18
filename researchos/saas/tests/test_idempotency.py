@@ -9,6 +9,11 @@ from researchos.saas.idempotency import (
 )
 
 
+class PostgrestError(Exception):
+    def __init__(self, code):
+        self.code = code
+
+
 class Query:
     def __init__(self, rows=None, *, insert_error=None):
         self.rows = rows or []
@@ -92,7 +97,7 @@ def test_supabase_idempotency_store_detects_conflicting_concurrent_key() -> None
             "status_code": existing.status_code,
             "response_body": existing.response_body,
         }],
-        insert_error=type("PostgrestError", (), {"code": "23505"})(),
+        insert_error=PostgrestError("23505"),
     )
 
     with pytest.raises(IdempotencyConflict):
