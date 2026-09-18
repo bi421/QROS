@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 from uuid import UUID, uuid4
 
@@ -57,10 +58,11 @@ class ResearchJobStore:
 
 
 class InMemoryResearchJobStore(ResearchJobStore):
-    def __init__(self) -> None:
+    def __init__(self, *, clock=None) -> None:
         self._jobs: dict[UUID, ResearchJob] = {}
-        self._leases: dict[UUID, UUID] = {}
+        self._leases: dict[UUID, tuple[UUID, datetime]] = {}
         self._lock = Lock()
+        self._clock = clock or (lambda: datetime.now(timezone.utc))
 
     def create(self, job: ResearchJob) -> ResearchJob:
         with self._lock:
@@ -105,12 +107,16 @@ class InMemoryResearchJobStore(ResearchJobStore):
             job = self._jobs.get(job_id)
             if job is None or job.workspace_id != workspace_id:
                 raise KeyError("research job not found")
-            if job.status != ResearchJobStatus.QUEUED:
+            existing_lease = self._leases.get(job_id)
+            if job.status == ResearchJobStatus.RUNNING:
+                if existing_lease is None or existing_lease[1] > self._clock():
+                    raise RuntimeError("research job is already claimed")
+            elif job.status != ResearchJobStatus.QUEUED:
                 raise RuntimeError("research job is already claimed")
             token = uuid4()
             updated = replace(job, status=ResearchJobStatus.RUNNING)
             self._jobs[job_id] = updated
-            self._leases[job_id] = token
+            self._leases[job_id] = (token, self._clock() + timedelta(seconds=lease_seconds))
             return WorkerLease(updated, token)
 
     def finish(
@@ -127,7 +133,7 @@ class InMemoryResearchJobStore(ResearchJobStore):
                 raise KeyError("research job not found")
             if (
                 job.status != ResearchJobStatus.RUNNING
-                or self._leases.get(job_id) != lease_token
+                or self._leases.get(job_id, (None, None))[0] != lease_token
             ):
                 raise RuntimeError("stale or invalid worker lease")
             if target not in {
