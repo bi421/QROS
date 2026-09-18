@@ -328,6 +328,7 @@ def create_app(
             dataset_version_id=version.id,
             workflow_id=request.workflow_id,
             status=ResearchJobStatus.QUEUED,
+            source_dataset_sha256=version.content_sha256,
             created_by=tenant.user_id,
         )
         body = _research_job_response(job).model_dump(mode="json")
