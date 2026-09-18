@@ -335,7 +335,20 @@ def create_app(
             status=ResearchJobStatus.QUEUED,
             created_by=tenant.user_id,
         )
-        created = store.create(job)
+        body = _research_job_response(job).model_dump(mode="json")
+        try:
+            created, replayed = store.create_idempotent(
+                job,
+                idempotency_key,
+                fingerprint,
+                body,
+            )
+        except ValueError as exc:
+            if "idempotency key reused" in str(exc):
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise
+        if replayed:
+            return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
         try:
             queue.enqueue(tenant.workspace_id, created.id)
         except Exception as exc:
@@ -349,11 +362,6 @@ def create_app(
             except Exception:
                 pass
             raise HTTPException(status_code=503, detail="research job queue unavailable") from exc
-        body = _research_job_response(created).model_dump(mode="json")
-        try:
-            idempotency.put(IdempotencyRecord(tenant.workspace_id, idempotency_key, fingerprint, 202, body))
-        except IdempotencyConflict as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
         return JSONResponse(status_code=202, content=body)
 
     @app.get("/v1/research-runs/{job_id}", response_model=ResearchJobResponse, tags=["research"])
