@@ -90,5 +90,5 @@ def test_graph_supports_contradiction_and_replication_relations():
     graph.evidence_repository.add_lineage_edge(first.artifact_hash, second.artifact_hash, "replicates")
     graph.evidence_repository.add_lineage_edge(first.artifact_hash, third.artifact_hash, "contradicts")
     assert graph.evidence_repository.verify_evidence() is True
-    assert "replicates" in graph.evidence_repository.get_children(first.artifact_hash) if False else True
+    assert graph.evidence_repository.get_children(first.artifact_hash) == sorted([second.artifact_hash, third.artifact_hash])
     repo.close()
