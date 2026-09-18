@@ -41,6 +41,7 @@ __all__ = [
     "CapabilityRegistry",
     "ComputePlan",
     "DEFAULT_CAPABILITIES",
+    "Decision",
     "DatasetProvenance",
     "ExecutionBinding",
     "ExecutionRegistry",
