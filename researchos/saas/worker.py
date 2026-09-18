@@ -79,8 +79,19 @@ class ResearchWorker:
             if result.status == "SUCCEEDED"
             else ResearchJobStatus.FAILED
         )
+        try:
+            self._store.record_result(workspace_id, job_id, lease.token, result)
+        except Exception:
+            try:
+                self._store.finish(
+                    workspace_id,
+                    job_id,
+                    lease.token,
+                    ResearchJobStatus.FAILED,
+                    error_code="provenance_error",
+                )
+            except Exception:
+                pass
+            raise
         self._store.finish(workspace_id, job_id, lease.token, target)
-        return result
-
-
-__all__ = ["ResearchExecutor", "ResearchWorker"]
+        return result__all__ = ["ResearchExecutor", "ResearchWorker"]
