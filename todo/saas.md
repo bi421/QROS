@@ -35,7 +35,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [x] Add durable job records and state transitions.
 - [x] Add retry policy with bounded attempts and explicit terminal states.
 - [x] Add worker heartbeat/lease semantics.
-- [ ] Ensure every job output is provenance-linked to its input artifact hashes.
+- [x] Ensure every job output is provenance-linked to its input artifact hashes.
 
 ## Phase 4 — API productization
 - [ ] Stable versioned API surface.
