@@ -101,7 +101,6 @@ jobs:
         run: cmake --build researchos/engines/quant/build -j
       - name: Test C++ Quant Engine
         run: ctest --test-dir researchos/engines/quant/build -V
-      - name: Benchmark C++ fast path
         env:
       - name: Test Python Quant Integration
         env:
