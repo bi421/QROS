@@ -54,7 +54,7 @@ class ResearchWorker:
         stop = Event()
         heartbeat = Thread(
             target=self._heartbeat,
-            args=(workspace_id, job.id, lease.token, stop),
+            args=(workspace_id, job_id, lease.token, stop),
             daemon=True,
         )
         heartbeat.start()
