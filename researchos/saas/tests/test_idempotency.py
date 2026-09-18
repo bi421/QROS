@@ -32,7 +32,7 @@ class Query:
         return self
 
     def execute(self):
-        if self.insert_error is not None:
+        if self.insert_error is not None and self.inserted is not None:
             raise self.insert_error
         return type("Response", (), {"data": self.rows})()
 
@@ -92,7 +92,7 @@ def test_supabase_idempotency_store_detects_conflicting_concurrent_key() -> None
             "status_code": existing.status_code,
             "response_body": existing.response_body,
         }],
-        insert_error=RuntimeError("duplicate key"),
+        insert_error=type("PostgrestError", (), {"code": "23505"})(),
     )
 
     with pytest.raises(IdempotencyConflict):
