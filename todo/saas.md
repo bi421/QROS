@@ -58,7 +58,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 ## Phase 6 — Research services
 - [x] Add deterministic computational path planner v1 (method contracts, capability registry, prerequisite gates, immutable plan hash).
 - [x] Governed analysis execution contract (immutable AnalysisResult bound to planner output).
-- [ ] Probability/edge service registry.
+- [x] Probability/edge service registry.
 - [ ] Calibration and uncertainty outputs.
 - [ ] Multiple-testing controls.
 - [ ] OOS/replication state tracking.
