@@ -169,31 +169,46 @@ class CapabilityRegistry:
 DEFAULT_CAPABILITIES = CapabilityRegistry(
     (
         ResearchMethod(
-            "probability.wilson.v1",
+            "quant.calculate_returns.v1",
             "1",
-            frozenset({"probability", "binary_outcome"}),
+            frozenset({"returns"}),
+            min_sample_size=2,
+            backend=Backend.PYTHON,
+        ),
+        ResearchMethod(
+            "quant.calculate_volatility.v1",
+            "1",
+            frozenset({"volatility"}),
+            min_sample_size=2,
+            backend=Backend.PYTHON,
+        ),
+        ResearchMethod(
+            "quant.calculate_drawdown.v1",
+            "1",
+            frozenset({"drawdown"}),
+            min_sample_size=2,
+            backend=Backend.PYTHON,
+        ),
+        ResearchMethod(
+            "quant.calculate_statistics.v1",
+            "1",
+            frozenset({"statistics"}),
             min_sample_size=1,
+            backend=Backend.PYTHON,
         ),
         ResearchMethod(
-            "dependence.block_bootstrap.v1",
+            "quant.calculate_metrics.v1",
             "1",
-            frozenset({"dependence", "time_series"}),
-            min_sample_size=30,
-            requires_time_order=True,
-            requires_serial_dependence=True,
+            frozenset({"metrics"}),
+            min_sample_size=2,
+            backend=Backend.PYTHON,
         ),
         ResearchMethod(
-            "information.mutual_information.v1",
+            "quant.calculate_performance_analytics.v1",
             "1",
-            frozenset({"feature_information"}),
-            required_features=frozenset({"feature", "target"}),
-            min_sample_size=30,
-        ),
-        ResearchMethod(
-            "risk.expected_shortfall.v1",
-            "1",
-            frozenset({"tail_risk", "risk"}),
-            min_sample_size=30,
+            frozenset({"performance_analytics"}),
+            min_sample_size=1,
+            backend=Backend.PYTHON,
         ),
     )
 )
