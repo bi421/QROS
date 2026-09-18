@@ -26,6 +26,8 @@ LINEAGE_RELATIONS: tuple[str, ...] = (
     "validates",
     "derives",
     "trains",
+    "contradicts",
+    "replicates",
 )
 HASH_SCHEME_VERSION = "2"
 
