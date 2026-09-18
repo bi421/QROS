@@ -200,17 +200,19 @@ class EvidenceRepository:
             child = next((row for row in rows if row[1] == child_hash), None)
             if child is None or parent_hash not in tuple(json.loads(child[4])):
                 return False
-            if relation != _default_relation(child[0]):
+            if relation not in LINEAGE_RELATIONS:
+                return False
+            if relation not in {_default_relation(child[0]), "contradicts", "replicates"}:
                 return False
 
-        expected_edges = {
-            (parent, row[1], _default_relation(row[0]))
-            for row in rows
-            for parent in tuple(json.loads(row[4]))
-        }
         cursor.execute("SELECT parent_hash, child_hash, relation FROM lineage")
         actual_edges = set(cursor.fetchall())
-        return actual_edges == expected_edges
+        for row in rows:
+            allowed = {_default_relation(row[0]), "contradicts", "replicates"}
+            for parent in tuple(json.loads(row[4])):
+                if not any((parent, row[1], relation) in actual_edges for relation in allowed):
+                    return False
+        return True
 
     def count_artifacts(self) -> int:
         conn = self._repo._get_conn()
