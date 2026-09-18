@@ -143,7 +143,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
     def get(self, workspace_id: UUID, job_id: UUID) -> ResearchJob | None:
         result = (
             self._client.table("research_run")
-            .select("id,workspace_id,dataset_version_id,workflow_id,status,created_by,attempt_count,max_attempts,error_code")
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code")
             .eq("workspace_id", str(workspace_id))
             .eq("id", str(job_id))
             .limit(1)
@@ -256,7 +256,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
             .eq("workspace_id", str(workspace_id))
             .eq("id", str(job_id))
             .eq("status", expected.value)
-            .select("id,workspace_id,dataset_version_id,workflow_id,status,created_by,attempt_count,max_attempts,error_code")
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code")
             .execute()
         )
         rows = result.data or []
