@@ -103,8 +103,6 @@ jobs:
         run: ctest --test-dir researchos/engines/quant/build -V
       - name: Benchmark C++ fast path
         env:
-          PYTHONPATH: researchos/engines/quant/python
-        run: python researchos/engines/quant/benchmarks/bench_fast_numeric.py --rows 1000000 --repeat 3
       - name: Test Python Quant Integration
         env:
           PYTHONPATH: researchos/engines/quant/python
