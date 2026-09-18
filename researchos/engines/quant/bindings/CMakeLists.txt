@@ -1,4 +1,4 @@
-﻿# Canonical Python binding for the QROS C++ Quant Engine.
+# Canonical Python binding for the QROS C++ Quant Engine.
 
 if(NOT TARGET quant_engine)
     message(FATAL_ERROR "bindings/ must be configured from the root project")
@@ -52,5 +52,7 @@ set_target_properties(
     cpp_quant_backend
     PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY
+            "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+        RUNTIME_OUTPUT_DIRECTORY
             "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
 )
