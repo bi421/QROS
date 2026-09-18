@@ -38,7 +38,7 @@ class DatasetStore(Protocol):
     def delete_dataset(self, workspace_id: UUID, dataset_id: UUID) -> None:
         ...
 
-    def create_version(self, version: DatasetVersion) -> DatasetVersion:
+    def create_version(self, workspace_id: UUID, version: DatasetVersion) -> DatasetVersion:
         ...
 
     def get_dataset(self, workspace_id: UUID, dataset_id: UUID) -> Dataset | None:
@@ -83,8 +83,8 @@ class InMemoryDatasetStore:
     def create_version(self, version: DatasetVersion) -> DatasetVersion:
         if version.id in self._versions:
             raise ValueError("dataset version already exists")
-        if version.dataset_id not in self._datasets:
-            raise KeyError("dataset not found")
+        if self.get_dataset(workspace_id, version.dataset_id) is None:
+            raise KeyError("dataset not found for workspace")
         existing = [v for v in self._versions.values() if v.dataset_id == version.dataset_id]
         if any(v.version_no == version.version_no for v in existing):
             raise ValueError("dataset version number already exists")
@@ -183,13 +183,16 @@ class SupabaseDatasetStore:
             "workspace_id", str(workspace_id)
         ).execute()
 
-    def create_version(self, version: DatasetVersion) -> DatasetVersion:
+    def create_version(self, workspace_id: UUID, version: DatasetVersion) -> DatasetVersion:
+        if self.get_dataset(workspace_id, version.dataset_id) is None:
+            raise KeyError("dataset not found for workspace")
         result = (
             self._client.table("dataset_version")
             .insert(
                 {
                     "id": str(version.id),
                     "dataset_id": str(version.dataset_id),
+                    "version_no": version.version_no,
                     "content_sha256": version.content_sha256,
                     "storage_path": version.storage_path,
                     "byte_size": version.byte_size,
