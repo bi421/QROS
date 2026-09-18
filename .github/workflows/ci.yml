@@ -30,7 +30,7 @@ jobs:
           python -m pip install pytest ruff
           python -m pip install -e ".[dev,test,saas]"
       - name: Run pytest
-        run: python -m pytest researchos/tests/ -v --tb=short
+        run: python -m pytest researchos/tests/ -v --tb=short -m "not cpp"
       - name: Run ruff
         run: ruff check .
 
@@ -65,6 +65,10 @@ jobs:
         env:
           PYTHONPATH: researchos/engines/quant/python
         run: python -m pytest researchos/engines/quant/tests/ -v
+      - name: Run C++ adapter regression
+        env:
+          PYTHONPATH: researchos/engines/quant/python
+        run: python -m pytest researchos/tests/test_cpp_backtest_regression.py -v
 
   health-evidence:
     name: Health Evidence
