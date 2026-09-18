@@ -105,6 +105,7 @@ class InMemoryResearchJobStore(ResearchJobStore):
 
     def create_idempotent(
         self,
+        workspace_id: UUID,
         job: ResearchJob,
         idempotency_key: str,
         request_fingerprint: str,
@@ -114,7 +115,7 @@ class InMemoryResearchJobStore(ResearchJobStore):
         if job.workspace_id != workspace_id:
             raise ValueError("research job workspace does not match tenant")
         with self._lock:
-            key = (job.workspace_id, idempotency_key)
+            key = (workspace_id, idempotency_key)
             existing = self._idempotency.get(key)
             if existing is not None:
                 existing_fingerprint, existing_job = existing
