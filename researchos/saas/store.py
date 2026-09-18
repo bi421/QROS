@@ -19,6 +19,16 @@ class ResearchJobStore:
     def create(self, job: ResearchJob) -> ResearchJob:
         raise NotImplementedError
 
+    def create_idempotent(
+        self,
+        job: ResearchJob,
+        idempotency_key: str,
+        request_fingerprint: str,
+        response_body: dict[str, object],
+    ) -> tuple[ResearchJob, bool]:
+        """Atomically create a job and reserve its idempotency result."""
+        raise NotImplementedError
+
     def get(self, workspace_id: UUID, job_id: UUID) -> ResearchJob | None:
         raise NotImplementedError
 
@@ -97,6 +107,7 @@ class InMemoryResearchJobStore(ResearchJobStore):
         self._leases: dict[UUID, tuple[UUID, datetime]] = {}
         self._lock = Lock()
         self._clock = clock or (lambda: datetime.now(timezone.utc))
+        self._idempotency: dict[tuple[UUID, str], tuple[str, ResearchJob]] = {}
 
     def create(self, job: ResearchJob) -> ResearchJob:
         with self._lock:
