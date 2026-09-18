@@ -130,7 +130,7 @@ def test_create_research_job_requires_existing_tenant_dataset_version() -> None:
     client, _, _, _ = _client()
     response = client.post(
         "/v1/research-runs",
-        headers={"Authorization": "Bearer test"},
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "missing-version"},
         json={"dataset_version_id": str(uuid4())},
     )
     assert response.status_code == 404
@@ -142,7 +142,7 @@ def test_create_and_get_research_job_are_tenant_scoped() -> None:
     version_id = uploaded.json()["version"]["id"]
     response = client.post(
         "/v1/research-runs",
-        headers={"Authorization": "Bearer test"},
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "create-run"},
         json={"dataset_version_id": version_id},
     )
     assert response.status_code == 202
