@@ -95,6 +95,7 @@ jobs:
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
+<<<<<<< HEAD
           python-version: "3.11"
           cache: pip
 
@@ -152,6 +153,43 @@ jobs:
           ruff check .
 
       - name: Upload test results
+=======
+          python-version: '3.11'
+          cache: 'pip'
+      
+      # 1. C++ компайл хийхэд шаардлагатай системийн багц
+      - name: Install system deps for C++ build
+        run: |
+          sudo apt-get update -o Acquire::Retries=5
+          sudo apt-get install -y -o Acquire::Retries=5 ninja-build
+      
+      # 2. Python болон build хэрэгслүүдийг суулгах
+      - name: Install health-check dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest ruff nanobind scikit-build-core cmake
+          python -m pip install -e ".[dev,test,saas]"
+      
+      # 3. C++ Quant Engine-ийг тусгайлан компайл хийх (health check-д шаардлагатай)
+      - name: Build C++ Quant Engine
+        run: |
+          cmake -S researchos/engines/quant -B researchos/engines/quant/build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build researchos/engines/quant/build -j
+      
+      - name: Scope guard
+        run: python scripts/check_scope.py --base origin/main
+      - name: Text integrity guard
+        run: python scripts/check_text_integrity.py .github/workflows/ci.yml .pre-commit-config.yaml pyproject.toml
+      
+      # 4. PYTHONPATH-ийг зааж өгснөөр Python тест cpp_quant_engine-ийг олох боломжтой болно
+      - name: Run canonical health check
+        env:
+          PYTHONPATH: researchos/engines/quant/python
+        run: python scripts/final_health_check.py
+      
+      - name: Upload health evidence
+>>>>>>> 6491ca6bb340efbefdce2e0cc0ccea11027da7b3
         if: always()
         uses: actions/upload-artifact@v4
         with:
