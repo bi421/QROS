@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from load_real_data import _parse_utc_dates
+from researchos.data_engine.real_data_loader import _parse_utc_dates
 
 
 def test_epoch_milliseconds_are_parsed_as_milliseconds():
