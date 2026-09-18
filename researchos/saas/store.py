@@ -6,7 +6,9 @@ from datetime import datetime, timedelta, timezone
 from threading import Lock
 from uuid import UUID, uuid4
 
+from researchos.research_core.contracts import ResearchResult
 from researchos.saas.contracts import ResearchJob, ResearchJobStatus
+from researchos.saas.provenance import ResearchRunResultRecord, build_result_record
 
 
 @dataclass(frozen=True)
@@ -28,6 +30,37 @@ class ResearchJobStore:
     ) -> tuple[ResearchJob, bool]:
         """Atomically create a job and reserve its idempotency result."""
         raise NotImplementedError
+
+    def record_result(self, workspace_id: UUID, job_id: UUID, lease_token: UUID, result: ResearchResult) -> ResearchRunResultRecord:
+        raise NotImplementedError
+
+    def get_result(self, workspace_id: UUID, job_id: UUID) -> ResearchRunResultRecord | None:
+        raise NotImplementedError
+
+    def record_result(self, workspace_id: UUID, job_id: UUID, lease_token: UUID, result: ResearchResult) -> ResearchRunResultRecord:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            lease = self._leases.get(job_id)
+            if (job is None or job.workspace_id != workspace_id or job.status != ResearchJobStatus.RUNNING
+                or lease is None or lease[0] != lease_token or lease[1] <= self._clock()):
+                raise RuntimeError("stale or invalid worker lease")
+            if result.source_dataset_sha256 != job.source_dataset_sha256:
+                raise ValueError("research result source hash does not match input dataset")
+            record = build_result_record(workspace_id, job_id, result)
+            existing = self._results.get(job_id)
+            if existing is not None:
+                if existing.manifest_sha256 != record.manifest_sha256:
+                    raise ValueError("research result already persisted with a different manifest")
+                return existing
+            self._results[job_id] = record
+            return record
+
+    def get_result(self, workspace_id: UUID, job_id: UUID) -> ResearchRunResultRecord | None:
+        with self._lock:
+            record = self._results.get(job_id)
+            if record is None or record.workspace_id != workspace_id:
+                return None
+            return record
 
     def get(self, workspace_id: UUID, job_id: UUID) -> ResearchJob | None:
         raise NotImplementedError
@@ -83,6 +116,7 @@ class InMemoryResearchJobStore(ResearchJobStore):
         self._lock = Lock()
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._idempotency: dict[tuple[UUID, str], tuple[str, ResearchJob]] = {}
+        self._results: dict[UUID, ResearchRunResultRecord] = {}
 
     def create(self, job: ResearchJob) -> ResearchJob:
         with self._lock:
