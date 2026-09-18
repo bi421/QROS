@@ -9,6 +9,11 @@ from researchos.research_core.contracts import (
     ResearchResult,
     ResearchRunner,
 )
+from researchos.research_core.execution import (
+    ExecutionBinding,
+    ExecutionRegistry,
+    validate_backend_capability,
+)
 from researchos.research_core.intelligence import (
     Backend,
     CapabilityRegistry,
@@ -32,8 +37,10 @@ __all__ = [
     "CapabilityRegistry",
     "ComputePlan",
     "DEFAULT_CAPABILITIES",
-    "Decision",
     "DatasetProvenance",
+    "Decision",
+    "ExecutionBinding",
+    "ExecutionRegistry",
     "FROZEN_XAUUSD_M1_WORKFLOW",
     "FrozenResearchPipeline",
     "FrozenXauusdM1Runner",
@@ -48,4 +55,5 @@ __all__ = [
     "ResearchResult",
     "ResearchRunner",
     "ValidationPlan",
+    "validate_backend_capability",
 ]
