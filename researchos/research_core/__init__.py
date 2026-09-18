@@ -12,6 +12,7 @@ from researchos.research_core.contracts import (
 from researchos.research_core.execution import (
     ExecutionBinding,
     ExecutionRegistry,
+    registry_for_backend,
     validate_backend_capability,
 )
 from researchos.research_core.intelligence import (
@@ -55,5 +56,6 @@ __all__ = [
     "ResearchResult",
     "ResearchRunner",
     "ValidationPlan",
+    "registry_for_backend",
     "validate_backend_capability",
 ]
