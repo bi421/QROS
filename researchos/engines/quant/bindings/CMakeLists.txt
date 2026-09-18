@@ -56,3 +56,12 @@ set_target_properties(
         RUNTIME_OUTPUT_DIRECTORY
             "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
 )
+
+
+# Install the nanobind extension into the importable top-level package.
+# scikit-build-core installs CMake targets relative to the wheel's platlib root.
+install(
+    TARGETS cpp_quant_backend
+    LIBRARY DESTINATION cpp_quant_engine
+    RUNTIME DESTINATION cpp_quant_engine
+)
