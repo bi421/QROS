@@ -113,3 +113,6 @@ A release is **NOT production-ready** unless all applicable gates are green:
 8. CI status is observed for the exact release commit.
 9. No known high-severity security or data-integrity defect remains open.
 10. The release artifact is reproducible and versioned.
+
+
+- Evidence governance v1: immutable OOS/replication artifact contracts bound to governed edge eligibility (PR #76).
