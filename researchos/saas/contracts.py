@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from enum import Enum
 from uuid import UUID
 
+from researchos.research_core.contracts import _validate_sha256
+
 
 class Plan(str, Enum):
     FREE = "free"
@@ -69,12 +71,14 @@ class ResearchJob:
     dataset_version_id: UUID
     workflow_id: str
     status: ResearchJobStatus
+    source_dataset_sha256: str
     created_by: UUID | None = None
     attempt_count: int = 0
     max_attempts: int = 3
     error_code: str | None = None
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "source_dataset_sha256", _validate_sha256(self.source_dataset_sha256, "source_dataset_sha256"))
         if not isinstance(self.dataset_version_id, UUID):
             raise TypeError("dataset_version_id must be a UUID")
         if not self.workflow_id.strip():
