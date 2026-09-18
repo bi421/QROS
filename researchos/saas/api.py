@@ -29,6 +29,7 @@ from researchos.saas.store import InMemoryResearchJobStore, ResearchJobStore
 from researchos.saas.idempotency import (
     IdempotencyConflict,
     IdempotencyRecord,
+    IdempotencyStore,
     InMemoryIdempotencyStore,
     MAX_IDEMPOTENCY_KEY_LENGTH,
 )
@@ -107,6 +108,7 @@ def create_app(
     dataset_store: DatasetStore | None = None,
     dataset_storage: DatasetStorage | None = None,
     job_queue: ResearchJobQueue | None = None,
+    idempotency_store: IdempotencyStore | None = None,
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
@@ -115,7 +117,7 @@ def create_app(
     datasets = dataset_store or InMemoryDatasetStore()
     storage = dataset_storage or InMemoryDatasetStorage()
     queue = job_queue or InMemoryResearchJobQueue()
-    idempotency = InMemoryIdempotencyStore()
+    idempotency = idempotency_store or InMemoryIdempotencyStore()
     rate_limiter = FixedWindowRateLimiter(limit=120, window_seconds=60)
     app = FastAPI(
         title="QROS SaaS API",
