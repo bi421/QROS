@@ -246,7 +246,7 @@ def create_app(
             storage_path = storage_path_for(tenant.workspace_id, dataset.id, digest)
             storage.put(storage_path, file.file)
             try:
-                persisted_dataset = datasets.create_dataset(dataset)
+                persisted_dataset = datasets.create_dataset(tenant.workspace_id, dataset)
                 version = datasets.create_version(
                     tenant.workspace_id,
                     DatasetVersion(
