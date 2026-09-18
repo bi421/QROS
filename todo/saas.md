@@ -19,8 +19,8 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [x] Reject evidence references that do not exist.
 - [x] Require a locked plan before evidence attachment.
 - [x] Add regression tests for the claim/evidence bridge.
-- [ ] Connect graph projection to Experiment/Run/Result/Validation/Finding traversal APIs.
-- [ ] Add first-class contradiction/replication edges without mutating historical artifacts.
+- [x] Connect graph projection to Experiment/Run/Result/Validation/Finding traversal APIs.
+- [x] Add first-class contradiction/replication edges without mutating historical artifacts.
 - [x] Add graph integrity and orphan detection gate.
 
 ## Phase 2 — Tenant-safe persistence
