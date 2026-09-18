@@ -1,14 +1,11 @@
-"""Governed binding between a planned method and an executable backend operation.
-
-The binding layer prevents the planner from becoming a symbolic-only registry:
-every executable method must declare the operation it maps to, the backend
-identity, and the trust guarantees required before execution.
-"""
+"""Governed binding between planned methods and executable QROS backends."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Mapping
+
+from researchos.quant_engine.interface import QuantComputationInterface
 
 
 @dataclass(frozen=True)
@@ -66,11 +63,42 @@ class ExecutionRegistry:
             )
 
 
+def registry_for_backend(
+    backend: QuantComputationInterface,
+    method_versions: Mapping[str, str] | None = None,
+) -> ExecutionRegistry:
+    """Derive executable research methods from a certified backend surface."""
+    capabilities = backend.capabilities()
+    versions = method_versions or {}
+    operation_to_method = {
+        "calculate_returns": "quant.calculate_returns.v1",
+        "calculate_volatility": "quant.calculate_volatility.v1",
+        "calculate_drawdown": "quant.calculate_drawdown.v1",
+        "calculate_statistics": "quant.calculate_statistics.v1",
+        "calculate_metrics": "quant.calculate_metrics.v1",
+        "calculate_performance_analytics": "quant.calculate_performance_analytics.v1",
+    }
+    bindings = tuple(
+        ExecutionBinding(
+            method_id=method_id,
+            method_version=versions.get(method_id, "1"),
+            operation=operation,
+            backend=capabilities.backend_name,
+            backend_version=capabilities.version,
+            deterministic=capabilities.deterministic,
+            requires_no_randomness=capabilities.no_randomness,
+        )
+        for operation, method_id in operation_to_method.items()
+        if capabilities.supports(operation)
+    )
+    return ExecutionRegistry(bindings)
+
+
 def validate_backend_capability(
     binding: ExecutionBinding,
     backend_capabilities: Mapping[str, object],
 ) -> None:
-    """Validate the minimum trust guarantees required by a binding."""
+    """Validate the trust guarantees required by an execution binding."""
     if not bool(backend_capabilities.get("deterministic", False)):
         raise ValueError(f"backend is not deterministic: {binding.backend}")
     if binding.requires_no_randomness and not bool(
@@ -84,4 +112,9 @@ def validate_backend_capability(
         )
 
 
-__all__ = ["ExecutionBinding", "ExecutionRegistry", "validate_backend_capability"]
+__all__ = [
+    "ExecutionBinding",
+    "ExecutionRegistry",
+    "registry_for_backend",
+    "validate_backend_capability",
+]
