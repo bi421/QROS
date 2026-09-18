@@ -1,7 +1,7 @@
 # QROS SaaS database contract
 
 **Target:** Supabase Postgres 17  
-**Status:** Implemented by migrations `202609170001_saas_core` through `202609170005_saas_fk_indexes` and verified on the active Supabase project.
+**Status:** Implemented by migrations through `202609180019_saas_result_rls` and verified on the active Supabase project.
 
 ## Tables
 
@@ -55,12 +55,33 @@ research_run
   dataset_version_id uuid FK dataset_version
   workflow_id text
   status text CHECK (queued|running|succeeded|failed|cancelled)
+  source_dataset_sha256 text
   attempt_count integer
   error_code text
   created_by uuid FK auth.users
   created_at timestamptz
   started_at timestamptz
   finished_at timestamptz
+
+research_run_result
+  id uuid PK
+  workspace_id uuid FK workspace
+  research_run_id uuid UNIQUE FK research_run
+  source_dataset_sha256 text
+  status text CHECK (SUCCEEDED|FAILED)
+  manifest_sha256 text
+  failures jsonb
+  created_at timestamptz
+
+research_run_artifact
+  id uuid PK
+  workspace_id uuid FK workspace
+  research_run_id uuid FK research_run
+  artifact_id text
+  kind text
+  content_sha256 text
+  created_at timestamptz
+  UNIQUE (research_run_id, artifact_id)
 
 artifact
   id uuid PK
