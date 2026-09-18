@@ -94,7 +94,9 @@ class SupabaseIdempotencyStore:
         }
         try:
             self._client.table("api_idempotency").insert(payload).execute()
-        except Exception:
+        except Exception as exc:
+            if getattr(exc, "code", None) != "23505":
+                raise
             existing = self.get(record.workspace_id, record.key)
             if existing is None:
                 raise
