@@ -124,6 +124,28 @@ class SupabaseResearchJobStore(ResearchJobStore):
             UUID(str(row["lease_token"])),
         )
 
+    def renew(
+        self,
+        workspace_id: UUID,
+        job_id: UUID,
+        lease_token: UUID,
+        lease_seconds: int,
+    ) -> WorkerLease:
+        result = self._client.rpc(
+            "renew_research_run",
+            {
+                "p_research_run_id": str(job_id),
+                "p_workspace_id": str(workspace_id),
+                "p_lease_token": str(lease_token),
+                "p_lease_seconds": lease_seconds,
+            },
+        ).execute()
+        rows = result.data or []
+        if len(rows) != 1:
+            raise RuntimeError("stale or invalid worker lease")
+        row = rows[0]
+        return WorkerLease(self._row_to_job(row), lease_token)
+
     def finish(
         self,
         workspace_id: UUID,
