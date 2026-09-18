@@ -200,8 +200,6 @@ class EvidenceRepository:
             child = next((row for row in rows if row[1] == child_hash), None)
             if child is None or parent_hash not in tuple(json.loads(child[4])):
                 return False
-            if relation not in LINEAGE_RELATIONS:
-                return False
             if relation not in {_default_relation(child[0]), "contradicts", "replicates"}:
                 return False
 
