@@ -85,6 +85,7 @@ cmake.build-type = "Release"
 wheel.packages = [
     "researchos",
     "researchos/engines/quant/python/cpp_quant_engine",
+    "financial_research_lab/src/financial_research_lab",
 ]
 
 [tool.scikit-build.cmake.define]
