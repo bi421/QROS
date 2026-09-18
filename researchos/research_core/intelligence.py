@@ -11,7 +11,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Mapping, Sequence
+from typing import Sequence
 
 
 class Decision(str, Enum):
