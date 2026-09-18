@@ -50,3 +50,18 @@ def test_in_memory_store_rejects_duplicate_content() -> None:
 
     with pytest.raises(ValueError, match="dataset content already exists"):
         store.create_version(dataset.workspace_id, second)
+
+
+def test_in_memory_store_rejects_version_write_from_other_workspace() -> None:
+    owner_workspace = uuid4()
+    other_workspace = uuid4()
+    dataset = Dataset(uuid4(), owner_workspace, "sample", uuid4())
+    store = InMemoryDatasetStore()
+    store.create_dataset(dataset)
+
+    version = DatasetVersion(
+        uuid4(), dataset.id, 1, "b" * 64, "path/b", 1, dataset.created_by
+    )
+
+    with pytest.raises(KeyError, match="dataset not found for workspace"):
+        store.create_version(other_workspace, version)
