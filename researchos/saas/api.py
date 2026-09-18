@@ -26,7 +26,12 @@ from researchos.saas.datasets import (
 )
 from researchos.saas.queue import InMemoryResearchJobQueue, ResearchJobQueue
 from researchos.saas.store import InMemoryResearchJobStore, ResearchJobStore
-from researchos.saas.idempotency import IdempotencyConflict, IdempotencyRecord, InMemoryIdempotencyStore, MAX_IDEMPOTENCY_KEY_LENGTH
+from researchos.saas.idempotency import (
+    IdempotencyConflict,
+    IdempotencyRecord,
+    InMemoryIdempotencyStore,
+    MAX_IDEMPOTENCY_KEY_LENGTH,
+)
 from researchos.saas.rate_limit import FixedWindowRateLimiter
 
 REQUEST_ID_HEADER = "X-Request-ID"
@@ -82,6 +87,17 @@ class DatasetResponse(BaseModel):
     name: str
     created_by: UUID
     version: DatasetVersion
+
+
+def _research_job_response(job: ResearchJob) -> ResearchJobResponse:
+    """Serialize the domain dataclass explicitly at the HTTP boundary."""
+    return ResearchJobResponse(
+        id=job.id,
+        workspace_id=job.workspace_id,
+        dataset_version_id=job.dataset_version_id,
+        workflow_id=job.workflow_id,
+        status=job.status,
+    )
 
 
 def create_app(
@@ -285,7 +301,7 @@ def create_app(
             except Exception:
                 pass
             raise HTTPException(status_code=503, detail="research job queue unavailable") from exc
-        body = ResearchJobResponse.model_validate(created).model_dump(mode="json")
+        body = _research_job_response(created).model_dump(mode="json")
         try:
             idempotency.put(IdempotencyRecord(tenant.workspace_id, idempotency_key, fingerprint, 202, body))
         except IdempotencyConflict as exc:
@@ -293,11 +309,11 @@ def create_app(
         return JSONResponse(status_code=202, content=body)
 
     @app.get("/v1/research-runs/{job_id}", response_model=ResearchJobResponse, tags=["research"])
-    def get_research_run(job_id: UUID, tenant: TenantContext = Depends(current_tenant)) -> ResearchJob:
+    def get_research_run(job_id: UUID, tenant: TenantContext = Depends(current_tenant)) -> ResearchJobResponse:
         job = store.get(tenant.workspace_id, job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="research run not found")
-        return job
+        return _research_job_response(job)
 
     return app
 
