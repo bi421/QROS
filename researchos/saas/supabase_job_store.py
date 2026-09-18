@@ -32,11 +32,14 @@ class SupabaseResearchJobStore(ResearchJobStore):
 
     def create_idempotent(
         self,
+        workspace_id: UUID,
         job: ResearchJob,
         idempotency_key: str,
         request_fingerprint: str,
         response_body: dict[str, object],
     ) -> tuple[ResearchJob, bool]:
+        if job.workspace_id != workspace_id:
+            raise ValueError("research job workspace does not match tenant")
         if job.created_by is None:
             raise ValueError("Supabase research jobs require created_by")
         result = self._client.rpc(
