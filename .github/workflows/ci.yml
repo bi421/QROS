@@ -51,7 +51,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install nanobind scikit-build-core pytest
+          python -m pip install nanobind scikit-build-core pytest numpy
       - name: Configure C++ Engine
         run: |
           cmake -S researchos/engines/quant \
