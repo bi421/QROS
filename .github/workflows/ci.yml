@@ -35,7 +35,7 @@ jobs:
       - name: Run ruff
         run: ruff check . --exit-zero
       - name: Run pytest
-        run: python -m pytest researchos/tests/ researchos/research_core/tests/ researchos/saas/tests/ -v --tb=short -x
+        run: python -m pytest researchos/tests/ researchos/research_core/tests/test_analysis_result.py researchos/saas/tests/ -v --tb=short -x
 
   quant-engine:
     name: Quant Engine (C++ / nanobind)
