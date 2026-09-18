@@ -18,7 +18,7 @@ class WorkerLease:
 
 
 class ResearchJobStore:
-    def create(self, job: ResearchJob) -> ResearchJob:
+    def create(self, workspace_id: UUID, job: ResearchJob) -> ResearchJob:
         raise NotImplementedError
 
     def create_idempotent(
@@ -93,7 +93,9 @@ class InMemoryResearchJobStore(ResearchJobStore):
         self._idempotency: dict[tuple[UUID, str], tuple[str, ResearchJob]] = {}
         self._results: dict[UUID, ResearchRunResultRecord] = {}
 
-    def create(self, job: ResearchJob) -> ResearchJob:
+    def create(self, workspace_id: UUID, job: ResearchJob) -> ResearchJob:
+        if job.workspace_id != workspace_id:
+            raise ValueError("research job workspace does not match tenant")
         with self._lock:
             if job.id in self._jobs:
                 raise ValueError("research job already exists")
