@@ -1,6 +1,7 @@
 """Worker boundary for asynchronous SaaS research execution."""
 from __future__ import annotations
 
+from threading import Event, Thread
 from typing import Protocol
 from uuid import UUID, uuid4
 
@@ -29,6 +30,16 @@ class ResearchWorker:
         self._executor = executor
         self._lease_seconds = lease_seconds
 
+    def _heartbeat(self, workspace_id, job_id, token, stop):
+        interval = max(1.0, self._lease_seconds / 3)
+        while not stop.wait(interval):
+            try:
+                self._store.renew(
+                    workspace_id, job_id, token, self._lease_seconds
+                )
+            except Exception:
+                return
+
     def run_once(
         self,
         workspace_id: UUID,
@@ -40,6 +51,13 @@ class ResearchWorker:
             owner=str(uuid4()),
             lease_seconds=self._lease_seconds,
         )
+        stop = Event()
+        heartbeat = Thread(
+            target=self._heartbeat,
+            args=(workspace_id, job.id, lease.token, stop),
+            daemon=True,
+        )
+        heartbeat.start()
         try:
             result = self._executor.execute(job_id)
         except Exception:
@@ -51,6 +69,10 @@ class ResearchWorker:
                 error_code="executor_error",
             )
             raise
+
+        finally:
+            stop.set()
+            heartbeat.join(timeout=1.0)
 
         target = (
             ResearchJobStatus.SUCCEEDED
