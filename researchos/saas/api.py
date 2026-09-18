@@ -33,7 +33,7 @@ from researchos.saas.idempotency import (
     InMemoryIdempotencyStore,
     MAX_IDEMPOTENCY_KEY_LENGTH,
 )
-from researchos.saas.rate_limit import FixedWindowRateLimiter
+from researchos.saas.rate_limit import FixedWindowRateLimiter, RateLimiter
 from researchos.saas.billing import (
     BillingEventConflict,
     BillingEventStore,
@@ -118,6 +118,7 @@ def create_app(
     idempotency_store: IdempotencyStore | None = None,
     billing_store: BillingEventStore | None = None,
     billing_webhook_secret: str | None = None,
+    rate_limiter: RateLimiter | None = None,
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
@@ -127,7 +128,7 @@ def create_app(
     storage = dataset_storage or InMemoryDatasetStorage()
     queue = job_queue or InMemoryResearchJobQueue()
     idempotency = idempotency_store or InMemoryIdempotencyStore()
-    rate_limiter = FixedWindowRateLimiter(limit=120, window_seconds=60)
+    limiter = rate_limiter or FixedWindowRateLimiter(limit=120, window_seconds=60)
     billing = billing_store
     app = FastAPI(
         title="QROS SaaS API",
@@ -142,7 +143,7 @@ def create_app(
     def require_rate_limit(request: Request, authorization: str | None) -> None:
         source = authorization or (request.client.host if request.client else "anonymous")
         principal = hashlib.sha256(source.encode()).hexdigest()
-        if not rate_limiter.allow(principal):
+        if not limiter.allow(principal):
             raise HTTPException(status_code=429, detail="rate limit exceeded")
 
     def request_fingerprint(payload: object) -> str:
