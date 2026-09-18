@@ -1,0 +1,607 @@
+QROS PYBIND11 FORENSIC AUDIT
+Date: 2026-09-17T21:16:02.1599029+08:00
+Root: C:\Users\User\Desktop\QROS
+HEAD: c69ad49bd25cd480924c0b61b2e2e0ee8c322b64
+Branch: feat/saas-research-core-20260917
+
+
+=== 1. GIT STATE ===
+HEAD:
+c69ad49bd25cd480924c0b61b2e2e0ee8c322b64
+BRANCH:
+feat/saas-research-core-20260917
+STATUS:
+ M .tmp-pr67
+?? .tmp-pr67_quarantine/
+?? qros_pybind11_forensic_audit.txt
+STASHES:
+stash@{0}: On feat/saas-research-core-20260917: QROS-before-full-pybind11-reset-20260917-211342
+stash@{1}: On main: QROS-local-work-before-pr70-switch-20260917
+stash@{2}: On chore/repository-hygiene-post-phase52: safety-before-cquant-canonical-sync-20260912
+stash@{3}: WIP on main: ff1302b test(phase52): cover blocked evidence report rendering
+stash@{4}: On feat/decision-pipeline-v1: local-ci-before-self-healing-sync
+stash@{5}: On feature/abstract-data-loader: security-fix-branch-reconcile
+
+=== 2. ACTIVE SOURCE TEXT SCAN ===
+ACTIVE TEXT HIT COUNT: 61
+C:\Users\User\Desktop\QROS\.github\workflows\ci.yml:68: name: Quant Engine (C++ / pybind11)
+C:\Users\User\Desktop\QROS\.github\workflows\ci.yml:89: # The checked-in CMakeLists.txt and bindings use pybind11, not nanobind.
+C:\Users\User\Desktop\QROS\.github\workflows\ci.yml:92: python -m pip install "pybind11>=2.11,<3" "scikit-build-core>=0.10,<0.12" "cmake>=3.28,<4"
+C:\Users\User\Desktop\QROS\.github\workflows\ci.yml:141: python -m pip install pytest ruff pybind11 scikit-build-core cmake
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:13: option(BUILD_PYTHON_BINDINGS "Build pybind11 Python bindings" OFF)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:44: find_package(pybind11 CONFIG QUIET)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:45: if(NOT pybind11_FOUND)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:46: # Discover the pybind11 CMake config installed with the active Python.
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:50: COMMAND "${Python3_EXECUTABLE}" -m pybind11 --cmakedir
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:51: OUTPUT_VARIABLE PYBIND11_CMAKE_DIR
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:53: RESULT_VARIABLE PYBIND11_CMAKE_RC
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:55: if(PYBIND11_CMAKE_RC EQUAL 0 AND PYBIND11_CMAKE_DIR)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:56: set(pybind11_DIR "${PYBIND11_CMAKE_DIR}" CACHE PATH
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:57: "pybind11 CMake config directory" FORCE)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:60: unset(pybind11_FOUND CACHE)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:61: find_package(pybind11 CONFIG QUIET)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:64: if(pybind11_FOUND)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:65: message(STATUS "pybind11 found: ${pybind11_INCLUDE_DIRS}")
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:66: # python3_add_library (used internally by pybind11_add_module) requires
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:69: pybind11_add_module(cpp_quant_backend
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:85: message(WARNING "pybind11 not found — Python bindings will NOT be built")
+C:\Users\User\Desktop\QROS\researchos\engines\quant\interface.py:9: A future C++ backend (C++20 + CMake + pybind11) can implement this same
+C:\Users\User\Desktop\QROS\researchos\engines\quant\python_bindings_dump.txt:1: #include <pybind11/pybind11.h>
+C:\Users\User\Desktop\QROS\researchos\engines\quant\python_bindings_dump.txt:2: #include <pybind11/stl.h>
+C:\Users\User\Desktop\QROS\researchos\engines\quant\python_bindings_dump.txt:6: namespace py = pybind11;
+C:\Users\User\Desktop\QROS\researchos\engines\quant\python_bindings_dump.txt:8: PYBIND11_MODULE(cpp_quant_core, m) {
+C:\Users\User\Desktop\QROS\researchos\engines\quant\setup.py:1: import pybind11
+C:\Users\User\Desktop\QROS\researchos\engines\quant\setup.py:7: include_dirs=[pybind11.get_include(), "include"],
+C:\Users\User\Desktop\QROS\researchos\engines\quant\bindings\CMakeLists.txt:12: find_package(pybind11 CONFIG REQUIRED)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\bindings\CMakeLists.txt:14: pybind11_add_module(cpp_quant_backend python_bindings.cpp)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\bindings\python_bindings.cpp:1: // pybind11 bindings exposing the C++ Quant Engine to Python.
+C:\Users\User\Desktop\QROS\researchos\engines\quant\bindings\python_bindings.cpp:15: #include <pybind11/pybind11.h>
+C:\Users\User\Desktop\QROS\researchos\engines\quant\bindings\python_bindings.cpp:16: #include <pybind11/stl.h>
+C:\Users\User\Desktop\QROS\researchos\engines\quant\bindings\python_bindings.cpp:17: #include <pybind11/functional.h>
+C:\Users\User\Desktop\QROS\researchos\engines\quant\bindings\python_bindings.cpp:18: #include <pybind11/pytypes.h>
+C:\Users\User\Desktop\QROS\researchos\engines\quant\bindings\python_bindings.cpp:37: namespace py = pybind11;
+C:\Users\User\Desktop\QROS\researchos\engines\quant\bindings\python_bindings.cpp:566: PYBIND11_MODULE(cpp_quant_backend, m) {
+C:\Users\User\Desktop\QROS\researchos\engines\quant\docs\PHASE_4_5_BASELINE_REPORT.md:135: - These timings include pybind11 copy overhead (input list -> vector<double>
+C:\Users\User\Desktop\QROS\researchos\engines\quant\docs\PHASE_4_5_BASELINE_REPORT.md:161: 3. pybind11 copy overhead caps small-op speedup; calculate_returns at 10M is
+C:\Users\User\Desktop\QROS\researchos\engines\quant\docs\PHASE_4_5_CPP_PERFORMANCE_AUDIT.md:6: pybind11 shim in `bindings/python_bindings.cpp`. It does **not** touch trading
+C:\Users\User\Desktop\QROS\researchos\engines\quant\docs\PHASE_4_5_CPP_PERFORMANCE_AUDIT.md:60: - `bindings/python_bindings.cpp` — pybind11 shim. `CppQuantBackend`
+C:\Users\User\Desktop\QROS\researchos\engines\quant\docs\PHASE_4_5_CPP_PERFORMANCE_AUDIT.md:75: | 5 | `calculate_returns` (pybind) | `bindings/python_bindings.cpp:387` | Phase 4.3: **0.42x** C++/Python @100k — bound by pybind11 `py::cast<std::vector<double>>` copy + per-call dispatch, not compute. |
+C:\Users\User\Desktop\QROS\researchos\engines\quant\docs\PHASE_4_5_CPP_PERFORMANCE_AUDIT.md:101: - **pybind copies:** `get_double_list` / `py::cast<std::vector<double>>`
+C:\Users\User\Desktop\QROS\researchos\engines\quant\docs\PHASE_4_5_CPP_PERFORMANCE_AUDIT.md:166: | `calculate_returns` (per-call pybind) | 0.42x (overhead-bound) | zero-copy `py::array_t` + avoid vector copy ? cross-even at n=10k |
+C:\Users\User\Desktop\QROS\researchos\engines\quant\docs\PHASE_4_5_CPP_PERFORMANCE_AUDIT.md:173: delivers single-digit-x on the aggregate paths. The pybind copy overhead fix
+C:\Users\User\Desktop\QROS\researchos\engines\quant\docs\PHASE_4_5_CPP_PERFORMANCE_AUDIT.md:194: serialization, plus the pybind copy overhead on small per-call ops. Compiler
+C:\Users\User\Desktop\QROS\researchos\engines\quant\docs\PHASE_4_5_STEP3_MEMORY_REPORT.md:149: 3. **pybind11 marshalling** caps small-op speedup (10M doubles across the
+C:\Users\User\Desktop\QROS\researchos\engines\quant\include\quant_engine.hpp:20: *       +-- CppQuantBackend (this — C++20 via pybind11)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\python\bindings.cpp:1: #include <pybind11/pybind11.h>
+C:\Users\User\Desktop\QROS\researchos\engines\quant\python\bindings.cpp:2: #include <pybind11/stl.h>
+C:\Users\User\Desktop\QROS\researchos\engines\quant\python\bindings.cpp:5: namespace py = pybind11;
+C:\Users\User\Desktop\QROS\researchos\engines\quant\python\bindings.cpp:7: PYBIND11_MODULE(cpp_quant, m) {
+C:\Users\User\Desktop\QROS\researchos\engines\quant\python\bridge_interface.h:5: // computation engine (pybind11 adapter).
+C:\Users\User\Desktop\QROS\researchos\engines\quant\python\bridge_interface.h:12: // with a stable numeric code. The pybind11 adapter translates BridgeError into
+C:\Users\User\Desktop\QROS\researchos\engines\quant\python\bridge_models.h:4: // Bridge data models shared by the C++ backend, the pybind11 adapter, and the
+C:\Users\User\Desktop\QROS\researchos\experiments\runner.py:91: - C++ Quant Engine (future) via pybind11
+C:\Users\User\Desktop\QROS\researchos\quant_engine\interface.py:9: A future C++ backend (C++20 + CMake + pybind11) can implement this same
+C:\Users\User\Desktop\QROS\researchos\quant_engine\__init__.py:16: +-- CppQuantBackend (future: C++20 + CMake + pybind11)
+C:\Users\User\Desktop\QROS\benchmarks\benchmark_runtime.py:29: print(f"Binary: {p.stat().st_size / 1024:.0f}KB (pybind11 was 684KB+26MB PDB)")
+C:\Users\User\Desktop\QROS\benchmarks\memory_final.py:22: print(f"{n} values: {before:.1f} -> {after:.1f} MB delta {after - before:+.2f} MB | nanobind 1.1x vs pybind11 2.5x")
+C:\Users\User\Desktop\QROS\benchmarks\memory_profiling.py:29: print(f"{n} candles: RSS {before:.1f} -> {after:.1f} MB delta {after - before:+.1f} MB | overhead 1.1x nanobind vs 2.5x pybind11")
+
+=== 3. GIT TRACKED FILE SCAN ===
+TRACKED FILES WITH PYBIND REFERENCES: 30
+.github/workflows/ci.yml
+benchmarks/benchmark_runtime.py
+benchmarks/memory_final.py
+benchmarks/memory_profiling.py
+docs/architecture/hardening/DEPENDENCY_GRAPH.md
+docs/architecture/RESEARCHOS_TECHNOLOGY_ECOSYSTEM_2026.md
+docs/archive/architecture_history/COMPUTE_BACKEND_ARCHITECTURE.md
+docs/archive/audits/PHASE4_RELEASE_AUDIT.md
+docs/archive/audits/QUANT_INFRASTRUCTURE_AUDIT.md
+docs/archive/completed_tasks/CPP_BACKTEST_ENGINE_REPORT.md
+docs/archive/completed_tasks/CPP_PYTHON_BRIDGE_REPORT.md
+docs/archive/phase_reports/PHASE_4_5_PERFORMANCE_INTEGRATION_REPORT.md
+docs/build_cpp.md
+docs/REPOSITORY_FORENSIC_AUDIT.md
+researchos/engines/quant/bindings/CMakeLists.txt
+researchos/engines/quant/bindings/python_bindings.cpp
+researchos/engines/quant/CMakeLists.txt
+researchos/engines/quant/docs/PHASE_4_5_BASELINE_REPORT.md
+researchos/engines/quant/docs/PHASE_4_5_CPP_PERFORMANCE_AUDIT.md
+researchos/engines/quant/docs/PHASE_4_5_STEP3_MEMORY_REPORT.md
+researchos/engines/quant/include/quant_engine.hpp
+researchos/engines/quant/interface.py
+researchos/engines/quant/python/bindings.cpp
+researchos/engines/quant/python/bridge_interface.h
+researchos/engines/quant/python/bridge_models.h
+researchos/engines/quant/python_bindings_dump.txt
+researchos/engines/quant/setup.py
+researchos/experiments/runner.py
+researchos/quant_engine/__init__.py
+researchos/quant_engine/interface.py
+
+=== 4. CMAKE FORENSICS ===
+CMAKE HIT COUNT: 57
+C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\CMakeLists.txt:13: option(BUILD_PYTHON_BINDINGS "Build pybind11 Python bindings" OFF)
+C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\CMakeLists.txt:44: find_package(pybind11 CONFIG QUIET)
+C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\CMakeLists.txt:45: if(NOT pybind11_FOUND)
+C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\CMakeLists.txt:46: # Discover the pybind11 CMake config installed with the active Python.
+C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\CMakeLists.txt:50: COMMAND "${Python3_EXECUTABLE}" -m pybind11 --cmakedir
+C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\CMakeLists.txt:51: OUTPUT_VARIABLE PYBIND11_CMAKE_DIR
+C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\CMakeLists.txt:53: RESULT_VARIABLE PYBIND11_CMAKE_RC
+C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\CMakeLists.txt:55: if(PYBIND11_CMAKE_RC EQUAL 0 AND PYBIND11_CMAKE_DIR)
+C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\CMakeLists.txt:56: set(pybind11_DIR "${PYBIND11_CMAKE_DIR}" CACHE PATH
+C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\CMakeLists.txt:57: "pybind11 CMake config directory" FORCE)
+C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\CMakeLists.txt:60: unset(pybind11_FOUND CACHE)
+C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\CMakeLists.txt:61: find_package(pybind11 CONFIG QUIET)
+C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\CMakeLists.txt:64: if(pybind11_FOUND)
+C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\CMakeLists.txt:65: message(STATUS "pybind11 found: ${pybind11_INCLUDE_DIRS}")
+C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\CMakeLists.txt:66: # python3_add_library (used internally by pybind11_add_module) requires
+C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\CMakeLists.txt:69: pybind11_add_module(cpp_quant_backend
+C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\CMakeLists.txt:85: message(WARNING "pybind11 not found — Python bindings will NOT be built")
+C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\bindings\CMakeLists.txt:12: find_package(pybind11 CONFIG REQUIRED)
+C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\bindings\CMakeLists.txt:14: pybind11_add_module(cpp_quant_backend python_bindings.cpp)
+C:\Users\User\Desktop\QROS\.tmp-pr67_quarantine\researchos\engines\quant\CMakeLists.txt:13: option(BUILD_PYTHON_BINDINGS "Build pybind11 Python bindings" OFF)
+C:\Users\User\Desktop\QROS\.tmp-pr67_quarantine\researchos\engines\quant\CMakeLists.txt:44: find_package(pybind11 CONFIG QUIET)
+C:\Users\User\Desktop\QROS\.tmp-pr67_quarantine\researchos\engines\quant\CMakeLists.txt:45: if(NOT pybind11_FOUND)
+C:\Users\User\Desktop\QROS\.tmp-pr67_quarantine\researchos\engines\quant\CMakeLists.txt:46: # Discover the pybind11 CMake config installed with the active Python.
+C:\Users\User\Desktop\QROS\.tmp-pr67_quarantine\researchos\engines\quant\CMakeLists.txt:50: COMMAND "${Python3_EXECUTABLE}" -m pybind11 --cmakedir
+C:\Users\User\Desktop\QROS\.tmp-pr67_quarantine\researchos\engines\quant\CMakeLists.txt:51: OUTPUT_VARIABLE PYBIND11_CMAKE_DIR
+C:\Users\User\Desktop\QROS\.tmp-pr67_quarantine\researchos\engines\quant\CMakeLists.txt:53: RESULT_VARIABLE PYBIND11_CMAKE_RC
+C:\Users\User\Desktop\QROS\.tmp-pr67_quarantine\researchos\engines\quant\CMakeLists.txt:55: if(PYBIND11_CMAKE_RC EQUAL 0 AND PYBIND11_CMAKE_DIR)
+C:\Users\User\Desktop\QROS\.tmp-pr67_quarantine\researchos\engines\quant\CMakeLists.txt:56: set(pybind11_DIR "${PYBIND11_CMAKE_DIR}" CACHE PATH
+C:\Users\User\Desktop\QROS\.tmp-pr67_quarantine\researchos\engines\quant\CMakeLists.txt:57: "pybind11 CMake config directory" FORCE)
+C:\Users\User\Desktop\QROS\.tmp-pr67_quarantine\researchos\engines\quant\CMakeLists.txt:60: unset(pybind11_FOUND CACHE)
+C:\Users\User\Desktop\QROS\.tmp-pr67_quarantine\researchos\engines\quant\CMakeLists.txt:61: find_package(pybind11 CONFIG QUIET)
+C:\Users\User\Desktop\QROS\.tmp-pr67_quarantine\researchos\engines\quant\CMakeLists.txt:64: if(pybind11_FOUND)
+C:\Users\User\Desktop\QROS\.tmp-pr67_quarantine\researchos\engines\quant\CMakeLists.txt:65: message(STATUS "pybind11 found: ${pybind11_INCLUDE_DIRS}")
+C:\Users\User\Desktop\QROS\.tmp-pr67_quarantine\researchos\engines\quant\CMakeLists.txt:66: # python3_add_library (used internally by pybind11_add_module) requires
+C:\Users\User\Desktop\QROS\.tmp-pr67_quarantine\researchos\engines\quant\CMakeLists.txt:69: pybind11_add_module(cpp_quant_backend
+C:\Users\User\Desktop\QROS\.tmp-pr67_quarantine\researchos\engines\quant\CMakeLists.txt:85: message(WARNING "pybind11 not found — Python bindings will NOT be built")
+C:\Users\User\Desktop\QROS\.tmp-pr67_quarantine\researchos\engines\quant\bindings\CMakeLists.txt:12: find_package(pybind11 CONFIG REQUIRED)
+C:\Users\User\Desktop\QROS\.tmp-pr67_quarantine\researchos\engines\quant\bindings\CMakeLists.txt:14: pybind11_add_module(cpp_quant_backend python_bindings.cpp)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:13: option(BUILD_PYTHON_BINDINGS "Build pybind11 Python bindings" OFF)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:44: find_package(pybind11 CONFIG QUIET)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:45: if(NOT pybind11_FOUND)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:46: # Discover the pybind11 CMake config installed with the active Python.
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:50: COMMAND "${Python3_EXECUTABLE}" -m pybind11 --cmakedir
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:51: OUTPUT_VARIABLE PYBIND11_CMAKE_DIR
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:53: RESULT_VARIABLE PYBIND11_CMAKE_RC
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:55: if(PYBIND11_CMAKE_RC EQUAL 0 AND PYBIND11_CMAKE_DIR)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:56: set(pybind11_DIR "${PYBIND11_CMAKE_DIR}" CACHE PATH
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:57: "pybind11 CMake config directory" FORCE)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:60: unset(pybind11_FOUND CACHE)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:61: find_package(pybind11 CONFIG QUIET)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:64: if(pybind11_FOUND)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:65: message(STATUS "pybind11 found: ${pybind11_INCLUDE_DIRS}")
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:66: # python3_add_library (used internally by pybind11_add_module) requires
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:69: pybind11_add_module(cpp_quant_backend
+C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt:85: message(WARNING "pybind11 not found — Python bindings will NOT be built")
+C:\Users\User\Desktop\QROS\researchos\engines\quant\bindings\CMakeLists.txt:12: find_package(pybind11 CONFIG REQUIRED)
+C:\Users\User\Desktop\QROS\researchos\engines\quant\bindings\CMakeLists.txt:14: pybind11_add_module(cpp_quant_backend python_bindings.cpp)
+
+=== 5. PYTHON PACKAGING ===
+CLEAN: pyproject.toml
+
+=== 6. GITHUB ACTIONS ===
+FOUND: C:\Users\User\Desktop\QROS\.github\workflows\ci.yml
+  68: name: Quant Engine (C++ / pybind11)
+  89: # The checked-in CMakeLists.txt and bindings use pybind11, not nanobind.
+  92: python -m pip install "pybind11>=2.11,<3" "scikit-build-core>=0.10,<0.12" "cmake>=3.28,<4"
+  141: python -m pip install pytest ruff pybind11 scikit-build-core cmake
+
+=== 7. PYTHON ENVIRONMENT FORENSICS ===
+python:
+Python 3.12.10
+python executable:
+C:\Users\User\AppData\Local\Python\pythoncore-3.12-64\python.exe
+pip:
+pip 26.2.1 from C:\Users\User\AppData\Local\Python\pythoncore-3.12-64\Lib\site-packages\pip (python 3.12)
+
+pybind11 import spec:
+None
+nanobind:
+3.0.1
+C:\Users\User\AppData\Local\Python\pythoncore-3.12-64\Lib\site-packages\nanobind\__init__.py
+pip show pybind11:
+WARNING: Package(s) not found: pybind11
+pip list matching bind:
+nanobind           3.0.1
+
+=== 8. PYTHON INSTALLATION DISCOVERY ===
+where python:
+C:\Users\User\AppData\Local\Python\bin\python.exe
+C:\Users\User\AppData\Local\Microsoft\WindowsApps\python.exe
+where pip:
+C:\Users\User\AppData\Local\Python\bin\pip.exe
+PATH entries containing Python:
+C:\Users\User\AppData\Local\Programs\Python\Launcher
+C:\Users\User\AppData\Local\Python\bin
+
+=== 9. LOCAL PYBIND DIRECTORY FORENSICS ===
+Scanning: C:\Users\User\AppData\Local\Python
+Scanning: C:\Users\User\AppData\Roaming\Python
+Scanning: C:\Users\User\.local
+Scanning: C:\Users\User\AppData\Local\Programs
+Scanning: C:\Users\User\AppData\Local\pip
+Scanning: C:\Users\User\Desktop\QROS\.venv
+
+=== 10. BUILD / CMAKE CACHE FORENSICS ===
+Scanning build root: researchos\engines\quant
+FOUND IN: C:\Users\User\Desktop\QROS\researchos\engines\quant\CMakeLists.txt
+  13: option(BUILD_PYTHON_BINDINGS "Build pybind11 Python bindings" OFF)
+  44: find_package(pybind11 CONFIG QUIET)
+  45: if(NOT pybind11_FOUND)
+  46: # Discover the pybind11 CMake config installed with the active Python.
+  50: COMMAND "${Python3_EXECUTABLE}" -m pybind11 --cmakedir
+  51: OUTPUT_VARIABLE PYBIND11_CMAKE_DIR
+  53: RESULT_VARIABLE PYBIND11_CMAKE_RC
+  55: if(PYBIND11_CMAKE_RC EQUAL 0 AND PYBIND11_CMAKE_DIR)
+  56: set(pybind11_DIR "${PYBIND11_CMAKE_DIR}" CACHE PATH
+  57: "pybind11 CMake config directory" FORCE)
+  60: unset(pybind11_FOUND CACHE)
+  61: find_package(pybind11 CONFIG QUIET)
+  64: if(pybind11_FOUND)
+  65: message(STATUS "pybind11 found: ${pybind11_INCLUDE_DIRS}")
+  66: # python3_add_library (used internally by pybind11_add_module) requires
+  69: pybind11_add_module(cpp_quant_backend
+  85: message(WARNING "pybind11 not found — Python bindings will NOT be built")
+FOUND IN: C:\Users\User\Desktop\QROS\researchos\engines\quant\bindings\CMakeLists.txt
+  12: find_package(pybind11 CONFIG REQUIRED)
+  14: pybind11_add_module(cpp_quant_backend python_bindings.cpp)
+Scanning build root: .tmp-pr67
+FOUND IN: C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\CMakeLists.txt
+  13: option(BUILD_PYTHON_BINDINGS "Build pybind11 Python bindings" OFF)
+  44: find_package(pybind11 CONFIG QUIET)
+  45: if(NOT pybind11_FOUND)
+  46: # Discover the pybind11 CMake config installed with the active Python.
+  50: COMMAND "${Python3_EXECUTABLE}" -m pybind11 --cmakedir
+  51: OUTPUT_VARIABLE PYBIND11_CMAKE_DIR
+  53: RESULT_VARIABLE PYBIND11_CMAKE_RC
+  55: if(PYBIND11_CMAKE_RC EQUAL 0 AND PYBIND11_CMAKE_DIR)
+  56: set(pybind11_DIR "${PYBIND11_CMAKE_DIR}" CACHE PATH
+  57: "pybind11 CMake config directory" FORCE)
+  60: unset(pybind11_FOUND CACHE)
+  61: find_package(pybind11 CONFIG QUIET)
+  64: if(pybind11_FOUND)
+  65: message(STATUS "pybind11 found: ${pybind11_INCLUDE_DIRS}")
+  66: # python3_add_library (used internally by pybind11_add_module) requires
+  69: pybind11_add_module(cpp_quant_backend
+  85: message(WARNING "pybind11 not found — Python bindings will NOT be built")
+FOUND IN: C:\Users\User\Desktop\QROS\.tmp-pr67\researchos\engines\quant\bindings\CMakeLists.txt
+  12: find_package(pybind11 CONFIG REQUIRED)
+  14: pybind11_add_module(cpp_quant_backend python_bindings.cpp)
+
+=== 11. NATIVE BINARY FORENSICS ===
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\benchmarks\Debug\quant_engine_bench.exe
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\benchmarks\quant_engine_bench.dir\Debug\benchmark_main.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\CMakeFiles\4.4.0\CompilerIdC\CompilerIdC.exe
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\CMakeFiles\4.4.0\CompilerIdC\Debug\CMakeCCompilerId.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\CMakeFiles\4.4.0\CompilerIdCXX\CompilerIdCXX.exe
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\CMakeFiles\4.4.0\CompilerIdCXX\Debug\CMakeCXXCompilerId.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\cpp_quant_backend.dir\Debug\python_bindings.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\cpp_quant_fast_backend.dir\Debug\fast_numeric_bindings.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\Debug\cpp_quant_backend.lib
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\Debug\cpp_quant_fast_backend.lib
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\Debug\nanobind-static.lib
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\Debug\quant_engine.lib
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\lib\Debug\gmock.lib
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\lib\Debug\gmock_main.lib
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\lib\Debug\gtest.lib
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\lib\Debug\gtest_main.lib
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\nanobind-static.dir\Debug\common.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\nanobind-static.dir\Debug\error.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\nanobind-static.dir\Debug\implicit.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\nanobind-static.dir\Debug\nb_datetime.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\nanobind-static.dir\Debug\nb_enum.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\nanobind-static.dir\Debug\nb_func.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\nanobind-static.dir\Debug\nb_internals.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\nanobind-static.dir\Debug\nb_ndarray.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\nanobind-static.dir\Debug\nb_static_property.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\nanobind-static.dir\Debug\nb_type.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\nanobind-static.dir\Debug\trampoline.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\backtest_engine.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\bridge.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\config.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\correlation.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\data_loader.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\descriptive.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\engine.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\error.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\event_replay.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\fast_numeric.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\historical_iterator.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\logger.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\macd.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\market_data.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\market_data_engine.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\metrics.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\monte_carlo.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\multi_feature_strategy.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\ohlcv_container.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\optimizer.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\order_book.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\parameter_space.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\paths.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\performance.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\performance_analyzer.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\position.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\quant_engine.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\regression.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\research_runner.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\risk.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\rng.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\rolling.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\rsi.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\rsi_macd_strategy.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\serialization.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\simulation.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\statistics.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\strategy_hash.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\strategy_kernel.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\timeframe_aggregator.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\time_index.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\trade_book.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\trade_result.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\types.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\quant_engine.dir\Debug\validation.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\Debug\quant_engine_tests.exe
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\run_tests.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_backtest.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_backtest_integration.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_bridge_core.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_bridge_engine.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_bridge_validation.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_engine.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_error_result.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_event_replay.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_fast_numeric.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_macd.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_market.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_market_data.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_market_data_iface.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_multi_feature_strategy.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_performance_analyzer.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_regression.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_research_optimizer.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_rolling.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_rsi.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_rsi_macd_strategy.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_serialization.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_simulation.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\tests\quant_engine_tests.dir\Debug\test_strategy_kernel.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\_deps\googletest-build\googlemock\gmock.dir\Debug\gmock-all.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\_deps\googletest-build\googlemock\gmock.dir\Debug\gtest-all.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\_deps\googletest-build\googlemock\gmock_main.dir\Debug\gmock-all.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\_deps\googletest-build\googlemock\gmock_main.dir\Debug\gmock_main.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\_deps\googletest-build\googlemock\gmock_main.dir\Debug\gtest-all.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\_deps\googletest-build\googletest\gtest.dir\Debug\gtest-all.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\build\_deps\googletest-build\googletest\gtest_main.dir\Debug\gtest_main.obj
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\python\cpp_quant_engine\cpp_quant_backend.cp312-win_amd64.pyd
+  no pybind ASCII string
+Binary: C:\Users\User\Desktop\QROS\.tmp-pr67\cpp_quant_engine\python\cpp_quant_engine\cpp_quant_fast_backend.cp312-win_amd64.pyd
+  no pybind ASCII string
+
+=== 12. NATIVE TOOLCHAIN SYMBOL CHECK ===
+
+=== 13. GIT HISTORY FORENSICS ===
+Historical commits mentioning pybind11:
+54353fa (refs/stash) On feat/saas-research-core-20260917: QROS-before-full-pybind11-reset-20260917-211342
+47992a2 Phase 4.5: C++ performance integration — connect Regression & RollingWindow via bridge
+Historical file names mentioning pybind11:
+
+=== 14. CURRENT GIT OBJECT CONTENT SCAN ===
+CURRENT HEAD CONTAINS PYBIND REFERENCES:
+HEAD:.github/workflows/ci.yml:68:    name: Quant Engine (C++ / pybind11)
+HEAD:.github/workflows/ci.yml:89:          # The checked-in CMakeLists.txt and bindings use pybind11, not nanobind.
+HEAD:.github/workflows/ci.yml:92:          python -m pip install "pybind11>=2.11,<3" "scikit-build-core>=0.10,<0.12" "cmake>=3.28,<4"
+HEAD:.github/workflows/ci.yml:141:          python -m pip install pytest ruff pybind11 scikit-build-core cmake
+HEAD:benchmarks/benchmark_runtime.py:29:    print(f"Binary: {p.stat().st_size / 1024:.0f}KB (pybind11 was 684KB+26MB PDB)")
+HEAD:benchmarks/memory_final.py:22:    print(f"{n} values: {before:.1f} -> {after:.1f} MB delta {after - before:+.2f} MB | nanobind 1.1x vs pybind11 2.5x")
+HEAD:benchmarks/memory_profiling.py:29:    print(f"{n} candles: RSS {before:.1f} -> {after:.1f} MB delta {after - before:+.1f} MB | overhead 1.1x nanobind vs 2.5x pybind11")
+HEAD:docs/REPOSITORY_FORENSIC_AUDIT.md:371:- `cpp_quant_engine/python/` has 0% test coverage (pybind11 bridge layer)
+HEAD:docs/REPOSITORY_FORENSIC_AUDIT.md:453:- `cpp_quant_engine/python/` — pybind11 bridge (requires compiled C++ module)
+HEAD:docs/architecture/RESEARCHOS_TECHNOLOGY_ECOSYSTEM_2026.md:22:| Python/C++ binding | nanobind or pybind11 | explicit bridge | one canonical binding strategy per engine |
+HEAD:docs/architecture/hardening/DEPENDENCY_GRAPH.md:62:- `researchos/quant_engine/research_cpp_backend.py:73` — dynamic import of the compiled pybind11 module with Python-reference fallback (warning, not error). **Only dynamic import boundary in the codebase.**
+HEAD:docs/archive/architecture_history/COMPUTE_BACKEND_ARCHITECTURE.md:228:The certification layer makes a future C++ backend (C++20 + CMake + pybind11)
+HEAD:docs/archive/audits/PHASE4_RELEASE_AUDIT.md:113:- `bindings/python_bindings.cpp` — pybind11 module (`Backend` stable contract +
+HEAD:docs/archive/audits/PHASE4_RELEASE_AUDIT.md:154:        ¦  cpp_quant_engine (Python bridge) + pybind11        -- Phase 4.4
+HEAD:docs/archive/audits/PHASE4_RELEASE_AUDIT.md:235:2. **pybind marshalling overhead** — small per-call ops are dispatch-bound; the
+HEAD:docs/archive/audits/QUANT_INFRASTRUCTURE_AUDIT.md:57:¦                          +-- CppQuantBackend     (FUTURE, pybind11 seam)   ¦
+HEAD:docs/archive/audits/QUANT_INFRASTRUCTURE_AUDIT.md:66:¦                          +-- CppExperimentRunner  (FUTURE, pybind11 seam)  ¦
+HEAD:docs/archive/audits/QUANT_INFRASTRUCTURE_AUDIT.md:93:¦  bindings/    pybind11 bindings (BUILD_BINDINGS=OFF by default)            ¦
+HEAD:docs/archive/audits/QUANT_INFRASTRUCTURE_AUDIT.md:153:| M7 | **C++ ? Python bridge (pybind11, active)** | The seam exists on both sides (`set_backend()`, `AbstractExperimentRunner`) but no compiled module. Phase 8. |
+HEAD:docs/archive/audits/QUANT_INFRASTRUCTURE_AUDIT.md:209:3. **Python side:** implement `CppQuantBackend(QuantComputationInterface)` that calls the pybind11 module; inject via `HistoricalSimulationEngine.set_backend()` (simulation.py:68). Implement `CppExperimentRunner(AbstractExperimentRunner)` for the experiments layer.
+HEAD:docs/archive/completed_tasks/CPP_BACKTEST_ENGINE_REPORT.md:216:  `BUILD_BENCHMARKS` + `add_subdirectory(benchmarks)`; pybind11 target renamed
+HEAD:docs/archive/completed_tasks/CPP_PYTHON_BRIDGE_REPORT.md:28:C++ quant engine to the future ResearchOS Python layer through a pybind11
+HEAD:docs/archive/completed_tasks/CPP_PYTHON_BRIDGE_REPORT.md:35:1. **Stable numeric error codes** shared byte-for-byte between C++, pybind11,
+HEAD:docs/archive/completed_tasks/CPP_PYTHON_BRIDGE_REPORT.md:52:| 3 | pybind11 module `cpp_quant_backend` (`Backend` + legacy `CppQuantBackend`) | Done |
+HEAD:docs/archive/completed_tasks/CPP_PYTHON_BRIDGE_REPORT.md:75: ¦  cpp_quant_engine.cpp_quant_backend  (pybind11 .pyd, 3.3 MB)      ¦
+HEAD:docs/archive/completed_tasks/CPP_PYTHON_BRIDGE_REPORT.md:116:### 5.4 pybind11 Module — `bindings/python_bindings.cpp`
+HEAD:docs/archive/completed_tasks/CPP_PYTHON_BRIDGE_REPORT.md:132:- `backend.py` — `CppQuantEngineBackend` typed facade with hash verification (`HashMismatchError` on mismatch); `_native_call` normalizes pybind11 cast failures to `InvalidTypeError` while letting typed `BridgeError`s through; facades `Statistics`, `Risk`, `Simulation`, `BacktestEngine`; `default_backend()`.
+HEAD:docs/archive/completed_tasks/CPP_PYTHON_BRIDGE_REPORT.md:181:- `cpp_quant_backend.cp314-win_amd64.pyd` (˜3.3 MB) built (MSVC 17.14.51, pybind11 3.0.4, Python 3.14.6) directly into `python/cpp_quant_engine/`.
+HEAD:docs/archive/completed_tasks/CPP_PYTHON_BRIDGE_REPORT.md:186:- Root `CMakeLists.txt`: added `python/` to the `quant_engine` target include dirs; `BUILD_PYTHON_BINDINGS` branch configures `find_package(pybind11 CONFIG)` (with `python -m pybind11 --cmakedir` fallback) and `find_package(Python3 COMPONENTS Development)` before `pybind11_add_module` (required for `python3_add_library`); target `cpp_quant_backend` links `quant_engine`; `LIBRARY_OUTPUT_DIRECTORY` / `_DEBUG` / `_RELEASE` set so the `.pyd` lands directly in `python/cpp_quant_engine/`.
+HEAD:docs/archive/completed_tasks/CPP_PYTHON_BRIDGE_REPORT.md:188:- pybind11 3.x note: `exception<T>` no longer exposes `def_property_readonly`; errors are translated with `register_exception_translator` instead.
+HEAD:docs/archive/phase_reports/PHASE_4_5_PERFORMANCE_INTEGRATION_REPORT.md:41:- `cpp_quant_engine/bindings/python_bindings.cpp` — pybind11 `CppQuantBackend`
+HEAD:docs/archive/phase_reports/PHASE_4_5_PERFORMANCE_INTEGRATION_REPORT.md:54:Exposed on the `CppQuantBackend` pybind11 shim (after `z_score`):
+HEAD:docs/build_cpp.md:12:- **pybind11** >= 2.10
+HEAD:docs/build_cpp.md:15:### Installing pybind11
+HEAD:docs/build_cpp.md:18:pip install pybind11
+HEAD:docs/build_cpp.md:54:requires = ["setuptools>=68.0", "wheel", "scikit-build-core>=0.10", "pybind11>=2.10"]
+HEAD:docs/build_cpp.md:58:optional-dependencies = ["cpp"] = ["pybind11>=2.10"]
+HEAD:researchos/engines/quant/CMakeLists.txt:13:option(BUILD_PYTHON_BINDINGS "Build pybind11 Python bindings" OFF)
+HEAD:researchos/engines/quant/CMakeLists.txt:44:    find_package(pybind11 CONFIG QUIET)
+HEAD:researchos/engines/quant/CMakeLists.txt:45:    if(NOT pybind11_FOUND)
+HEAD:researchos/engines/quant/CMakeLists.txt:46:        # Discover the pybind11 CMake config installed with the active Python.
+HEAD:researchos/engines/quant/CMakeLists.txt:50:                COMMAND "${Python3_EXECUTABLE}" -m pybind11 --cmakedir
+HEAD:researchos/engines/quant/CMakeLists.txt:51:                OUTPUT_VARIABLE PYBIND11_CMAKE_DIR
+HEAD:researchos/engines/quant/CMakeLists.txt:53:                RESULT_VARIABLE PYBIND11_CMAKE_RC
+HEAD:researchos/engines/quant/CMakeLists.txt:55:            if(PYBIND11_CMAKE_RC EQUAL 0 AND PYBIND11_CMAKE_DIR)
+HEAD:researchos/engines/quant/CMakeLists.txt:56:                set(pybind11_DIR "${PYBIND11_CMAKE_DIR}" CACHE PATH
+HEAD:researchos/engines/quant/CMakeLists.txt:57:                    "pybind11 CMake config directory" FORCE)
+HEAD:researchos/engines/quant/CMakeLists.txt:60:        unset(pybind11_FOUND CACHE)
+HEAD:researchos/engines/quant/CMakeLists.txt:61:        find_package(pybind11 CONFIG QUIET)
+HEAD:researchos/engines/quant/CMakeLists.txt:64:    if(pybind11_FOUND)
+HEAD:researchos/engines/quant/CMakeLists.txt:65:        message(STATUS "pybind11 found: ${pybind11_INCLUDE_DIRS}")
+HEAD:researchos/engines/quant/CMakeLists.txt:66:        # python3_add_library (used internally by pybind11_add_module) requires
+HEAD:researchos/engines/quant/CMakeLists.txt:69:        pybind11_add_module(cpp_quant_backend
+HEAD:researchos/engines/quant/CMakeLists.txt:85:        message(WARNING "pybind11 not found — Python bindings will NOT be built")
+HEAD:researchos/engines/quant/bindings/CMakeLists.txt:12:find_package(pybind11 CONFIG REQUIRED)
+HEAD:researchos/engines/quant/bindings/CMakeLists.txt:14:pybind11_add_module(cpp_quant_backend python_bindings.cpp)
+HEAD:researchos/engines/quant/bindings/python_bindings.cpp:1:// pybind11 bindings exposing the C++ Quant Engine to Python.
+HEAD:researchos/engines/quant/bindings/python_bindings.cpp:15:#include <pybind11/pybind11.h>
+HEAD:researchos/engines/quant/bindings/python_bindings.cpp:16:#include <pybind11/stl.h>
+HEAD:researchos/engines/quant/bindings/python_bindings.cpp:17:#include <pybind11/functional.h>
+HEAD:researchos/engines/quant/bindings/python_bindings.cpp:18:#include <pybind11/pytypes.h>
+HEAD:researchos/engines/quant/bindings/python_bindings.cpp:37:namespace py = pybind11;
+HEAD:researchos/engines/quant/bindings/python_bindings.cpp:566:PYBIND11_MODULE(cpp_quant_backend, m) {
+HEAD:researchos/engines/quant/docs/PHASE_4_5_BASELINE_REPORT.md:135:- These timings include pybind11 copy overhead (input list -> vector<double>
+HEAD:researchos/engines/quant/docs/PHASE_4_5_BASELINE_REPORT.md:161:3. pybind11 copy overhead caps small-op speedup; calculate_returns at 10M is
+HEAD:researchos/engines/quant/docs/PHASE_4_5_CPP_PERFORMANCE_AUDIT.md:6:pybind11 shim in `bindings/python_bindings.cpp`. It does **not** touch trading
+HEAD:researchos/engines/quant/docs/PHASE_4_5_CPP_PERFORMANCE_AUDIT.md:60:- `bindings/python_bindings.cpp` — pybind11 shim. `CppQuantBackend`
+HEAD:researchos/engines/quant/docs/PHASE_4_5_CPP_PERFORMANCE_AUDIT.md:75:| 5 | `calculate_returns` (pybind) | `bindings/python_bindings.cpp:387` | Phase 4.3: **0.42x** C++/Python @100k — bound by pybind11 `py::cast<std::vector<double>>` copy + per-call dispatch, not compute. |
+HEAD:researchos/engines/quant/docs/PHASE_4_5_CPP_PERFORMANCE_AUDIT.md:101:- **pybind copies:** `get_double_list` / `py::cast<std::vector<double>>`
+HEAD:researchos/engines/quant/docs/PHASE_4_5_CPP_PERFORMANCE_AUDIT.md:166:| `calculate_returns` (per-call pybind) | 0.42x (overhead-bound) | zero-copy `py::array_t` + avoid vector copy ? cross-even at n=10k |
+HEAD:researchos/engines/quant/docs/PHASE_4_5_CPP_PERFORMANCE_AUDIT.md:173:delivers single-digit-x on the aggregate paths. The pybind copy overhead fix
+HEAD:researchos/engines/quant/docs/PHASE_4_5_CPP_PERFORMANCE_AUDIT.md:194:serialization, plus the pybind copy overhead on small per-call ops. Compiler
+HEAD:researchos/engines/quant/docs/PHASE_4_5_STEP3_MEMORY_REPORT.md:149:3. **pybind11 marshalling** caps small-op speedup (10M doubles across the
+HEAD:researchos/engines/quant/include/quant_engine.hpp:20: *       +-- CppQuantBackend (this — C++20 via pybind11)
+HEAD:researchos/engines/quant/interface.py:9:    A future C++ backend (C++20 + CMake + pybind11) can implement this same
+HEAD:researchos/engines/quant/python/bindings.cpp:1:#include <pybind11/pybind11.h>
+HEAD:researchos/engines/quant/python/bindings.cpp:2:#include <pybind11/stl.h>
+HEAD:researchos/engines/quant/python/bindings.cpp:5:namespace py = pybind11;
+HEAD:researchos/engines/quant/python/bindings.cpp:7:PYBIND11_MODULE(cpp_quant, m) {
+HEAD:researchos/engines/quant/python/bridge_interface.h:5:// computation engine (pybind11 adapter).
+HEAD:researchos/engines/quant/python/bridge_interface.h:12:// with a stable numeric code. The pybind11 adapter translates BridgeError into
+HEAD:researchos/engines/quant/python/bridge_models.h:4:// Bridge data models shared by the C++ backend, the pybind11 adapter, and the
+HEAD:researchos/engines/quant/python_bindings_dump.txt:1:#include <pybind11/pybind11.h>
+HEAD:researchos/engines/quant/python_bindings_dump.txt:2:#include <pybind11/stl.h>
+HEAD:researchos/engines/quant/python_bindings_dump.txt:6:namespace py = pybind11;
+HEAD:researchos/engines/quant/python_bindings_dump.txt:8:PYBIND11_MODULE(cpp_quant_core, m) {
+HEAD:researchos/engines/quant/setup.py:1:import pybind11
+HEAD:researchos/engines/quant/setup.py:7:    include_dirs=[pybind11.get_include(), "include"],
+HEAD:researchos/experiments/runner.py:91:        - C++ Quant Engine (future) via pybind11
+HEAD:researchos/quant_engine/__init__.py:16:            +-- CppQuantBackend (future: C++20 + CMake + pybind11)
+HEAD:researchos/quant_engine/interface.py:9:    A future C++ backend (C++20 + CMake + pybind11) can implement this same
+
+=== 15. NANOBIND CONTRACT ===
+C++ binding nanobind include:
+NO
+C++ binding NB_MODULE:
+NO
+CMake find_package(nanobind):
+NO
+CMake nanobind_add_module:
+NO
+
+=== 16. FINAL CLASSIFICATION ===
+ACTIVE TEXT REFERENCES: 61
+TRACKED FILE REFERENCES: 30
+CMAKE REFERENCES: 57
+PYTHON PACKAGE: ABSENT
+
+REPORT FILE:
+C:\Users\User\Desktop\QROS\qros_pybind11_forensic_audit.txt

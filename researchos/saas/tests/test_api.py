@@ -1,3 +1,4 @@
+from io import BytesIO
 from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
@@ -5,6 +6,7 @@ from fastapi.testclient import TestClient
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.api import create_app
 from researchos.saas.contracts import Plan, TenantContext
+from researchos.saas.datasets import InMemoryDatasetStorage, InMemoryDatasetStore
 from researchos.saas.store import InMemoryResearchJobStore
 
 
@@ -17,17 +19,31 @@ class StaticAuth:
         return self.context
 
 
-def _client(workspace_id: UUID | None = None) -> TestClient:
+def _client(workspace_id: UUID | None = None):
     context = TenantContext(
         user_id=uuid4(),
         workspace_id=workspace_id or uuid4(),
         plan=Plan.PRO,
     )
-    return TestClient(
+    dataset_store = InMemoryDatasetStore()
+    dataset_storage = InMemoryDatasetStorage()
+    client = TestClient(
         create_app(
             auth_provider=StaticAuth(context),
             job_store=InMemoryResearchJobStore(),
+            dataset_store=dataset_store,
+            dataset_storage=dataset_storage,
         )
+    )
+    return client, context, dataset_store, dataset_storage
+
+
+def _upload(client: TestClient, name: str, body: bytes):
+    return client.post(
+        "/v1/datasets",
+        headers={"Authorization": "Bearer test"},
+        data={"name": name},
+        files={"file": (f"{name}.csv", BytesIO(body), "text/csv")},
     )
 
 
@@ -65,19 +81,76 @@ def test_unconfigured_saas_auth_fails_closed() -> None:
     assert response.status_code == 503
 
 
-def test_create_and_get_research_job_are_tenant_scoped() -> None:
-    workspace_id = uuid4()
-    client = _client(workspace_id)
+def test_dataset_upload_creates_immutable_version_and_stores_bytes() -> None:
+    client, context, store, storage = _client()
+    body = b"timestamp,open,high,low,close\n1,10,11,9,10\n"
+    response = _upload(client, "sample-xauusd", body)
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["workspace_id"] == str(context.workspace_id)
+    assert payload["version"]["version_no"] == 1
+    assert payload["version"]["byte_size"] == len(body)
+    assert len(payload["version"]["content_sha256"]) == 64
+
+    versions = client.get(
+        f"/v1/datasets/{payload['id']}/versions",
+        headers={"Authorization": "Bearer test"},
+    )
+    assert versions.status_code == 200
+    assert len(versions.json()) == 1
+    version = versions.json()[0]
+    assert version["id"] == payload["version"]["id"]
+    assert storage.get(version["storage_path"]) == body
+    assert store.get_dataset(context.workspace_id, UUID(payload["id"])) is not None
+
+
+def test_dataset_versions_are_append_only() -> None:
+    client, _, _, _ = _client()
+    first = _upload(client, "sample", b"a")
+    assert first.status_code == 201
+    dataset_id = first.json()["id"]
+
+    second = client.post(
+        f"/v1/datasets/{dataset_id}/versions",
+        headers={"Authorization": "Bearer test"},
+        files={"file": ("sample-v2.csv", BytesIO(b"b"), "text/csv")},
+    )
+    assert second.status_code == 201
+    assert second.json()["version_no"] == 2
+
+    versions = client.get(
+        f"/v1/datasets/{dataset_id}/versions",
+        headers={"Authorization": "Bearer test"},
+    )
+    assert versions.status_code == 200
+    assert [item["version_no"] for item in versions.json()] == [1, 2]
+
+
+def test_create_research_job_requires_existing_tenant_dataset_version() -> None:
+    client, _, _, _ = _client()
     response = client.post(
         "/v1/research-runs",
         headers={"Authorization": "Bearer test"},
-        json={"dataset_id": "xauusd-m1-2021-2025"},
+        json={"dataset_version_id": str(uuid4())},
+    )
+    assert response.status_code == 404
+
+
+def test_create_and_get_research_job_are_tenant_scoped() -> None:
+    client, context, _, _ = _client()
+    uploaded = _upload(client, "sample", b"x")
+    version_id = uploaded.json()["version"]["id"]
+    response = client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test"},
+        json={"dataset_version_id": version_id},
     )
     assert response.status_code == 202
     payload = response.json()
-    assert payload["workspace_id"] == str(workspace_id)
+    assert payload["workspace_id"] == str(context.workspace_id)
     assert payload["status"] == "queued"
     assert payload["workflow_id"] == FROZEN_XAUUSD_M1_WORKFLOW
+    assert payload["dataset_version_id"] == version_id
 
     job_id = payload["id"]
     fetched = client.get(
@@ -89,11 +162,11 @@ def test_create_and_get_research_job_are_tenant_scoped() -> None:
 
 
 def test_unsupported_workflow_is_rejected() -> None:
-    client = _client()
+    client, _, _, _ = _client()
     response = client.post(
         "/v1/research-runs",
         headers={"Authorization": "Bearer test"},
-        json={"dataset_id": "xauusd-m1", "workflow_id": "arbitrary"},
+        json={"dataset_version_id": str(uuid4()), "workflow_id": "arbitrary"},
     )
     assert response.status_code == 400
 
@@ -102,13 +175,29 @@ def test_cross_tenant_job_lookup_returns_404() -> None:
     store = InMemoryResearchJobStore()
     owner = TenantContext(uuid4(), uuid4(), Plan.PRO)
     other = TenantContext(uuid4(), uuid4(), Plan.PRO)
-    owner_client = TestClient(create_app(auth_provider=StaticAuth(owner), job_store=store))
-    other_client = TestClient(create_app(auth_provider=StaticAuth(other), job_store=store))
-
+    owner_datasets = InMemoryDatasetStore()
+    owner_storage = InMemoryDatasetStorage()
+    owner_client = TestClient(
+        create_app(
+            auth_provider=StaticAuth(owner),
+            job_store=store,
+            dataset_store=owner_datasets,
+            dataset_storage=owner_storage,
+        )
+    )
+    other_client = TestClient(
+        create_app(
+            auth_provider=StaticAuth(other),
+            job_store=store,
+            dataset_store=owner_datasets,
+            dataset_storage=owner_storage,
+        )
+    )
+    created_dataset = _upload(owner_client, "sample", b"x")
     created = owner_client.post(
         "/v1/research-runs",
         headers={"Authorization": "Bearer test"},
-        json={"dataset_id": "xauusd-m1"},
+        json={"dataset_version_id": created_dataset.json()["version"]["id"]},
     )
     job_id = created.json()["id"]
 

@@ -1,7 +1,7 @@
-# ResearchOS SaaS database contract
+# QROS SaaS database contract
 
-**Target:** Supabase Postgres
-**Status:** Schema contract; executable migration must be generated with the Supabase CLI when the project is connected.
+**Target:** Supabase Postgres 17  
+**Status:** Implemented by migrations `202609170001_saas_core` through `202609170005_saas_fk_indexes` and verified on the active Supabase project.
 
 ## Tables
 
@@ -19,105 +19,124 @@ workspace_member
   PK (workspace_id, user_id)
 
 subscription
-  workspace_id uuid PK FK workspace
+  id uuid PK
+  workspace_id uuid UNIQUE FK workspace
+  plan text CHECK (free|pro|team|enterprise)
+  status text CHECK (trialing|active|past_due|cancelled|incomplete)
   provider text
   provider_customer_id text
-  provider_subscription_id text UNIQUE
-  plan text
-  status text
+  provider_subscription_id text
   current_period_end timestamptz
+  created_at timestamptz
+  updated_at timestamptz
 
-research_dataset
+dataset
   id uuid PK
   workspace_id uuid FK workspace
   name text
-  asset text
-  timeframe text
+  created_by uuid FK auth.users
   created_at timestamptz
 
-research_dataset_version
+dataset_version
   id uuid PK
-  dataset_id uuid FK research_dataset
-  workspace_id uuid FK workspace
-  object_path text UNIQUE
+  dataset_id uuid FK dataset
+  version_no integer
   content_sha256 text
-  rows_sha256 text
-  row_count bigint
+  storage_path text
+  byte_size bigint
+  created_by uuid FK auth.users
   created_at timestamptz
+  UNIQUE (dataset_id, version_no)
+  UNIQUE (dataset_id, content_sha256)
 
 research_run
   id uuid PK
   workspace_id uuid FK workspace
-  dataset_version_id uuid FK research_dataset_version
+  dataset_version_id uuid FK dataset_version
   workflow_id text
-  status text
+  status text CHECK (queued|running|succeeded|failed|cancelled)
+  attempt_count integer
+  error_code text
+  created_by uuid FK auth.users
   created_at timestamptz
   started_at timestamptz
   finished_at timestamptz
-  error_code text
-  error_message text
 
-research_artifact
+artifact
   id uuid PK
   workspace_id uuid FK workspace
   research_run_id uuid FK research_run
   kind text
-  object_path text
   content_sha256 text
+  storage_path text
+  byte_size bigint
   created_at timestamptz
+  UNIQUE (research_run_id, content_sha256)
 
-research_evidence
+evidence
   id uuid PK
   workspace_id uuid FK workspace
   research_run_id uuid FK research_run
-  evidence_json jsonb
-  content_sha256 text
+  artifact_id uuid FK artifact
+  claim text
+  status text CHECK (proven|rejected|inconclusive|unverified)
+  provenance jsonb
   created_at timestamptz
 
-audit_event
-  id bigint generated always as identity PK
+usage_event
+  id uuid PK
   workspace_id uuid FK workspace
-  actor_user_id uuid FK auth.users
+  user_id uuid FK auth.users
   event_type text
+  quantity bigint
+  research_run_id uuid FK research_run
+  created_at timestamptz
+
+audit_log
+  id uuid PK
+  workspace_id uuid FK workspace
+  user_id uuid FK auth.users
+  action text
   resource_type text
   resource_id uuid
-  payload jsonb
+  metadata jsonb
   created_at timestamptz
 ```
 
 ## Tenant isolation contract
 
-Every table containing customer-owned data has `workspace_id`. Every exposed table has RLS enabled. Policies must resolve authorization through `workspace_member` rather than trusting request-body workspace IDs or user-editable profile metadata.
+Every customer-owned table has `workspace_id`, directly or through its parent relation. RLS is enabled on all SaaS tables. Authorization is resolved through `workspace_member`; request-body workspace identifiers are never trusted.
 
-Canonical policy shape:
+The server-side application uses the privileged Supabase client for writes and membership/subscription resolution. `anon` and `authenticated` have no table grants for these SaaS tables, so the browser cannot bypass the application API through PostgREST. RLS remains enabled as defense-in-depth.
 
-```sql
-using (
-  exists (
-    select 1
-    from public.workspace_member wm
-    where wm.workspace_id = <table>.workspace_id
-      and wm.user_id = (select auth.uid())
-  )
-)
-```
+The membership helper is `private.is_workspace_member(...)`, a `SECURITY DEFINER` function with a pinned empty `search_path`; it is not exposed in the public Data API.
 
-For writes, the corresponding `with check` predicate is required. UPDATE policies must have both `using` and `with check`.
+Cross-resource policies additionally require research runs to reference a dataset version belonging to the same workspace, artifacts to reference runs in the same workspace, and evidence to reference matching runs/artifacts.
+
+## Dataset immutability
+
+`dataset_version` is append-only. PostgreSQL enforces two invariants:
+
+1. `dataset_version_allocate_no` allocates the next `version_no` under a per-dataset transaction advisory lock.
+2. `dataset_version_immutable` rejects UPDATE/DELETE operations that would mutate or remove a version.
+
+Content is identified by lowercase SHA-256 and duplicate content is rejected per dataset. The API creates a new version and content-addressed object path rather than overwriting an existing scientific source.
 
 ## Storage contract
 
-Use a private bucket for customer research data. Object paths are immutable and include the workspace and dataset version:
+The `qros-datasets` bucket is private. Server-side code uses the privileged Supabase client; browser code never receives service-role/secret credentials.
+
+Current object path contract:
 
 ```text
-research/{workspace_id}/{dataset_id}/{dataset_version_id}/source.csv
-research/{workspace_id}/{research_run_id}/{artifact_id}.json
+{workspace_id}/datasets/{dataset_id}/sha256/{sha256}
 ```
 
-Never overwrite a scientific source object. A new upload creates a new dataset version. Large uploads should use resumable/signed upload flows rather than buffering the full object in the API process.
+The API computes SHA-256 and byte size before persistence and removes an uploaded object if metadata persistence fails. Supabase recommends resumable/TUS upload flows for large files; those will replace the current server-side multipart path before large-plan production rollout.
 
 ## Queue contract
 
-Use a durable Supabase Queue backed by `pgmq` for `research-runs`. The queue message contains only identifiers:
+Use a durable Supabase Queue backed by `pgmq` for `research-runs`. Queue messages should contain identifiers only:
 
 ```json
 {
@@ -137,3 +156,4 @@ The worker reloads the authoritative database record and verifies workspace owne
 - Keep raw source files private.
 - Preserve content hashes in the database and evidence artifacts.
 - Treat subscription state as server-authoritative.
+- Enable leaked-password protection in Supabase Auth before production auth rollout.

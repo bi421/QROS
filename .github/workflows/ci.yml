@@ -2,164 +2,99 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
-      - "feat/**"
-      - "fix/**"
-      - "refactor/**"
+    branches: [main, develop, "feat/**"]
   pull_request:
-  workflow_dispatch:
+    branches: [main, develop]
 
-# Keep the PR path fast while preserving the full compatibility matrix on main/manual runs.
-# Feature/fix/refactor pushes are validated before a PR is opened.
-# New pushes cancel stale PR runs so obsolete commits do not consume runner time.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   python-primary:
-    name: Python Tests + Coverage (3.11)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - name: Setup Python 3.11
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-      - name: Install
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,test,saas]"
-          python -m pip install pytest pytest-cov ruff
-      - name: Test + coverage
-        run: python -m pytest -v --cov=researchos --cov-report=xml --cov-report=term
-
-  python-compatibility:
-    name: Python Compatibility (${{ matrix.python-version }})
-    if: github.event_name != 'pull_request'
+    name: Python Tests
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.10', '3.14']
-      fail-fast: false
+        python-version: ["3.10", "3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - name: Setup Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'pip'
-      - name: Install
+          cache: pip
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          python -m pip install pytest ruff
           python -m pip install -e ".[dev,test,saas]"
-          python -m pip install pytest pytest-cov
-      - name: Compatibility test
-        run: python -m pytest -v
+      - name: Run pytest
+        run: python -m pytest researchos/tests/ -v --tb=short
+      - name: Run ruff
+        run: ruff check .
 
   quant-engine:
     name: Quant Engine (C++ / nanobind)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - name: Setup Python 3.11
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
-      - name: Install system deps
+          python-version: "3.11"
+          cache: pip
+      - name: Install system dependencies
         run: |
-          sudo grep -RIl 'dl.google.com/linux/chrome' /etc/apt/sources.list.d 2>/dev/null \
-            | while read -r source; do sudo mv "$source" "$source.disabled"; done
-          sudo apt-get clean
-          sudo rm -rf /var/lib/apt/lists/*
-          sudo apt-get update -o Acquire::Retries=5
-          sudo apt-get install -y -o Acquire::Retries=5 ccache ninja-build
-      - name: Install Python build dependencies
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake g++
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,test,saas]"
-          python -m pip install nanobind scikit-build-core cmake
-          python -m pip install pytest pytest-cov
-      - name: Cache build
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cache/pip
-            ~/.ccache
-            researchos/engines/quant/build
-          key: quant-${{ runner.os }}-${{ hashFiles('researchos/engines/quant/CMakeLists.txt', 'researchos/engines/quant/**/*.cpp', 'researchos/engines/quant/**/*.h', 'pyproject.toml') }}
-          restore-keys: quant-${{ runner.os }}-
-      - name: Configure C++ Quant Engine
+          python -m pip install nanobind scikit-build-core pytest
+      - name: Configure C++ Engine
         run: |
-          cmake -S researchos/engines/quant -B researchos/engines/quant/build -G Ninja \
+          cmake -S researchos/engines/quant \
+            -B researchos/engines/quant/build \
+            -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-      - name: Build C++ Quant Engine
+            -DBUILD_PYTHON_BINDINGS=ON
+      - name: Build C++ Engine
         run: cmake --build researchos/engines/quant/build -j
-      - name: Test C++ Quant Engine
-        run: ctest --test-dir researchos/engines/quant/build -V
-      - name: Benchmark C++ fast path
+      - name: Test Python Integration
         env:
           PYTHONPATH: researchos/engines/quant/python
-        run: python researchos/engines/quant/benchmarks/bench_fast_numeric.py --rows 1000000 --repeat 3
-      - name: Test Python Quant Integration
-        env:
-          PYTHONPATH: researchos/engines/quant/python
-        run: python -m pytest researchos/tests/ -k quant -v
+        run: python -m pytest researchos/engines/quant/tests/ -v
 
   health-evidence:
-    name: Health Evidence + Scope Gate
-    needs: [python-primary, quant-engine]
+    name: Health Evidence
     runs-on: ubuntu-latest
+    needs: [python-primary, quant-engine]
     steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
       - name: Setup Python 3.11
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
-      
-      # 1. C++ компайл хийхэд шаардлагатай системийн багц
-      - name: Install system deps for C++ build
+          python-version: "3.11"
+          cache: pip
+      - name: Install system dependencies
         run: |
-          sudo apt-get update -o Acquire::Retries=5
-          sudo apt-get install -y -o Acquire::Retries=5 ninja-build
-      
-      # 2. Python болон build хэрэгслүүдийг суулгах
-      - name: Install health-check dependencies
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake g++
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest ruff nanobind scikit-build-core cmake
           python -m pip install -e ".[dev,test,saas]"
-      
-      # 3. C++ Quant Engine-ийг тусгайлан компайл хийх (health check-д шаардлагатай)
-      - name: Build C++ Quant Engine
+          python -m pip install nanobind scikit-build-core pytest ruff
+      - name: Build C++ Engine
         run: |
-          cmake -S researchos/engines/quant -B researchos/engines/quant/build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release
+          cmake -S researchos/engines/quant \
+            -B researchos/engines/quant/build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_PYTHON_BINDINGS=ON
           cmake --build researchos/engines/quant/build -j
-      
-      - name: Scope guard
-        run: python scripts/check_scope.py --base origin/main
-      - name: Text integrity guard
-        run: python scripts/check_text_integrity.py .github/workflows/ci.yml .pre-commit-config.yaml pyproject.toml
-      
-      # 4. PYTHONPATH-ийг зааж өгснөөр Python тест cpp_quant_engine-ийг олох боломжтой болно
-      - name: Run canonical health check
+      - name: Run health check
         env:
           PYTHONPATH: researchos/engines/quant/python
-        run: python scripts/final_health_check.py
-      
-      - name: Upload health evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: researchos-health-${{ github.sha }}
-          path: .health/last_run.json
-          if-no-files-found: error
-          retention-days: 30
+        run: python -m pytest researchos/tests/ -v

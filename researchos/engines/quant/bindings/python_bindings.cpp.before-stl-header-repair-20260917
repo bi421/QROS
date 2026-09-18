@@ -13,15 +13,9 @@
 // reproduces byte-for-byte.
 
 #include <nanobind/nanobind.h>
-#include <nanobind/stl/string.h>
-#include <nanobind/stl/vector.h>
-#include <nanobind/stl/optional.h>
-#include <nanobind/stl/map.h>
-#include <nanobind/stl/unordered_map.h>
-#include <nanobind/stl/function.h>
-
-
-
+#include <nanobind/stl.h>
+#include <nanobind/functional.h>
+#include <nanobind/pytypes.h>
 
 #include "bridge_interface.h"
 #include "bridge_models.h"
@@ -269,7 +263,7 @@ nb::dict performance_result_to_dict(const bridge::PerformanceResult& r) {
 // implements, trading logic).
 std::optional<quant::SignalFn> make_signal_fn(const nb::object& signal) {
   if (signal.is_none()) return std::nullopt;
-  nb::object fn = signal;
+  const nb::function fn = nb::cast<nb::function>(signal);
   return [fn](size_t bar_index, const std::vector<quant::OHLCV>& history)
              -> quant::SignalResult {
     nb::gil_scoped_acquire gil;
@@ -308,7 +302,7 @@ public:
 
   nb::dict meta() const { return meta_to_dict(impl_->meta()); }
 
-  nb::str version() const { return nb::str(impl_->version().c_str()); }
+  nb::str version() const { return nb::str(impl_->version()); }
 
   nb::dict market_data_load(const nb::dict& request) const {
     MarketDataRequest req;
@@ -570,32 +564,29 @@ std::vector<double> rolling_volatility_series_ext(const std::vector<double>& dat
 
 // ── Module Definition ───────────────────────────────────────────────────────
 
-// Static exception translator to avoid MSVC lambda conversion issues
-static void bridge_exception_translator(std::exception_ptr p, void*) {
-  try {
-    if (p) std::rethrow_exception(p);
-  } catch (const bridge::BridgeError& e) {
-    nb::object exc;
-    try {
-      nb::object error_from_code =
-          nb::module_::import_("cpp_quant_engine.exceptions").attr("error_from_code");
-      exc = error_from_code(nb::int_(e.code_value()), nb::str(e.what()));
-    } catch (...) {
-      exc = nb::module_::import_("builtins").attr("RuntimeError")(nb::str(e.what()));
-    }
-    PyErr_SetObject(reinterpret_cast<PyObject*>(Py_TYPE(exc.ptr())), exc.ptr());
-  }
-}
-
 NB_MODULE(cpp_quant_backend, m) {
   m.doc() = "C++20 Quant Computation Engine for ResearchOS — stable Python/C++ integration bridge";
 
   // Bridge errors are raised as the typed Python exceptions defined in
   // cpp_quant_engine/exceptions.py (selected by the stable numeric code).
-  nb::register_exception_translator(reinterpret_cast<nanobind::detail::exception_translator>(&bridge_exception_translator));
+  nb::register_exception_translator([](std::exception_ptr p) {
+    try {
+      if (p) std::rethrow_exception(p);
+    } catch (const bridge::BridgeError& e) {
+      nb::object exc;
+      try {
+        nb::object error_from_code =
+            nb::module_::import("cpp_quant_engine.exceptions").attr("error_from_code");
+        exc = error_from_code(nb::int_(e.code_value()), nb::str(e.what()));
+      } catch (...) {
+        exc = nb::module_::import("builtins").attr("RuntimeError")(nb::str(e.what()));
+      }
+      PyErr_SetObject(reinterpret_cast<PyObject*>(Py_TYPE(exc.ptr())), exc.ptr());
+    }
+  });
 
   nb::class_<Backend>(m, "Backend")
-      .def("__init__", [](Backend &self) { new (&self) Backend(bridge::create_backend()); })
+      .def(nb::init([]() { return Backend(bridge::create_backend()); }))
       .def("meta", &Backend::meta)
       .def("version", &Backend::version)
       .def("market_data_load", &Backend::market_data_load, nb::arg("request"))
