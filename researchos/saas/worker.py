@@ -12,7 +12,8 @@ class ResearchExecutor(Protocol):
 class ResearchWorker:
     """Fenced coordinator: only the worker holding the lease token may finalize a run."""
     def __init__(self, store: ResearchJobStore, executor: ResearchExecutor, *, lease_seconds: int = 900) -> None:
-        if lease_seconds < 1: raise ValueError("lease_seconds must be positive")
+        if lease_seconds < 1:
+            raise ValueError("lease_seconds must be positive")
         self._store, self._executor, self._lease_seconds = store, executor, lease_seconds
     def run_once(self, workspace_id: UUID, job_id: UUID) -> ResearchResult:
         lease = self._store.claim(workspace_id, job_id, owner=str(uuid4()), lease_seconds=self._lease_seconds)
