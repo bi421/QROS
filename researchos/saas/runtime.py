@@ -10,6 +10,7 @@ from researchos.saas.queue import SupabaseResearchJobQueue
 from researchos.saas.supabase_job_store import SupabaseResearchJobStore
 from researchos.saas.idempotency import SupabaseIdempotencyStore
 from researchos.saas.billing import SupabaseBillingEventStore
+from researchos.saas.rate_limit import SupabaseRateLimiter
 
 def build_production_app():
     url = os.environ["SUPABASE_URL"]
@@ -26,6 +27,7 @@ def build_production_app():
         idempotency_store=SupabaseIdempotencyStore(client),
         billing_store=SupabaseBillingEventStore(client),
         billing_webhook_secret=os.environ.get("BILLING_WEBHOOK_SECRET"),
+        rate_limiter=SupabaseRateLimiter(client, limit=120, window_seconds=60),
     )
 
 app = build_production_app()
