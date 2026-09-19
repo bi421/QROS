@@ -123,11 +123,11 @@ def execute_deletion(
     if not approved:
         return DeletionExecution(RetentionDecision.RETAIN, "approval_required", False)
     if authorize is None:
-        return DeletionExecution(RetentionDecision.RETAIN, "tenant_authorization_required", False)
+        return DeletionExecution(\n            RetentionDecision.RETAIN, "tenant_authorization_required", False\n        )
     if not authorize(candidate):
-        return DeletionExecution(RetentionDecision.RETAIN, "tenant_authorization_denied", False)
+        return DeletionExecution(\n            RetentionDecision.RETAIN, "tenant_authorization_denied", False\n        )
     if dependency_check is None:
-        return DeletionExecution(RetentionDecision.RETAIN, "dependency_check_required", False)
+        return DeletionExecution(\n            RetentionDecision.RETAIN, "dependency_check_required", False\n        )
     if not dependency_check(candidate):
         return DeletionExecution(RetentionDecision.RETAIN, "active_dependencies", False)
     if audit is None:
