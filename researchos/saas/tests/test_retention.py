@@ -75,7 +75,6 @@ def test_candidate_and_now_must_be_timezone_aware() -> None:
         evaluate_deletion(candidate(), now=datetime(2026, 9, 19))
 
 
-
 def test_executor_requires_approval_audit_and_delete_before_destructive_action() -> None:
     from researchos.saas.retention import execute_deletion
 
@@ -87,7 +86,7 @@ def test_executor_requires_approval_audit_and_delete_before_destructive_action()
         "dependency_check": lambda _candidate: True,
     }
     for kwargs, reason in [
-        ({}, "approval_required"),
+        ({"destructive_deletion_enabled": True}, "approval_required"),
         ({**base}, "audit_sink_required"),
         ({**base, "audit": lambda *_: calls.append("audit")}, "delete_operation_required"),
     ]:
@@ -161,13 +160,19 @@ def test_executor_never_calls_delete_for_ineligible_candidate() -> None:
 def test_executor_requires_authorization_and_dependency_resolution() -> None:
     from researchos.saas.retention import execute_deletion
 
-    result = execute_deletion(candidate(), now=NOW, approved=True, destructive_deletion_enabled=True)
+    result = execute_deletion(
+        candidate(),
+        now=NOW,
+        approved=True,
+        destructive_deletion_enabled=True,
+    )
     assert result.reason == "tenant_authorization_required"
 
     result = execute_deletion(
         candidate(),
         now=NOW,
         approved=True,
+        destructive_deletion_enabled=True,
         authorize=lambda _candidate: False,
     )
     assert result.reason == "tenant_authorization_denied"
@@ -176,6 +181,7 @@ def test_executor_requires_authorization_and_dependency_resolution() -> None:
         candidate(),
         now=NOW,
         approved=True,
+        destructive_deletion_enabled=True,
         authorize=lambda _candidate: True,
     )
     assert result.reason == "dependency_check_required"
@@ -184,6 +190,7 @@ def test_executor_requires_authorization_and_dependency_resolution() -> None:
         candidate(),
         now=NOW,
         approved=True,
+        destructive_deletion_enabled=True,
         authorize=lambda _candidate: True,
         dependency_check=lambda _candidate: False,
     )
@@ -204,6 +211,7 @@ def test_executor_does_not_emit_completion_when_delete_fails() -> None:
             candidate(),
             now=NOW,
             approved=True,
+            destructive_deletion_enabled=True,
             authorize=lambda _candidate: True,
             dependency_check=lambda _candidate: True,
             audit=lambda _candidate, event: calls.append(event),
@@ -227,6 +235,7 @@ def test_executor_exposes_post_delete_audit_failure_for_reconciliation() -> None
             candidate(),
             now=NOW,
             approved=True,
+            destructive_deletion_enabled=True,
             authorize=lambda _candidate: True,
             dependency_check=lambda _candidate: True,
             audit=audit,
