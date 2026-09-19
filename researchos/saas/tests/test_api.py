@@ -381,3 +381,31 @@ def test_billing_webhook_rejects_invalid_signature() -> None:
         headers={"X-Billing-Signature": "bad", "X-Billing-Provider": "test"},
     )
     assert response.status_code == 401
+
+
+
+def test_http_errors_include_structured_error_metadata() -> None:
+    client = TestClient(create_app())
+    response = client.get("/v1/me", headers={"Authorization": "Bearer anything", "X-Request-ID": "req-structured"})
+    assert response.status_code == 503
+    payload = response.json()
+    assert payload["detail"] == "SaaS authentication provider is not configured"
+    assert payload["error"] == {
+        "code": "service_unavailable",
+        "message": "SaaS authentication provider is not configured",
+        "request_id": "req-structured",
+    }
+
+
+def test_validation_errors_include_structured_error_metadata() -> None:
+    client, _, _, _ = _client()
+    response = client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "validation"},
+        json={"dataset_version_id": "not-a-uuid"},
+    )
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["error"]["code"] == "validation_error"
+    assert payload["error"]["request_id"]
+    assert isinstance(payload["detail"], list)
