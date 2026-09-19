@@ -21,6 +21,19 @@ class Plan(str, Enum):
     ENTERPRISE = "enterprise"
 
 
+@dataclass(frozen=True)
+class PageRequest:
+    """Bounded offset pagination with explicit deterministic sorting."""
+    limit: int = 50
+    offset: int = 0
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        if self.offset < 0:
+            raise ValueError("offset must not be negative")
+
+
 class ResearchJobStatus(str, Enum):
     QUEUED = "queued"
     RUNNING = "running"
@@ -101,6 +114,7 @@ DEFAULT_USAGE_POLICIES: dict[Plan, UsagePolicy] = {
 
 __all__ = [
     "DEFAULT_USAGE_POLICIES",
+    "PageRequest",
     "Plan",
     "ResearchJob",
     "ResearchJobStatus",
