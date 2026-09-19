@@ -72,6 +72,27 @@ class ProbabilityAnalysis:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "method", ProbabilityMethod(self.method))
+        allowed_statuses = {
+            "integrity_gate_status": {"UNKNOWN", "PASS", "PASSED", "FAIL", "FAILED"},
+            "out_of_sample_status": {
+                "UNKNOWN", "PASS", "PASSED", "FAIL", "FAILED", "NOT_APPLICABLE"
+            },
+            "replication_status": {
+                "UNKNOWN", "PASS", "PASSED", "FAIL", "FAILED", "NOT_APPLICABLE"
+            },
+            "calibration_status": {
+                "UNKNOWN", "PASS", "PASSED", "FAIL", "FAILED", "NOT_APPLICABLE",
+                "INSUFFICIENT_SAMPLE"
+            },
+        }
+        for name, values in allowed_statuses.items():
+            value = getattr(self, name)
+            if value not in values:
+                raise ValueError(f"{name} has unsupported status: {value}")
+        if self.selection_count is not None and self.selection_count < 1:
+            raise ValueError("selection_count must be >= 1 when provided")
+        if self.selection_count is None and self.multiple_testing_context.strip():
+            raise ValueError("selection_count is required when multiple_testing_context is declared")
         if not self.analysis_id.strip():
             raise ValueError("analysis_id is required")
         if not self.claim_id.strip():

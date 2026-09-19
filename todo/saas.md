@@ -67,7 +67,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [ ] Calibration and uncertainty outputs.
 - [x] Add deterministic Holm/Benjamini-Hochberg multiple-testing correction primitives.
 - [x] Enforce multiple-testing results at governed edge eligibility.
-- [ ] OOS/replication state tracking.
+- [x] OOS/replication state tracking.
 - [ ] Economic cost/slippage context.
 - [ ] Deterministic research artifact manifests.
 
