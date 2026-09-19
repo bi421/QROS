@@ -130,6 +130,7 @@ def test_executor_does_not_delete_when_pre_delete_audit_fails() -> None:
             candidate(),
             now=NOW,
             approved=True,
+            destructive_deletion_enabled=True,
             authorize=lambda _candidate: True,
             dependency_check=lambda _candidate: True,
             audit=audit,
@@ -146,6 +147,7 @@ def test_executor_never_calls_delete_for_ineligible_candidate() -> None:
         candidate(reference_count=1),
         now=NOW,
         approved=True,
+        destructive_deletion_enabled=True,
         authorize=lambda _candidate: True,
         dependency_check=lambda _candidate: True,
         audit=lambda *_: calls.append("audit"),
@@ -159,7 +161,7 @@ def test_executor_never_calls_delete_for_ineligible_candidate() -> None:
 def test_executor_requires_authorization_and_dependency_resolution() -> None:
     from researchos.saas.retention import execute_deletion
 
-    result = execute_deletion(candidate(), now=NOW, approved=True)
+    result = execute_deletion(candidate(), now=NOW, approved=True, destructive_deletion_enabled=True)
     assert result.reason == "tenant_authorization_required"
 
     result = execute_deletion(
