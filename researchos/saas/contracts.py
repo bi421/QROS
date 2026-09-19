@@ -21,17 +21,25 @@ class Plan(str, Enum):
     ENTERPRISE = "enterprise"
 
 
-@dataclass(frozen=True)
+class WorkspaceRole(str, Enum):
+    """Server-authoritative membership roles used by the API authorization layer."""
+
+    OWNER = "owner"
+    ADMIN = "admin"
+    RESEARCHER = "researcher"
+    VIEWER = "viewer"
+
+
 class PageRequest:
     """Bounded offset pagination with explicit deterministic sorting."""
-    limit: int = 50
-    offset: int = 0
 
-    def __post_init__(self) -> None:
-        if not 1 <= self.limit <= 100:
+    def __init__(self, limit: int = 50, offset: int = 0) -> None:
+        if not 1 <= limit <= 100:
             raise ValueError("limit must be between 1 and 100")
-        if self.offset < 0:
+        if offset < 0:
             raise ValueError("offset must not be negative")
+        self.limit = limit
+        self.offset = offset
 
 
 class ResearchJobStatus(str, Enum):
@@ -49,6 +57,7 @@ class TenantContext:
     user_id: UUID
     workspace_id: UUID
     plan: Plan
+    role: WorkspaceRole
 
 
 @dataclass(frozen=True)
@@ -120,4 +129,5 @@ __all__ = [
     "ResearchJobStatus",
     "TenantContext",
     "UsagePolicy",
+    "WorkspaceRole",
 ]
