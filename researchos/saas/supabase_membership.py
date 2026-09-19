@@ -18,19 +18,31 @@ class SupabaseWorkspaceMembershipResolver:
     def __init__(self, supabase_client: Any) -> None:
         self._client = supabase_client
 
-    def resolve(self, user_id: UUID) -> tuple[UUID, Plan] | None:
+    def resolve(self, user_id: UUID, requested_workspace_id: UUID | None = None) -> tuple[UUID, Plan] | None:
+        """Resolve an authorized workspace without silently choosing one.
+
+        A user may belong to multiple workspaces. If the caller supplies a
+        workspace, membership must match that exact workspace. If no workspace
+        is supplied, resolution is only allowed when membership is unambiguous.
+        """
         membership = (
             self._client.table("workspace_member")
             .select("workspace_id")
             .eq("user_id", str(user_id))
-            .limit(1)
             .execute()
         )
         rows = membership.data or []
         if not rows:
             return None
-
-        workspace_id = UUID(str(rows[0]["workspace_id"]))
+        workspace_ids = {UUID(str(row["workspace_id"])) for row in rows}
+        if requested_workspace_id is not None:
+            if requested_workspace_id not in workspace_ids:
+                return None
+            workspace_id = requested_workspace_id
+        elif len(workspace_ids) == 1:
+            workspace_id = next(iter(workspace_ids))
+        else:
+            raise ValueError("workspace selection is required for multi-workspace users")
         subscription = (
             self._client.table("subscription")
             .select("plan,status")
