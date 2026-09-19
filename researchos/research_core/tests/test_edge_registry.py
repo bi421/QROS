@@ -1,3 +1,4 @@
+from researchos.probability.economic_cost import EconomicCostContext
 from researchos.probability.calibration import CalibrationResult
 from researchos.research_core.edge_registry import (
     DEFAULT_EDGE_REGISTRY,
@@ -46,6 +47,10 @@ def _multiple_testing() -> object:
     return adjust_p_values((0.01, 0.20), method="holm")
 
 
+def _economic_cost() -> EconomicCostContext:
+    return EconomicCostContext(spread_cost=0.01, slippage_cost=0.01)
+
+
 def _calibration(sample_size: int = 100) -> CalibrationResult:
     return CalibrationResult(
         brier_score=0.08,
@@ -83,6 +88,7 @@ def test_default_edge_becomes_eligible_only_after_declared_gates() -> None:
         replication_evidence=_rep(),
         multiple_testing_result=_multiple_testing(),
         calibration_result=_calibration(),
+        economic_cost_context=_economic_cost(),
     )
     assert snapshot.decisions[0].state is EdgeState.ELIGIBLE
     assert snapshot.decisions[0].reasons == ()
@@ -142,7 +148,24 @@ def _passing_evidence() -> dict[str, object]:
         "replication_evidence": _rep(),
         "multiple_testing_result": _multiple_testing(),
         "calibration_result": _calibration(),
+        "economic_cost_context": _economic_cost(),
     }
+
+
+def test_economic_cost_context_is_required() -> None:
+    args = _passing_evidence()
+    args["economic_cost_context"] = None
+    state, reasons = _strict_edge().evaluate(**args)
+    assert state is EdgeState.NOT_ELIGIBLE
+    assert reasons == ("economic_cost_context_required",)
+
+
+def test_net_effect_after_economic_cost_must_clear_minimum() -> None:
+    args = _passing_evidence()
+    args["economic_cost_context"] = EconomicCostContext(spread_cost=0.04, slippage_cost=0.03)
+    state, reasons = _strict_edge().evaluate(**args)
+    assert state is EdgeState.NOT_ELIGIBLE
+    assert reasons == ("net_effect_below_minimum:0.07999999999999999<0.1",)
 
 
 def test_calibration_result_is_required() -> None:
