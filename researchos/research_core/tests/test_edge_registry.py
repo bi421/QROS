@@ -101,6 +101,7 @@ def test_registry_snapshot_is_deterministic() -> None:
         out_of_sample_evidence=_oos(),
         replication_evidence=_rep(),
         multiple_testing_result=_multiple_testing(),
+        calibration_result=_calibration(),
     )
     assert DEFAULT_EDGE_REGISTRY.evaluate(**kwargs).registry_sha256 == (
         DEFAULT_EDGE_REGISTRY.evaluate(**kwargs).registry_sha256
