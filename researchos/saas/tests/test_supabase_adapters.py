@@ -131,3 +131,52 @@ def test_malformed_membership_role_fails_closed() -> None:
     import pytest
     with pytest.raises(RuntimeError, match="invalid workspace membership role"):
         SupabaseWorkspaceMembershipResolver(BrokenRoleClient()).resolve(USER_ID)
+
+
+def test_supabase_auth_rejects_missing_or_malformed_bearer_token() -> None:
+    import pytest
+    from fastapi import HTTPException
+
+    provider = SupabaseJwtAuthProvider(ClaimsAuth(), Membership())
+
+    for authorization in (None, "", "Basic good", "Bearer "):
+        with pytest.raises(HTTPException) as exc_info:
+            provider.authenticate(authorization)
+        assert exc_info.value.status_code == 401
+
+
+def test_supabase_auth_rejects_invalid_or_missing_subject_claim() -> None:
+    import pytest
+    from fastapi import HTTPException
+
+    class BrokenClaimsAuth:
+        class _Auth:
+            def get_claims(self, token):
+                if token == "missing-sub":
+                    return {"claims": {}}
+                return {"claims": {"sub": "not-a-uuid"}}
+
+        auth = _Auth()
+
+    provider = SupabaseJwtAuthProvider(BrokenClaimsAuth(), Membership())
+
+    for token in ("missing-sub", "bad-sub"):
+        with pytest.raises(HTTPException) as exc_info:
+            provider.authenticate(f"Bearer {token}")
+        assert exc_info.value.status_code == 401
+
+
+def test_supabase_auth_rejects_unexpected_claims_provider_failure() -> None:
+    import pytest
+    from fastapi import HTTPException
+
+    class FailingClaimsAuth:
+        class _Auth:
+            def get_claims(self, token):
+                raise RuntimeError("verification failed")
+
+        auth = _Auth()
+
+    with pytest.raises(HTTPException) as exc_info:
+        SupabaseJwtAuthProvider(FailingClaimsAuth(), Membership()).authenticate("Bearer bad")
+    assert exc_info.value.status_code == 401
