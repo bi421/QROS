@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from io import BytesIO
 from uuid import uuid4
 
 import pytest
@@ -94,8 +93,10 @@ def test_supabase_dataset_version_rejects_foreign_parent_without_version_insert(
     with pytest.raises(KeyError, match="dataset not found for workspace"):
         store.create_version(tenant, version)
 
-    assert ("insert", "dataset_version", version) not in client.writes
-    assert not any(kind == "insert" and table == "dataset_version" for kind, table, _ in client.writes)
+    assert not any(
+        kind == "insert" and table == "dataset_version"
+        for kind, table, _ in client.writes
+    )
 
 
 def test_supabase_claim_save_rejects_cross_tenant_object_before_write():
@@ -152,4 +153,7 @@ def test_supabase_dataset_version_accepts_matching_parent_and_writes():
     created = store.create_version(tenant, version)
 
     assert created == version
-    assert any(kind == "insert" and table == "dataset_version" for kind, table, _ in client.writes)
+    assert any(
+        kind == "insert" and table == "dataset_version"
+        for kind, table, _ in client.writes
+    )
