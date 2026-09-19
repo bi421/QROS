@@ -12,18 +12,18 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 
-from researchos.saas.contracts import Plan, TenantContext
+from researchos.saas.contracts import Plan, TenantContext, WorkspaceRole
 
 
 class WorkspaceMembershipResolver(Protocol):
-    """Resolve the caller's authorized workspace and server-side plan."""
+    """Resolve the caller's authorized workspace, role, and server-side plan."""
 
     def resolve(
         self,
         user_id: UUID,
         requested_workspace_id: UUID | None = None,
-    ) -> tuple[UUID, Plan] | None:
-        """Return one authorized workspace/plan or ``None`` if unauthorized."""
+    ) -> tuple[UUID, Plan, WorkspaceRole] | None:
+        """Return one authorized workspace/role/plan or None if unauthorized."""
 
 
 class SupabaseJwtAuthProvider:
@@ -63,8 +63,8 @@ class SupabaseJwtAuthProvider:
         if resolved is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="workspace access denied")
 
-        workspace_id, plan = resolved
-        return TenantContext(user_id=user_id, workspace_id=workspace_id, plan=plan)
+        workspace_id, plan, role = resolved
+        return TenantContext(user_id=user_id, workspace_id=workspace_id, plan=plan, role=role)
 
 
 __all__ = ["SupabaseJwtAuthProvider", "WorkspaceMembershipResolver"]
