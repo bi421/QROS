@@ -29,7 +29,6 @@ from researchos.saas.queue import InMemoryResearchJobQueue, ResearchJobQueue
 from researchos.saas.store import InMemoryResearchJobStore, ResearchJobStore
 from researchos.saas.idempotency import (
     IdempotencyStore,
-    InMemoryIdempotencyStore,
     MAX_IDEMPOTENCY_KEY_LENGTH,
 )
 from researchos.saas.rate_limit import FixedWindowRateLimiter, RateLimiter
