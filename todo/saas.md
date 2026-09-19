@@ -27,6 +27,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [ ] Make workspace/tenant identity mandatory at every SaaS boundary.
   - [x] Reject ambiguous multi-workspace auth resolution; support explicit `X-Workspace-ID` selection.
 - [ ] Implement canonical Supabase persistence adapters.
+  - [x] Add tenant-scoped durable Supabase Research Claim adapter (persistence only; API exposure remains gated).
 - [x] Enforce RLS for every tenant-owned table.
 - [ ] Add tenant-isolation integration tests.
 - [ ] Add migration/version compatibility checks.
