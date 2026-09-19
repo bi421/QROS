@@ -537,3 +537,82 @@ def test_admin_can_create_dataset_and_research_run() -> None:
         json={"dataset_version_id": uploaded.json()["version"]["id"]},
     )
     assert run.status_code == 202
+
+
+def test_cross_tenant_research_run_list_and_idempotency_key_are_isolated() -> None:
+    store = InMemoryResearchJobStore()
+    owner = TenantContext(uuid4(), uuid4(), Plan.TEAM, WorkspaceRole.RESEARCHER)
+    other = TenantContext(uuid4(), uuid4(), Plan.TEAM, WorkspaceRole.RESEARCHER)
+    dataset_store = InMemoryDatasetStore()
+    dataset_storage = InMemoryDatasetStorage()
+
+    owner_client = TestClient(create_app(
+        auth_provider=StaticAuth(owner),
+        job_store=store,
+        dataset_store=dataset_store,
+        dataset_storage=dataset_storage,
+    ))
+    other_client = TestClient(create_app(
+        auth_provider=StaticAuth(other),
+        job_store=store,
+        dataset_store=dataset_store,
+        dataset_storage=dataset_storage,
+    ))
+
+    owner_dataset = _upload(owner_client, "owner-dataset", b"owner")
+    other_dataset = _upload(other_client, "other-dataset", b"other")
+    assert owner_dataset.status_code == 201
+    assert other_dataset.status_code == 201
+
+    # The same idempotency key is safe to reuse across tenants because the
+    # durable key is scoped by workspace, not globally.
+    shared_key = "shared-red-team-key"
+    owner_run = owner_client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": shared_key},
+        json={"dataset_version_id": owner_dataset.json()["version"]["id"]},
+    )
+    other_run = other_client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": shared_key},
+        json={"dataset_version_id": other_dataset.json()["version"]["id"]},
+    )
+
+    assert owner_run.status_code == 202
+    assert other_run.status_code == 202
+    assert owner_run.json()["id"] != other_run.json()["id"]
+    assert owner_run.json()["workspace_id"] == str(owner.workspace_id)
+    assert other_run.json()["workspace_id"] == str(other.workspace_id)
+
+    owner_list = owner_client.get(
+        "/v1/research-runs?limit=100&offset=0",
+        headers={"Authorization": "Bearer test"},
+    )
+    other_list = other_client.get(
+        "/v1/research-runs?limit=100&offset=0",
+        headers={"Authorization": "Bearer test"},
+    )
+
+    assert owner_list.status_code == 200
+    assert other_list.status_code == 200
+    assert owner_list.json()["total"] == 1
+    assert other_list.json()["total"] == 1
+    assert {item["id"] for item in owner_list.json()["items"]} == {owner_run.json()["id"]}
+    assert {item["id"] for item in other_list.json()["items"]} == {other_run.json()["id"]}
+
+
+def test_cross_tenant_workspace_header_cannot_select_another_workspace() -> None:
+    owner = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
+    other = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
+    client = TestClient(create_app(auth_provider=StaticAuth(owner)))
+
+    response = client.get(
+        "/v1/me",
+        headers={
+            "Authorization": "Bearer test",
+            "X-Workspace-ID": str(other.workspace_id),
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "workspace access denied"
