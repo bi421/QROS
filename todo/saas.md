@@ -41,7 +41,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 ## Phase 4 — API productization
 - [x] Stable versioned API surface.
 - [ ] Authentication/session boundary.
-- [ ] Authorization policy matrix.
+- [x] Authorization policy matrix.
 - [x] Request validation and size limits.
 - [x] Rate limiting and abuse controls.
 - [x] Pagination/filter/sort contracts.
