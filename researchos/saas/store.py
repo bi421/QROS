@@ -41,6 +41,23 @@ class ResearchJobStore:
     def get(self, workspace_id: UUID, job_id: UUID) -> ResearchJob | None:
         raise NotImplementedError
 
+    def list(self, workspace_id: UUID, *, limit: int, offset: int, status: ResearchJobStatus | None = None, workflow_id: str | None = None) -> tuple[list[ResearchJob], int]:
+        raise NotImplementedError
+
+    def list(self, workspace_id: UUID, *, limit: int, offset: int, status: ResearchJobStatus | None = None, workflow_id: str | None = None) -> tuple[list[ResearchJob], int]:
+        if not 1 <= limit <= 100 or offset < 0:
+            raise ValueError("invalid pagination")
+        with self._lock:
+            jobs = [
+                job for job in self._jobs.values()
+                if job.workspace_id == workspace_id
+                and (status is None or job.status == status)
+                and (workflow_id is None or job.workflow_id == workflow_id)
+            ]
+            jobs.sort(key=lambda item: item.id.hex)
+            total = len(jobs)
+            return jobs[offset : offset + limit], total
+
     def count_active(self, workspace_id: UUID) -> int:
         raise NotImplementedError
 
