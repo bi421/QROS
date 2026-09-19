@@ -58,7 +58,7 @@ class TenantContext:
     user_id: UUID
     workspace_id: UUID
     plan: Plan
-    role: WorkspaceRole
+    role: WorkspaceRole = WorkspaceRole.RESEARCHER
 
 
 @dataclass(frozen=True)
