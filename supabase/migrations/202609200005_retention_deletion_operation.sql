@@ -93,3 +93,27 @@ alter function private.reserve_retention_deletion_operation(uuid, text, text, te
 
 comment on function private.reserve_retention_deletion_operation(uuid, text, text, text) is
     'Atomic tenant-scoped retention operation reservation; service-role only.';
+
+create or replace function public.reserve_retention_deletion_operation(
+    p_workspace_id uuid,
+    p_operation_id text,
+    p_resource_type text,
+    p_resource_id text
+)
+returns public.retention_deletion_operation
+language sql
+security invoker
+set search_path = ''
+as $$
+    select * from private.reserve_retention_deletion_operation(
+        p_workspace_id, p_operation_id, p_resource_type, p_resource_id
+    );
+$$;
+
+revoke all on function public.reserve_retention_deletion_operation(uuid, text, text, text)
+    from public, anon, authenticated;
+grant execute on function public.reserve_retention_deletion_operation(uuid, text, text, text)
+    to service_role;
+
+comment on function public.reserve_retention_deletion_operation(uuid, text, text, text) is
+    'Server-only API wrapper for atomic tenant-scoped retention operation reservation.';
