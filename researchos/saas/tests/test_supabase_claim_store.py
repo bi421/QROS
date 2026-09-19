@@ -15,15 +15,10 @@ class _Response:
 
 
 class _Query:
-    def __init__(self, rows, count=None):
+    def __init__(self, rows):
         self._rows = rows
-        self._count = count
-        self._selected = rows
         self._filters = []
-
-    def insert(self, row):
-        self._rows[:] = [row]
-        return self
+        self._range = None
 
     def upsert(self, row, on_conflict=None):
         self._rows[:] = [row]
@@ -32,20 +27,27 @@ class _Query:
     def select(self, *_args, **_kwargs):
         return self
 
-    def eq(self, *_args):
+    def eq(self, column, value):
+        self._filters.append((column, str(value)))
         return self
 
     def order(self, *_args):
         return self
 
-    def range(self, *_args):
+    def range(self, start, end):
+        self._range = (start, end)
         return self
 
-    def limit(self, *_args):
+    def limit(self, limit):
+        self._range = (0, limit - 1)
         return self
 
     def execute(self):
-        return _Response(self._rows, self._count if self._count is not None else len(self._rows))
+        rows = [row for row in self._rows if all(str(row.get(column)) == value for column, value in self._filters)]
+        if self._range is not None:
+            start, end = self._range
+            rows = rows[start:end + 1]
+        return _Response(rows, len(rows))
 
 
 class _Client:
@@ -55,7 +57,7 @@ class _Client:
 
     def table(self, name):
         self.last_table = name
-        return _Query(self.rows, count=len(self.rows))
+        return _Query(self.rows)
 
 
 def _claim(workspace_id: UUID) -> ResearchClaim:
@@ -89,11 +91,13 @@ def test_save_and_get_round_trip_preserves_claim_identity() -> None:
 def test_save_rejects_cross_tenant_claim_before_database_write() -> None:
     workspace_id = uuid4()
     other_workspace_id = uuid4()
-    store = SupabaseResearchClaimStore(_Client())
+    client = _Client()
+    store = SupabaseResearchClaimStore(client)
     claim = _claim(other_workspace_id)
 
     with pytest.raises(ValueError, match="workspace"):
         store.save(workspace_id, claim)
+    assert client.rows == []
 
 
 def test_get_is_tenant_scoped() -> None:
