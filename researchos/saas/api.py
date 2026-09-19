@@ -32,6 +32,7 @@ from researchos.saas.idempotency import (
     MAX_IDEMPOTENCY_KEY_LENGTH,
 )
 from researchos.saas.rate_limit import FixedWindowRateLimiter, RateLimiter
+from researchos.saas.claim_api import register_research_claim_routes
 from researchos.saas.billing import (
     BillingEventConflict,
     BillingEventStore,
@@ -162,6 +163,7 @@ def create_app(
     billing_store: BillingEventStore | None = None,
     billing_webhook_secret: str | None = None,
     rate_limiter: RateLimiter | None = None,
+    claim_store: object | None = None,
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
@@ -492,9 +494,6 @@ def create_app(
             raise HTTPException(status_code=404, detail="research run not found")
         return _research_job_response(job)
 
-    return app
-
-
-app = create_app()
+    register_research_claim_routes(\n        app,\n        tenant_dependency=current_tenant,\n        claim_store=claim_store,\n    )\n\n    return app\n\n\napp = create_app()
 
 __all__ = ["AuthProvider", "RequestCorrelationMiddleware", "app", "create_app"]
