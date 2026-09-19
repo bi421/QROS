@@ -34,6 +34,35 @@ class ResearchRunResultRecord:
             raise ValueError("status must be SUCCEEDED or FAILED")
 
 
+def artifact_manifest_payload(artifacts: tuple[ResearchArtifact, ...]) -> dict[str, object]:
+    """Return the canonical, order-independent identity of research artifacts."""
+    identities = [
+        {
+            "artifact_id": artifact.artifact_id,
+            "kind": artifact.kind,
+            "content_sha256": artifact.content_sha256,
+        }
+        for artifact in sorted(
+            artifacts,
+            key=lambda item: (item.artifact_id, item.kind, item.content_sha256),
+        )
+    ]
+    if len({item["artifact_id"] for item in identities}) != len(identities):
+        raise ValueError("artifact_id must be unique within a manifest")
+    return {"schema": "research-artifact-manifest.v1", "artifacts": identities}
+
+
+def artifact_manifest_sha256(artifacts: tuple[ResearchArtifact, ...]) -> str:
+    """Hash the canonical artifact manifest with deterministic JSON encoding."""
+    encoded = json.dumps(
+        artifact_manifest_payload(artifacts),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def manifest_payload(result: ResearchResult) -> dict[str, object]:
     return {
         "status": result.status,
@@ -81,6 +110,8 @@ def build_result_record(
 
 __all__ = [
     "ResearchRunResultRecord",
+    "artifact_manifest_payload",
+    "artifact_manifest_sha256",
     "build_result_record",
     "manifest_payload",
     "manifest_sha256",

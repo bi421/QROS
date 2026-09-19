@@ -28,3 +28,32 @@ def test_result_record_binds_workspace_and_run_identity():
     assert record.research_run_id == run_id
     assert record.source_dataset_sha256 == "0" * 64
     assert len(record.manifest_sha256) == 64
+
+
+def test_artifact_manifest_is_order_independent():
+    artifacts = (
+        ResearchArtifact("b", "result", "2" * 64),
+        ResearchArtifact("a", "evidence", "1" * 64),
+    )
+    from researchos.saas.provenance import artifact_manifest_sha256
+    assert artifact_manifest_sha256(artifacts) == artifact_manifest_sha256(tuple(reversed(artifacts)))
+
+
+def test_artifact_manifest_has_versioned_canonical_schema():
+    from researchos.saas.provenance import artifact_manifest_payload
+    artifacts = (ResearchArtifact("a", "evidence", "1" * 64),)
+    assert artifact_manifest_payload(artifacts) == {
+        "schema": "research-artifact-manifest.v1",
+        "artifacts": [{"artifact_id": "a", "kind": "evidence", "content_sha256": "1" * 64}],
+    }
+
+
+def test_artifact_manifest_rejects_duplicate_artifact_ids():
+    import pytest
+    from researchos.saas.provenance import artifact_manifest_payload
+    artifacts = (
+        ResearchArtifact("a", "evidence", "1" * 64),
+        ResearchArtifact("a", "result", "2" * 64),
+    )
+    with pytest.raises(ValueError, match="artifact_id must be unique"):
+        artifact_manifest_payload(artifacts)
