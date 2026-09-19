@@ -127,3 +127,28 @@ def test_probability_analysis_rejects_non_positive_selection_count() -> None:
             data_hash="a" * 64,
             selection_count=0,
         )
+
+
+def test_brier_score_returns_deterministic_calibration_diagnostics():
+    result = brier_score((0.9, 0.2, 0.7, 0.4), (1, 0, 1, 0))
+    assert result.brier_score == pytest.approx(0.075)
+    assert result.sample_size == 4
+    assert result.mean_predicted_probability == pytest.approx(0.55)
+    assert result.observed_frequency == pytest.approx(0.5)
+
+
+def test_brier_score_rejects_invalid_inputs():
+    with pytest.raises(ValueError, match="probabilities"):
+        brier_score((1.2,), (1,))
+    with pytest.raises(ValueError, match="outcomes"):
+        brier_score((0.5,), (2,))
+
+
+def test_wilson_interval_is_bounded_and_contains_observed_rate():
+    low, high = wilson_interval(50, 100)
+    assert 0.0 <= low < 0.5 < high <= 1.0
+
+
+def test_wilson_interval_rejects_invalid_counts():
+    with pytest.raises(ValueError, match="successes"):
+        wilson_interval(101, 100)
