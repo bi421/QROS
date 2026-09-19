@@ -103,6 +103,7 @@ def execute_deletion(
     now: datetime,
     policy: RetentionPolicy | None = None,
     approved: bool = False,
+    destructive_deletion_enabled: bool = False,
     audit: Any | None = None,
     delete: Any | None = None,
     dependency_check: Any | None = None,
@@ -120,6 +121,10 @@ def execute_deletion(
     decision, reason = evaluate_deletion(candidate, now=now, policy=policy)
     if decision is not RetentionDecision.ELIGIBLE:
         return DeletionExecution(decision, reason, False)
+    if not destructive_deletion_enabled:
+        return DeletionExecution(
+            RetentionDecision.RETAIN, "production_destructive_deletion_disabled", False
+        )
     if not approved:
         return DeletionExecution(RetentionDecision.RETAIN, "approval_required", False)
     if authorize is None:
