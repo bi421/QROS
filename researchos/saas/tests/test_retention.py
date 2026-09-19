@@ -80,7 +80,11 @@ def test_executor_requires_approval_audit_and_delete_before_destructive_action()
     from researchos.saas.retention import execute_deletion
 
     calls: list[str] = []
-    base = {"approved": True, "authorize": lambda _candidate: True, "dependency_check": lambda _candidate: True}
+    base = {
+        "approved": True,
+        "authorize": lambda _candidate: True,
+        "dependency_check": lambda _candidate: True,
+    }
     for kwargs, reason in [
         ({}, "approval_required"),
         ({**base}, "audit_sink_required"),
@@ -148,6 +152,7 @@ def test_executor_never_calls_delete_for_ineligible_candidate() -> None:
     assert result.deleted is False
     assert result.reason == "active_references"
     assert calls == []
+
 
 def test_executor_requires_authorization_and_dependency_resolution() -> None:
     from researchos.saas.retention import execute_deletion
