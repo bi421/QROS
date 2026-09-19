@@ -30,7 +30,7 @@ This file is the execution contract for turning QROS into a research-grade multi
   - [x] Add tenant-scoped durable Supabase Research Claim adapter (persistence only; API exposure remains gated).
   - [x] Add tenant-scoped Research Claim customer API with fail-closed persistence and cross-workspace tests.
 - [x] Enforce RLS for every tenant-owned table.
-- [ ] Add tenant-isolation integration tests.
+- [ ] Add tenant-isolation integration tests.\n  - [x] Golden Path result/evidence API cross-workspace isolation contract tests.
   - [x] Research Claim API cross-workspace lookup and pagination isolation coverage (API contract tests).
 - [ ] Add migration/version compatibility checks.
 
@@ -127,3 +127,15 @@ A release is **NOT production-ready** unless all applicable gates are green:
 
 - Structured API errors and request-correlation metadata are implemented and covered by SaaS API tests.
 - Production readiness remains gated on exact-release CI, integration, security, tenant-isolation, and operational verification.
+
+## Golden Path V1 — active milestone
+- [x] Freeze QROS SaaS architecture and product workflow boundary.
+- [x] Publish product flow, API contract, production checklist, and batch execution roadmap.
+- [x] Dataset upload/version API and durable storage boundary.
+- [x] Research Run API, durable idempotency, queue and worker lease/result provenance.
+- [x] Research Claim durable persistence and customer API.
+- [x] Tenant-scoped Result read API.
+- [x] Tenant-scoped Evidence read API.
+- [ ] Auth provider production integration.
+- [ ] End-to-end staging Golden Path execution.
+- [ ] Production Golden Path execution.
