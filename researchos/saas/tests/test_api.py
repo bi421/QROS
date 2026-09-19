@@ -396,6 +396,39 @@ def test_cross_tenant_dataset_and_version_access_returns_not_found() -> None:
         json={"dataset_version_id": version_id},
     )
     assert run.status_code == 404
+    assert other_client.get(
+        f"/v1/datasets/{dataset_id}/versions/{version_id}/download",
+        headers={"Authorization": "Bearer test"},
+    ).status_code == 404
+
+
+def test_dataset_download_url_is_authorized_and_short_lived() -> None:
+    client, _, _, _ = _client()
+    created = _upload(client, "downloadable", b"dataset")
+    dataset_id = created.json()["id"]
+    version_id = created.json()["version"]["id"]
+
+    response = client.get(
+        f"/v1/datasets/{dataset_id}/versions/{version_id}/download",
+        headers={"Authorization": "Bearer test"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["expires_in"] == "300"
+    assert response.json()["url"].startswith("memory://")
+
+
+def test_dataset_download_rejects_dataset_version_mismatch() -> None:
+    client, _, _, _ = _client()
+    first = _upload(client, "first", b"one")
+    second = _upload(client, "second", b"two")
+
+    response = client.get(
+        f"/v1/datasets/{first.json()['id']}/versions/{second.json()['version']['id']}/download",
+        headers={"Authorization": "Bearer test"},
+    )
+
+    assert response.status_code == 404
 
 
 def test_billing_webhook_processes_and_replays_identical_event() -> None:

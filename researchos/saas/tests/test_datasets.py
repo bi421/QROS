@@ -6,6 +6,7 @@ import pytest
 from researchos.saas.datasets import (
     Dataset,
     DatasetVersion,
+    InMemoryDatasetStorage,
     InMemoryDatasetStore,
     storage_path_for,
     stream_sha256,
@@ -77,3 +78,16 @@ def test_in_memory_store_rejects_dataset_write_from_other_workspace() -> None:
         store.create_dataset(other_workspace, dataset)
 
     assert store.get_dataset(owner_workspace, dataset.id) is None
+
+
+def test_in_memory_signed_download_url_requires_existing_object_and_bounded_expiry() -> None:
+    storage = InMemoryDatasetStorage()
+    with pytest.raises(FileNotFoundError):
+        storage.create_signed_download_url("missing", 300)
+
+    storage.put("tenant/object", BytesIO(b"data"))
+    assert storage.create_signed_download_url("tenant/object", 300).endswith("?expires_in=300")
+
+    for expires_in in (0, 901):
+        with pytest.raises(ValueError, match="signed URL expiry"):
+            storage.create_signed_download_url("tenant/object", expires_in)
