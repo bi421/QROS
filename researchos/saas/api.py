@@ -494,6 +494,15 @@ def create_app(
             raise HTTPException(status_code=404, detail="research run not found")
         return _research_job_response(job)
 
-    register_research_claim_routes(\n        app,\n        tenant_dependency=current_tenant,\n        claim_store=claim_store,\n    )\n\n    return app\n\n\napp = create_app()
+    register_research_claim_routes(
+        app,
+        tenant_dependency=current_tenant,
+        claim_store=claim_store,
+    )
+
+    return app
+
+
+app = create_app()
 
 __all__ = ["AuthProvider", "RequestCorrelationMiddleware", "app", "create_app"]
