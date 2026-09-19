@@ -9,16 +9,20 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from researchos.saas.contracts import Plan
+from researchos.saas.contracts import Plan, WorkspaceRole
 
 
 class SupabaseWorkspaceMembershipResolver:
-    """Resolve one active workspace membership and server-side subscription plan."""
+    """Resolve one active workspace membership, role, and subscription plan."""
 
     def __init__(self, supabase_client: Any) -> None:
         self._client = supabase_client
 
-    def resolve(self, user_id: UUID, requested_workspace_id: UUID | None = None) -> tuple[UUID, Plan] | None:
+    def resolve(
+        self,
+        user_id: UUID,
+        requested_workspace_id: UUID | None = None,
+    ) -> tuple[UUID, Plan, WorkspaceRole] | None:
         """Resolve an authorized workspace without silently choosing one.
 
         A user may belong to multiple workspaces. If the caller supplies a
@@ -27,22 +31,28 @@ class SupabaseWorkspaceMembershipResolver:
         """
         membership = (
             self._client.table("workspace_member")
-            .select("workspace_id")
+            .select("workspace_id,role")
             .eq("user_id", str(user_id))
             .execute()
         )
         rows = membership.data or []
         if not rows:
             return None
-        workspace_ids = {UUID(str(row["workspace_id"])) for row in rows}
+
+        memberships = {
+            UUID(str(row["workspace_id"])): WorkspaceRole(str(row["role"]))
+            for row in rows
+        }
         if requested_workspace_id is not None:
-            if requested_workspace_id not in workspace_ids:
+            if requested_workspace_id not in memberships:
                 return None
             workspace_id = requested_workspace_id
-        elif len(workspace_ids) == 1:
-            workspace_id = next(iter(workspace_ids))
+        elif len(memberships) == 1:
+            workspace_id = next(iter(memberships))
         else:
             raise ValueError("workspace selection is required for multi-workspace users")
+
+        role = memberships[workspace_id]
         subscription = (
             self._client.table("subscription")
             .select("plan,status")
@@ -52,18 +62,15 @@ class SupabaseWorkspaceMembershipResolver:
         )
         subscriptions = subscription.data or []
         if not subscriptions:
-            return workspace_id, Plan.FREE
+            return workspace_id, Plan.FREE, role
 
         row = subscriptions[0]
         if row.get("status") not in {"active", "trialing"}:
-            return workspace_id, Plan.FREE
+            return workspace_id, Plan.FREE, role
 
         try:
-            return workspace_id, Plan(str(row["plan"]))
+            return workspace_id, Plan(str(row["plan"])), role
         except (KeyError, ValueError) as exc:
-            # Never downgrade malformed billing state to FREE. A bad
-            # entitlement record must fail closed rather than grant access
-            # under an unintended plan.
             raise RuntimeError("invalid active subscription entitlement") from exc
 
 
