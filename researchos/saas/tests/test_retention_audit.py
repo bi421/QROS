@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from researchos.saas.audit import AuditEvent, InMemoryAuditEventStore
+from researchos.saas.audit import InMemoryAuditEventStore
 from researchos.saas.retention import DeletionCandidate
 from researchos.saas.retention_audit import retention_audit_callback
 
@@ -52,12 +52,18 @@ def test_retention_audit_callback_does_not_use_resource_id_as_tenant() -> None:
     assert store.list(workspace_b) == []
 
 
-def test_audit_event_is_created_by_the_store_boundary() -> None:
+def test_retention_audit_callback_writes_only_non_secret_context() -> None:
     store = InMemoryAuditEventStore()
+    workspace = uuid4()
     candidate = DeletionCandidate(
         resource_type="dataset_version",
         resource_id="version-1",
         created_at=datetime.now(timezone.utc),
+        reference_count=0,
+        legal_hold=False,
     )
-    retention_audit_callback(store, workspace_id=uuid4())(candidate, "deletion_approved")
-    assert isinstance(store.list(candidate.workspace_id), list) is False
+
+    retention_audit_callback(store, workspace_id=workspace)(candidate, "deletion_approved")
+
+    event = store.list(workspace)[0]
+    assert event.metadata == {"reference_count": 0, "legal_hold": False}
