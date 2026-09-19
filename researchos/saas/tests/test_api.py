@@ -358,7 +358,7 @@ def test_cross_tenant_job_lookup_returns_404() -> None:
 
 
 def test_cross_tenant_dataset_and_version_access_returns_not_found() -> None:
-    owner = TenantContext(uuid4(), uuid4(), Plan.PRO)
+    owner = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
     other = TenantContext(uuid4(), uuid4(), Plan.PRO)
     store = InMemoryDatasetStore()
     storage = InMemoryDatasetStorage()
