@@ -154,3 +154,16 @@ def test_wilson_interval_is_bounded_and_contains_observed_rate():
 def test_wilson_interval_rejects_invalid_counts():
     with pytest.raises(ValueError, match="successes"):
         wilson_interval(101, 100)
+
+
+
+def test_probability_analysis_serializes_economic_cost_context() -> None:
+    from researchos.probability import EconomicCostContext, ProbabilityAnalysis, ProbabilityMethod
+
+    analysis = ProbabilityAnalysis(
+        analysis_id="a1", claim_id="c1", method=ProbabilityMethod.DESCRIPTIVE,
+        population_definition="eligible", time_window="2026", data_version="v1",
+        data_hash="sha256:data",
+        economic_cost_context=EconomicCostContext(slippage_cost=0.02),
+    )
+    assert analysis.to_dict()["economic_cost_context"]["slippage_cost"] == 0.02

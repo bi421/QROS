@@ -1,6 +1,7 @@
 """Deterministic probability and trading-edge research primitives."""
 
 from researchos.probability.calibration import CalibrationResult, brier_score, wilson_interval
+from researchos.probability.economic_cost import EconomicCostContext
 from researchos.probability.contracts import ProbabilityAnalysis, ProbabilityMethod
 from researchos.probability.primitives import (
     expected_value,
@@ -13,6 +14,7 @@ from researchos.probability.primitives import (
 
 __all__ = [
     "CalibrationResult",
+    "EconomicCostContext",
     "ProbabilityAnalysis",
     "ProbabilityMethod",
     "brier_score",

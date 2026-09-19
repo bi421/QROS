@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from researchos.probability.economic_cost import EconomicCostContext
+
 
 class ProbabilityMethod(str, Enum):
     """Declared method families; analysis code must identify its method explicitly."""
@@ -67,6 +69,7 @@ class ProbabilityAnalysis:
     replication_status: str = "UNKNOWN"
     calibration_status: str = "NOT_APPLICABLE"
     economic_cost_model: str = ""
+    economic_cost_context: EconomicCostContext | None = None
     result_artifact_hash: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -138,6 +141,20 @@ class ProbabilityAnalysis:
             "replication_status": self.replication_status,
             "calibration_status": self.calibration_status,
             "economic_cost_model": self.economic_cost_model,
+            "economic_cost_context": (
+                {
+                    "spread_cost": self.economic_cost_context.spread_cost,
+                    "slippage_cost": self.economic_cost_context.slippage_cost,
+                    "commission_cost": self.economic_cost_context.commission_cost,
+                    "other_cost": self.economic_cost_context.other_cost,
+                    "currency": self.economic_cost_context.currency,
+                    "unit": self.economic_cost_context.unit,
+                    "source": self.economic_cost_context.source,
+                    "version": self.economic_cost_context.version,
+                }
+                if self.economic_cost_context is not None
+                else None
+            ),
             "result_artifact_hash": self.result_artifact_hash,
             "metadata": dict(self.metadata),
         }
