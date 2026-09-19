@@ -28,8 +28,6 @@ from researchos.saas.datasets import (
 from researchos.saas.queue import InMemoryResearchJobQueue, ResearchJobQueue
 from researchos.saas.store import InMemoryResearchJobStore, ResearchJobStore
 from researchos.saas.idempotency import (
-    IdempotencyConflict,
-    IdempotencyRecord,
     IdempotencyStore,
     InMemoryIdempotencyStore,
     MAX_IDEMPOTENCY_KEY_LENGTH,
@@ -156,7 +154,6 @@ def create_app(
     datasets = dataset_store or InMemoryDatasetStore()
     storage = dataset_storage or InMemoryDatasetStorage()
     queue = job_queue or InMemoryResearchJobQueue()
-    _idempotency = idempotency_store or InMemoryIdempotencyStore()
     limiter = rate_limiter or FixedWindowRateLimiter(limit=120, window_seconds=60)
     billing = billing_store
     app = FastAPI(
