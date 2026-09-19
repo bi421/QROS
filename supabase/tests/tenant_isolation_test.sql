@@ -79,9 +79,8 @@ select results_eq(
   'tenant A sees only its research run'
 );
 
-select results_eq(
-  $$select name from public.dataset where id = 'bbbbbbbb-0000-0000-0000-bbbbbbbbbbbb'$$,
-  $$values (null::text)$$,
+select is_empty(
+  $select name from public.dataset where id = 'bbbbbbbb-0000-0000-0000-bbbbbbbbbbbb'$,
   'tenant A cannot read tenant B dataset by resource id'
 );
 
@@ -116,11 +115,9 @@ select throws_ok(
   'tenant A cannot create a version under tenant B dataset'
 );
 
-select results_eq(
-  $$select count(*)::bigint
-      from public.research_run
-     where id = 'bbbbbbbb-2000-0000-0000-bbbbbbbbbbbb'$$,
-  $$values (0::bigint)$$,
+select is_empty(
+  $select id from public.research_run
+     where id = 'bbbbbbbb-2000-0000-0000-bbbbbbbbbbbb'$,
   'tenant A cannot observe tenant B run by id'
 );
 
@@ -138,9 +135,8 @@ select results_eq(
   'tenant B sees only its dataset'
 );
 
-select results_eq(
-  $$select name from public.dataset where id = 'aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa'$$,
-  $$values (null::text)$$,
+select is_empty(
+  $select name from public.dataset where id = 'aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa'$,
   'tenant B cannot read tenant A dataset by resource id'
 );
 
