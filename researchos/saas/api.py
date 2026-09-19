@@ -100,7 +100,11 @@ class AuthProvider(Protocol):
 class UnconfiguredAuthProvider:
     """Fail-closed default; production must install a real identity provider."""
 
-    def authenticate(self, authorization: str | None) -> TenantContext:
+    def authenticate(
+        self,
+        authorization: str | None,
+        requested_workspace_id: UUID | None = None,
+    ) -> TenantContext:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="SaaS authentication provider is not configured",
