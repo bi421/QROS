@@ -1,3 +1,4 @@
+from researchos.probability.calibration import CalibrationResult
 from researchos.research_core.edge_registry import (
     DEFAULT_EDGE_REGISTRY,
     EdgeDefinition,
@@ -45,6 +46,15 @@ def _multiple_testing() -> object:
     return adjust_p_values((0.01, 0.20), method="holm")
 
 
+def _calibration(sample_size: int = 100) -> CalibrationResult:
+    return CalibrationResult(
+        brier_score=0.08,
+        sample_size=sample_size,
+        mean_predicted_probability=0.5,
+        observed_frequency=0.5,
+    )
+
+
 def test_default_edge_requires_immutable_evidence_artifacts() -> None:
     snapshot = DEFAULT_EDGE_REGISTRY.evaluate(
         sample_size=29,
@@ -72,6 +82,7 @@ def test_default_edge_becomes_eligible_only_after_declared_gates() -> None:
         out_of_sample_evidence=_oos(),
         replication_evidence=_rep(),
         multiple_testing_result=_multiple_testing(),
+        calibration_result=_calibration(),
     )
     assert snapshot.decisions[0].state is EdgeState.ELIGIBLE
     assert snapshot.decisions[0].reasons == ()
@@ -90,6 +101,7 @@ def test_registry_snapshot_is_deterministic() -> None:
         out_of_sample_evidence=_oos(),
         replication_evidence=_rep(),
         multiple_testing_result=_multiple_testing(),
+        calibration_result=_calibration(),
     )
     assert DEFAULT_EDGE_REGISTRY.evaluate(**kwargs).registry_sha256 == (
         DEFAULT_EDGE_REGISTRY.evaluate(**kwargs).registry_sha256
@@ -129,7 +141,24 @@ def _passing_evidence() -> dict[str, object]:
         "out_of_sample_evidence": _oos(),
         "replication_evidence": _rep(),
         "multiple_testing_result": _multiple_testing(),
+        "calibration_result": _calibration(),
     }
+
+
+def test_calibration_result_is_required() -> None:
+    args = _passing_evidence()
+    args["calibration_result"] = None
+    state, reasons = _strict_edge().evaluate(**args)
+    assert state is EdgeState.NOT_ELIGIBLE
+    assert reasons == ("calibration_result_required",)
+
+
+def test_calibration_sample_size_is_governed() -> None:
+    args = _passing_evidence()
+    args["calibration_result"] = _calibration(29)
+    state, reasons = _strict_edge().evaluate(**args)
+    assert state is EdgeState.NOT_ELIGIBLE
+    assert reasons == ("calibration_sample_size_insufficient:29<30",)
 
 
 def test_multiple_testing_result_is_required() -> None:
