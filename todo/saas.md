@@ -32,7 +32,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [x] Enforce RLS for every tenant-owned table.
 - [ ] Add tenant-isolation integration tests.\n  - [x] Golden Path result/evidence API cross-workspace isolation contract tests.
   - [x] Research Claim API cross-workspace lookup and pagination isolation coverage (API contract tests).
-- [ ] Add migration/version compatibility checks.
+- [x] Add repository migration integrity gate (target-environment compatibility still release-gated).
 
 ## Phase 3 — Durable execution
 - [x] Introduce idempotency keys for research-run mutation with atomic durable reservation.
