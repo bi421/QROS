@@ -190,7 +190,7 @@ class EdgeRegistrySnapshot:
 class EdgeRegistry:
     """Deterministic registry of explicitly governed edge definitions."""
 
-    registry_version = "edge-registry.v3"
+    registry_version = "edge-registry.v4"
 
     def __init__(self, definitions: Sequence[EdgeDefinition]) -> None:
         by_id: dict[str, EdgeDefinition] = {}
