@@ -5,6 +5,7 @@ import hmac
 import json
 import threading
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
@@ -19,8 +20,10 @@ class StaticAuth:
     def __init__(self, context: TenantContext) -> None:
         self.context = context
 
-    def authenticate(self, authorization: str | None) -> TenantContext:
+    def authenticate(self, authorization: str | None, requested_workspace_id: UUID | None = None) -> TenantContext:
         assert authorization == "Bearer test"
+        if requested_workspace_id is not None and requested_workspace_id != self.context.workspace_id:
+            raise HTTPException(status_code=403, detail="workspace access denied")
         return self.context
 
 
@@ -455,3 +458,9 @@ def test_validation_errors_include_structured_error_metadata() -> None:
     assert payload["error"]["code"] == "validation_error"
     assert payload["error"]["request_id"]
     assert isinstance(payload["detail"], list)
+
+
+def test_invalid_workspace_header_is_rejected() -> None:
+    client, _, _, _ = _client()
+    response = client.get("/v1/me", headers={"Authorization": "Bearer test", "X-Workspace-ID": "not-a-uuid"})
+    assert response.status_code == 422
