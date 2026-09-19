@@ -27,6 +27,8 @@ jobs:
         run: python scripts/check_text_integrity.py
       - name: Compile Python sources
         run: python -m compileall -q researchos scripts
+      - name: Validate Supabase migrations
+        run: python scripts/check_migrations.py
 
   python-primary:
     name: Python Tests
@@ -85,6 +87,15 @@ jobs:
         env:
           PYTHONPATH: researchos/engines/quant/python
         run: python -m pytest researchos/engines/quant/tests/ -v -x
+
+  container-build:
+    name: Production Container Build
+    needs: [repository-integrity]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build production image
+        run: docker build --pull -t qros-api:ci .
 
   health-evidence:
     name: Health Evidence
