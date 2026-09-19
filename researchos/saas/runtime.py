@@ -1,16 +1,22 @@
 """Production composition root for QROS SaaS."""
 from __future__ import annotations
+
 import os
+
 from supabase import create_client
+
 from researchos.saas.api import create_app
 from researchos.saas.supabase_auth import SupabaseJwtAuthProvider
 from researchos.saas.supabase_membership import SupabaseWorkspaceMembershipResolver
 from researchos.saas.datasets import SupabaseDatasetStorage, SupabaseDatasetStore
 from researchos.saas.queue import SupabaseResearchJobQueue
 from researchos.saas.supabase_job_store import SupabaseResearchJobStore
+from researchos.saas.supabase_claim_store import SupabaseResearchClaimStore
+from researchos.saas.evidence_api import SupabaseResearchEvidenceStore
 from researchos.saas.idempotency import SupabaseIdempotencyStore
 from researchos.saas.billing import SupabaseBillingEventStore
 from researchos.saas.rate_limit import SupabaseRateLimiter
+
 
 def build_production_app():
     url = os.environ["SUPABASE_URL"]
@@ -25,9 +31,12 @@ def build_production_app():
         dataset_storage=SupabaseDatasetStorage(client),
         job_queue=SupabaseResearchJobQueue(client),
         idempotency_store=SupabaseIdempotencyStore(client),
+        claim_store=SupabaseResearchClaimStore(client),
+        evidence_store=SupabaseResearchEvidenceStore(client),
         billing_store=SupabaseBillingEventStore(client),
         billing_webhook_secret=os.environ.get("BILLING_WEBHOOK_SECRET"),
         rate_limiter=SupabaseRateLimiter(client, limit=120, window_seconds=60),
     )
+
 
 app = build_production_app()
