@@ -5,6 +5,7 @@ from researchos.research_core.edge_registry import (
     EdgeState,
 )
 from researchos.research_core.evidence import EvidenceArtifact, EvidenceKind
+from researchos.research_core.multiple_testing import adjust_p_values
 
 
 DATASET_SHA = "a" * 64
@@ -40,6 +41,10 @@ def _rep() -> EvidenceArtifact:
     )
 
 
+def _multiple_testing() -> object:
+    return adjust_p_values((0.01, 0.20), method="holm")
+
+
 def test_default_edge_requires_immutable_evidence_artifacts() -> None:
     snapshot = DEFAULT_EDGE_REGISTRY.evaluate(
         sample_size=29,
@@ -50,6 +55,7 @@ def test_default_edge_requires_immutable_evidence_artifacts() -> None:
     decision = snapshot.decisions[0]
     assert decision.state is EdgeState.NOT_ELIGIBLE
     assert "insufficient_sample_size:29<30" in decision.reasons
+    assert "multiple_testing_result_required" in decision.reasons
     assert "out_of_sample_evidence_artifact_required" in decision.reasons
     assert "replication_evidence_artifact_required" in decision.reasons
 
@@ -65,6 +71,7 @@ def test_default_edge_becomes_eligible_only_after_declared_gates() -> None:
         replication_evidence_id="rep-1",
         out_of_sample_evidence=_oos(),
         replication_evidence=_rep(),
+        multiple_testing_result=_multiple_testing(),
     )
     assert snapshot.decisions[0].state is EdgeState.ELIGIBLE
     assert snapshot.decisions[0].reasons == ()
@@ -82,6 +89,7 @@ def test_registry_snapshot_is_deterministic() -> None:
         replication_evidence_id="rep-1",
         out_of_sample_evidence=_oos(),
         replication_evidence=_rep(),
+        multiple_testing_result=_multiple_testing(),
     )
     assert DEFAULT_EDGE_REGISTRY.evaluate(**kwargs).registry_sha256 == (
         DEFAULT_EDGE_REGISTRY.evaluate(**kwargs).registry_sha256
@@ -120,7 +128,32 @@ def _passing_evidence() -> dict[str, object]:
         "replication_evidence_id": "rep-1",
         "out_of_sample_evidence": _oos(),
         "replication_evidence": _rep(),
+        "multiple_testing_result": _multiple_testing(),
     }
+
+
+def test_multiple_testing_result_is_required() -> None:
+    args = _passing_evidence()
+    args["multiple_testing_result"] = None
+    state, reasons = _strict_edge().evaluate(**args)
+    assert state is EdgeState.NOT_ELIGIBLE
+    assert reasons == ("multiple_testing_result_required",)
+
+
+def test_multiple_testing_rejection_is_required() -> None:
+    args = _passing_evidence()
+    args["multiple_testing_result"] = adjust_p_values((0.9,), method="holm")
+    state, reasons = _strict_edge().evaluate(**args)
+    assert state is EdgeState.NOT_ELIGIBLE
+    assert reasons == ("multiple_testing_not_rejected",)
+
+
+def test_multiple_testing_hypothesis_index_is_validated() -> None:
+    args = _passing_evidence()
+    args["multiple_testing_hypothesis_index"] = 2
+    state, reasons = _strict_edge().evaluate(**args)
+    assert state is EdgeState.NOT_ELIGIBLE
+    assert reasons == ("multiple_testing_hypothesis_index_invalid",)
 
 
 def test_effect_below_minimum_blocks_eligibility() -> None:

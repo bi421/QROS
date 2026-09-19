@@ -9,6 +9,7 @@ from enum import Enum
 from typing import Sequence
 
 from researchos.research_core.evidence import EvidenceArtifact, EvidenceKind
+from researchos.research_core.multiple_testing import MultipleTestingResult
 
 
 class EdgeState(str, Enum):
@@ -53,6 +54,7 @@ class EdgeDefinition:
     minimum_sample_size: int
     requires_out_of_sample: bool = True
     requires_replication: bool = True
+    requires_multiple_testing: bool = True
     probability: ProbabilityDefinition | None = None
 
     def __post_init__(self) -> None:
@@ -79,6 +81,8 @@ class EdgeDefinition:
         replication_evidence_id: str | None = None,
         out_of_sample_evidence: EvidenceArtifact | None = None,
         replication_evidence: EvidenceArtifact | None = None,
+        multiple_testing_result: MultipleTestingResult | None = None,
+        multiple_testing_hypothesis_index: int = 0,
     ) -> tuple[EdgeState, tuple[str, ...]]:
         reasons: list[str] = []
         if sample_size < self.minimum_sample_size:
@@ -93,6 +97,19 @@ class EdgeDefinition:
             reasons.append(
                 f"uncertainty_below_minimum:{uncertainty_lower_bound}<{self.minimum_effect_size}"
             )
+
+        if self.requires_multiple_testing:
+            if multiple_testing_result is None:
+                reasons.append("multiple_testing_result_required")
+            else:
+                if not 0 <= multiple_testing_hypothesis_index < len(
+                    multiple_testing_result.p_values
+                ):
+                    reasons.append("multiple_testing_hypothesis_index_invalid")
+                elif not multiple_testing_result.reject()[
+                    multiple_testing_hypothesis_index
+                ]:
+                    reasons.append("multiple_testing_not_rejected")
 
         if self.requires_out_of_sample:
             if not out_of_sample:
@@ -162,7 +179,7 @@ class EdgeRegistrySnapshot:
 class EdgeRegistry:
     """Deterministic registry of explicitly governed edge definitions."""
 
-    registry_version = "edge-registry.v2"
+    registry_version = "edge-registry.v3"
 
     def __init__(self, definitions: Sequence[EdgeDefinition]) -> None:
         by_id: dict[str, EdgeDefinition] = {}
