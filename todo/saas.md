@@ -30,8 +30,8 @@ This file is the execution contract for turning QROS into a research-grade multi
   - [x] Add tenant-scoped durable Supabase Research Claim adapter (persistence only; API exposure remains gated).
   - [x] Add tenant-scoped Research Claim customer API with fail-closed persistence and cross-workspace tests.
 - [x] Enforce RLS for every tenant-owned table.
-- [x] Add tenant-isolation integration tests.
-  - [x] Research Claim API cross-workspace lookup and pagination isolation coverage.
+- [ ] Add tenant-isolation integration tests.
+  - [x] Research Claim API cross-workspace lookup and pagination isolation coverage (API contract tests).
 - [ ] Add migration/version compatibility checks.
 
 ## Phase 3 — Durable execution
