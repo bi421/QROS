@@ -167,6 +167,13 @@ def test_net_effect_after_economic_cost_must_clear_minimum() -> None:
     assert state is EdgeState.NOT_ELIGIBLE
     assert reasons == ("net_effect_below_minimum:0.07999999999999999<0.1",)
 
+def test_zero_cost_context_does_not_duplicate_effect_failure() -> None:
+    args = _passing_evidence()
+    args["observed_effect_size"] = 0.09
+    state, reasons = _strict_edge().evaluate(**args)
+    assert state is EdgeState.NOT_ELIGIBLE
+    assert reasons == ("effect_below_minimum:0.09<0.1",)
+
 
 def test_calibration_result_is_required() -> None:
     args = _passing_evidence()
