@@ -23,6 +23,12 @@ from researchos.saas.datasets import (
 )
 from researchos.saas.queue import InMemoryResearchJobQueue, SupabaseResearchJobQueue
 from researchos.saas.retention_audit import retention_audit_callback
+from researchos.saas.retention_reconciliation import (
+    DeletionOperation,
+    DeletionOperationState,
+    InMemoryDeletionOperationStore,
+    SupabaseDeletionOperationStore,
+)
 from researchos.saas.supabase_claim_store import SupabaseResearchClaimStore
 from researchos.saas.supabase_job_store import SupabaseResearchJobStore
 from researchos.saas.supabase_membership import SupabaseWorkspaceMembershipResolver
@@ -31,9 +37,12 @@ __all__ = [
     "AuditEvent",
     "Dataset",
     "DatasetVersion",
+    "DeletionOperation",
+    "DeletionOperationState",
     "InMemoryAuditEventStore",
     "InMemoryDatasetStorage",
     "InMemoryDatasetStore",
+    "InMemoryDeletionOperationStore",
     "InMemoryResearchJobQueue",
     "Plan",
     "ResearchJob",
@@ -41,6 +50,7 @@ __all__ = [
     "SupabaseAuditEventStore",
     "SupabaseDatasetStorage",
     "SupabaseDatasetStore",
+    "SupabaseDeletionOperationStore",
     "SupabaseResearchClaimStore",
     "SupabaseResearchJobQueue",
     "SupabaseResearchJobStore",
