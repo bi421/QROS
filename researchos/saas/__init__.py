@@ -21,6 +21,7 @@ from researchos.saas.datasets import (
     SupabaseDatasetStore,
 )
 from researchos.saas.queue import InMemoryResearchJobQueue, SupabaseResearchJobQueue
+from researchos.saas.supabase_claim_store import SupabaseResearchClaimStore
 from researchos.saas.supabase_job_store import SupabaseResearchJobStore
 from researchos.saas.supabase_membership import SupabaseWorkspaceMembershipResolver
 
@@ -35,6 +36,7 @@ __all__ = [
     "ResearchJobStatus",
     "SupabaseDatasetStorage",
     "SupabaseDatasetStore",
+    "SupabaseResearchClaimStore",
     "SupabaseResearchJobQueue",
     "SupabaseResearchJobStore",
     "SupabaseWorkspaceMembershipResolver",
