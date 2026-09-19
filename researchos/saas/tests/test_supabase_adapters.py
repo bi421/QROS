@@ -72,6 +72,22 @@ class MultiWorkspaceClient(Client):
         return Query([{"plan": "team", "status": "active"}])
 
 
+def test_duplicate_workspace_membership_fails_closed() -> None:
+    import pytest
+
+    class DuplicateMembershipClient(Client):
+        def table(self, name):
+            if name == "workspace_member":
+                return Query([
+                    {"workspace_id": str(WORKSPACE_ID), "role": "researcher"},
+                    {"workspace_id": str(WORKSPACE_ID), "role": "admin"},
+                ])
+            return Query([{"plan": "team", "status": "active"}])
+
+    with pytest.raises(RuntimeError, match="duplicate workspace membership"):
+        SupabaseWorkspaceMembershipResolver(DuplicateMembershipClient()).resolve(USER_ID)
+
+
 def test_multi_workspace_resolution_requires_explicit_selection() -> None:
     import pytest
 
