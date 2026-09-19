@@ -54,7 +54,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 
 ## Phase 5 — Data and artifact storage
 - [x] Tenant-scoped object storage abstraction.
-- [ ] Content-addressed artifacts.
+- [x] Content-addressed artifacts.
 - [x] Upload/download authorization.
 - [ ] Retention and deletion policy.
 - [x] Dataset version registry.
