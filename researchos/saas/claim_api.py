@@ -102,9 +102,6 @@ def register_research_claim_routes(
 ) -> None:
     """Attach v1 claim routes without exposing an unconfigured persistence fallback."""
 
-    def tenant() -> TenantContext:
-        return tenant_dependency()
-
     def require_store() -> ResearchClaimStore:
         if claim_store is None:
             raise HTTPException(
@@ -132,7 +129,7 @@ def register_research_claim_routes(
     )
     def create_research_claim(
         request: ResearchClaimCreateRequest,
-        context: TenantContext = Depends(tenant),
+        context: TenantContext = Depends(tenant_dependency),
     ) -> ResearchClaimResponse:
         require_write_role(context)
         store = require_store()
