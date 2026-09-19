@@ -17,7 +17,7 @@ create_app() may retain in-memory defaults because unit and local contract tests
 
 ## Important boundary
 
-The legacy ResearchRepository, ResearchClaimRepository, and EvidenceRepository are not yet multi-tenant Supabase SaaS services. They must not be silently treated as customer-facing durable SaaS state. Before claims/evidence become SaaS resources, implement a dedicated tenant-aware durable adapter and API boundary.
+The legacy ResearchRepository and EvidenceRepository are not yet multi-tenant Supabase SaaS services. ResearchClaim now has a dedicated tenant-scoped durable Supabase persistence adapter, but it is not yet exposed as a customer-facing API resource. Claims/evidence must not be treated as SaaS resources until the API boundary, authorization policy, and integration tests are implemented.
 
 ## Regression rule
 
