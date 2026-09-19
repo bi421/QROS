@@ -82,6 +82,7 @@ def test_executor_requires_approval_audit_and_delete_before_destructive_action()
     calls: list[str] = []
     base = {
         "approved": True,
+        "destructive_deletion_enabled": True,
         "authorize": lambda _candidate: True,
         "dependency_check": lambda _candidate: True,
     }
@@ -104,6 +105,7 @@ def test_executor_audits_before_and_after_successful_delete() -> None:
         candidate(),
         now=NOW,
         approved=True,
+        destructive_deletion_enabled=True,
         authorize=lambda _candidate: True,
         dependency_check=lambda _candidate: True,
         audit=lambda _candidate, event: calls.append(event),
@@ -229,3 +231,22 @@ def test_executor_exposes_post_delete_audit_failure_for_reconciliation() -> None
             delete=lambda _candidate: calls.append("delete"),
         )
     assert calls == ["deletion_approved", "delete", "deletion_completed"]
+
+
+def test_executor_is_disabled_by_default_before_any_side_effect() -> None:
+    from researchos.saas.retention import execute_deletion
+
+    calls: list[str] = []
+    result = execute_deletion(
+        candidate(),
+        now=NOW,
+        approved=True,
+        authorize=lambda _candidate: calls.append("authorize") or True,
+        dependency_check=lambda _candidate: calls.append("dependency") or True,
+        audit=lambda *_: calls.append("audit"),
+        delete=lambda _candidate: calls.append("delete"),
+    )
+
+    assert result.deleted is False
+    assert result.reason == "production_destructive_deletion_disabled"
+    assert calls == []
