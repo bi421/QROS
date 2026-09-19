@@ -156,7 +156,7 @@ def create_app(
     datasets = dataset_store or InMemoryDatasetStore()
     storage = dataset_storage or InMemoryDatasetStorage()
     queue = job_queue or InMemoryResearchJobQueue()
-    idempotency = idempotency_store or InMemoryIdempotencyStore()
+    _idempotency = idempotency_store or InMemoryIdempotencyStore()
     limiter = rate_limiter or FixedWindowRateLimiter(limit=120, window_seconds=60)
     billing = billing_store
     app = FastAPI(
