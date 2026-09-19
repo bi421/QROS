@@ -72,7 +72,8 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [x] Add deterministic Holm/Benjamini-Hochberg multiple-testing correction primitives.
 - [x] Enforce multiple-testing results at governed edge eligibility.
 - [x] OOS/replication state tracking.
-- [ ] Economic cost/slippage context.
+- [x] Economic cost/slippage context.
+- [x] Bind economic cost/slippage context to governed edge eligibility.
 - [x] Deterministic research artifact manifests.
 
 ## Phase 7 — Product UI

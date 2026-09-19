@@ -8,8 +8,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Sequence
 
-from researchos.research_core.evidence import EvidenceArtifact, EvidenceKind
 from researchos.probability.calibration import CalibrationResult
+from researchos.probability.economic_cost import EconomicCostContext
+from researchos.research_core.evidence import EvidenceArtifact, EvidenceKind
 from researchos.research_core.multiple_testing import MultipleTestingResult
 
 
@@ -57,6 +58,7 @@ class EdgeDefinition:
     requires_replication: bool = True
     requires_multiple_testing: bool = True
     requires_calibration: bool = True
+    requires_economic_cost_context: bool = True
     probability: ProbabilityDefinition | None = None
 
     def __post_init__(self) -> None:
@@ -86,6 +88,7 @@ class EdgeDefinition:
         multiple_testing_result: MultipleTestingResult | None = None,
         multiple_testing_hypothesis_index: int = 0,
         calibration_result: CalibrationResult | None = None,
+        economic_cost_context: EconomicCostContext | None = None,
     ) -> tuple[EdgeState, tuple[str, ...]]:
         reasons: list[str] = []
         if sample_size < self.minimum_sample_size:
@@ -121,6 +124,19 @@ class EdgeDefinition:
                 reasons.append(
                     f"calibration_sample_size_insufficient:{calibration_result.sample_size}<{self.minimum_sample_size}"
                 )
+
+        if self.requires_economic_cost_context:
+            if economic_cost_context is None:
+                reasons.append("economic_cost_context_required")
+            else:
+                total_cost = economic_cost_context.total_cost
+                net_effect = economic_cost_context.net_effect(observed_effect_size)
+                if total_cost > 0 and net_effect < self.minimum_effect_size:
+                    reasons.append(
+                        "net_effect_below_minimum:"
+                        f"{net_effect}"
+                        f"<{self.minimum_effect_size}"
+                    )
 
         if self.requires_out_of_sample:
             if not out_of_sample:
@@ -190,7 +206,7 @@ class EdgeRegistrySnapshot:
 class EdgeRegistry:
     """Deterministic registry of explicitly governed edge definitions."""
 
-    registry_version = "edge-registry.v4"
+    registry_version = "edge-registry.v5"
 
     def __init__(self, definitions: Sequence[EdgeDefinition]) -> None:
         by_id: dict[str, EdgeDefinition] = {}
