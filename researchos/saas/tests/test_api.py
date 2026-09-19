@@ -37,11 +37,11 @@ class StaticRateLimiter:
         return self.allowed
 
 
-def _client(workspace_id: UUID | None = None, *, billing_store=None, billing_secret=None, rate_limiter=None):
+def _client(workspace_id: UUID | None = None, *, plan: Plan = Plan.PRO, billing_store=None, billing_secret=None, rate_limiter=None):
     context = TenantContext(
         user_id=uuid4(),
         workspace_id=workspace_id or uuid4(),
-        plan=Plan.PRO,
+        plan=plan,
     )
     dataset_store = InMemoryDatasetStore()
     dataset_storage = InMemoryDatasetStorage()
@@ -233,6 +233,52 @@ def test_research_run_idempotency_is_atomic_under_concurrent_requests() -> None:
 
     assert [response.status_code for response in responses] == [202, 202]
     assert {response.json()["id"] for response in responses}.__len__() == 1
+
+
+def test_research_run_list_supports_tenant_scoped_pagination_and_filters() -> None:
+    # The API enforces the tenant plan concurrency limit. This test needs
+    # three simultaneously queued runs to exercise pagination, so use TEAM
+    # explicitly rather than weakening the production limit or rate limiter.
+    client, context, _, _ = _client(plan=Plan.TEAM)
+    uploaded = _upload(client, "sample-list", b"x")
+    version_id = uploaded.json()["version"]["id"]
+    for key in ("list-a", "list-b", "list-c"):
+        response = client.post(
+            "/v1/research-runs",
+            headers={"Authorization": "Bearer test", "Idempotency-Key": key},
+            json={"dataset_version_id": version_id},
+        )
+        assert response.status_code == 202
+
+    page = client.get(
+        "/v1/research-runs?limit=2&offset=1&status_filter=queued",
+        headers={"Authorization": "Bearer test"},
+    )
+    assert page.status_code == 200
+    payload = page.json()
+    assert payload["total"] == 3
+    assert payload["limit"] == 2
+    assert payload["offset"] == 1
+    assert len(payload["items"]) == 2
+    assert payload["has_more"] is False
+    assert all(item["workspace_id"] == str(context.workspace_id) for item in payload["items"])
+
+    empty = client.get(
+        "/v1/research-runs?limit=100&offset=0&workflow_id=not-this-workflow",
+        headers={"Authorization": "Bearer test"},
+    )
+    assert empty.status_code == 200
+    assert empty.json()["total"] == 0
+    assert empty.json()["items"] == []
+
+
+def test_research_run_list_rejects_unbounded_pagination() -> None:
+    client, _, _, _ = _client()
+    response = client.get(
+        "/v1/research-runs?limit=101",
+        headers={"Authorization": "Bearer test"},
+    )
+    assert response.status_code == 422
 
 
 def test_create_and_get_research_job_are_tenant_scoped() -> None:

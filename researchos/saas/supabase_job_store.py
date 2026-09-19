@@ -155,6 +155,21 @@ class SupabaseResearchJobStore(ResearchJobStore):
         rows = result.data or []
         return self._row_to_job(rows[0]) if rows else None
 
+    def list(self, workspace_id: UUID, *, limit: int, offset: int, status: ResearchJobStatus | None = None, workflow_id: str | None = None) -> tuple[list[ResearchJob], int]:
+        if not 1 <= limit <= 100 or offset < 0:
+            raise ValueError("invalid pagination")
+        query = (
+            self._client.table("research_run")
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code", count="exact")
+            .eq("workspace_id", str(workspace_id))
+        )
+        if status is not None:
+            query = query.eq("status", status.value)
+        if workflow_id is not None:
+            query = query.eq("workflow_id", workflow_id)
+        result = query.order("id").range(offset, offset + limit - 1).execute()
+        return [self._row_to_job(row) for row in (result.data or [])], int(result.count or 0)
+
     def count_active(self, workspace_id: UUID) -> int:
         result = (
             self._client.table("research_run")
