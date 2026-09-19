@@ -322,8 +322,8 @@ def test_unsupported_workflow_is_rejected() -> None:
 
 def test_cross_tenant_job_lookup_returns_404() -> None:
     store = InMemoryResearchJobStore()
-    owner = TenantContext(uuid4(), uuid4(), Plan.PRO)
-    other = TenantContext(uuid4(), uuid4(), Plan.PRO)
+    owner = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
+    other = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
     owner_datasets = InMemoryDatasetStore()
     owner_storage = InMemoryDatasetStorage()
     owner_client = TestClient(
