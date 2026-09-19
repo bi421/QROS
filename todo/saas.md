@@ -28,8 +28,10 @@ This file is the execution contract for turning QROS into a research-grade multi
   - [x] Reject ambiguous multi-workspace auth resolution; support explicit `X-Workspace-ID` selection.
 - [ ] Implement canonical Supabase persistence adapters.
   - [x] Add tenant-scoped durable Supabase Research Claim adapter (persistence only; API exposure remains gated).
+  - [x] Add tenant-scoped Research Claim customer API with fail-closed persistence and cross-workspace tests.
 - [x] Enforce RLS for every tenant-owned table.
 - [ ] Add tenant-isolation integration tests.
+  - [x] Research Claim API cross-workspace lookup and pagination isolation coverage (API contract tests).
 - [ ] Add migration/version compatibility checks.
 
 ## Phase 3 — Durable execution
@@ -42,6 +44,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 ## Phase 4 — API productization
 - [x] Stable versioned API surface.
 - [ ] Authentication/session boundary.
+  - [x] Research Claim endpoints consume the authenticated TenantContext and never trust workspace/creator request fields.
 - [x] Authorization policy matrix.
 - [x] Request validation and size limits.
 - [x] Rate limiting and abuse controls.
