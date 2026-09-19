@@ -71,6 +71,16 @@ class SupabaseResearchEvidenceStore:
         )
 
     def list_for_run(self, workspace_id: UUID, research_run_id: UUID) -> list[ResearchEvidenceRecord]:
+        run = (
+            self._client.table("research_run")
+            .select("id")
+            .eq("id", str(research_run_id))
+            .eq("workspace_id", str(workspace_id))
+            .limit(1)
+            .execute()
+        )
+        if not (run.data or []):
+            return []
         result = (
             self._client.table("evidence")
             .select("id,workspace_id,research_run_id,artifact_id,claim,status,provenance")
