@@ -6,6 +6,8 @@ import pytest
 from researchos.probability import (
     ProbabilityAnalysis,
     ProbabilityMethod,
+    brier_score,
+    wilson_interval,
     expected_value,
     historical_expected_shortfall,
     historical_var,
