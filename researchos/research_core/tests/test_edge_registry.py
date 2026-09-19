@@ -48,7 +48,7 @@ def _multiple_testing() -> object:
 
 
 def _economic_cost() -> EconomicCostContext:
-    return EconomicCostContext(spread_cost=0.01, slippage_cost=0.01)
+    return EconomicCostContext()
 
 
 def _calibration(sample_size: int = 100) -> CalibrationResult:
