@@ -189,26 +189,32 @@ select throws_ok(
   'trusted writer cannot cross-bind evidence to another tenant'
 );
 
-select has_function_privilege(
-  'authenticated',
-  'public.create_research_run_idempotent(uuid,uuid,uuid,text,uuid,text,text,jsonb)',
-  'EXECUTE',
+select is(
+  has_function_privilege(
+    'authenticated',
+    'public.create_research_run_idempotent(uuid,uuid,uuid,text,uuid,text,text,jsonb)',
+    'EXECUTE'
+  ),
   false,
   'authenticated cannot execute privileged idempotent research-run RPC'
 );
 
-select has_function_privilege(
-  'authenticated',
-  'public.enqueue_research_run(uuid,uuid)',
-  'EXECUTE',
+select is(
+  has_function_privilege(
+    'authenticated',
+    'public.enqueue_research_run(uuid,uuid)',
+    'EXECUTE'
+  ),
   false,
   'authenticated cannot execute privileged enqueue RPC'
 );
 
-select has_function_privilege(
-  'authenticated',
-  'public.finish_research_run(uuid,uuid,uuid,text,text)',
-  'EXECUTE',
+select is(
+  has_function_privilege(
+    'authenticated',
+    'public.finish_research_run(uuid,uuid,uuid,text,text)',
+    'EXECUTE'
+  ),
   false,
   'authenticated cannot execute privileged finish RPC'
 );
