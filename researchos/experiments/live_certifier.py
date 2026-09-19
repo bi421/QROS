@@ -1,4 +1,4 @@
-﻿"""
+"""
 Live Experiment Certification Engine.
 Bridges cpp_quant_engine WFO results into the EvidenceRegistry with strict determinism.
 """

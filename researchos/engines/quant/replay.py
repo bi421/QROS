@@ -19,8 +19,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from researchos.engines.data.dataset import HistoricalDataset
-from researchos.engines.data.iterator import HistoricalIterator
+from researchos.data_engine.dataset import HistoricalDataset
+from researchos.data_engine.iterator import HistoricalIterator
 from researchos.engines.quant.execution import ExecutionSimulationLayer
 from researchos.engines.quant.models import OrderSide, Signal
 from researchos.engines.quant.strategy import StrategyEvaluationInterface

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Evidence objects â€” interpreted observations that support or contradict hypotheses.
 
 Based on Article XVII: Object Model â€” Evidence Layer.
