@@ -59,3 +59,36 @@ class Client:
 def test_supabase_membership_resolver_uses_server_subscription_state() -> None:
     result = SupabaseWorkspaceMembershipResolver(Client()).resolve(USER_ID)
     assert result == (WORKSPACE_ID, Plan.TEAM)
+
+
+class MultiWorkspaceClient(Client):
+    def table(self, name):
+        if name == "workspace_member":
+            return Query([
+                {"workspace_id": str(WORKSPACE_ID)},
+                {"workspace_id": str(uuid4())},
+            ])
+        return Query([{"plan": "team", "status": "active"}])
+
+
+def test_multi_workspace_resolution_requires_explicit_selection() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="workspace selection is required"):
+        SupabaseWorkspaceMembershipResolver(MultiWorkspaceClient()).resolve(USER_ID)
+
+
+def test_multi_workspace_resolution_accepts_authorized_workspace() -> None:
+    other_workspace = uuid4()
+    class SelectedClient(Client):
+        def table(self, name):
+            if name == "workspace_member":
+                return Query([
+                    {"workspace_id": str(WORKSPACE_ID)},
+                    {"workspace_id": str(other_workspace)},
+                ])
+            return Query([{"plan": "team", "status": "active"}])
+
+    assert SupabaseWorkspaceMembershipResolver(SelectedClient()).resolve(
+        USER_ID, WORKSPACE_ID
+    ) == (WORKSPACE_ID, Plan.TEAM)
