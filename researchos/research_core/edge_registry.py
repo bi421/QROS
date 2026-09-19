@@ -9,6 +9,7 @@ from enum import Enum
 from typing import Sequence
 
 from researchos.research_core.evidence import EvidenceArtifact, EvidenceKind
+from researchos.probability.calibration import CalibrationResult
 from researchos.research_core.multiple_testing import MultipleTestingResult
 
 
@@ -55,6 +56,7 @@ class EdgeDefinition:
     requires_out_of_sample: bool = True
     requires_replication: bool = True
     requires_multiple_testing: bool = True
+    requires_calibration: bool = True
     probability: ProbabilityDefinition | None = None
 
     def __post_init__(self) -> None:
@@ -83,6 +85,7 @@ class EdgeDefinition:
         replication_evidence: EvidenceArtifact | None = None,
         multiple_testing_result: MultipleTestingResult | None = None,
         multiple_testing_hypothesis_index: int = 0,
+        calibration_result: CalibrationResult | None = None,
     ) -> tuple[EdgeState, tuple[str, ...]]:
         reasons: list[str] = []
         if sample_size < self.minimum_sample_size:
@@ -110,6 +113,14 @@ class EdgeDefinition:
                     multiple_testing_hypothesis_index
                 ]:
                     reasons.append("multiple_testing_not_rejected")
+
+        if self.requires_calibration:
+            if calibration_result is None:
+                reasons.append("calibration_result_required")
+            elif calibration_result.sample_size < self.minimum_sample_size:
+                reasons.append(
+                    f"calibration_sample_size_insufficient:{calibration_result.sample_size}<{self.minimum_sample_size}"
+                )
 
         if self.requires_out_of_sample:
             if not out_of_sample:
