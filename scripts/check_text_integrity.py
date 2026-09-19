@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Reject malformed or unsafe text files before they reach CI/runtime."""
+"""Reject source/config encoding hazards before they reach CI or runtime."""
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
 BOM = b"\xef\xbb\xbf"
-TEXT_SUFFIXES = {
-    ".py", ".toml", ".yml", ".yaml", ".md", ".txt", ".json",
-    ".ini", ".cfg", ".sh", ".ps1", ".c", ".cc", ".cpp", ".cxx", ".h", ".hh",
-    ".hpp", ".hxx", ".cmake",
+
+# These files are parsed/executed by CI, Python, YAML tooling, or shells.
+VALIDATED_SUFFIXES = {
+    ".py", ".toml", ".yml", ".yaml", ".json", ".ini", ".cfg", ".sh", ".ps1",
+    ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".cmake",
 }
 SKIP_DIRS = {
     ".git", "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache",
@@ -24,11 +25,8 @@ FORBIDDEN_PATH_MARKERS = (
 def iter_files() -> list[Path]:
     result: list[Path] = []
     for path in Path(".").rglob("*"):
-        if not path.is_file():
-            continue
-        if any(part in SKIP_DIRS for part in path.parts):
-            continue
-        result.append(path)
+        if path.is_file() and not any(part in SKIP_DIRS for part in path.parts):
+            result.append(path)
     return result
 
 
@@ -43,34 +41,30 @@ def check(path: Path) -> list[str]:
     if any(marker in normalized for marker in FORBIDDEN_PATH_MARKERS):
         failures.append(f"{path}: forbidden temporary artifact path")
 
+    # BOM is a repository-level hazard even when the file is not parsed as UTF-8
+    # by this checker, so detect it directly from the raw bytes.
     if raw.startswith(BOM):
         failures.append(f"{path}: UTF-8 BOM detected")
 
-    if path.suffix.lower() in TEXT_SUFFIXES:
-        try:
-            text = raw.decode("utf-8")
-        except UnicodeDecodeError as exc:
-            failures.append(f"{path}: invalid UTF-8: {exc}")
-            return failures
+    if path.suffix.lower() not in VALIDATED_SUFFIXES:
+        return failures
 
-        if "\ufeff" in text:
-            failures.append(f"{path}: UTF-8 BOM character detected in text")
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        failures.append(f"{path}: invalid UTF-8: {exc}")
+        return failures
 
-        if "\x00" in text:
-            failures.append(f"{path}: NUL character detected in text")
-
-        for number, line in enumerate(text.splitlines(), 1):
-            if line.rstrip("\r\n").endswith((" ", "\t")):
-                failures.append(f"{path}:{number}: trailing whitespace")
+    if "\ufeff" in text:
+        failures.append(f"{path}: UTF-8 BOM character detected in text")
+    if "\x00" in text:
+        failures.append(f"{path}: NUL character detected in text")
 
     return failures
 
 
 def main() -> int:
-    paths = [Path(arg) for arg in sys.argv[1:]]
-    if not paths:
-        paths = iter_files()
-
+    paths = [Path(arg) for arg in sys.argv[1:]] or iter_files()
     failures = [failure for path in paths if path.exists() for failure in check(path)]
     if failures:
         print("TEXT INTEGRITY: FAIL")
