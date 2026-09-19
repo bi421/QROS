@@ -16,12 +16,24 @@ begin
       and not c.relrowsecurity;
     if missing_rls is not null then raise exception 'R3 security gate: RLS disabled on: %', missing_rls; end if;
 
-    select string_agg(format('%s.%s:%s:%s', table_schema, table_name, grantee, privilege_type), ', ' order by table_name, grantee, privilege_type)
+    -- information_schema.role_table_grants includes privileges inherited through
+    -- PUBLIC. Inspect the table ACL directly so this gate detects explicit
+    -- anon/authenticated grants without treating the normal PUBLIC baseline as
+    -- a client grant.
+    select string_agg(
+        format('%s.%s:%s:%s', n.nspname, c.relname, r.rolname, x.privilege_type),
+        ', ' order by c.relname, r.rolname, x.privilege_type
+    )
       into exposed_grants
-    from information_schema.role_table_grants
-    where table_schema='public' and grantee in ('anon','authenticated')
-      and table_name in ('workspace','workspace_member','subscription','dataset','dataset_version','research_run','research_run_result','research_run_artifact','artifact','evidence','usage_event','audit_log','api_rate_limit','billing_event');
-    if exposed_grants is not null then raise exception 'R3 security gate: client table grants detected: %', exposed_grants; end if;
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) x
+    join pg_roles r on r.oid = x.grantee
+    where n.nspname = 'public'
+      and c.relkind = 'r'
+      and r.rolname in ('anon', 'authenticated')
+      and c.relname in ('workspace','workspace_member','subscription','dataset','dataset_version','research_run','research_run_result','research_run_artifact','artifact','evidence','usage_event','audit_log','api_rate_limit','billing_event');
+    if exposed_grants is not null then raise exception 'R3 security gate: explicit client table grants detected: %', exposed_grants; end if;
 
     select string_agg(format('%s.%s', n.nspname, p.proname), ', ' order by n.nspname, p.proname)
       into unsafe_definers
