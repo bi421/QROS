@@ -8,7 +8,8 @@ from pathlib import Path
 BOM = b"\xef\xbb\xbf"
 TEXT_SUFFIXES = {
     ".py", ".toml", ".yml", ".yaml", ".md", ".txt", ".json",
-    ".ini", ".cfg", ".sh", ".ps1",
+    ".ini", ".cfg", ".sh", ".ps1", ".c", ".cc", ".cpp", ".cxx", ".h", ".hh",
+    ".hpp", ".hxx", ".cmake",
 }
 SKIP_DIRS = {
     ".git", "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache",

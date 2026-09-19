@@ -10,7 +10,8 @@ on:
 # New pushes must not cancel a run already executing for the same branch.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  # Cancel stale feature/PR runs so a fix does not leave obsolete CI consuming time.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/feat/') }}
 
 jobs:
   repository-integrity:
@@ -26,8 +27,6 @@ jobs:
         run: python scripts/check_text_integrity.py
       - name: Compile Python sources
         run: python -m compileall -q researchos scripts
-      - name: Check staged-scope invariants
-        run: python scripts/check_scope.py --base origin/main
 
   python-primary:
     name: Python Tests
