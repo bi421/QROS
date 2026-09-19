@@ -88,7 +88,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,test,saas]" 2>&1 || true
+          python -m pip install -e ".[dev,test,saas]"
           python -m pip install nanobind scikit-build-core pytest ruff
       - name: Build C++ Engine
         run: |
@@ -103,4 +103,4 @@ jobs:
           PYTHONPATH: researchos/engines/quant/python
         run: |
           python -m pytest researchos/tests/ researchos/research_core/tests/ -v --tb=short -x
-          ruff check . --exit-zero
+          ruff check .
