@@ -64,7 +64,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [x] Add deterministic computational path planner v1 (method contracts, capability registry, prerequisite gates, immutable plan hash).
 - [x] Governed analysis execution contract (immutable AnalysisResult bound to planner output).
 - [x] Probability/edge service registry.
-- [ ] Calibration and uncertainty outputs.
+- [x] Calibration and uncertainty outputs.
 - [x] Add deterministic Holm/Benjamini-Hochberg multiple-testing correction primitives.
 - [x] Enforce multiple-testing results at governed edge eligibility.
 - [x] OOS/replication state tracking.
