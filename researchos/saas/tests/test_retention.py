@@ -73,3 +73,71 @@ def test_candidate_and_now_must_be_timezone_aware() -> None:
         )
     with pytest.raises(ValueError, match="timezone-aware"):
         evaluate_deletion(candidate(), now=datetime(2026, 9, 19))
+
+
+
+def test_executor_requires_approval_audit_and_delete_before_destructive_action() -> None:
+    from researchos.saas.retention import execute_deletion
+
+    calls: list[str] = []
+    for kwargs, reason in [
+        ({}, "approval_required"),
+        ({"approved": True}, "audit_sink_required"),
+        ({"approved": True, "audit": lambda *_: calls.append("audit")}, "delete_operation_required"),
+    ]:
+        result = execute_deletion(candidate(), now=NOW, **kwargs)
+        assert result.deleted is False
+        assert result.reason == reason
+        assert calls == []
+
+
+def test_executor_audits_before_and_after_successful_delete() -> None:
+    from researchos.saas.retention import execute_deletion
+
+    calls: list[str] = []
+    result = execute_deletion(
+        candidate(),
+        now=NOW,
+        approved=True,
+        audit=lambda _candidate, event: calls.append(event),
+        delete=lambda _candidate: calls.append("delete"),
+    )
+    assert result.deleted is True
+    assert result.reason == "deletion_completed"
+    assert calls == ["deletion_approved", "delete", "deletion_completed"]
+
+
+def test_executor_does_not_delete_when_pre_delete_audit_fails() -> None:
+    from researchos.saas.retention import execute_deletion
+
+    calls: list[str] = []
+
+    def audit(_candidate, event):
+        calls.append(event)
+        raise RuntimeError("audit unavailable")
+
+    with pytest.raises(RuntimeError, match="audit unavailable"):
+        execute_deletion(
+            candidate(),
+            now=NOW,
+            approved=True,
+            audit=audit,
+            delete=lambda _candidate: calls.append("delete"),
+        )
+    assert calls == ["deletion_approved"]
+
+
+def test_executor_never_calls_delete_for_ineligible_candidate() -> None:
+    from researchos.saas.retention import execute_deletion
+
+    calls: list[str] = []
+    result = execute_deletion(
+        candidate(reference_count=1),
+        now=NOW,
+        approved=True,
+        audit=lambda *_: calls.append("audit"),
+        delete=lambda _candidate: calls.append("delete"),
+    )
+    assert result.deleted is False
+    assert result.reason == "active_references"
+    assert calls == []
