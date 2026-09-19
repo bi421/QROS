@@ -171,6 +171,10 @@ When a feature conflicts with the research boundary, isolate the feature rather 
 
 When uncertainty is material and cannot be quantified, the result must be labeled accordingly rather than presented as precise.
 
+## 13. Security architecture control
+
+The mandatory security and architecture invariants are defined in `docs/governance/SECURITY_ARCHITECTURE_GOVERNANCE.md`. Trust-boundary changes are classified R0-R3 and must satisfy the corresponding evidence gates before merge.
+
 ## 13. Release gate
 
 A ResearchOS release may claim a research capability only when its capability contract, tests, provenance, and applicable CI evidence exist in the repository. Marketing language must not exceed the verified implementation state.
