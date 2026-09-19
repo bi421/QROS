@@ -30,6 +30,7 @@ def test_supabase_auth_adapter_maps_verified_claims_to_tenant() -> None:
     assert context.user_id == USER_ID
     assert context.workspace_id == WORKSPACE_ID
     assert context.plan is Plan.PRO
+    assert context.role is WorkspaceRole.RESEARCHER
 
 
 class Query:
@@ -118,3 +119,15 @@ def test_membership_resolver_returns_server_role() -> None:
     assert SupabaseWorkspaceMembershipResolver(ViewerClient()).resolve(USER_ID) == (
         WORKSPACE_ID, Plan.TEAM, WorkspaceRole.VIEWER
     )
+
+
+def test_malformed_membership_role_fails_closed() -> None:
+    class BrokenRoleClient(Client):
+        def table(self, name):
+            if name == "workspace_member":
+                return Query([{"workspace_id": str(WORKSPACE_ID), "role": "superuser"}])
+            return Query([{"plan": "team", "status": "active"}])
+
+    import pytest
+    with pytest.raises(RuntimeError, match="invalid workspace membership role"):
+        SupabaseWorkspaceMembershipResolver(BrokenRoleClient()).resolve(USER_ID)
