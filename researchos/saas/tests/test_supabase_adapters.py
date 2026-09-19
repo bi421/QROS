@@ -92,3 +92,17 @@ def test_multi_workspace_resolution_accepts_authorized_workspace() -> None:
     assert SupabaseWorkspaceMembershipResolver(SelectedClient()).resolve(
         USER_ID, WORKSPACE_ID
     ) == (WORKSPACE_ID, Plan.TEAM)
+
+
+class BrokenMembership:
+    def resolve(self, user_id, requested_workspace_id=None):
+        raise RuntimeError("invalid active subscription entitlement")
+
+
+def test_supabase_auth_maps_entitlement_corruption_to_service_unavailable() -> None:
+    import pytest
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc_info:
+        SupabaseJwtAuthProvider(ClaimsAuth(), BrokenMembership()).authenticate("Bearer good")
+    assert exc_info.value.status_code == 503
