@@ -59,6 +59,10 @@ class DatasetStorage(Protocol):
     def remove(self, storage_path: str) -> None:
         ...
 
+    def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
+        """Create a short-lived URL for an already-authorized private object."""
+        ...
+
 
 class InMemoryDatasetStore:
     """Deterministic development/test implementation; not production storage."""
@@ -131,8 +135,12 @@ class InMemoryDatasetStorage:
     def remove(self, storage_path: str) -> None:
         self._objects.pop(storage_path, None)
 
-    def get(self, storage_path: str) -> bytes | None:
-        return self._objects.get(storage_path)
+    def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
+        if storage_path not in self._objects:
+            raise FileNotFoundError(storage_path)
+        if not 1 <= expires_in <= 900:
+            raise ValueError("signed URL expiry must be between 1 and 900 seconds")
+        return f"memory://{storage_path}?expires_in={expires_in}"
 
 
 class SupabaseDatasetStore:
@@ -267,6 +275,21 @@ class SupabaseDatasetStorage:
 
     def remove(self, storage_path: str) -> None:
         self._client.storage.from_(self._bucket).remove([storage_path])
+
+    def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
+        if not 1 <= expires_in <= 900:
+            raise ValueError("signed URL expiry must be between 1 and 900 seconds")
+        response = self._client.storage.from_(self._bucket).create_signed_url(
+            storage_path,
+            expires_in,
+        )
+        if isinstance(response, dict):
+            signed_url = response.get("signedURL") or response.get("signedUrl")
+        else:
+            signed_url = getattr(response, "signedURL", None) or getattr(response, "signedUrl", None)
+        if not signed_url:
+            raise RuntimeError("storage provider returned no signed download URL")
+        return str(signed_url)
 
 
 def stream_sha256(file: BinaryIO, max_bytes: int) -> tuple[str, int]:
