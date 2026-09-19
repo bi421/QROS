@@ -85,3 +85,45 @@ def test_probability_analysis_rejects_invalid_uncertainty_interval() -> None:
             data_hash="a" * 64,
             uncertainty_interval=(0.5, 0.1),
         )
+
+
+def test_probability_analysis_rejects_unknown_governance_status() -> None:
+    with pytest.raises(ValueError, match="out_of_sample_status"):
+        ProbabilityAnalysis(
+            analysis_id="pa-002",
+            claim_id="claim-001",
+            method=ProbabilityMethod.DESCRIPTIVE,
+            population_definition="sample",
+            time_window="2025",
+            data_version="v1",
+            data_hash="a" * 64,
+            out_of_sample_status="MAYBE",
+        )
+
+
+def test_probability_analysis_requires_selection_count_for_multiple_testing_context() -> None:
+    with pytest.raises(ValueError, match="selection_count"):
+        ProbabilityAnalysis(
+            analysis_id="pa-003",
+            claim_id="claim-001",
+            method=ProbabilityMethod.DESCRIPTIVE,
+            population_definition="sample",
+            time_window="2025",
+            data_version="v1",
+            data_hash="a" * 64,
+            multiple_testing_context="holm alpha=0.05",
+        )
+
+
+def test_probability_analysis_rejects_non_positive_selection_count() -> None:
+    with pytest.raises(ValueError, match="selection_count"):
+        ProbabilityAnalysis(
+            analysis_id="pa-004",
+            claim_id="claim-001",
+            method=ProbabilityMethod.DESCRIPTIVE,
+            population_definition="sample",
+            time_window="2025",
+            data_version="v1",
+            data_hash="a" * 64,
+            selection_count=0,
+        )
