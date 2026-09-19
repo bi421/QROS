@@ -11,6 +11,13 @@ from pathlib import Path
 MIGRATIONS = Path("supabase/migrations")
 NAME_RE = re.compile(r"^\d{12}_[a-z0-9][a-z0-9_-]*\.sql$")
 
+# Security assertions must never execute before the grants they assert are revoked.
+# Keep this dependency explicit so timestamp changes cannot silently reintroduce a
+# fresh-database security failure.
+REQUIRED_MIGRATION_ORDER = (
+    ("202609200000_r3_result_client_grants_deny.sql", "202609200003_r3_security_boundary_assertions_v2.sql"),
+)
+
 
 def main() -> int:
     if not MIGRATIONS.is_dir():
@@ -45,6 +52,13 @@ def main() -> int:
             data.decode("utf-8")
         except UnicodeDecodeError as exc:
             raise SystemExit(f"migration is not valid UTF-8: {path}") from exc
+
+    names = {path.name for path in files}
+    for prerequisite, dependent in REQUIRED_MIGRATION_ORDER:
+        if prerequisite not in names or dependent not in names:
+            raise SystemExit(f"required security migration dependency missing: {prerequisite} -> {dependent}")
+        if prerequisite >= dependent:
+            raise SystemExit(f"security migration dependency order invalid: {prerequisite} must precede {dependent}")
 
     print(f"migration integrity OK: {len(files)} files")
     return 0
