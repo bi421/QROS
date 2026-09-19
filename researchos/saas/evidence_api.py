@@ -24,6 +24,52 @@ class ResearchEvidenceRecord:
 
 
 class ResearchEvidenceStore(Protocol):
+    def add(self, record: ResearchEvidenceRecord) -> ResearchEvidenceRecord:
+        if record.workspace_id is None:
+            raise ValueError("evidence workspace is required")
+        run = (
+            self._client.table("research_run")
+            .select("id")
+            .eq("id", str(record.research_run_id))
+            .eq("workspace_id", str(record.workspace_id))
+            .limit(1)
+            .execute()
+        )
+        if not (run.data or []):
+            raise ValueError("research run is not owned by workspace")
+        if record.artifact_id is not None:
+            artifact = (
+                self._client.table("artifact")
+                .select("id")
+                .eq("id", str(record.artifact_id))
+                .eq("research_run_id", str(record.research_run_id))
+                .eq("workspace_id", str(record.workspace_id))
+                .limit(1)
+                .execute()
+            )
+            if not (artifact.data or []):
+                raise ValueError("evidence artifact is not owned by research run")
+        result = (
+            self._client.table("evidence")
+            .insert(
+                {
+                    "id": str(record.id),
+                    "workspace_id": str(record.workspace_id),
+                    "research_run_id": str(record.research_run_id),
+                    "artifact_id": str(record.artifact_id) if record.artifact_id else None,
+                    "claim": record.claim,
+                    "status": record.status,
+                    "provenance": record.provenance,
+                }
+            )
+            .select("id,workspace_id,research_run_id,artifact_id,claim,status,provenance")
+            .execute()
+        )
+        rows = result.data or []
+        if len(rows) != 1:
+            raise RuntimeError("evidence persistence returned no unique row")
+        return self._record(rows[0])
+
     def list_for_run(self, workspace_id: UUID, research_run_id: UUID) -> list[ResearchEvidenceRecord]:
         ...
 
