@@ -17,6 +17,11 @@ from researchos.research_core.execution import (
     registry_for_backend,
     validate_backend_capability,
 )
+from researchos.research_core.multiple_testing import (
+    MULTIPLE_TESTING_SCHEMA_VERSION,
+    MultipleTestingResult,
+    adjust_p_values,
+)
 from researchos.research_core.intelligence import (
     Backend,
     CapabilityRegistry,
@@ -52,6 +57,8 @@ __all__ = [
     "FrozenResearchPipeline",
     "FrozenXauusdM1Runner",
     "MethodDecision",
+    "MULTIPLE_TESTING_SCHEMA_VERSION",
+    "MultipleTestingResult",
     "PipelineArtifact",
     "ResearchArtifact",
     "ResearchContext",
@@ -63,5 +70,6 @@ __all__ = [
     "ResearchRunner",
     "ValidationPlan",
     "registry_for_backend",
+    "adjust_p_values",
     "validate_backend_capability",
 ]
