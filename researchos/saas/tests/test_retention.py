@@ -80,10 +80,15 @@ def test_executor_requires_approval_audit_and_delete_before_destructive_action()
     from researchos.saas.retention import execute_deletion
 
     calls: list[str] = []
+    base = {
+        "approved": True,
+        "authorize": lambda _candidate: True,
+        "dependency_check": lambda _candidate: True,
+    }
     for kwargs, reason in [
         ({}, "approval_required"),
-        ({"approved": True}, "audit_sink_required"),
-        ({"approved": True, "audit": lambda *_: calls.append("audit")}, "delete_operation_required"),
+        ({**base}, "audit_sink_required"),
+        ({**base, "audit": lambda *_: calls.append("audit")}, "delete_operation_required"),
     ]:
         result = execute_deletion(candidate(), now=NOW, **kwargs)
         assert result.deleted is False
@@ -99,6 +104,8 @@ def test_executor_audits_before_and_after_successful_delete() -> None:
         candidate(),
         now=NOW,
         approved=True,
+        authorize=lambda _candidate: True,
+        dependency_check=lambda _candidate: True,
         audit=lambda _candidate, event: calls.append(event),
         delete=lambda _candidate: calls.append("delete"),
     )
@@ -121,6 +128,8 @@ def test_executor_does_not_delete_when_pre_delete_audit_fails() -> None:
             candidate(),
             now=NOW,
             approved=True,
+            authorize=lambda _candidate: True,
+            dependency_check=lambda _candidate: True,
             audit=audit,
             delete=lambda _candidate: calls.append("delete"),
         )
@@ -135,9 +144,43 @@ def test_executor_never_calls_delete_for_ineligible_candidate() -> None:
         candidate(reference_count=1),
         now=NOW,
         approved=True,
+        authorize=lambda _candidate: True,
+        dependency_check=lambda _candidate: True,
         audit=lambda *_: calls.append("audit"),
         delete=lambda _candidate: calls.append("delete"),
     )
     assert result.deleted is False
     assert result.reason == "active_references"
     assert calls == []
+
+
+def test_executor_requires_authorization_and_dependency_resolution() -> None:
+    from researchos.saas.retention import execute_deletion
+
+    result = execute_deletion(candidate(), now=NOW, approved=True)
+    assert result.reason == "tenant_authorization_required"
+
+    result = execute_deletion(
+        candidate(),
+        now=NOW,
+        approved=True,
+        authorize=lambda _candidate: False,
+    )
+    assert result.reason == "tenant_authorization_denied"
+
+    result = execute_deletion(
+        candidate(),
+        now=NOW,
+        approved=True,
+        authorize=lambda _candidate: True,
+    )
+    assert result.reason == "dependency_check_required"
+
+    result = execute_deletion(
+        candidate(),
+        now=NOW,
+        approved=True,
+        authorize=lambda _candidate: True,
+        dependency_check=lambda _candidate: False,
+    )
+    assert result.reason == "active_dependencies"

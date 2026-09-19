@@ -105,11 +105,14 @@ def execute_deletion(
     approved: bool = False,
     audit: Any | None = None,
     delete: Any | None = None,
+    dependency_check: Any | None = None,
+    authorize: Any | None = None,
 ) -> DeletionExecution:
     """Execute deletion only after eligibility, approval, and audit gates pass.
 
-    The executor is deliberately fail-closed: approval, audit sink, and delete
-    operation are all required before an eligible resource can be destroyed.
+    The executor is deliberately fail-closed: approval, tenant authorization,
+    dependency resolution, audit sink, and delete operation are all required
+    before an eligible resource can be destroyed.
     The audit callback is invoked before deletion; if it raises, deletion does
     not occur. A delete callback must return normally for the result to report
     a successful deletion. No recovery or retry is performed implicitly.
@@ -119,6 +122,20 @@ def execute_deletion(
         return DeletionExecution(decision, reason, False)
     if not approved:
         return DeletionExecution(RetentionDecision.RETAIN, "approval_required", False)
+    if authorize is None:
+        return DeletionExecution(
+            RetentionDecision.RETAIN, "tenant_authorization_required", False
+        )
+    if not authorize(candidate):
+        return DeletionExecution(
+            RetentionDecision.RETAIN, "tenant_authorization_denied", False
+        )
+    if dependency_check is None:
+        return DeletionExecution(
+            RetentionDecision.RETAIN, "dependency_check_required", False
+        )
+    if not dependency_check(candidate):
+        return DeletionExecution(RetentionDecision.RETAIN, "active_dependencies", False)
     if audit is None:
         return DeletionExecution(RetentionDecision.RETAIN, "audit_sink_required", False)
     if delete is None:
