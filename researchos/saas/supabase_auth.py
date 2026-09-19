@@ -18,7 +18,11 @@ from researchos.saas.contracts import Plan, TenantContext
 class WorkspaceMembershipResolver(Protocol):
     """Resolve the caller's authorized workspace and server-side plan."""
 
-    def resolve(self, user_id: UUID) -> tuple[UUID, Plan] | None:
+    def resolve(
+        self,
+        user_id: UUID,
+        requested_workspace_id: UUID | None = None,
+    ) -> tuple[UUID, Plan] | None:
         """Return one authorized workspace/plan or ``None`` if unauthorized."""
 
 
@@ -51,6 +55,11 @@ class SupabaseJwtAuthProvider:
             resolved = self._membership.resolve(user_id, requested_workspace_id)
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="workspace entitlement state is unavailable",
+            ) from exc
         if resolved is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="workspace access denied")
 
