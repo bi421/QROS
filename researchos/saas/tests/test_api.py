@@ -37,11 +37,11 @@ class StaticRateLimiter:
         return self.allowed
 
 
-def _client(workspace_id: UUID | None = None, *, billing_store=None, billing_secret=None, rate_limiter=None):
+def _client(workspace_id: UUID | None = None, *, plan: Plan = Plan.PRO, billing_store=None, billing_secret=None, rate_limiter=None):
     context = TenantContext(
         user_id=uuid4(),
         workspace_id=workspace_id or uuid4(),
-        plan=Plan.PRO,
+        plan=plan,
     )
     dataset_store = InMemoryDatasetStore()
     dataset_storage = InMemoryDatasetStorage()
@@ -236,7 +236,10 @@ def test_research_run_idempotency_is_atomic_under_concurrent_requests() -> None:
 
 
 def test_research_run_list_supports_tenant_scoped_pagination_and_filters() -> None:
-    client, context, _, _ = _client()
+    # The API enforces the tenant plan concurrency limit. This test needs
+    # three simultaneously queued runs to exercise pagination, so use TEAM
+    # explicitly rather than weakening the production limit or rate limiter.
+    client, context, _, _ = _client(plan=Plan.TEAM)
     uploaded = _upload(client, "sample-list", b"x")
     version_id = uploaded.json()["version"]["id"]
     for key in ("list-a", "list-b", "list-c"):
