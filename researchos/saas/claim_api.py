@@ -171,7 +171,7 @@ def register_research_claim_routes(
     )
     def get_research_claim(
         claim_id: str,
-        context: TenantContext = Depends(tenant),
+        context: TenantContext = Depends(tenant_dependency),
     ) -> ResearchClaimResponse:
         if not claim_id.strip() or len(claim_id) > 256:
             raise HTTPException(status_code=422, detail="invalid claim id")
