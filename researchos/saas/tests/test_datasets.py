@@ -6,6 +6,7 @@ import pytest
 from researchos.saas.datasets import (
     Dataset,
     DatasetVersion,
+    InMemoryDatasetStorage,
     InMemoryDatasetStore,
     storage_path_for,
     stream_sha256,
@@ -80,8 +81,6 @@ def test_in_memory_store_rejects_dataset_write_from_other_workspace() -> None:
 
 
 def test_in_memory_signed_download_url_requires_existing_object_and_bounded_expiry() -> None:
-    from io import BytesIO
-
     storage = InMemoryDatasetStorage()
     with pytest.raises(FileNotFoundError):
         storage.create_signed_download_url("missing", 300)
