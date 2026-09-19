@@ -25,12 +25,13 @@ This file is the execution contract for turning QROS into a research-grade multi
 
 ## Phase 2 — Tenant-safe persistence
 - [ ] Make workspace/tenant identity mandatory at every SaaS boundary.
-  - [x] Reject ambiguous multi-workspace auth resolution; support explicit `X-Workspace-ID` selection.
+  - [x] Reject ambiguous multi-workspace auth resolution; support explicit \`X-Workspace-ID\` selection.
 - [ ] Implement canonical Supabase persistence adapters.
   - [x] Add tenant-scoped durable Supabase Research Claim adapter (persistence only; API exposure remains gated).
   - [x] Add tenant-scoped Research Claim customer API with fail-closed persistence and cross-workspace tests.
 - [x] Enforce RLS for every tenant-owned table.
-- [ ] Add tenant-isolation integration tests.\n  - [x] Golden Path result/evidence API cross-workspace isolation contract tests.
+- [ ] Add tenant-isolation integration tests.
+  - [x] Golden Path result/evidence API cross-workspace isolation contract tests.
   - [x] Research Claim API cross-workspace lookup and pagination isolation coverage (API contract tests).
 - [x] Add repository migration integrity gate (target-environment compatibility still release-gated).
 
@@ -57,6 +58,8 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [x] Content-addressed artifacts.
 - [x] Upload/download authorization.
 - [ ] Retention and deletion policy.
+  - [x] Deterministic fail-closed retention eligibility contract.
+  - [ ] Destructive retention executor with dependency resolution, audit events, and recovery/runbook coverage.
 - [x] Dataset version registry.
 - [x] Reproducibility manifest generation.
 
@@ -121,9 +124,7 @@ A release is **NOT production-ready** unless all applicable gates are green:
 9. No known high-severity security or data-integrity defect remains open.
 10. The release artifact is reproducible and versioned.
 
-
 - Evidence governance v1: immutable OOS/replication artifact contracts bound to governed edge eligibility (PR #76).
-
 
 ## Verification discipline
 
