@@ -14,7 +14,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
-from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, ResearchJob, ResearchJobStatus, TenantContext
+from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, PageRequest, ResearchJob, ResearchJobStatus, TenantContext
 from researchos.saas.datasets import (
     Dataset,
     DatasetStorage,
@@ -105,6 +105,14 @@ class UnconfiguredAuthProvider:
 class ResearchCreateRequest(BaseModel):
     dataset_version_id: UUID
     workflow_id: str = Field(default=FROZEN_XAUUSD_M1_WORKFLOW, min_length=1, max_length=128)
+
+
+class PageResponse(BaseModel):
+    items: list[object]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
 
 
 class ResearchJobResponse(BaseModel):
@@ -400,6 +408,36 @@ def create_app(
                 pass
             raise HTTPException(status_code=503, detail="research job queue unavailable") from exc
         return JSONResponse(status_code=202, content=body)
+
+    @app.get("/v1/research-runs", response_model=PageResponse, tags=["research"])
+    def list_research_runs(
+        limit: int = 50,
+        offset: int = 0,
+        status_filter: ResearchJobStatus | None = None,
+        workflow_id: str | None = None,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> PageResponse:
+        try:
+            page = PageRequest(limit=limit, offset=offset)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if workflow_id is not None and not 1 <= len(workflow_id) <= 128:
+            raise HTTPException(status_code=422, detail="workflow_id must be between 1 and 128 characters")
+        jobs, total = store.list(
+            tenant.workspace_id,
+            limit=page.limit,
+            offset=page.offset,
+            status=status_filter,
+            workflow_id=workflow_id,
+        )
+        items = [_research_job_response(job).model_dump(mode="json") for job in jobs]
+        return PageResponse(
+            items=items,
+            total=total,
+            limit=page.limit,
+            offset=page.offset,
+            has_more=page.offset + len(items) < total,
+        )
 
     @app.get("/v1/research-runs/{job_id}", response_model=ResearchJobResponse, tags=["research"])
     def get_research_run(job_id: UUID, tenant: TenantContext = Depends(current_tenant)) -> ResearchJobResponse:
