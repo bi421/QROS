@@ -32,7 +32,7 @@ from researchos.saas.idempotency import (
     MAX_IDEMPOTENCY_KEY_LENGTH,
 )
 from researchos.saas.rate_limit import FixedWindowRateLimiter, RateLimiter
-from researchos.saas.claim_api import register_research_claim_routes
+from researchos.saas.claim_api import ResearchClaimStore, register_research_claim_routes
 from researchos.saas.billing import (
     BillingEventConflict,
     BillingEventStore,
@@ -163,7 +163,7 @@ def create_app(
     billing_store: BillingEventStore | None = None,
     billing_webhook_secret: str | None = None,
     rate_limiter: RateLimiter | None = None,
-    claim_store: object | None = None,
+    claim_store: ResearchClaimStore | None = None,
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
