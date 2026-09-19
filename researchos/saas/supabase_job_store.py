@@ -63,6 +63,8 @@ class SupabaseResearchJobStore(ResearchJobStore):
         return self._row_to_job(job_row), bool(row.get("replayed", False))
 
     def create(self, workspace_id: UUID, job: ResearchJob) -> ResearchJob:
+        if job.workspace_id != workspace_id:
+            raise ValueError("research job workspace does not match tenant")
         if job.created_by is None:
             raise ValueError("Supabase research jobs require created_by")
         result = (
