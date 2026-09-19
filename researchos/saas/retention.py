@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import StrEnum\nfrom typing import Any
+from enum import StrEnum
+from typing import Any
 
 
 class RetentionDecision(StrEnum):
