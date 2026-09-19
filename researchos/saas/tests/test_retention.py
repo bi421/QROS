@@ -184,3 +184,48 @@ def test_executor_requires_authorization_and_dependency_resolution() -> None:
         dependency_check=lambda _candidate: False,
     )
     assert result.reason == "active_dependencies"
+
+
+def test_executor_does_not_emit_completion_when_delete_fails() -> None:
+    from researchos.saas.retention import execute_deletion
+
+    calls: list[str] = []
+
+    def delete(_candidate):
+        calls.append("delete")
+        raise RuntimeError("delete unavailable")
+
+    with pytest.raises(RuntimeError, match="delete unavailable"):
+        execute_deletion(
+            candidate(),
+            now=NOW,
+            approved=True,
+            authorize=lambda _candidate: True,
+            dependency_check=lambda _candidate: True,
+            audit=lambda _candidate, event: calls.append(event),
+            delete=delete,
+        )
+    assert calls == ["deletion_approved", "delete"]
+
+
+def test_executor_exposes_post_delete_audit_failure_for_reconciliation() -> None:
+    from researchos.saas.retention import execute_deletion
+
+    calls: list[str] = []
+
+    def audit(_candidate, event):
+        calls.append(event)
+        if event == "deletion_completed":
+            raise RuntimeError("audit unavailable")
+
+    with pytest.raises(RuntimeError, match="audit unavailable"):
+        execute_deletion(
+            candidate(),
+            now=NOW,
+            approved=True,
+            authorize=lambda _candidate: True,
+            dependency_check=lambda _candidate: True,
+            audit=audit,
+            delete=lambda _candidate: calls.append("delete"),
+        )
+    assert calls == ["deletion_approved", "delete", "deletion_completed"]
