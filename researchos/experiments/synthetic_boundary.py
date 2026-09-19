@@ -1,4 +1,4 @@
-﻿"""
+"""
 Synthetic-Data Boundary Enforcer.
 """
 from __future__ import annotations

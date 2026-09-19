@@ -13,8 +13,25 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  repository-integrity:
+    name: Repository Integrity Gate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Check repository text integrity
+        run: python scripts/check_text_integrity.py
+      - name: Compile Python sources
+        run: python -m compileall -q researchos scripts
+      - name: Check staged-scope invariants
+        run: python scripts/check_scope.py --base origin/main
+
   python-primary:
     name: Python Tests
+    needs: [repository-integrity]
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -39,6 +56,7 @@ jobs:
 
   quant-engine:
     name: Quant Engine (C++ / nanobind)
+    needs: [repository-integrity]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -71,9 +89,9 @@ jobs:
 
   health-evidence:
     name: Health Evidence
+    needs: [repository-integrity, python-primary, quant-engine]
+    if: ${{ needs.repository-integrity.result == 'success' && needs.python-primary.result == 'success' && needs.quant-engine.result == 'success' }}
     runs-on: ubuntu-24.04
-    needs: [python-primary, quant-engine]
-    if: always()
     steps:
       - uses: actions/checkout@v5
       - name: Setup Python 3.12

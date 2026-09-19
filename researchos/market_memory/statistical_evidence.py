@@ -1,4 +1,4 @@
-﻿"""Statistical evidence primitives for Market Memory.
+"""Statistical evidence primitives for Market Memory.
 
 These functions keep descriptive statistics separate from inferential claims.
 All calculations are deterministic and contain explicit sample-size guards.
