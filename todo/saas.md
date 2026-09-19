@@ -69,7 +69,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [x] Enforce multiple-testing results at governed edge eligibility.
 - [x] OOS/replication state tracking.
 - [ ] Economic cost/slippage context.
-- [ ] Deterministic research artifact manifests.
+- [x] Deterministic research artifact manifests.
 
 ## Phase 7 — Product UI
 - [ ] Tenant/workspace shell.
