@@ -63,6 +63,8 @@ def test_production_runtime_is_explicitly_durable() -> None:
         "researchos.saas.idempotency",
         "researchos.saas.billing",
         "researchos.saas.rate_limit",
+        "researchos.saas.supabase_claim_store",
+        "researchos.saas.evidence_api",
     }
     assert expected_modules <= imported_from
     assert "researchos.saas.store" not in imported_from
@@ -104,6 +106,8 @@ def test_production_runtime_is_explicitly_durable() -> None:
         "idempotency_store": "SupabaseIdempotencyStore",
         "billing_store": "SupabaseBillingEventStore",
         "rate_limiter": "SupabaseRateLimiter",
+        "claim_store": "SupabaseResearchClaimStore",
+        "evidence_store": "SupabaseResearchEvidenceStore",
     }
     assignments = {}
     for node in ast.walk(build):
