@@ -25,7 +25,8 @@ class _InsertQuery:
         return self
 
     def execute(self):
-        return _Response(self._rows)
+        row = self._rows[-1]
+        return _Response([{**row, "attempt_count": 0, "max_attempts": 3, "error_code": None}])
 
 
 class _Client:
@@ -70,21 +71,6 @@ def test_create_accepts_matching_tenant_and_writes_workspace_id() -> None:
     store = SupabaseResearchJobStore(client)
 
     job = _job(workspace_id)
-    client.rows.append(
-        {
-            "id": str(job.id),
-            "workspace_id": str(workspace_id),
-            "dataset_version_id": str(job.dataset_version_id),
-            "workflow_id": job.workflow_id,
-            "status": job.status.value,
-            "source_dataset_sha256": job.source_dataset_sha256,
-            "created_by": str(job.created_by),
-            "attempt_count": 0,
-            "max_attempts": 3,
-            "error_code": None,
-        }
-    )
-
     created = store.create(workspace_id, job)
 
     assert client.insert_called is True
