@@ -12,8 +12,10 @@ class StaticAuth:
     def __init__(self, context: TenantContext) -> None:
         self.context = context
 
-    def authenticate(self, authorization: str | None) -> TenantContext:
+    def authenticate(self, authorization: str | None, requested_workspace_id=None) -> TenantContext:
         assert authorization == "Bearer test"
+        if requested_workspace_id is not None and requested_workspace_id != self.context.workspace_id:
+            raise RuntimeError("workspace mismatch")
         return self.context
 
 

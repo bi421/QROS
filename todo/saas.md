@@ -25,6 +25,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 
 ## Phase 2 — Tenant-safe persistence
 - [ ] Make workspace/tenant identity mandatory at every SaaS boundary.
+  - [x] Reject ambiguous multi-workspace auth resolution; support explicit `X-Workspace-ID` selection.
 - [ ] Implement canonical Supabase persistence adapters.
 - [x] Enforce RLS for every tenant-owned table.
 - [ ] Add tenant-isolation integration tests.
@@ -43,7 +44,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [ ] Authorization policy matrix.
 - [x] Request validation and size limits.
 - [x] Rate limiting and abuse controls.
-- [ ] Pagination/filter/sort contracts.
+- [x] Pagination/filter/sort contracts.
 - [x] Idempotent research-run mutation semantics with atomic job/idempotency transaction.
 - [x] Structured error model.
 
