@@ -15,8 +15,9 @@ class ClaimsAuth:
 
 
 class Membership:
-    def resolve(self, user_id):
+    def resolve(self, user_id, requested_workspace_id=None):
         assert user_id == USER_ID
+        assert requested_workspace_id in (None, WORKSPACE_ID)
         return WORKSPACE_ID, Plan.PRO
 
 
@@ -51,7 +52,7 @@ class Query:
 class Client:
     def table(self, name):
         if name == "workspace_member":
-            return Query([{"workspace_id": str(WORKSPACE_ID)}])
+            return Query([{"workspace_id": str(WORKSPACE_ID), "user_id": str(USER_ID)}])
         return Query([{"plan": "team", "status": "active"}])
 
 
