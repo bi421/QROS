@@ -37,7 +37,7 @@ drop policy if exists research_claim_member_select on public.research_claim;
 create policy research_claim_member_select
 on public.research_claim
 for select to authenticated
-using (public.is_workspace_member(workspace_id));
+using (private.is_workspace_member(workspace_id));
 
 comment on table public.research_claim is
     'Tenant-scoped durable Research Claim. Scientific semantics and version lineage are defined by the ResearchClaim domain contract.';
