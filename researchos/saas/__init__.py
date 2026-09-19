@@ -1,10 +1,11 @@
 """SaaS delivery boundary for QROS.
 
 This package owns tenancy, API, job orchestration, usage policy, and delivery
-concerns. Scientific semantics remain in ``researchos.research_core`` and the
+concerns. Scientific semantics remain in researchos.research_core and the
 existing research pipeline.
 """
 
+from researchos.saas.audit import AuditEvent, InMemoryAuditEventStore, SupabaseAuditEventStore
 from researchos.saas.contracts import (
     Plan,
     ResearchJob,
@@ -26,14 +27,17 @@ from researchos.saas.supabase_job_store import SupabaseResearchJobStore
 from researchos.saas.supabase_membership import SupabaseWorkspaceMembershipResolver
 
 __all__ = [
+    "AuditEvent",
     "Dataset",
     "DatasetVersion",
+    "InMemoryAuditEventStore",
     "InMemoryDatasetStorage",
     "InMemoryDatasetStore",
     "InMemoryResearchJobQueue",
     "Plan",
     "ResearchJob",
     "ResearchJobStatus",
+    "SupabaseAuditEventStore",
     "SupabaseDatasetStorage",
     "SupabaseDatasetStore",
     "SupabaseResearchClaimStore",
