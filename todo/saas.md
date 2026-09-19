@@ -53,12 +53,12 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [x] Structured error model.
 
 ## Phase 5 — Data and artifact storage
-- [ ] Tenant-scoped object storage abstraction.
+- [x] Tenant-scoped object storage abstraction.
 - [ ] Content-addressed artifacts.
-- [ ] Upload/download authorization.
+- [x] Upload/download authorization.
 - [ ] Retention and deletion policy.
-- [ ] Dataset version registry.
-- [ ] Reproducibility manifest generation.
+- [x] Dataset version registry.
+- [x] Reproducibility manifest generation.
 
 ## Phase 6 — Research services
 - [x] Add deterministic computational path planner v1 (method contracts, capability registry, prerequisite gates, immutable plan hash).

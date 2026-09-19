@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 
 from researchos.claims.claim import ResearchClaim
-from researchos.saas.datasets import Dataset, DatasetVersion, SupabaseDatasetStore
+from researchos.saas.datasets import Dataset, DatasetVersion, SupabaseDatasetStore, storage_path_for
 from researchos.saas.supabase_claim_store import SupabaseResearchClaimStore
 
 
@@ -157,3 +157,16 @@ def test_supabase_dataset_version_accepts_matching_parent_and_writes():
         kind == "insert" and table == "dataset_version"
         for kind, table, _ in client.writes
     )
+
+
+def test_storage_path_is_tenant_scoped_and_content_addressed():
+    tenant = uuid4()
+    foreign_tenant = uuid4()
+    dataset = uuid4()
+    digest = "c" * 64
+
+    path = storage_path_for(tenant, dataset, digest)
+
+    assert path == f"{tenant}/datasets/{dataset}/sha256/{digest}"
+    assert str(foreign_tenant) not in path
+    assert path.startswith(f"{tenant}/")
