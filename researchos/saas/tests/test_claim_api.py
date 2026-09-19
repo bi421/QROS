@@ -202,3 +202,50 @@ def test_claim_pagination_is_bounded() -> None:
         "/v1/research-claims?offset=-1",
         headers={"Authorization": "Bearer test"},
     ).status_code == 422
+
+
+def test_claim_and_run_identity_remain_workspace_scoped_across_golden_path_boundaries() -> None:
+    owner = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
+    other = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
+    claim_store = FakeClaimStore()
+
+    owner_client, _, _ = _client(context=owner, store=claim_store)
+    other_client, _, _ = _client(context=other, store=claim_store)
+
+    created = owner_client.post(
+        "/v1/research-claims",
+        headers={"Authorization": "Bearer test"},
+        json=_payload("Tenant-scoped Golden Path claim"),
+    )
+    assert created.status_code == 201
+    claim_id = created.json()["id"]
+
+    # A claim identifier alone must never grant another tenant access.
+    assert other_client.get(
+        f"/v1/research-claims/{claim_id}",
+        headers={"Authorization": "Bearer test"},
+    ).status_code == 404
+
+    # The same logical claim payload in another workspace is a distinct
+    # identity because workspace_id participates in the deterministic id.
+    other_created = other_client.post(
+        "/v1/research-claims",
+        headers={"Authorization": "Bearer test"},
+        json=_payload("Tenant-scoped Golden Path claim"),
+    )
+    assert other_created.status_code == 201
+    assert other_created.json()["id"] != claim_id
+    assert other_created.json()["workspace_id"] == str(other.workspace_id)
+
+    owner_list = owner_client.get(
+        "/v1/research-claims?limit=100&offset=0",
+        headers={"Authorization": "Bearer test"},
+    )
+    other_list = other_client.get(
+        "/v1/research-claims?limit=100&offset=0",
+        headers={"Authorization": "Bearer test"},
+    )
+    assert owner_list.json()["total"] == 1
+    assert other_list.json()["total"] == 1
+    assert owner_list.json()["items"][0]["id"] == claim_id
+    assert other_list.json()["items"][0]["id"] == other_created.json()["id"]
