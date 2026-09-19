@@ -34,7 +34,7 @@ begin
 end;
 $$;
 
-revoke all on function public.enqueue_research_run(uuid, uuid) from public;
+revoke all on function public.enqueue_research_run(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.enqueue_research_run(uuid, uuid) to service_role;
 
 comment on function public.enqueue_research_run(uuid, uuid)
