@@ -65,7 +65,8 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [x] Governed analysis execution contract (immutable AnalysisResult bound to planner output).
 - [x] Probability/edge service registry.
 - [ ] Calibration and uncertainty outputs.
-- [ ] Multiple-testing controls.
+- [x] Add deterministic Holm/Benjamini-Hochberg multiple-testing correction primitives.
+- [ ] Enforce multiple-testing results at governed edge eligibility.
 - [ ] OOS/replication state tracking.
 - [ ] Economic cost/slippage context.
 - [ ] Deterministic research artifact manifests.
