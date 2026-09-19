@@ -28,6 +28,8 @@ class SupabaseWorkspaceMembershipResolver:
         A user may belong to multiple workspaces. If the caller supplies a
         workspace, membership must match that exact workspace. If no workspace
         is supplied, resolution is only allowed when membership is unambiguous.
+        Duplicate membership rows for one workspace fail closed rather than
+        allowing row order to determine the effective role.
         """
         membership = (
             self._client.table("workspace_member")
@@ -40,10 +42,15 @@ class SupabaseWorkspaceMembershipResolver:
             return None
 
         try:
-            memberships = {
-                UUID(str(row["workspace_id"])): WorkspaceRole(str(row["role"]))
-                for row in rows
-            }
+            memberships: dict[UUID, WorkspaceRole] = {}
+            for row in rows:
+                workspace_id = UUID(str(row["workspace_id"]))
+                role = WorkspaceRole(str(row["role"]))
+                if workspace_id in memberships:
+                    raise RuntimeError("duplicate workspace membership")
+                memberships[workspace_id] = role
+        except RuntimeError:
+            raise
         except (KeyError, ValueError, TypeError) as exc:
             raise RuntimeError("invalid workspace membership role") from exc
         if requested_workspace_id is not None:
