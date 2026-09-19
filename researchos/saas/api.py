@@ -368,6 +368,26 @@ def create_app(
     ) -> list[DatasetVersion]:
         return datasets.list_versions(tenant.workspace_id, dataset_id)
 
+    @app.get("/v1/datasets/{dataset_id}/versions/{version_id}/download", response_model=dict[str, str], tags=["datasets"])
+    def create_dataset_download_url(
+        dataset_id: UUID,
+        version_id: UUID,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> dict[str, str]:
+        """Authorize tenant ownership before issuing a short-lived private URL."""
+        version = datasets.get_version(tenant.workspace_id, version_id)
+        if version is None or version.dataset_id != dataset_id:
+            raise HTTPException(status_code=404, detail="dataset version not found")
+        try:
+            url = storage.create_signed_download_url(version.storage_path, 300)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="dataset object not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="dataset download service unavailable") from exc
+        return {"url": url, "expires_in": "300"}
+
     @app.post("/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"])
     def create_research_run(
         request: ResearchCreateRequest,
