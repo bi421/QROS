@@ -1,4 +1,4 @@
-﻿"""
+"""
 Runtime Evidence Certification Engine.
 Wires the experiment execution path to the EvidenceRepository with strict determinism.
 Guarantees:
@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any, Dict
 from researchos.core.identity import deterministic_hash
 from researchos.objects.evidence import Evidence, EvidenceRegistry
+
 
 class RuntimeCertifier:
     """Certifies experiment results and appends them to the evidence registry."""
@@ -25,14 +26,14 @@ class RuntimeCertifier:
         result_data: Dict[str, Any],
         hypothesis_id: str,
         interpretation: str,
-        direction: str = "Neutral"
+        direction: str = "Neutral",
     ) -> Evidence:
         # 1. Deterministic Artifact Identity (Exclude runtime telemetry)
         hash_payload = {
             "experiment_id": experiment_id,
             "run_id": run_id,
             "result_data": result_data,
-            "hypothesis_id": hypothesis_id
+            "hypothesis_id": hypothesis_id,
         }
         artifact_hash = deterministic_hash(hash_payload)
 
@@ -46,7 +47,7 @@ class RuntimeCertifier:
             interpretation=interpretation,
             direction=direction,
             source_reliability=0.95,
-            tier="Primary"
+            tier="Primary",
         )
 
         # 4. Append-only Persistence
@@ -58,7 +59,7 @@ class RuntimeCertifier:
         experiment_id: str,
         run_id: str,
         error_message: str,
-        hypothesis_id: str
+        hypothesis_id: str,
     ) -> Evidence:
         """Certifies a failed run as contradictory evidence."""
         return self.certify_run(
@@ -67,5 +68,5 @@ class RuntimeCertifier:
             result_data={"status": "failed", "error": error_message},
             hypothesis_id=hypothesis_id,
             interpretation=f"Run failed: {error_message}",
-            direction="Contradicting"
+            direction="Contradicting",
         )
