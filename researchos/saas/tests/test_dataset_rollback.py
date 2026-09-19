@@ -4,7 +4,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from researchos.saas.api import create_app
-from researchos.saas.contracts import Plan, TenantContext
+from researchos.saas.contracts import Plan, TenantContext, WorkspaceRole
 from researchos.saas.datasets import DatasetVersion, InMemoryDatasetStorage, InMemoryDatasetStore
 
 
@@ -25,7 +25,7 @@ class FailingVersionStore(InMemoryDatasetStore):
 
 
 def test_failed_initial_dataset_upload_rolls_back_metadata_and_object() -> None:
-    context = TenantContext(uuid4(), uuid4(), Plan.PRO)
+    context = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
     store = FailingVersionStore()
     storage = InMemoryDatasetStorage()
     client = TestClient(

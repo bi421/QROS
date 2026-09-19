@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.api import create_app
 from researchos.saas.billing import InMemoryBillingEventStore
-from researchos.saas.contracts import Plan, TenantContext
+from researchos.saas.contracts import Plan, TenantContext, WorkspaceRole
 from researchos.saas.datasets import InMemoryDatasetStorage, InMemoryDatasetStore
 from researchos.saas.store import InMemoryResearchJobStore
 
@@ -40,11 +40,12 @@ class StaticRateLimiter:
         return self.allowed
 
 
-def _client(workspace_id: UUID | None = None, *, plan: Plan = Plan.PRO, billing_store=None, billing_secret=None, rate_limiter=None):
+def _client(workspace_id: UUID | None = None, *, plan: Plan = Plan.PRO, role: WorkspaceRole = WorkspaceRole.RESEARCHER, billing_store=None, billing_secret=None, rate_limiter=None):
     context = TenantContext(
         user_id=uuid4(),
         workspace_id=workspace_id or uuid4(),
         plan=plan,
+        role=role,
     )
     dataset_store = InMemoryDatasetStore()
     dataset_storage = InMemoryDatasetStorage()
@@ -321,8 +322,8 @@ def test_unsupported_workflow_is_rejected() -> None:
 
 def test_cross_tenant_job_lookup_returns_404() -> None:
     store = InMemoryResearchJobStore()
-    owner = TenantContext(uuid4(), uuid4(), Plan.PRO)
-    other = TenantContext(uuid4(), uuid4(), Plan.PRO)
+    owner = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
+    other = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
     owner_datasets = InMemoryDatasetStore()
     owner_storage = InMemoryDatasetStorage()
     owner_client = TestClient(
@@ -357,8 +358,8 @@ def test_cross_tenant_job_lookup_returns_404() -> None:
 
 
 def test_cross_tenant_dataset_and_version_access_returns_not_found() -> None:
-    owner = TenantContext(uuid4(), uuid4(), Plan.PRO)
-    other = TenantContext(uuid4(), uuid4(), Plan.PRO)
+    owner = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
+    other = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
     store = InMemoryDatasetStore()
     storage = InMemoryDatasetStorage()
     owner_client = TestClient(create_app(
@@ -464,3 +465,42 @@ def test_invalid_workspace_header_is_rejected() -> None:
     client, _, _, _ = _client()
     response = client.get("/v1/me", headers={"Authorization": "Bearer test", "X-Workspace-ID": "not-a-uuid"})
     assert response.status_code == 422
+
+
+def test_viewer_can_read_but_cannot_mutate_datasets_or_research() -> None:
+    client, _, _, _ = _client(role=WorkspaceRole.VIEWER)
+    health = client.get("/v1/me", headers={"Authorization": "Bearer test"})
+    assert health.status_code == 200
+    upload = _upload(client, "viewer-upload", b"x")
+    assert upload.status_code == 403
+    run = client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "viewer-run"},
+        json={"dataset_version_id": str(uuid4())},
+    )
+    assert run.status_code == 403
+
+
+def test_researcher_can_create_dataset_and_research_run() -> None:
+    client, _, _, _ = _client(role=WorkspaceRole.RESEARCHER)
+    uploaded = _upload(client, "researcher-upload", b"x")
+    assert uploaded.status_code == 201
+    version_id = uploaded.json()["version"]["id"]
+    run = client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "researcher-run"},
+        json={"dataset_version_id": version_id},
+    )
+    assert run.status_code == 202
+
+
+def test_admin_can_create_dataset_and_research_run() -> None:
+    client, _, _, _ = _client(role=WorkspaceRole.ADMIN)
+    uploaded = _upload(client, "admin-upload", b"x")
+    assert uploaded.status_code == 201
+    run = client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "admin-run"},
+        json={"dataset_version_id": uploaded.json()["version"]["id"]},
+    )
+    assert run.status_code == 202

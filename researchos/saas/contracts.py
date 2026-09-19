@@ -21,6 +21,15 @@ class Plan(str, Enum):
     ENTERPRISE = "enterprise"
 
 
+class WorkspaceRole(str, Enum):
+    """Server-authoritative membership roles used by the API authorization layer."""
+
+    OWNER = "owner"
+    ADMIN = "admin"
+    RESEARCHER = "researcher"
+    VIEWER = "viewer"
+
+
 @dataclass(frozen=True)
 class PageRequest:
     """Bounded offset pagination with explicit deterministic sorting."""
@@ -49,6 +58,7 @@ class TenantContext:
     user_id: UUID
     workspace_id: UUID
     plan: Plan
+    role: WorkspaceRole = WorkspaceRole.VIEWER
 
 
 @dataclass(frozen=True)
@@ -120,4 +130,5 @@ __all__ = [
     "ResearchJobStatus",
     "TenantContext",
     "UsagePolicy",
+    "WorkspaceRole",
 ]

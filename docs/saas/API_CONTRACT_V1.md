@@ -35,6 +35,7 @@ The authenticated context contains:
 - `user_id`
 - `workspace_id`
 - `plan`
+- `role` — server-authoritative workspace membership role.
 
 ## 4. Endpoints
 
@@ -112,6 +113,23 @@ Internal exception details and secrets are not returned to clients.
 Every tenant-owned read/write is scoped by authenticated workspace.
 
 Database defense in depth uses Supabase RLS for tenant-owned tables. Trusted server-side RPCs additionally require explicit workspace/resource matching.
+
+Membership roles are resolved from server-side `workspace_member.role`; client claims and profile metadata are never used for authorization.
+
+| Capability | Owner | Admin | Researcher | Viewer |
+|---|---:|---:|---:|---:|
+| Read own workspace identity | yes | yes | yes | yes |
+| Read tenant datasets/versions | yes | yes | yes | yes |
+| Upload dataset | yes | yes | yes | no |
+| Append dataset version | yes | yes | yes | no |
+| Create research run | yes | yes | yes | no |
+| Read research runs | yes | yes | yes | yes |
+| Membership administration | reserved for future API | reserved for future API | no | no |
+| Billing/subscription mutation | server-side webhook only | server-side webhook only | server-side webhook only | server-side webhook only |
+
+The current API exposes no user-facing membership-management or billing-management endpoints. Those permissions are therefore not implicitly granted by role; future endpoints must add explicit policy entries and tests before implementation.
+
+Forbidden role actions return HTTP 403. Cross-workspace resource lookups remain 404 where the resource is not visible to the authenticated workspace.
 
 ## 10. Research integrity
 

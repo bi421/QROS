@@ -14,7 +14,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
-from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, PageRequest, ResearchJob, ResearchJobStatus, TenantContext
+from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, PageRequest, ResearchJob, ResearchJobStatus, TenantContext, WorkspaceRole
 from researchos.saas.datasets import (
     Dataset,
     DatasetStorage,
@@ -206,6 +206,11 @@ def create_app(
                 raise HTTPException(status_code=422, detail="invalid X-Workspace-ID") from exc
         return auth.authenticate(authorization, requested_workspace_id)
 
+    def require_role(tenant: TenantContext, *allowed: WorkspaceRole) -> None:
+        """Enforce server-resolved membership roles; never trust request data."""
+        if tenant.role not in allowed:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="workspace role is not authorized")
+
     def require_rate_limit(tenant: TenantContext) -> None:
         principal = hashlib.sha256(
             f"workspace:{tenant.workspace_id}".encode()
@@ -303,6 +308,7 @@ def create_app(
         file: UploadFile = File(...),
         tenant: TenantContext = Depends(current_tenant),
     ) -> DatasetResponse:
+        require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.RESEARCHER)
         dataset = Dataset(id=uuid4(), workspace_id=tenant.workspace_id, name=name.strip(), created_by=tenant.user_id)
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         try:
@@ -350,6 +356,7 @@ def create_app(
         file: UploadFile = File(...),
         tenant: TenantContext = Depends(current_tenant),
     ) -> DatasetVersion:
+        require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.RESEARCHER)
         if datasets.get_dataset(tenant.workspace_id, dataset_id) is None:
             raise HTTPException(status_code=404, detail="dataset not found")
         return persist_version(dataset_id=dataset_id, tenant=tenant, file=file)
@@ -367,6 +374,7 @@ def create_app(
         tenant: TenantContext = Depends(current_tenant),
         idempotency_key: str | None = Header(default=None, alias=IDEMPOTENCY_HEADER),
     ) -> Response:
+        require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.RESEARCHER)
         require_rate_limit(tenant)
         if request.workflow_id != FROZEN_XAUUSD_M1_WORKFLOW:
             raise HTTPException(status_code=400, detail="unsupported workflow")
