@@ -29,7 +29,7 @@ class SupabaseJwtAuthProvider:
         self._client = supabase_client
         self._membership = membership_resolver
 
-    def authenticate(self, authorization: str | None) -> TenantContext:
+    def authenticate(self, authorization: str | None, requested_workspace_id: UUID | None = None) -> TenantContext:
         if not authorization or not authorization.startswith("Bearer "):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token")
 
@@ -47,7 +47,10 @@ class SupabaseJwtAuthProvider:
                 detail="invalid authentication token",
             ) from exc
 
-        resolved = self._membership.resolve(user_id)
+        try:
+            resolved = self._membership.resolve(user_id, requested_workspace_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         if resolved is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="workspace access denied")
 
