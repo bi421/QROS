@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import StrEnum
+from enum import StrEnum\nfrom typing import Any
 
 
 class RetentionDecision(StrEnum):
@@ -84,4 +84,56 @@ __all__ = [
     "RetentionDecision",
     "RetentionPolicy",
     "evaluate_deletion",
+]
+
+
+@dataclass(frozen=True)
+class DeletionExecution:
+    """Auditable result of a retention deletion attempt."""
+
+    decision: RetentionDecision
+    reason: str
+    deleted: bool
+
+
+def execute_deletion(
+    candidate: DeletionCandidate,
+    *,
+    now: datetime,
+    policy: RetentionPolicy | None = None,
+    approved: bool = False,
+    audit: Any | None = None,
+    delete: Any | None = None,
+) -> DeletionExecution:
+    """Execute deletion only after eligibility, approval, and audit gates pass.
+
+    The executor is deliberately fail-closed: approval, audit sink, and delete
+    operation are all required before an eligible resource can be destroyed.
+    The audit callback is invoked before deletion; if it raises, deletion does
+    not occur. A delete callback must return normally for the result to report
+    a successful deletion. No recovery or retry is performed implicitly.
+    """
+    decision, reason = evaluate_deletion(candidate, now=now, policy=policy)
+    if decision is not RetentionDecision.ELIGIBLE:
+        return DeletionExecution(decision, reason, False)
+    if not approved:
+        return DeletionExecution(RetentionDecision.RETAIN, "approval_required", False)
+    if audit is None:
+        return DeletionExecution(RetentionDecision.RETAIN, "audit_sink_required", False)
+    if delete is None:
+        return DeletionExecution(RetentionDecision.RETAIN, "delete_operation_required", False)
+
+    audit(candidate, "deletion_approved")
+    delete(candidate)
+    audit(candidate, "deletion_completed")
+    return DeletionExecution(RetentionDecision.ELIGIBLE, "deletion_completed", True)
+
+
+__all__ = [
+    "DeletionCandidate",
+    "RetentionDecision",
+    "RetentionPolicy",
+    "evaluate_deletion",
+    "DeletionExecution",
+    "execute_deletion",
 ]
