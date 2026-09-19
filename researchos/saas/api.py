@@ -41,6 +41,7 @@ from researchos.saas.billing import (
 )
 
 REQUEST_ID_HEADER = "X-Request-ID"
+WORKSPACE_HEADER = "X-Workspace-ID"
 IDEMPOTENCY_HEADER = "Idempotency-Key"
 MAX_REQUEST_ID_LENGTH = 128
 
@@ -88,7 +89,11 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
 class AuthProvider(Protocol):
     """Authenticate a request and resolve its authorized workspace."""
 
-    def authenticate(self, authorization: str | None) -> TenantContext:
+    def authenticate(
+        self,
+        authorization: str | None,
+        requested_workspace_id: UUID | None = None,
+    ) -> TenantContext:
         ...
 
 
@@ -185,8 +190,17 @@ def create_app(
             content=_error_payload(request, 422, exc.errors()),
         )
 
-    def current_tenant(authorization: str | None = Header(default=None)) -> TenantContext:
-        return auth.authenticate(authorization)
+    def current_tenant(
+        authorization: str | None = Header(default=None),
+        workspace_header: str | None = Header(default=None, alias=WORKSPACE_HEADER),
+    ) -> TenantContext:
+        requested_workspace_id: UUID | None = None
+        if workspace_header is not None:
+            try:
+                requested_workspace_id = UUID(workspace_header.strip())
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail="invalid X-Workspace-ID") from exc
+        return auth.authenticate(authorization, requested_workspace_id)
 
     def require_rate_limit(tenant: TenantContext) -> None:
         principal = hashlib.sha256(
