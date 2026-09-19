@@ -374,6 +374,7 @@ def create_app(
         tenant: TenantContext = Depends(current_tenant),
         idempotency_key: str | None = Header(default=None, alias=IDEMPOTENCY_HEADER),
     ) -> Response:
+        require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.RESEARCHER)
         require_rate_limit(tenant)
         if request.workflow_id != FROZEN_XAUUSD_M1_WORKFLOW:
             raise HTTPException(status_code=400, detail="unsupported workflow")
