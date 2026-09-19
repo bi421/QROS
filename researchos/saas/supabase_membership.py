@@ -39,10 +39,13 @@ class SupabaseWorkspaceMembershipResolver:
         if not rows:
             return None
 
-        memberships = {
-            UUID(str(row["workspace_id"])): WorkspaceRole(str(row["role"]))
-            for row in rows
-        }
+        try:
+            memberships = {
+                UUID(str(row["workspace_id"])): WorkspaceRole(str(row["role"]))
+                for row in rows
+            }
+        except (KeyError, ValueError, TypeError) as exc:
+            raise RuntimeError("invalid workspace membership role") from exc
         if requested_workspace_id is not None:
             if requested_workspace_id not in memberships:
                 return None
