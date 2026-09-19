@@ -58,7 +58,7 @@ class Client:
 
 def test_supabase_membership_resolver_uses_server_subscription_state() -> None:
     result = SupabaseWorkspaceMembershipResolver(Client()).resolve(USER_ID)
-    assert result == (WORKSPACE_ID, Plan.TEAM)
+    assert result == (WORKSPACE_ID, Plan.TEAM, WorkspaceRole.RESEARCHER)
 
 
 class MultiWorkspaceClient(Client):
@@ -91,7 +91,7 @@ def test_multi_workspace_resolution_accepts_authorized_workspace() -> None:
 
     assert SupabaseWorkspaceMembershipResolver(SelectedClient()).resolve(
         USER_ID, WORKSPACE_ID
-    ) == (WORKSPACE_ID, Plan.TEAM, WorkspaceRole.RESEARCHER)
+    ) == (WORKSPACE_ID, Plan.TEAM, WorkspaceRole.ADMIN)
 
 
 class BrokenMembership:
