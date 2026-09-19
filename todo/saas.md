@@ -38,14 +38,14 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [x] Ensure every job output is provenance-linked to its input artifact hashes.
 
 ## Phase 4 — API productization
-- [ ] Stable versioned API surface.
+- [x] Stable versioned API surface.
 - [ ] Authentication/session boundary.
 - [ ] Authorization policy matrix.
-- [ ] Request validation and size limits.
-- [ ] Rate limiting and abuse controls.
+- [x] Request validation and size limits.
+- [x] Rate limiting and abuse controls.
 - [ ] Pagination/filter/sort contracts.
 - [x] Idempotent research-run mutation semantics with atomic job/idempotency transaction.
-- [ ] Structured error model.
+- [x] Structured error model.
 
 ## Phase 5 — Data and artifact storage
 - [ ] Tenant-scoped object storage abstraction.
@@ -113,3 +113,12 @@ A release is **NOT production-ready** unless all applicable gates are green:
 8. CI status is observed for the exact release commit.
 9. No known high-severity security or data-integrity defect remains open.
 10. The release artifact is reproducible and versioned.
+
+
+- Evidence governance v1: immutable OOS/replication artifact contracts bound to governed edge eligibility (PR #76).
+
+
+## Verification discipline
+
+- Structured API errors and request-correlation metadata are implemented and covered by SaaS API tests.
+- Production readiness remains gated on exact-release CI, integration, security, tenant-isolation, and operational verification.

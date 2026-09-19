@@ -1,43 +1,168 @@
-# QROS (ResearchOS)
+# QROS
 
-**Institutional-Grade Market Research Platform**
+**Quant Research Operating System — Evidence-Governed Research Infrastructure**
 
-[![Health](https://github.com/bi421/QROS/actions/workflows/ci.yml/badge.svg)](https://github.com/bi421/QROS/actions/workflows/ci.yml)
+QROS is a research-first quantitative research system being evolved into a **multi-tenant SaaS platform** for reproducible, auditable, evidence-backed research.
 
-> **Health evidence rule:** a local or AI-reported "checked" state is **UNVERIFIED** until `scripts/final_health_check.py` produces `.health/last_run.json`, or the corresponding GitHub Actions Health Evidence Gate passes and uploads that artifact.
+> **Core rule:** a formula is not a claim, a model fit is not a validated edge, and statistical significance is not automatically economic significance.
 
-ResearchOS is a deterministic, explainable, scientific market research platform that produces institutional-quality research for human traders. It is **NOT** an automated trading system — it never executes trades, sends orders, or makes final trading decisions.
+QROS is **research infrastructure, not a broker/execution system**. It does not place trades or send orders.
 
-## Key Principles
+## Research Pipeline
 
-- **Determinism**: Every computation is deterministic and reproducible
-- **Explainability**: Every conclusion has a complete reasoning trace
-- **Scientific Rigor**: Every hypothesis is falsifiable
-- **No Trading**: ResearchOS never executes trades or sends orders
+```
+REAL DATA
+   ↓
+MARKET MEMORY
+   ↓
+RESEARCH CLAIM
+   ↓
+RESEARCH PLAN
+   ↓
+EXPERIMENT
+   ↓
+RUN
+   ↓
+RESULT
+   ↓
+VALIDATION
+   ↓
+FINDING
+   ↓
+REPLICATION / CONTRADICTION
+```
 
-## Documentation
+Every governed conclusion is intended to remain traceable to its source data, immutable plan, execution, evidence, validation state, and research artifacts.
 
-The ResearchOS constitutional framework consists of 17 articles:
+## What Is Implemented
 
-| Article | Title | Description |
-|---|---|---|
-| I | Vision | Mission, philosophy, core beliefs |
-| II | Scope | 3 functions, boundaries, responsibility matrix |
-| III | Principles | Scientific method, falsifiability, reproducibility |
-| IV | Glossary | Core terms, research concepts, cognitive concepts |
-| V | Architecture | Three-engine architecture, data flow, audit trail |
-| VI | Roadmap | Development phases, success metrics, non-goals |
-| VII | Research Methodology | 9-stage deterministic pipeline |
-| VIII | Data Sources | 116 sources, 15 categories |
-| IX | Market Ontology | 150+ concepts, 6 layers |
-| X | Reasoning Engine | 7-stage pipeline, R1-R8 guarantees |
-| XI | Scenario Engine | A/B/C construction, S1-S8 guarantees |
-| XII | Validation Engine | 5-stage pipeline, V1-V8 guarantees |
-| XIII | Knowledge Engine | 5 repositories, K1-K8 guarantees |
-| XIV | Cognitive Growth Engine | 6 dimensions, C1-C8 guarantees |
-| XV | System Architecture | 3 engines, 25 modules |
-| XVI | Scientific Reasoning Framework | 10 sections |
-| XVII | Object Model | 20 object types, 12 layers |
+### Research governance
+
+- Research Claim as the durable unit of research intent
+- Immutable/content-hashed Research Plan with one-time lock
+- Governed planner v1
+- Immutable governed `AnalysisResult`
+- Probability / edge registry
+- Evidence-backed edge eligibility gates
+- OOS and replication evidence contracts
+- Deterministic evidence hashing
+
+### Evidence and lineage
+
+- Immutable `EvidenceEnvelope`
+- SHA-256 content and lineage hashes
+- Typed artifacts: Dataset, Feature, Experiment, Run, Result, Validation, Finding, Model
+- Lineage relations including `feeds`, `executes`, `produces`, `validates`, `derives`, `trains`, `contradicts`, and `replicates`
+- Claim → Plan → Evidence graph projection
+- Deterministic Experiment/Run/Result/Validation/Finding traversal
+- Broken-edge and orphan-evidence integrity checks
+- Historical evidence is referenced rather than silently rewritten
+
+### SaaS execution foundation
+
+- Explicit authenticated `TenantContext`
+- Tenant-scoped dataset and research-job operations
+- Content-addressed dataset storage paths
+- Immutable dataset versions
+- Atomic research-run idempotency
+- Durable job state transitions
+- Worker lease and heartbeat semantics
+- Bounded retry controls
+- Provenance-linked research results
+- Tenant-scoped Supabase persistence adapters
+- RLS and tenant-boundary database hardening migrations
+- Workspace-scoped rate limiting
+- Billing webhook signature verification and event deduplication
+- Versioned `/v1` HTTP API
+- Fail-closed authentication boundary
+- Structured API error metadata with request correlation IDs
+
+## Research Integrity Rules
+
+1. **Evidence before intelligence.** Predictive conclusions require validated evidence.
+2. **Research before execution.** QROS does not place live orders.
+3. **Immutable provenance.** Data, plans, results, and artifacts retain stable identifiers and hashes.
+4. **Deterministic computation.** Versioned inputs and configuration should produce reproducible outputs.
+5. **Explicit uncertainty.** Probability must have a defined meaning and provenance.
+6. **Statistical ≠ economic.** Costs and execution assumptions remain explicit.
+7. **OOS discipline.** In-sample results are not treated as out-of-sample validation.
+8. **Replication matters.** A single experiment does not automatically become durable knowledge.
+9. **Tenant isolation is correctness.** Cross-workspace access is a data-integrity defect, not merely a UI problem.
+10. **No silent repair.** Missing or ambiguous evidence must not be fabricated or silently repaired.
+
+## SaaS Architecture
+
+```
+Client
+  ↓
+/v1 API
+  ↓
+Authentication
+  ↓
+Tenant / Workspace Context
+  ↓
+Research Planner
+  ↓
+Durable Research Job
+  ↓
+Governed Execution
+  ↓
+Evidence / Lineage / Validation
+  ↓
+Provenance + Content-Addressed Artifacts
+  ↓
+Auditable Research Result
+```
+
+The production target includes tenant isolation, authenticated access, authorization, durable jobs, object storage, dataset versioning, auditability, observability, billing controls, backup/recovery, and reproducible releases.
+
+Not every production capability is complete. The repository roadmap is deliberately conservative: **implemented code, verified integration, and production readiness are separate states.**
+
+## Current Development Status
+
+The project is in the **research-core → SaaS hardening** stage.
+
+### Remaining production gates
+
+- Complete tenant-isolation integration tests against the real persistence boundary
+- Migration/version compatibility verification
+- Full public API contract coverage
+- Complete authorization policy matrix
+- Pagination/filter/sort contracts where required
+- Tenant-scoped production object-storage authorization
+- Retention/deletion controls
+- Dataset registry hardening
+- Security/threat-model review and red-team isolation tests
+- Structured application observability
+- Production UI
+- Commercial entitlement enforcement
+- Backup/restore and disaster-recovery verification
+- Exact-release CI and final integration gates
+
+See `todo/saas.md` for the canonical execution checklist.
+
+## Repository Structure
+
+```
+QROS/
+├── researchos/
+│   ├── claims/              # Claims and evidence graph
+│   ├── evidence/            # Evidence envelopes and lineage
+│   ├── probability/         # Probability contracts
+│   ├── research_core/       # Governed research contracts
+│   └── saas/                # API, jobs, datasets, billing, persistence
+├── supabase/
+│   └── migrations/          # Database/RLS/tenant-boundary migrations
+├── docs/
+│   ├── architecture/
+│   ├── governance/
+│   ├── product/
+│   └── saas/
+├── todo/
+│   └── saas.md              # Canonical SaaS roadmap
+├── scripts/
+└── README.md
+```
 
 ## Installation
 
@@ -45,87 +170,47 @@ The ResearchOS constitutional framework consists of 17 articles:
 pip install -e .
 ```
 
-## Health evidence
+## Verification
+
+Run targeted tests during development:
+
+```bash
+pytest researchos/tests/ -v
+pytest researchos/saas/tests/ -v
+```
+
+For release decisions, use the repository's complete CI and health-evidence gates. A partial local test run is not evidence that the whole repository is production-ready.
+
+Health evidence can be generated with:
 
 ```bash
 python scripts/final_health_check.py
 ```
 
-The command records the commit SHA, UTC timestamp, ruff result, pytest result, C++ configure/build result, and git status in `.health/last_run.json`. The local evidence file is ephemeral; CI uploads the same file as a workflow artifact named `researchos-health-<commit-sha>`.
+A health claim is considered **verified only when the resulting artifact or the corresponding CI evidence is observed for the exact commit under review**.
 
-## Quick Start
+## Documentation
 
-```python
-from researchos import Research, Observation, Evidence, Hypothesis, Scenario
+Key contracts and architecture:
 
-research = Research(
-    question="What is the inflation outlook?",
-    time_horizon="Monthly",
-    asset="US",
-)
+- `docs/governance/`
+- `docs/architecture/`
+- `docs/product/`
+- `docs/saas/API_CONTRACT_V1.md`
+- `docs/saas/DATABASE_SCHEMA.md`
+- `todo/saas.md`
 
-from datetime import datetime, timezone
+## Non-Goals
 
-obs = Observation(
-    source="MACRO:CPI_YOY",
-    timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc),
-    value=3.2,
-    unit="percent",
-)
-obs.validate()
+QROS does not:
 
-ev = Evidence(
-    observation_id=obs.id,
-    hypothesis_id="hyp1",
-    interpretation="Inflation is moderating",
-    direction="Supporting",
-)
-
-hyp = Hypothesis(
-    research_id=research.id,
-    type="Primary",
-    statement="Inflation will continue to moderate",
-    evidence_strength=0.8,
-    coherence=0.7,
-    plausibility=0.9,
-    falsifiability=0.6,
-)
-
-from researchos import ScenarioSet
-ss = ScenarioSet(research_id=research.id)
-ss.add_scenario(Scenario(hypothesis_id=hyp.id, type="Base", probability=0.5))
-ss.add_scenario(Scenario(hypothesis_id=hyp.id, type="Bull", probability=0.3))
-ss.add_scenario(Scenario(hypothesis_id=hyp.id, type="Bear", probability=0.2))
-ss.normalize_probabilities()
-research.complete()
-```
-
-## Project Structure
-
-```
-ResearchOS/
-├── docs/                    # Constitutional documentation
-├── researchos/              # Python package
-├── examples/                # Usage examples
-├── scripts/                 # Reproducible operational entry points
-└── README.md
-```
-
-## Repository Hygiene
-
-- Canonical runtime code belongs under `researchos/`.
-- Reproducible operational entry points belong under `scripts/`.
-- Automated tests belong under the relevant `researchos/*/tests/` package.
-- Historical reports and completed audit material belong under `docs/archive/`.
-- One-off exploratory, repair, manual-test, and scratch scripts must not be added to the repository root.
-- Credentials and API keys must never be committed; use environment variables or local secret configuration.
-
-## Running Tests
-
-```bash
-pytest researchos/tests/ -v
-```
+- Execute broker orders
+- Claim that backtest profitability proves a durable edge
+- Hide assumptions behind unexplained scores
+- Manufacture evidence when data is missing
+- Treat statistical significance as economic significance
+- Declare production readiness without integration and operational verification
 
 ## License
 
-ResearchOS is a scientific research platform. All outputs are for research purposes only.
+QROS is research infrastructure. Research outputs are for research purposes and do not constitute financial advice or instructions to execute trades.

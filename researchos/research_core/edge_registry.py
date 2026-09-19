@@ -1,8 +1,4 @@
-"""Governed probability and edge definitions for research claims.
-
-Definitions are descriptive contracts, not predictive models. A registry may
-select a definition only when its declared prerequisites are satisfied.
-"""
+"""Governed probability and edge definitions for research claims."""
 
 from __future__ import annotations
 
@@ -11,6 +7,8 @@ import json
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Sequence
+
+from researchos.research_core.evidence import EvidenceArtifact, EvidenceKind
 
 
 class EdgeState(str, Enum):
@@ -45,7 +43,7 @@ class ProbabilityDefinition:
 
 @dataclass(frozen=True)
 class EdgeDefinition:
-    """A falsifiable edge contract with explicit eligibility requirements."""
+    """A falsifiable edge contract with evidence-backed eligibility gates."""
 
     edge_id: str
     version: str
@@ -79,24 +77,53 @@ class EdgeDefinition:
         uncertainty_lower_bound: float | None = None,
         out_of_sample_evidence_id: str | None = None,
         replication_evidence_id: str | None = None,
+        out_of_sample_evidence: EvidenceArtifact | None = None,
+        replication_evidence: EvidenceArtifact | None = None,
     ) -> tuple[EdgeState, tuple[str, ...]]:
         reasons: list[str] = []
         if sample_size < self.minimum_sample_size:
             reasons.append(f"insufficient_sample_size:{sample_size}<{self.minimum_sample_size}")
         if observed_effect_size < self.minimum_effect_size:
-            reasons.append(f"effect_below_minimum:{observed_effect_size}<{self.minimum_effect_size}")
+            reasons.append(
+                f"effect_below_minimum:{observed_effect_size}<{self.minimum_effect_size}"
+            )
         if uncertainty_lower_bound is None:
             reasons.append("uncertainty_required")
         elif uncertainty_lower_bound < self.minimum_effect_size:
-            reasons.append(f"uncertainty_below_minimum:{uncertainty_lower_bound}<{self.minimum_effect_size}")
-        if self.requires_out_of_sample and not out_of_sample:
-            reasons.append("out_of_sample_required")
-        if self.requires_out_of_sample and not out_of_sample_evidence_id:
-            reasons.append("out_of_sample_evidence_required")
-        if self.requires_replication and not replicated:
-            reasons.append("replication_required")
-        if self.requires_replication and not replication_evidence_id:
-            reasons.append("replication_evidence_required")
+            reasons.append(
+                f"uncertainty_below_minimum:{uncertainty_lower_bound}<{self.minimum_effect_size}"
+            )
+
+        if self.requires_out_of_sample:
+            if not out_of_sample:
+                reasons.append("out_of_sample_required")
+            if out_of_sample_evidence is None:
+                reasons.append("out_of_sample_evidence_artifact_required")
+            else:
+                if (
+                    out_of_sample_evidence_id
+                    and out_of_sample_evidence.evidence_id != out_of_sample_evidence_id
+                ):
+                    reasons.append("out_of_sample_evidence_id_mismatch")
+                if out_of_sample_evidence.kind is not EvidenceKind.OUT_OF_SAMPLE:
+                    reasons.append("out_of_sample_evidence_kind_invalid")
+                if out_of_sample_evidence.sample_size != sample_size:
+                    reasons.append("out_of_sample_sample_size_mismatch")
+
+        if self.requires_replication:
+            if not replicated:
+                reasons.append("replication_required")
+            if replication_evidence is None:
+                reasons.append("replication_evidence_artifact_required")
+            else:
+                if (
+                    replication_evidence_id
+                    and replication_evidence.evidence_id != replication_evidence_id
+                ):
+                    reasons.append("replication_evidence_id_mismatch")
+                if replication_evidence.kind is not EvidenceKind.REPLICATION:
+                    reasons.append("replication_evidence_kind_invalid")
+
         return (
             (EdgeState.NOT_ELIGIBLE, tuple(reasons))
             if reasons
@@ -114,8 +141,6 @@ class EdgeDecision:
 
 @dataclass(frozen=True)
 class EdgeRegistrySnapshot:
-    """Deterministic content identity of the registered edge definitions."""
-
     registry_version: str
     decisions: tuple[EdgeDecision, ...]
     registry_sha256: str = field(init=False)
@@ -130,16 +155,14 @@ class EdgeRegistrySnapshot:
         }
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
         object.__setattr__(
-            self,
-            "registry_sha256",
-            hashlib.sha256(encoded).hexdigest(),
+            self, "registry_sha256", hashlib.sha256(encoded).hexdigest()
         )
 
 
 class EdgeRegistry:
     """Deterministic registry of explicitly governed edge definitions."""
 
-    registry_version = "edge-registry.v1"
+    registry_version = "edge-registry.v2"
 
     def __init__(self, definitions: Sequence[EdgeDefinition]) -> None:
         by_id: dict[str, EdgeDefinition] = {}
@@ -155,30 +178,12 @@ class EdgeRegistry:
     def get(self, edge_id: str) -> EdgeDefinition:
         return self._definitions[edge_id]
 
-    def evaluate(
-        self,
-        *,
-        sample_size: int,
-        out_of_sample: bool,
-        replicated: bool,
-        observed_effect_size: float,
-        uncertainty_lower_bound: float | None = None,
-        out_of_sample_evidence_id: str | None = None,
-        replication_evidence_id: str | None = None,
-    ) -> EdgeRegistrySnapshot:
+    def evaluate(self, **kwargs: object) -> EdgeRegistrySnapshot:
         decisions = tuple(
             EdgeDecision(
                 definition.edge_id,
                 definition.version,
-                *definition.evaluate(
-                    sample_size=sample_size,
-                    out_of_sample=out_of_sample,
-                    replicated=replicated,
-                    observed_effect_size=observed_effect_size,
-                    uncertainty_lower_bound=uncertainty_lower_bound,
-                    out_of_sample_evidence_id=out_of_sample_evidence_id,
-                    replication_evidence_id=replication_evidence_id,
-                ),
+                *definition.evaluate(**kwargs),
             )
             for definition in self.definitions()
         )

@@ -10,6 +10,7 @@ from researchos.research_core.contracts import (
     ResearchResult,
     ResearchRunner,
 )
+from researchos.research_core.evidence import EvidenceArtifact, EvidenceKind
 from researchos.research_core.execution import (
     ExecutionBinding,
     ExecutionRegistry,
@@ -45,6 +46,8 @@ __all__ = [
     "DatasetProvenance",
     "ExecutionBinding",
     "ExecutionRegistry",
+    "EvidenceArtifact",
+    "EvidenceKind",
     "FROZEN_XAUUSD_M1_WORKFLOW",
     "FrozenResearchPipeline",
     "FrozenXauusdM1Runner",

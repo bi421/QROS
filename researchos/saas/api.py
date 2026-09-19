@@ -8,6 +8,7 @@ import hashlib
 import json
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
+from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
@@ -27,10 +28,7 @@ from researchos.saas.datasets import (
 from researchos.saas.queue import InMemoryResearchJobQueue, ResearchJobQueue
 from researchos.saas.store import InMemoryResearchJobStore, ResearchJobStore
 from researchos.saas.idempotency import (
-    IdempotencyConflict,
-    IdempotencyRecord,
     IdempotencyStore,
-    InMemoryIdempotencyStore,
     MAX_IDEMPOTENCY_KEY_LENGTH,
 )
 from researchos.saas.rate_limit import FixedWindowRateLimiter, RateLimiter
@@ -45,6 +43,34 @@ from researchos.saas.billing import (
 REQUEST_ID_HEADER = "X-Request-ID"
 IDEMPOTENCY_HEADER = "Idempotency-Key"
 MAX_REQUEST_ID_LENGTH = 128
+
+
+def _error_code(status_code: int) -> str:
+    return {
+        400: "bad_request",
+        401: "unauthorized",
+        402: "payment_required",
+        403: "forbidden",
+        404: "not_found",
+        409: "conflict",
+        413: "payload_too_large",
+        422: "validation_error",
+        429: "rate_limited",
+        500: "internal_error",
+        503: "service_unavailable",
+    }.get(status_code, "http_error")
+
+
+def _error_payload(request: Request, status_code: int, detail: object) -> dict[str, object]:
+    message = detail if isinstance(detail, str) else "request failed"
+    return {
+        "detail": detail,
+        "error": {
+            "code": _error_code(status_code),
+            "message": message,
+            "request_id": getattr(request.state, "request_id", None),
+        },
+    }
 
 
 class RequestCorrelationMiddleware(BaseHTTPMiddleware):
@@ -127,7 +153,6 @@ def create_app(
     datasets = dataset_store or InMemoryDatasetStore()
     storage = dataset_storage or InMemoryDatasetStorage()
     queue = job_queue or InMemoryResearchJobQueue()
-    idempotency = idempotency_store or InMemoryIdempotencyStore()
     limiter = rate_limiter or FixedWindowRateLimiter(limit=120, window_seconds=60)
     billing = billing_store
     app = FastAPI(
@@ -136,6 +161,21 @@ def create_app(
         description="Multi-tenant delivery API for auditable financial research.",
     )
     app.add_middleware(RequestCorrelationMiddleware)
+
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+        return JSONResponse(
+            status_code=exc.status_code,
+            headers=exc.headers,
+            content=_error_payload(request, exc.status_code, exc.detail),
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+        return JSONResponse(
+            status_code=422,
+            content=_error_payload(request, 422, exc.errors()),
+        )
 
     def current_tenant(authorization: str | None = Header(default=None)) -> TenantContext:
         return auth.authenticate(authorization)
