@@ -31,9 +31,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install pytest pytest-cov ruff
-          python -m pip install -e ".[dev,test,saas]" 2>&1 || true
+          python -m pip install -e ".[dev,test,saas]"
       - name: Run ruff
-        run: ruff check . --exit-zero
+        run: ruff check .
       - name: Run pytest
         run: python -m pytest researchos/tests/ researchos/research_core/tests/ researchos/saas/tests/ -v --tb=short -x --import-mode=importlib
 
