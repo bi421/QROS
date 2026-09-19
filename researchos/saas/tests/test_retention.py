@@ -1,0 +1,75 @@
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from researchos.saas.retention import (
+    DeletionCandidate,
+    RetentionDecision,
+    RetentionPolicy,
+    evaluate_deletion,
+)
+
+
+NOW = datetime(2026, 9, 19, 12, 0, tzinfo=timezone.utc)
+
+
+def candidate(**overrides: object) -> DeletionCandidate:
+    values: dict[str, object] = {
+        "resource_type": "artifact",
+        "resource_id": "artifact-1",
+        "created_at": NOW - timedelta(days=31),
+    }
+    values.update(overrides)
+    return DeletionCandidate(**values)  # type: ignore[arg-type]
+
+
+def test_expired_unreferenced_resource_is_eligible() -> None:
+    decision, reason = evaluate_deletion(candidate(), now=NOW)
+    assert decision is RetentionDecision.ELIGIBLE
+    assert reason == "retention_window_elapsed"
+
+
+@pytest.mark.parametrize(
+    ("overrides", "reason"),
+    [
+        ({"created_at": NOW - timedelta(days=29)}, "retention_window_active"),
+        ({"reference_count": 1}, "active_references"),
+        ({"legal_hold": True}, "legal_hold"),
+        ({"resource_type": "research_claim"}, "resource_type_not_deletable"),
+    ],
+)
+def test_safety_conditions_fail_closed(
+    overrides: dict[str, object], reason: str
+) -> None:
+    decision, actual_reason = evaluate_deletion(candidate(**overrides), now=NOW)
+    assert decision is RetentionDecision.RETAIN
+    assert actual_reason == reason
+
+
+def test_custom_policy_controls_retention_window_and_resource_types() -> None:
+    policy = RetentionPolicy(
+        min_age=timedelta(days=7),
+        deletable_resource_types=frozenset({"dataset"}),
+    )
+    decision, reason = policy.evaluate(
+        candidate(resource_type="dataset", created_at=NOW - timedelta(days=8)),
+        now=NOW,
+    )
+    assert decision is RetentionDecision.ELIGIBLE
+    assert reason == "retention_window_elapsed"
+
+
+def test_candidate_rejects_negative_reference_count() -> None:
+    with pytest.raises(ValueError, match="reference_count"):
+        candidate(reference_count=-1)
+
+
+def test_candidate_and_now_must_be_timezone_aware() -> None:
+    with pytest.raises(ValueError, match="timezone-aware"):
+        DeletionCandidate(
+            resource_type="artifact",
+            resource_id="artifact-1",
+            created_at=datetime(2026, 9, 19),
+        )
+    with pytest.raises(ValueError, match="timezone-aware"):
+        evaluate_deletion(candidate(), now=datetime(2026, 9, 19))
