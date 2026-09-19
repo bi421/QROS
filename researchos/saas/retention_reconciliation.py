@@ -14,12 +14,23 @@ from typing import Protocol
 from uuid import UUID
 
 
-
 class DeletionOperationState(StrEnum):
     APPROVED = "APPROVED"
     DELETE_ATTEMPTED = "DELETE_ATTEMPTED"
     COMPLETED = "COMPLETED"
     RECONCILIATION_REQUIRED = "RECONCILIATION_REQUIRED"
+
+
+_ALLOWED_TRANSITIONS: dict[DeletionOperationState, frozenset[DeletionOperationState]] = {
+    DeletionOperationState.APPROVED: frozenset(
+        {DeletionOperationState.DELETE_ATTEMPTED, DeletionOperationState.RECONCILIATION_REQUIRED}
+    ),
+    DeletionOperationState.DELETE_ATTEMPTED: frozenset(
+        {DeletionOperationState.COMPLETED, DeletionOperationState.RECONCILIATION_REQUIRED}
+    ),
+    DeletionOperationState.COMPLETED: frozenset(),
+    DeletionOperationState.RECONCILIATION_REQUIRED: frozenset(),
+}
 
 
 @dataclass(frozen=True)
@@ -38,19 +49,39 @@ class DeletionOperation:
         if not self.resource_id.strip():
             raise ValueError("resource_id must not be empty")
 
+    def transition_to(self, state: DeletionOperationState) -> "DeletionOperation":
+        if state is self.state:
+            return self
+        if state not in _ALLOWED_TRANSITIONS[self.state]:
+            raise ValueError(
+                f"invalid deletion operation transition: {self.state} -> {state}"
+            )
+        return DeletionOperation(
+            workspace_id=self.workspace_id,
+            operation_id=self.operation_id,
+            resource_type=self.resource_type,
+            resource_id=self.resource_id,
+            state=state,
+        )
+
 
 class DeletionOperationStore(Protocol):
-    """Durable store contract for idempotent deletion state.
-
-    Production implementations MUST reserve an operation atomically within
-    the workspace and MUST preserve terminal state across retries. A plain
-    read-then-write implementation is insufficient under concurrent workers.
-    """
+    """Durable store contract for idempotent deletion state."""
 
     def get(self, workspace_id: UUID, operation_id: str) -> DeletionOperation | None:
         ...
 
     def put(self, operation: DeletionOperation) -> None:
+        ...
+
+    def transition(
+        self,
+        workspace_id: UUID,
+        operation_id: str,
+        resource_type: str,
+        resource_id: str,
+        state: DeletionOperationState,
+    ) -> DeletionOperation:
         ...
 
 
@@ -66,6 +97,23 @@ class InMemoryDeletionOperationStore:
     def put(self, operation: DeletionOperation) -> None:
         self._operations[(operation.workspace_id, operation.operation_id)] = operation
 
+    def transition(
+        self,
+        workspace_id: UUID,
+        operation_id: str,
+        resource_type: str,
+        resource_id: str,
+        state: DeletionOperationState,
+    ) -> DeletionOperation:
+        current = self.get(workspace_id, operation_id)
+        if current is None:
+            raise KeyError("retention operation not found")
+        if current.resource_type != resource_type or current.resource_id != resource_id:
+            raise ValueError("retention operation resource identity mismatch")
+        updated = current.transition_to(state)
+        self.put(updated)
+        return updated
+
 
 def require_reconciliation_after_delete(
     *,
@@ -75,13 +123,6 @@ def require_reconciliation_after_delete(
     resource_type: str,
     resource_id: str,
 ) -> DeletionOperation:
-    """Persist the explicit recovery state after a delete/audit split.
-
-    This is intentionally separate from the destructive executor: if deletion
-    succeeds but completion auditing fails, callers must record that the
-    operation requires reconciliation rather than silently reporting success.
-    """
-
     operation = DeletionOperation(
         workspace_id=workspace_id,
         operation_id=operation_id,
@@ -91,7 +132,6 @@ def require_reconciliation_after_delete(
     )
     store.put(operation)
     return operation
-
 
 
 @dataclass(frozen=True)
@@ -124,6 +164,33 @@ class SupabaseDeletionOperationStore:
             .eq("resource_id", operation.resource_id)
             .execute()
         )
+
+    def transition(
+        self,
+        workspace_id: UUID,
+        operation_id: str,
+        resource_type: str,
+        resource_id: str,
+        state: DeletionOperationState,
+    ) -> DeletionOperation:
+        result = self.supabase_client.rpc(
+            "transition_retention_deletion_operation",
+            {
+                "p_workspace_id": str(workspace_id),
+                "p_operation_id": operation_id,
+                "p_resource_type": resource_type,
+                "p_resource_id": resource_id,
+                "p_state": state.value,
+            },
+        ).execute()
+        data = result.data
+        if isinstance(data, list):
+            if len(data) != 1:
+                raise RuntimeError("retention transition RPC returned no unique operation")
+            data = data[0]
+        if not isinstance(data, dict):
+            raise RuntimeError("retention transition RPC returned invalid operation")
+        return _operation_from_row(data)
 
     def reserve(
         self,
