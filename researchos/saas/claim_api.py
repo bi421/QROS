@@ -195,7 +195,7 @@ def register_research_claim_routes(
     def list_research_claims(
         limit: int = 50,
         offset: int = 0,
-        context: TenantContext = Depends(tenant),
+        context: TenantContext = Depends(tenant_dependency),
     ) -> ResearchClaimPageResponse:
         if not 1 <= limit <= 100 or offset < 0:
             raise HTTPException(status_code=422, detail="invalid pagination")
