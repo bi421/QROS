@@ -87,7 +87,7 @@ def test_executor_requires_approval_audit_and_delete_before_destructive_action()
         "dependency_check": lambda _candidate: True,
     }
     for kwargs, reason in [
-        ({}, "approval_required"),
+        ({"destructive_deletion_enabled": True}, "approval_required"),
         ({**base}, "audit_sink_required"),
         ({**base, "audit": lambda *_: calls.append("audit")}, "delete_operation_required"),
     ]:
@@ -204,6 +204,7 @@ def test_executor_does_not_emit_completion_when_delete_fails() -> None:
             candidate(),
             now=NOW,
             approved=True,
+            destructive_deletion_enabled=True,
             authorize=lambda _candidate: True,
             dependency_check=lambda _candidate: True,
             audit=lambda _candidate, event: calls.append(event),
@@ -227,6 +228,7 @@ def test_executor_exposes_post_delete_audit_failure_for_reconciliation() -> None
             candidate(),
             now=NOW,
             approved=True,
+            destructive_deletion_enabled=True,
             authorize=lambda _candidate: True,
             dependency_check=lambda _candidate: True,
             audit=audit,
