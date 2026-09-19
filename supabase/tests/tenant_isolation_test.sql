@@ -80,7 +80,7 @@ select results_eq(
 );
 
 select is_empty(
-  $select name from public.dataset where id = 'bbbbbbbb-0000-0000-0000-bbbbbbbbbbbb'$,
+  $q$select name from public.dataset where id = 'bbbbbbbb-0000-0000-0000-bbbbbbbbbbbb'$q$,
   'tenant A cannot read tenant B dataset by resource id'
 );
 
@@ -116,8 +116,8 @@ select throws_ok(
 );
 
 select is_empty(
-  $select id from public.research_run
-     where id = 'bbbbbbbb-2000-0000-0000-bbbbbbbbbbbb'$,
+  $q$select id from public.research_run
+     where id = 'bbbbbbbb-2000-0000-0000-bbbbbbbbbbbb'$q$,
   'tenant A cannot observe tenant B run by id'
 );
 
@@ -136,7 +136,7 @@ select results_eq(
 );
 
 select is_empty(
-  $select name from public.dataset where id = 'aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa'$,
+  $q$select name from public.dataset where id = 'aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa'$q$,
   'tenant B cannot read tenant A dataset by resource id'
 );
 
