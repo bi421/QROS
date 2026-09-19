@@ -2,14 +2,14 @@ name: CI
 
 on:
   push:
-    branches: [main, develop, "feat/**"]
+    branches: [main, develop]
   pull_request:
     branches: [main, develop]
 
 # Preserve an independent verification result for every main commit.
 # New pushes must not cancel a run already executing for the same branch.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref }}
   # Cancel stale feature/PR runs so a fix does not leave obsolete CI consuming time.
   cancel-in-progress: ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/feat/') }}
 

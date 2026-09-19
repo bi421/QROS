@@ -1,0 +1,24 @@
+# SaaS Production Persistence Boundary
+
+## Purpose
+
+QROS has two separate persistence concerns.
+
+1. SaaS operational state: tenant workspaces, memberships, datasets, research runs, idempotency, billing events, rate limits, worker leases, and research-run result provenance.
+2. Research-domain storage: reusable research/evidence/claim libraries used by offline research components.
+
+## Production rule
+
+researchos/saas/runtime.py is the production composition root. It must explicitly wire durable Supabase-backed adapters for every SaaS operational dependency. In-memory implementations are test doubles only.
+
+The production composition root currently uses SupabaseJwtAuthProvider, SupabaseWorkspaceMembershipResolver, SupabaseResearchJobStore, SupabaseDatasetStore, SupabaseDatasetStorage, SupabaseResearchJobQueue, SupabaseIdempotencyStore, SupabaseBillingEventStore, and SupabaseRateLimiter.
+
+create_app() may retain in-memory defaults because unit and local contract tests intentionally use them. Those defaults must never become the production composition root.
+
+## Important boundary
+
+The legacy ResearchRepository, ResearchClaimRepository, and EvidenceRepository are not yet multi-tenant Supabase SaaS services. They must not be silently treated as customer-facing durable SaaS state. Before claims/evidence become SaaS resources, implement a dedicated tenant-aware durable adapter and API boundary.
+
+## Regression rule
+
+Any future production runtime change that replaces a Supabase adapter with an InMemory implementation must fail the architecture test before merge.
