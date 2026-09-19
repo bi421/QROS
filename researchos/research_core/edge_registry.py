@@ -128,12 +128,15 @@ class EdgeDefinition:
         if self.requires_economic_cost_context:
             if economic_cost_context is None:
                 reasons.append("economic_cost_context_required")
-            elif economic_cost_context.net_effect(observed_effect_size) < self.minimum_effect_size:
-                reasons.append(
-                    "net_effect_below_minimum:"
-                    f"{economic_cost_context.net_effect(observed_effect_size)}"
-                    f"<{self.minimum_effect_size}"
-                )
+            else:
+                total_cost = economic_cost_context.total_cost
+                net_effect = economic_cost_context.net_effect(observed_effect_size)
+                if total_cost > 0 and net_effect < self.minimum_effect_size:
+                    reasons.append(
+                        "net_effect_below_minimum:"
+                        f"{net_effect}"
+                        f"<{self.minimum_effect_size}"
+                    )
 
         if self.requires_out_of_sample:
             if not out_of_sample:
