@@ -33,11 +33,6 @@ create index if not exists idx_research_claim_workspace_research
 
 alter table public.research_claim enable row level security;
 
--- The customer API uses a trusted server-side Supabase client. Do not expose
--- this table directly to anon/authenticated clients; the API performs the
--- tenant authorization before reaching this persistence adapter.
-grant select, insert, update, delete on public.research_claim to service_role;
-
 drop policy if exists research_claim_member_select on public.research_claim;
 create policy research_claim_member_select
 on public.research_claim
