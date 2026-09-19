@@ -105,8 +105,18 @@ def test_production_runtime_is_explicitly_durable() -> None:
         "billing_store": "SupabaseBillingEventStore",
         "rate_limiter": "SupabaseRateLimiter",
     }
+    assignments = {}
+    for node in ast.walk(build):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            if isinstance(target, ast.Name):
+                assignments[target.id] = node.value
+
     for argument, constructor in required.items():
         value = keywords.get(argument)
+        assert value is not None, argument
+        if isinstance(value, ast.Name):
+            value = assignments.get(value.id)
         assert isinstance(value, ast.Call), argument
         assert isinstance(value.func, ast.Name), argument
         assert value.func.id == constructor, argument
