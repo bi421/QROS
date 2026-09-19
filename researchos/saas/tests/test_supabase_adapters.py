@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from researchos.saas.contracts import Plan
+from researchos.saas.contracts import Plan, WorkspaceRole
 from researchos.saas.supabase_auth import SupabaseJwtAuthProvider
 from researchos.saas.supabase_membership import SupabaseWorkspaceMembershipResolver
 
@@ -18,7 +18,7 @@ class Membership:
     def resolve(self, user_id, requested_workspace_id=None):
         assert user_id == USER_ID
         assert requested_workspace_id in (None, WORKSPACE_ID)
-        return WORKSPACE_ID, Plan.PRO
+        return WORKSPACE_ID, Plan.PRO, WorkspaceRole.RESEARCHER
 
 
 USER_ID = uuid4()
@@ -52,7 +52,7 @@ class Query:
 class Client:
     def table(self, name):
         if name == "workspace_member":
-            return Query([{"workspace_id": str(WORKSPACE_ID), "user_id": str(USER_ID)}])
+            return Query([{"workspace_id": str(WORKSPACE_ID), "user_id": str(USER_ID), "role": "researcher"}])
         return Query([{"plan": "team", "status": "active"}])
 
 
@@ -65,8 +65,8 @@ class MultiWorkspaceClient(Client):
     def table(self, name):
         if name == "workspace_member":
             return Query([
-                {"workspace_id": str(WORKSPACE_ID)},
-                {"workspace_id": str(uuid4())},
+                {"workspace_id": str(WORKSPACE_ID), "role": "researcher"},
+                {"workspace_id": str(uuid4()), "role": "viewer"},
             ])
         return Query([{"plan": "team", "status": "active"}])
 
@@ -84,14 +84,14 @@ def test_multi_workspace_resolution_accepts_authorized_workspace() -> None:
         def table(self, name):
             if name == "workspace_member":
                 return Query([
-                    {"workspace_id": str(WORKSPACE_ID)},
-                    {"workspace_id": str(other_workspace)},
+                    {"workspace_id": str(WORKSPACE_ID), "role": "admin"},
+                    {"workspace_id": str(other_workspace), "role": "viewer"},
                 ])
             return Query([{"plan": "team", "status": "active"}])
 
     assert SupabaseWorkspaceMembershipResolver(SelectedClient()).resolve(
         USER_ID, WORKSPACE_ID
-    ) == (WORKSPACE_ID, Plan.TEAM)
+    ) == (WORKSPACE_ID, Plan.TEAM, WorkspaceRole.RESEARCHER)
 
 
 class BrokenMembership:
@@ -106,3 +106,15 @@ def test_supabase_auth_maps_entitlement_corruption_to_service_unavailable() -> N
     with pytest.raises(HTTPException) as exc_info:
         SupabaseJwtAuthProvider(ClaimsAuth(), BrokenMembership()).authenticate("Bearer good")
     assert exc_info.value.status_code == 503
+
+
+def test_membership_resolver_returns_server_role() -> None:
+    class ViewerClient(Client):
+        def table(self, name):
+            if name == "workspace_member":
+                return Query([{"workspace_id": str(WORKSPACE_ID), "role": "viewer"}])
+            return Query([{"plan": "team", "status": "active"}])
+
+    assert SupabaseWorkspaceMembershipResolver(ViewerClient()).resolve(USER_ID) == (
+        WORKSPACE_ID, Plan.TEAM, WorkspaceRole.VIEWER
+    )
