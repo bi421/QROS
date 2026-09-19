@@ -33,7 +33,7 @@ from researchos.saas.idempotency import (
 )
 from researchos.saas.rate_limit import FixedWindowRateLimiter, RateLimiter
 from researchos.saas.claim_api import ResearchClaimStore, register_research_claim_routes
-from researchos.saas.evidence_api import ResearchEvidenceStore, register_research_evidence_routes
+from researchos.saas.evidence_api import ResearchEvidenceStore
 from researchos.saas.billing import (
     BillingEventConflict,
     BillingEventStore,
