@@ -135,6 +135,9 @@ class InMemoryDatasetStorage:
     def remove(self, storage_path: str) -> None:
         self._objects.pop(storage_path, None)
 
+    def get(self, storage_path: str) -> bytes | None:
+        return self._objects.get(storage_path)
+
     def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
         if storage_path not in self._objects:
             raise FileNotFoundError(storage_path)
