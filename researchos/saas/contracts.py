@@ -30,16 +30,17 @@ class WorkspaceRole(str, Enum):
     VIEWER = "viewer"
 
 
+@dataclass(frozen=True)
 class PageRequest:
     """Bounded offset pagination with explicit deterministic sorting."""
+    limit: int = 50
+    offset: int = 0
 
-    def __init__(self, limit: int = 50, offset: int = 0) -> None:
-        if not 1 <= limit <= 100:
+    def __post_init__(self) -> None:
+        if not 1 <= self.limit <= 100:
             raise ValueError("limit must be between 1 and 100")
-        if offset < 0:
+        if self.offset < 0:
             raise ValueError("offset must not be negative")
-        self.limit = limit
-        self.offset = offset
 
 
 class ResearchJobStatus(str, Enum):
