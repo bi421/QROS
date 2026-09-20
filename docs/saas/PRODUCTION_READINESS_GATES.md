@@ -20,7 +20,7 @@ The gate must report **up to date** before a release can be called migration-com
 
 ## Current production audit — 2026-09-20
 
-The production project was independently queried during hardening. Its recorded migration history currently ends at `202609200008_retention_reconciliation_completion`. The repository also contains later durable SaaS migrations, including `202609190020_saas_research_claims`, `202609190021_saas_research_claim_grants`, and `202609190031_saas_audit_events`. The production database currently lacks `public.research_claim` and `public.audit_event`. This is an observed schema/migration parity blocker, not a passing release gate.
+The production project was independently queried during hardening. The observed migration-history drift was repaired to the repository's canonical versions, and the durable `public.research_claim` and `public.audit_event` objects were restored using their existing repository migrations. The additional `202609200009_saas_audit_event_client_deny` migration adds an explicit client-deny policy. The current target schema check shows the required QROS tenant/server tables with RLS enabled. The Supabase Security Advisor still reports nine unrelated legacy public tables with RLS disabled and one informational `audit_event` RLS-no-policy finding has been removed by the explicit deny migration; leaked-password protection remains a separate warning.
 
 ## Not yet verified
 
