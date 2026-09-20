@@ -1,8 +1,9 @@
 """Supabase JWT authentication adapter.
 
-The adapter verifies the bearer token with Supabase Auth and then delegates
-workspace authorization to a separate membership resolver. Authorization is
-never inferred from user-editable profile metadata.
+The adapter verifies the bearer token with Supabase Auth, optionally enforces
+an authoritative session-revocation check, and then delegates workspace
+authorization to a separate membership resolver. Authorization is never
+inferred from user-editable profile metadata.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from uuid import UUID
 from fastapi import HTTPException, status
 
 from researchos.saas.contracts import Plan, TenantContext, WorkspaceRole
+from researchos.saas.supabase_session import SessionValidationUnavailable, SessionValidator
 
 
 class WorkspaceMembershipResolver(Protocol):
@@ -34,10 +36,12 @@ class SupabaseJwtAuthProvider:
         supabase_client: Any,
         membership_resolver: WorkspaceMembershipResolver,
         expected_issuer: str = "",
+        session_validator: SessionValidator | None = None,
     ) -> None:
         self._client = supabase_client
         self._membership = membership_resolver
         self._expected_issuer = expected_issuer.rstrip("/")
+        self._session_validator = session_validator
 
     def authenticate(self, authorization: str | None, requested_workspace_id: UUID | None = None) -> TenantContext:
         if not authorization or not authorization.startswith("Bearer "):
@@ -62,12 +66,26 @@ class SupabaseJwtAuthProvider:
             if self._expected_issuer and claims.get("iss") != self._expected_issuer:
                 raise ValueError("invalid authentication issuer")
             user_id = UUID(str(claims.get("sub", "")))
-            UUID(str(claims.get("session_id", "")))
+            session_id = UUID(str(claims.get("session_id", "")))
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="invalid authentication token",
             ) from exc
+
+        if self._session_validator is not None:
+            try:
+                session_active = self._session_validator.is_active(user_id, session_id)
+            except SessionValidationUnavailable as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="authentication session state is unavailable",
+                ) from exc
+            if not session_active:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="authentication session is no longer active",
+                )
 
         try:
             resolved = self._membership.resolve(user_id, requested_workspace_id)

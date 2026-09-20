@@ -57,6 +57,7 @@ def test_production_runtime_is_explicitly_durable() -> None:
         "researchos.saas.api",
         "researchos.saas.supabase_auth",
         "researchos.saas.supabase_membership",
+        "researchos.saas.supabase_session",
         "researchos.saas.datasets",
         "researchos.saas.queue",
         "researchos.saas.supabase_job_store",
@@ -79,6 +80,8 @@ def test_production_runtime_is_explicitly_durable() -> None:
         "FixedWindowRateLimiter",
     )
     assert not any(token in source for token in forbidden)
+    assert "session_validator = SupabaseSessionValidator(client)" in source
+    assert "session_validator=session_validator" in source
 
     build = next(
         node for node in ast.walk(tree)
