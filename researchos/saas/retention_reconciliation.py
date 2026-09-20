@@ -29,7 +29,9 @@ _ALLOWED_TRANSITIONS: dict[DeletionOperationState, frozenset[DeletionOperationSt
         {DeletionOperationState.COMPLETED, DeletionOperationState.RECONCILIATION_REQUIRED}
     ),
     DeletionOperationState.COMPLETED: frozenset(),
-    DeletionOperationState.RECONCILIATION_REQUIRED: frozenset(),
+    DeletionOperationState.RECONCILIATION_REQUIRED: frozenset(
+        {DeletionOperationState.COMPLETED}
+    ),
 }
 
 
