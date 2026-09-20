@@ -56,31 +56,31 @@ set local role authenticated;
 set local request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
 
 select results_eq(
-  $select count(*)::bigint from public.workspace$,
-  $values (1::bigint)$,
+  $$select count(*)::bigint from public.workspace$$,
+  $$values (1::bigint)$,
   'tenant A sees only its workspace'
 );
 
 select results_eq(
-  $select count(*)::bigint from public.dataset$,
-  $values (1::bigint)$,
+  $$select count(*)::bigint from public.dataset$$,
+  $$values (1::bigint)$,
   'tenant A sees only its dataset'
 );
 
 select results_eq(
-  $select count(*)::bigint from public.dataset_version$,
-  $values (1::bigint)$,
+  $$select count(*)::bigint from public.dataset_version$$,
+  $$values (1::bigint)$,
   'tenant A sees only its dataset version'
 );
 
 select results_eq(
-  $select count(*)::bigint from public.research_run$,
-  $values (1::bigint)$,
+  $$select count(*)::bigint from public.research_run$$,
+  $$values (1::bigint)$,
   'tenant A sees only its research run'
 );
 
 select is_empty(
-  $$select name from public.dataset where id = 'bbbbbbbb-0000-0000-0000-bbbbbbbbbbbb'$$,
+  $$$select name from public.dataset where id = 'bbbbbbbb-0000-0000-0000-bbbbbbbbbbbb'$$,
   'tenant A cannot read tenant B dataset by resource id'
 );
 
@@ -116,7 +116,7 @@ select throws_ok(
 );
 
 select is_empty(
-  $$select id from public.research_run
+  $$$select id from public.research_run
      where id = 'bbbbbbbb-2000-0000-0000-bbbbbbbbbbbb'$$,
   'tenant A cannot observe tenant B run by id'
 );
@@ -124,19 +124,19 @@ select is_empty(
 set local request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
 
 select results_eq(
-  $select count(*)::bigint from public.workspace$,
-  $values (1::bigint)$,
+  $$select count(*)::bigint from public.workspace$$,
+  $$values (1::bigint)$,
   'tenant B sees only its workspace'
 );
 
 select results_eq(
-  $select count(*)::bigint from public.dataset$,
-  $values (1::bigint)$,
+  $$select count(*)::bigint from public.dataset$$,
+  $$values (1::bigint)$,
   'tenant B sees only its dataset'
 );
 
 select is_empty(
-  $$select name from public.dataset where id = 'aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa'$$,
+  $$$select name from public.dataset where id = 'aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa'$$,
   'tenant B cannot read tenant A dataset by resource id'
 );
 
@@ -248,7 +248,7 @@ select results_eq(
        returning id
     )
     select count(*)::bigint from deleted$$,
-  $$values (0::bigint)$$,
+  $$$values (0::bigint)$$,
   'tenant A cannot delete tenant B dataset by resource id'
 );
 
@@ -261,7 +261,7 @@ select results_eq(
        returning id
     )
     select count(*)::bigint from deleted$$,
-  $$values (0::bigint)$$,
+  $$$values (0::bigint)$$,
   'tenant B cannot delete tenant A dataset by resource id'
 );
 
