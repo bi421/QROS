@@ -81,7 +81,7 @@ def test_completed_operation_is_terminal() -> None:
         resource_id="artifact-1",
     )
 
-    with pytest.raises(ValueError, match="invalid deletion operation state transition"):
+    with pytest.raises(ValueError, match="invalid deletion operation transition"):
         store.transition(
             workspace_id,
             "delete-artifact-1",
