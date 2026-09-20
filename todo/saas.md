@@ -34,6 +34,9 @@ This file is the execution contract for turning QROS into a research-grade multi
   - [x] Golden Path result/evidence API cross-workspace isolation contract tests.
   - [x] Research Claim API cross-workspace lookup and pagination isolation coverage (API contract tests).
 - [x] Add repository migration integrity gate (target-environment compatibility still release-gated).
+  - [ ] Verify production migration history against repository with the non-destructive schema parity gate.
+  - [ ] Verify required durable production objects and RLS against the target environment.
+  - [ ] Resolve observed production migration drift through the canonical migration workflow.
 
 ## Phase 3 — Durable execution
 - [x] Introduce idempotency keys for research-run mutation with atomic durable reservation.
@@ -130,7 +133,8 @@ A release is **NOT production-ready** unless all applicable gates are green:
 ## Verification discipline
 
 - Structured API errors and request-correlation metadata are implemented and covered by SaaS API tests.
-- Production readiness remains gated on exact-release CI, integration, security, tenant-isolation, and operational verification.
+- Production readiness remains gated on exact-release CI, integration, security, tenant-isolation, target-environment schema parity, and operational verification.
+- 2026-09-20 production audit observed missing `public.research_claim` and `public.audit_event`; this remains a release blocker until migration parity is restored.
 
 ## Golden Path V1 — active milestone
 - [x] Freeze QROS SaaS architecture and product workflow boundary.
