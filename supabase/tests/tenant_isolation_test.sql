@@ -141,10 +141,10 @@ select is_empty(
 );
 
 select is_empty(
-  $$update public.dataset
+  $q$update public.dataset
        set name = 'tampered-by-b'
      where id = 'aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa'
-     returning id$$,
+     returning id$q$,
   'tenant B cannot update tenant A'
 );
 
@@ -224,9 +224,11 @@ set local role authenticated;
 set local request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
 
 select throws_ok(
-  $update public.dataset
+  $update$
+    update public.dataset
        set workspace_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
-     where id = 'aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa'$,
+     where id = 'aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa'
+  $update$,
   '42501',
   null,
   'tenant A cannot rebind its dataset to tenant B'
