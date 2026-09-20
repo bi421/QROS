@@ -124,6 +124,7 @@ def test_executor_does_not_delete_when_pre_delete_audit_fails() -> None:
     from researchos.saas.retention import execute_deletion
 
     calls: list[str] = []
+    store, workspace_id, operation_id = operation_context()
 
     def audit(_candidate, event):
         calls.append(event)
@@ -139,6 +140,9 @@ def test_executor_does_not_delete_when_pre_delete_audit_fails() -> None:
             dependency_check=lambda _candidate: True,
             audit=audit,
             delete=lambda _candidate: calls.append("delete"),
+            operation_store=store,
+            workspace_id=workspace_id,
+            operation_id=operation_id,
         )
     assert calls == ["deletion_approved"]
 
