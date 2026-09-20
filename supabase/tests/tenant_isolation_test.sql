@@ -4,7 +4,7 @@
 -- server-only Data API boundary; the transaction rolls back all changes.
 begin;
 
-select plan(19);
+select plan(23);
 
 insert into auth.users (id, email)
 values
@@ -80,7 +80,7 @@ select results_eq(
 );
 
 select is_empty(
-  $q$select name from public.dataset where id = 'bbbbbbbb-0000-0000-0000-bbbbbbbbbbbb'$q$,
+  $$select name from public.dataset where id = 'bbbbbbbb-0000-0000-0000-bbbbbbbbbbbb'$$,
   'tenant A cannot read tenant B dataset by resource id'
 );
 
@@ -116,8 +116,8 @@ select throws_ok(
 );
 
 select is_empty(
-  $q$select id from public.research_run
-     where id = 'bbbbbbbb-2000-0000-0000-bbbbbbbbbbbb'$q$,
+  $$select id from public.research_run
+     where id = 'bbbbbbbb-2000-0000-0000-bbbbbbbbbbbb'$$,
   'tenant A cannot observe tenant B run by id'
 );
 
@@ -136,7 +136,7 @@ select results_eq(
 );
 
 select is_empty(
-  $q$select name from public.dataset where id = 'aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa'$q$,
+  $$select name from public.dataset where id = 'aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa'$$,
   'tenant B cannot read tenant A dataset by resource id'
 );
 
@@ -217,6 +217,51 @@ select is(
   ),
   false,
   'authenticated cannot execute privileged finish RPC'
+);
+
+
+set local role authenticated;
+set local request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+
+select is_empty(
+  $$
+    update public.dataset
+       set workspace_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+     where id = 'aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa'
+     returning id
+  $$,
+  'tenant A cannot rebind its dataset to tenant B'
+);
+
+select is(
+  (select count(*) from public.dataset
+    where workspace_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
+  1::bigint,
+  'tenant A dataset remains in tenant A after workspace-id injection attempt'
+);
+
+select results_eq(
+  $$with deleted as (
+      delete from public.dataset
+       where id = 'bbbbbbbb-0000-0000-0000-bbbbbbbbbbbb'
+       returning id
+    )
+    select count(*)::bigint from deleted$$,
+  $$values (0::bigint)$$,
+  'tenant A cannot delete tenant B dataset by resource id'
+);
+
+set local request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
+
+select results_eq(
+  $$with deleted as (
+      delete from public.dataset
+       where id = 'aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa'
+       returning id
+    )
+    select count(*)::bigint from deleted$$,
+  $$values (0::bigint)$$,
+  'tenant B cannot delete tenant A dataset by resource id'
 );
 
 select * from finish();
