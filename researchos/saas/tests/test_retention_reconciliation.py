@@ -1,5 +1,7 @@
 from uuid import uuid4
 
+import pytest
+
 from researchos.saas.retention_reconciliation import (
     DeletionOperation,
     DeletionOperationState,
@@ -50,7 +52,7 @@ def test_operation_rejects_empty_identity() -> None:
         ("delete-1", "", "artifact-1"),
         ("delete-1", "artifact", ""),
     ]:
-        try:
+        with pytest.raises(ValueError):
             DeletionOperation(
                 workspace_id=workspace_id,
                 operation_id=operation_id,
@@ -58,9 +60,60 @@ def test_operation_rejects_empty_identity() -> None:
                 resource_id=resource_id,
                 state=DeletionOperationState.APPROVED,
             )
-        except ValueError:
-            continue
-        raise AssertionError("invalid deletion operation identity was accepted")
+
+
+def test_operation_state_transition_contract() -> None:
+    workspace_id = uuid4()
+    operation = DeletionOperation(
+        workspace_id=workspace_id,
+        operation_id="delete-1",
+        resource_type="artifact",
+        resource_id="artifact-1",
+        state=DeletionOperationState.APPROVED,
+    )
+
+    attempted = operation.transition_to(DeletionOperationState.DELETE_ATTEMPTED)
+    completed = attempted.transition_to(DeletionOperationState.COMPLETED)
+    assert attempted.state is DeletionOperationState.DELETE_ATTEMPTED
+    assert completed.state is DeletionOperationState.COMPLETED
+
+    with pytest.raises(ValueError):
+        completed.transition_to(DeletionOperationState.APPROVED)
+
+    with pytest.raises(ValueError):
+        operation.transition_to(DeletionOperationState.COMPLETED)
+
+
+def test_in_memory_transition_preserves_resource_identity() -> None:
+    store = InMemoryDeletionOperationStore()
+    workspace_id = uuid4()
+    store.put(
+        DeletionOperation(
+            workspace_id=workspace_id,
+            operation_id="delete-1",
+            resource_type="artifact",
+            resource_id="artifact-1",
+            state=DeletionOperationState.APPROVED,
+        )
+    )
+
+    updated = store.transition(
+        workspace_id,
+        "delete-1",
+        "artifact",
+        "artifact-1",
+        DeletionOperationState.DELETE_ATTEMPTED,
+    )
+    assert updated.state is DeletionOperationState.DELETE_ATTEMPTED
+
+    with pytest.raises(ValueError):
+        store.transition(
+            workspace_id,
+            "delete-1",
+            "dataset",
+            "dataset-1",
+            DeletionOperationState.COMPLETED,
+        )
 
 
 def test_supabase_row_adapter_is_strict_and_tenant_scoped() -> None:
@@ -84,7 +137,7 @@ def test_supabase_row_adapter_is_strict_and_tenant_scoped() -> None:
 def test_supabase_row_adapter_rejects_malformed_state() -> None:
     from researchos.saas.retention_reconciliation import _operation_from_row
 
-    try:
+    with pytest.raises(RuntimeError):
         _operation_from_row(
             {
                 "workspace_id": str(uuid4()),
@@ -94,6 +147,3 @@ def test_supabase_row_adapter_rejects_malformed_state() -> None:
                 "state": "UNKNOWN",
             }
         )
-    except RuntimeError:
-        return
-    raise AssertionError("malformed retention operation state was accepted")
