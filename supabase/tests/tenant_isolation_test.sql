@@ -96,10 +96,10 @@ select throws_ok(
 );
 
 select is_empty(
-  $$$update public.dataset
+  $update public.dataset
        set name = 'tampered'
      where id = 'bbbbbbbb-0000-0000-0000-bbbbbbbbbbbb'
-     returning id$$,
+     returning id$,
   'tenant A cannot update tenant B'
 );
 
