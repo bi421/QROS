@@ -196,3 +196,34 @@ def test_supabase_auth_rejects_unexpected_claims_provider_failure() -> None:
     with pytest.raises(HTTPException) as exc_info:
         SupabaseJwtAuthProvider(FailingClaimsAuth(), Membership()).authenticate("Bearer bad")
     assert exc_info.value.status_code == 401
+
+
+def test_subscription_resolution_ignores_inactive_history_and_uses_active_entitlement() -> None:
+    class HistoricalSubscriptionClient(Client):
+        def table(self, name):
+            if name == "workspace_member":
+                return Query([{"workspace_id": str(WORKSPACE_ID), "role": "researcher"}])
+            return Query([
+                {"plan": "free", "status": "canceled"},
+                {"plan": "team", "status": "active"},
+            ])
+
+    assert SupabaseWorkspaceMembershipResolver(HistoricalSubscriptionClient()).resolve(USER_ID) == (
+        WORKSPACE_ID, Plan.TEAM, WorkspaceRole.RESEARCHER
+    )
+
+
+def test_duplicate_active_subscriptions_fail_closed() -> None:
+    import pytest
+
+    class DuplicateSubscriptionClient(Client):
+        def table(self, name):
+            if name == "workspace_member":
+                return Query([{"workspace_id": str(WORKSPACE_ID), "role": "researcher"}])
+            return Query([
+                {"plan": "team", "status": "active"},
+                {"plan": "pro", "status": "active"},
+            ])
+
+    with pytest.raises(RuntimeError, match="ambiguous active subscription entitlement"):
+        SupabaseWorkspaceMembershipResolver(DuplicateSubscriptionClient()).resolve(USER_ID)
