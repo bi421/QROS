@@ -108,6 +108,9 @@ def execute_deletion(
     delete: Any | None = None,
     dependency_check: Any | None = None,
     authorize: Any | None = None,
+    operation_store: Any | None = None,
+    workspace_id: Any | None = None,
+    operation_id: str | None = None,
 ) -> DeletionExecution:
     """Execute deletion only after eligibility, approval, and audit gates pass.
 
@@ -115,8 +118,10 @@ def execute_deletion(
     dependency resolution, audit sink, and delete operation are all required
     before an eligible resource can be destroyed.
     The audit callback is invoked before deletion; if it raises, deletion does
-    not occur. A delete callback must return normally for the result to report
-    a successful deletion. No recovery or retry is performed implicitly.
+    not occur. Destructive execution also requires a durable operation store and
+    transitions APPROVED -> DELETE_ATTEMPTED before the delete. Any delete or
+    post-delete-audit failure enters RECONCILIATION_REQUIRED. No recovery or
+    retry is performed implicitly.
     """
     decision, reason = evaluate_deletion(candidate, now=now, policy=policy)
     if decision is not RetentionDecision.ELIGIBLE:
@@ -145,10 +150,69 @@ def execute_deletion(
         return DeletionExecution(RetentionDecision.RETAIN, "audit_sink_required", False)
     if delete is None:
         return DeletionExecution(RetentionDecision.RETAIN, "delete_operation_required", False)
+    if operation_store is None or workspace_id is None or operation_id is None:
+        return DeletionExecution(
+            RetentionDecision.RETAIN, "durable_operation_required", False
+        )
+
+    from researchos.saas.retention_reconciliation import DeletionOperationState
 
     audit(candidate, "deletion_approved")
-    delete(candidate)
-    audit(candidate, "deletion_completed")
+    operation_store.transition(
+        workspace_id,
+        operation_id,
+        candidate.resource_type,
+        candidate.resource_id,
+        DeletionOperationState.DELETE_ATTEMPTED,
+    )
+    try:
+        delete(candidate)
+    except Exception:
+        operation_store.transition(
+            workspace_id,
+            operation_id,
+            candidate.resource_type,
+            candidate.resource_id,
+            DeletionOperationState.RECONCILIATION_REQUIRED,
+        )
+        raise
+
+    try:
+        audit(candidate, "deletion_completed")
+    except Exception:
+        operation_store.transition(
+            workspace_id,
+            operation_id,
+            candidate.resource_type,
+            candidate.resource_id,
+            DeletionOperationState.RECONCILIATION_REQUIRED,
+        )
+        return DeletionExecution(
+            RetentionDecision.ELIGIBLE, "reconciliation_required", True
+        )
+
+    try:
+        operation_store.transition(
+            workspace_id,
+            operation_id,
+            candidate.resource_type,
+            candidate.resource_id,
+            DeletionOperationState.COMPLETED,
+        )
+    except Exception as completion_error:
+        try:
+            operation_store.transition(
+                workspace_id,
+                operation_id,
+                candidate.resource_type,
+                candidate.resource_id,
+                DeletionOperationState.RECONCILIATION_REQUIRED,
+            )
+        except Exception as reconciliation_error:
+            raise RuntimeError(
+                "durable_completion_and_reconciliation_failed"
+            ) from reconciliation_error
+        raise RuntimeError("durable_completion_state_persist_failed") from completion_error
     return DeletionExecution(RetentionDecision.ELIGIBLE, "deletion_completed", True)
 
 
