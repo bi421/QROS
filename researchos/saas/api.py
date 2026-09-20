@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Protocol
 from uuid import UUID, uuid4
 import hashlib
+import hmac
 import json
+import time
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
 from fastapi.exceptions import RequestValidationError
@@ -83,9 +85,25 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         supplied = request.headers.get(REQUEST_ID_HEADER, "").strip()
         request_id = supplied[:MAX_REQUEST_ID_LENGTH] if supplied else str(uuid4())
+        request_id = "".join(char if ord(char) >= 32 and ord(char) != 127 else "-" for char in request_id)
         request.state.request_id = request_id
-        started_at = __import__("time").perf_counter()
-        response = await call_next(request)
+        started_at = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            observer = getattr(request.app.state, "observability", None)
+            if isinstance(observer, StructuredRequestObserver):
+                route = request.scope.get("route")
+                path = getattr(route, "path", request.url.path)
+                observe_request(
+                    observer,
+                    request_id=request_id,
+                    method=request.method,
+                    path=path,
+                    status_code=500,
+                    started_at=started_at,
+                )
+            raise
         response.headers[REQUEST_ID_HEADER] = request_id
         observer = getattr(request.app.state, "observability", None)
         if isinstance(observer, StructuredRequestObserver):
@@ -177,6 +195,7 @@ def create_app(
     idempotency_store: IdempotencyStore | None = None,
     billing_store: BillingEventStore | None = None,
     billing_webhook_secret: str | None = None,
+    metrics_token: str | None = None,
     rate_limiter: RateLimiter | None = None,
     claim_store: ResearchClaimStore | None = None,
     evidence_store: ResearchEvidenceStore | None = None,
@@ -281,8 +300,12 @@ def create_app(
             raise HTTPException(status_code=500, detail="dataset version persistence failed") from exc
 
     @app.get("/metrics", tags=["system"])
-    def metrics() -> Response:
-        """Expose process metrics; production ingress must keep this endpoint internal."""
+    def metrics(metrics_header: str | None = Header(default=None, alias="X-Metrics-Token")) -> Response:
+        """Expose process metrics only when an explicit scrape credential is configured."""
+        if not metrics_token:
+            raise HTTPException(status_code=503, detail="metrics endpoint is not configured")
+        if not metrics_header or not hmac.compare_digest(metrics_header, metrics_token):
+            raise HTTPException(status_code=404, detail="metrics endpoint not found")
         observer = app.state.observability
         return Response(content=observer.metrics.prometheus_text(), media_type="text/plain; version=0.0.4")
 

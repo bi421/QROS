@@ -9,19 +9,21 @@ from researchos.saas.observability import RequestMetrics, StructuredRequestObser
 
 
 def test_request_correlation_is_echoed_and_observed(caplog) -> None:
-    client = TestClient(create_app())
+    app = create_app(metrics_token="scrape-secret")
+    client = TestClient(app)
     caplog.set_level(logging.INFO, logger="qros.saas")
 
     response = client.get("/healthz", headers={"X-Request-ID": "obs-123"})
 
     assert response.status_code == 200
     assert response.headers["X-Request-ID"] == "obs-123"
-    assert client.app.state.observability.metrics.requests_total == 1
+    assert app.state.observability.metrics.requests_total == 1
     assert any('"request_id":"obs-123"' in record.message for record in caplog.records)
 
 
 def test_missing_request_id_is_generated_and_bounded() -> None:
-    client = TestClient(create_app())
+    app = create_app(metrics_token="scrape-secret")
+    client = TestClient(app)
 
     response = client.get("/healthz")
 
@@ -29,22 +31,33 @@ def test_missing_request_id_is_generated_and_bounded() -> None:
     assert response.status_code == 200
     assert request_id
     assert len(request_id) <= 128
-    assert client.app.state.observability.metrics.requests_total == 1
+    assert app.state.observability.metrics.requests_total == 1
 
 
-def test_metrics_exposition_is_prometheus_text_and_contains_no_tenant_data() -> None:
+def test_metrics_endpoint_fails_closed_without_configuration() -> None:
     client = TestClient(create_app())
-    client.get("/healthz")
 
     response = client.get("/metrics")
+
+    assert response.status_code == 503
+
+
+def test_metrics_endpoint_requires_token_and_exposes_only_metrics() -> None:
+    app = create_app(metrics_token="scrape-secret")
+    client = TestClient(app)
+    client.get("/healthz")
+
+    assert client.get("/metrics").status_code == 404
+    response = client.get("/metrics", headers={"X-Metrics-Token": "scrape-secret"})
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/plain; version=0.0.4")
     body = response.text
     assert "# TYPE qros_http_requests_total counter" in body
-    assert "qros_http_requests_total 1" in body
+    assert "qros_http_requests_total 2" in body
     assert "qros_http_errors_total 0" in body
     assert "workspace_id" not in body
+    assert "scrape-secret" not in body
 
 
 def test_sensitive_log_fields_are_redacted() -> None:
@@ -81,3 +94,30 @@ def test_observer_records_5xx_as_error() -> None:
     assert snapshot["requests_total"] == 1
     assert snapshot["errors_total"] == 1
     assert snapshot["status_counts"] == {503: 1}
+
+
+def test_request_id_control_characters_are_neutralized() -> None:
+    app = create_app(metrics_token="scrape-secret")
+    client = TestClient(app)
+
+    response = client.get("/healthz", headers={"X-Request-ID": "safe\nrequest\r\tid"})
+
+    assert response.status_code == 200
+    assert response.headers["X-Request-ID"] == "safe-request--id"
+
+
+def test_unhandled_exception_is_counted_as_5xx() -> None:
+    app = create_app(metrics_token="scrape-secret")
+
+    @app.get("/test-unhandled")
+    def test_unhandled() -> None:
+        raise RuntimeError("boom")
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.get("/test-unhandled")
+
+    assert response.status_code == 500
+    snapshot = app.state.observability.metrics.snapshot()
+    assert snapshot["requests_total"] == 1
+    assert snapshot["errors_total"] == 1
+    assert snapshot["status_counts"] == {500: 1}
