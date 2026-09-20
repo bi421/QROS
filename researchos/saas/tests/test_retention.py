@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 import pytest
 
@@ -11,6 +12,18 @@ from researchos.saas.retention import (
 
 
 NOW = datetime(2026, 9, 19, 12, 0, tzinfo=timezone.utc)
+
+def operation_context():
+    from researchos.saas.retention_reconciliation import (
+        DeletionOperation,
+        DeletionOperationState,
+        InMemoryDeletionOperationStore,
+    )
+    store = InMemoryDeletionOperationStore()
+    workspace_id = uuid4()
+    operation_id = "delete-artifact-1"
+    store.put(DeletionOperation(workspace_id=workspace_id, operation_id=operation_id, resource_type="artifact", resource_id="artifact-1", state=DeletionOperationState.APPROVED))
+    return store, workspace_id, operation_id
 
 
 def candidate(**overrides: object) -> DeletionCandidate:
@@ -98,22 +111,14 @@ def test_executor_requires_approval_audit_and_delete_before_destructive_action()
 
 def test_executor_audits_before_and_after_successful_delete() -> None:
     from researchos.saas.retention import execute_deletion
-
+    from researchos.saas.retention_reconciliation import DeletionOperationState
     calls: list[str] = []
-    result = execute_deletion(
-        candidate(),
-        now=NOW,
-        approved=True,
-        destructive_deletion_enabled=True,
-        authorize=lambda _candidate: True,
-        dependency_check=lambda _candidate: True,
-        audit=lambda _candidate, event: calls.append(event),
-        delete=lambda _candidate: calls.append("delete"),
-    )
+    store, workspace_id, operation_id = operation_context()
+    result = execute_deletion(candidate(), now=NOW, approved=True, destructive_deletion_enabled=True, authorize=lambda _candidate: True, dependency_check=lambda _candidate: True, audit=lambda _candidate, event: calls.append(event), delete=lambda _candidate: calls.append("delete"), operation_store=store, workspace_id=workspace_id, operation_id=operation_id)
     assert result.deleted is True
     assert result.reason == "deletion_completed"
     assert calls == ["deletion_approved", "delete", "deletion_completed"]
-
+    assert store.get(workspace_id, operation_id).state is DeletionOperationState.COMPLETED
 
 def test_executor_does_not_delete_when_pre_delete_audit_fails() -> None:
     from researchos.saas.retention import execute_deletion
@@ -197,52 +202,39 @@ def test_executor_requires_authorization_and_dependency_resolution() -> None:
     assert result.reason == "active_dependencies"
 
 
-def test_executor_does_not_emit_completion_when_delete_fails() -> None:
+def test_executor_marks_reconciliation_when_delete_fails() -> None:
     from researchos.saas.retention import execute_deletion
-
+    from researchos.saas.retention_reconciliation import DeletionOperationState
     calls: list[str] = []
-
+    store, workspace_id, operation_id = operation_context()
     def delete(_candidate):
         calls.append("delete")
         raise RuntimeError("delete unavailable")
-
     with pytest.raises(RuntimeError, match="delete unavailable"):
-        execute_deletion(
-            candidate(),
-            now=NOW,
-            approved=True,
-            destructive_deletion_enabled=True,
-            authorize=lambda _candidate: True,
-            dependency_check=lambda _candidate: True,
-            audit=lambda _candidate, event: calls.append(event),
-            delete=delete,
-        )
+        execute_deletion(candidate(), now=NOW, approved=True, destructive_deletion_enabled=True, authorize=lambda _candidate: True, dependency_check=lambda _candidate: True, audit=lambda _candidate, event: calls.append(event), delete=delete, operation_store=store, workspace_id=workspace_id, operation_id=operation_id)
     assert calls == ["deletion_approved", "delete"]
+    assert store.get(workspace_id, operation_id).state is DeletionOperationState.RECONCILIATION_REQUIRED
 
-
-def test_executor_exposes_post_delete_audit_failure_for_reconciliation() -> None:
+def test_executor_returns_reconciliation_when_post_delete_audit_fails() -> None:
     from researchos.saas.retention import execute_deletion
-
+    from researchos.saas.retention_reconciliation import DeletionOperationState
     calls: list[str] = []
-
+    store, workspace_id, operation_id = operation_context()
     def audit(_candidate, event):
         calls.append(event)
         if event == "deletion_completed":
             raise RuntimeError("audit unavailable")
-
-    with pytest.raises(RuntimeError, match="audit unavailable"):
-        execute_deletion(
-            candidate(),
-            now=NOW,
-            approved=True,
-            destructive_deletion_enabled=True,
-            authorize=lambda _candidate: True,
-            dependency_check=lambda _candidate: True,
-            audit=audit,
-            delete=lambda _candidate: calls.append("delete"),
-        )
+    result = execute_deletion(candidate(), now=NOW, approved=True, destructive_deletion_enabled=True, authorize=lambda _candidate: True, dependency_check=lambda _candidate: True, audit=audit, delete=lambda _candidate: calls.append("delete"), operation_store=store, workspace_id=workspace_id, operation_id=operation_id)
+    assert result.deleted is True
+    assert result.reason == "reconciliation_required"
     assert calls == ["deletion_approved", "delete", "deletion_completed"]
+    assert store.get(workspace_id, operation_id).state is DeletionOperationState.RECONCILIATION_REQUIRED
 
+def test_executor_requires_durable_operation_state_before_delete() -> None:
+    from researchos.saas.retention import execute_deletion
+    result = execute_deletion(candidate(), now=NOW, approved=True, destructive_deletion_enabled=True, authorize=lambda _candidate: True, dependency_check=lambda _candidate: True, audit=lambda *_: None, delete=lambda _candidate: None)
+    assert result.deleted is False
+    assert result.reason == "durable_operation_required"
 
 def test_executor_is_disabled_by_default_before_any_side_effect() -> None:
     from researchos.saas.retention import execute_deletion
