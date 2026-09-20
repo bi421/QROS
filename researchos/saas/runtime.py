@@ -23,7 +23,7 @@ def build_production_app():
     key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
     client = create_client(url, key)
     membership = SupabaseWorkspaceMembershipResolver(client)
-    auth = SupabaseJwtAuthProvider(client, membership)
+    auth = SupabaseJwtAuthProvider(client, membership, expected_issuer=f"{url.rstrip('/')}/auth/v1")
     return create_app(
         auth_provider=auth,
         job_store=SupabaseResearchJobStore(client),

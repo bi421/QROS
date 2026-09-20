@@ -9,7 +9,7 @@ class ClaimsAuth:
     class _Auth:
         def get_claims(self, token):
             assert token == "good"
-            return {"claims": {"sub": str(USER_ID)}}
+            return {"claims": {"sub": str(USER_ID), "role": "authenticated", "aud": "authenticated", "iss": EXPECTED_ISSUER, "session_id": str(SESSION_ID)}}
 
     auth = _Auth()
 
@@ -23,6 +23,8 @@ class Membership:
 
 USER_ID = uuid4()
 WORKSPACE_ID = uuid4()
+SESSION_ID = uuid4()
+EXPECTED_ISSUER = "https://pvhdsngxyoiqhqwujfjt.supabase.co/auth/v1"
 
 
 def test_supabase_auth_adapter_maps_verified_claims_to_tenant() -> None:
