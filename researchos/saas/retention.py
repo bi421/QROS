@@ -191,13 +191,28 @@ def execute_deletion(
             RetentionDecision.ELIGIBLE, "reconciliation_required", True
         )
 
-    operation_store.transition(
-        workspace_id,
-        operation_id,
-        candidate.resource_type,
-        candidate.resource_id,
-        DeletionOperationState.COMPLETED,
-    )
+    try:
+        operation_store.transition(
+            workspace_id,
+            operation_id,
+            candidate.resource_type,
+            candidate.resource_id,
+            DeletionOperationState.COMPLETED,
+        )
+    except Exception as completion_error:
+        try:
+            operation_store.transition(
+                workspace_id,
+                operation_id,
+                candidate.resource_type,
+                candidate.resource_id,
+                DeletionOperationState.RECONCILIATION_REQUIRED,
+            )
+        except Exception as reconciliation_error:
+            raise RuntimeError(
+                "durable_completion_and_reconciliation_failed"
+            ) from reconciliation_error
+        raise RuntimeError("durable_completion_state_persist_failed") from completion_error
     return DeletionExecution(RetentionDecision.ELIGIBLE, "deletion_completed", True)
 
 
