@@ -80,7 +80,7 @@ select results_eq(
 );
 
 select is_empty(
-  $q$select name from public.dataset where id = 'bbbbbbbb-0000-0000-0000-bbbbbbbbbbbb'$q$,
+  $q$select name from public.dataset where id = 'bbbbbbbb-0000-0000-0000-bbbbbbbbbbbb'$,
   'tenant A cannot read tenant B dataset by resource id'
 );
 
