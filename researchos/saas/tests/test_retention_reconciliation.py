@@ -14,6 +14,16 @@ def test_reconciliation_state_is_durable_in_operation_store() -> None:
     store = InMemoryDeletionOperationStore()
     workspace_id = uuid4()
 
+    store.put(
+        DeletionOperation(
+            workspace_id=workspace_id,
+            operation_id="delete-artifact-1",
+            resource_type="artifact",
+            resource_id="artifact-1",
+            state=DeletionOperationState.DELETE_ATTEMPTED,
+        )
+    )
+
     operation = require_reconciliation_after_delete(
         store=store,
         workspace_id=workspace_id,
