@@ -63,7 +63,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [x] Upload/download authorization.
 - [ ] Retention and deletion policy.
   - [x] Deterministic fail-closed retention eligibility contract.
-  - [ ] Destructive retention executor with dependency resolution, audit events, and recovery/runbook coverage.
+  - [x] Destructive retention executor with durable state binding, dependency resolution, audit events, and recovery transitions implemented (PR #126); production destructive deletion remains disabled by default and operational enablement remains a release gate.
 - [x] Dataset version registry.
 - [x] Reproducibility manifest generation.
 
@@ -136,7 +136,7 @@ A release is **NOT production-ready** unless all applicable gates are green:
 - Structured API errors and request-correlation metadata are implemented and covered by SaaS API tests.
 - Production readiness remains gated on exact-release CI, integration, security, tenant-isolation, target-environment schema parity, and operational verification.
 - 2026-09-20 production migration drift was repaired through the canonical migration workflow; the target now contains `public.research_claim`, `public.audit_event`, and the required QROS tenant/server tables with RLS enabled.
-- The target Supabase Security Advisor still reports nine unrelated legacy public tables with RLS disabled. These are not QROS tenant tables and remain a separate security remediation item; enabling RLS blindly would risk breaking their existing access model.
+- The target Supabase Security Advisor still reports nine unrelated legacy public tables with RLS disabled (`Dislike`, `Like`, `Referral`, `User`, `album_consents`, `albums`, `avatars`, `face_embeddings`, `users`). The 2026-09-21 audit verified they are owned by `postgres`, have no RLS policies, and have no direct `anon`/`authenticated` table privileges; `has_table_privilege` also returns false for those roles. Repository code search found no references to the legacy table names. They remain outside the QROS tenant model and require a separately governed disposition (retain/retire/isolate) rather than blind RLS enablement.
 
 ## Golden Path V1 — active milestone
 - [x] Freeze QROS SaaS architecture and product workflow boundary.
