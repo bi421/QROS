@@ -29,9 +29,15 @@ class WorkspaceMembershipResolver(Protocol):
 class SupabaseJwtAuthProvider:
     """Fail-closed Supabase JWT verifier for FastAPI Authorization headers."""
 
-    def __init__(self, supabase_client: Any, membership_resolver: WorkspaceMembershipResolver) -> None:
+    def __init__(
+        self,
+        supabase_client: Any,
+        membership_resolver: WorkspaceMembershipResolver,
+        expected_issuer: str = "",
+    ) -> None:
         self._client = supabase_client
         self._membership = membership_resolver
+        self._expected_issuer = expected_issuer.rstrip("/")
 
     def authenticate(self, authorization: str | None, requested_workspace_id: UUID | None = None) -> TenantContext:
         if not authorization or not authorization.startswith("Bearer "):
@@ -43,8 +49,20 @@ class SupabaseJwtAuthProvider:
 
         try:
             response = self._client.auth.get_claims(token)
-            claims = response.get("claims") if hasattr(response, "get") else None
-            user_id = UUID(str((claims or {}).get("sub", "")))
+            claims = response.get("claims") if isinstance(response, dict) else None
+            if not isinstance(claims, dict):
+                raise ValueError("missing verified claims")
+            if claims.get("role") != "authenticated":
+                raise ValueError("invalid authentication role")
+            audience = claims.get("aud")
+            if audience != "authenticated" and not (
+                isinstance(audience, list) and "authenticated" in audience
+            ):
+                raise ValueError("invalid authentication audience")
+            if self._expected_issuer and claims.get("iss") != self._expected_issuer:
+                raise ValueError("invalid authentication issuer")
+            user_id = UUID(str(claims.get("sub", "")))
+            UUID(str(claims.get("session_id", "")))
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
