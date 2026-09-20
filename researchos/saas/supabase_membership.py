@@ -67,17 +67,16 @@ class SupabaseWorkspaceMembershipResolver:
             self._client.table("subscription")
             .select("plan,status")
             .eq("workspace_id", str(workspace_id))
-            .limit(1)
             .execute()
         )
         subscriptions = subscription.data or []
-        if not subscriptions:
+        active = [row for row in subscriptions if row.get("status") in {"active", "trialing"}]
+        if not active:
             return workspace_id, Plan.FREE, role
+        if len(active) > 1:
+            raise RuntimeError("ambiguous active subscription entitlement")
 
-        row = subscriptions[0]
-        if row.get("status") not in {"active", "trialing"}:
-            return workspace_id, Plan.FREE, role
-
+        row = active[0]
         try:
             return workspace_id, Plan(str(row["plan"])), role
         except (KeyError, ValueError) as exc:
