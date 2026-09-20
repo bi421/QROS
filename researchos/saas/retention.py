@@ -155,13 +155,15 @@ def execute_deletion(
             RetentionDecision.RETAIN, "durable_operation_required", False
         )
 
+    from researchos.saas.retention_reconciliation import DeletionOperationState
+
     audit(candidate, "deletion_approved")
     operation_store.transition(
         workspace_id,
         operation_id,
         candidate.resource_type,
         candidate.resource_id,
-        "DELETE_ATTEMPTED",
+        DeletionOperationState.DELETE_ATTEMPTED,
     )
     try:
         delete(candidate)
@@ -171,7 +173,7 @@ def execute_deletion(
             operation_id,
             candidate.resource_type,
             candidate.resource_id,
-            "RECONCILIATION_REQUIRED",
+            DeletionOperationState.RECONCILIATION_REQUIRED,
         )
         raise
 
@@ -194,7 +196,7 @@ def execute_deletion(
         operation_id,
         candidate.resource_type,
         candidate.resource_id,
-        "COMPLETED",
+        DeletionOperationState.COMPLETED,
     )
     return DeletionExecution(RetentionDecision.ELIGIBLE, "deletion_completed", True)
 
