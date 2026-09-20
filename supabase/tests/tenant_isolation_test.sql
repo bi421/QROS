@@ -99,7 +99,7 @@ select is_empty(
   $$update public.dataset
        set name = 'tampered'
      where id = 'bbbbbbbb-0000-0000-0000-bbbbbbbbbbbb'
-     returning id$,
+     returning id$$,
   'tenant A cannot update tenant B'
 );
 
@@ -144,7 +144,7 @@ select is_empty(
   $$update public.dataset
        set name = 'tampered-by-b'
      where id = 'aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa'
-     returning id$,
+     returning id$$,
   'tenant B cannot update tenant A'
 );
 
