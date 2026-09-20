@@ -14,6 +14,16 @@ def test_reconciliation_state_is_durable_in_operation_store() -> None:
     store = InMemoryDeletionOperationStore()
     workspace_id = uuid4()
 
+    store.put(
+        DeletionOperation(
+            workspace_id=workspace_id,
+            operation_id="delete-artifact-1",
+            resource_type="artifact",
+            resource_id="artifact-1",
+            state=DeletionOperationState.DELETE_ATTEMPTED,
+        )
+    )
+
     operation = require_reconciliation_after_delete(
         store=store,
         workspace_id=workspace_id,
@@ -24,6 +34,19 @@ def test_reconciliation_state_is_durable_in_operation_store() -> None:
 
     assert operation.state is DeletionOperationState.RECONCILIATION_REQUIRED
     assert store.get(workspace_id, "delete-artifact-1") == operation
+
+
+def test_reconciliation_requires_existing_operation() -> None:
+    store = InMemoryDeletionOperationStore()
+
+    with pytest.raises(KeyError):
+        require_reconciliation_after_delete(
+            store=store,
+            workspace_id=uuid4(),
+            operation_id="missing",
+            resource_type="artifact",
+            resource_id="artifact-1",
+        )
 
 
 def test_operation_state_is_tenant_scoped() -> None:
