@@ -123,15 +123,13 @@ def require_reconciliation_after_delete(
     resource_type: str,
     resource_id: str,
 ) -> DeletionOperation:
-    operation = DeletionOperation(
-        workspace_id=workspace_id,
-        operation_id=operation_id,
-        resource_type=resource_type,
-        resource_id=resource_id,
-        state=DeletionOperationState.RECONCILIATION_REQUIRED,
+    return store.transition(
+        workspace_id,
+        operation_id,
+        resource_type,
+        resource_id,
+        DeletionOperationState.RECONCILIATION_REQUIRED,
     )
-    store.put(operation)
-    return operation
 
 
 @dataclass(frozen=True)
