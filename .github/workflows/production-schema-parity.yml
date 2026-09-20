@@ -55,17 +55,45 @@ jobs:
       - name: Verify required production objects
         run: |
           set -euo pipefail
-          result="$(supabase db query --linked "select to_regclass('public.research_claim') as research_claim, to_regclass('public.audit_event') as audit_event, to_regclass('public.retention_deletion_operation') as retention_deletion_operation;" 2>&1)"
-          printf '%s\n' "$result"
-          grep -q "research_claim" <<<"$result" || { echo "::error::research_claim is missing"; exit 1; }
-          grep -q "audit_event" <<<"$result" || { echo "::error::audit_event is missing"; exit 1; }
-          grep -q "retention_deletion_operation" <<<"$result" || { echo "::error::retention_deletion_operation is missing"; exit 1; }
+          supabase db query --linked "
+          do \\$\\$
+          begin
+            if to_regclass('public.research_claim') is null then
+              raise exception 'required object missing: public.research_claim';
+            end if;
+            if to_regclass('public.audit_event') is null then
+              raise exception 'required object missing: public.audit_event';
+            end if;
+            if to_regclass('public.retention_deletion_operation') is null then
+              raise exception 'required object missing: public.retention_deletion_operation';
+            end if;
+          end
+          \\$\\$;
+          "
 
       - name: Verify public tenant tables remain RLS protected
         run: |
           set -euo pipefail
-          supabase db query --linked "select c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and c.relname in ('workspace','workspace_member','dataset','dataset_version','research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation') and not c.relrowsecurity order by c.relname;" | tee /tmp/rls.txt
-          if grep -Eq 'workspace|workspace_member|dataset|dataset_version|research_run|artifact|evidence|research_claim|audit_event|retention_deletion_operation' /tmp/rls.txt; then
-            echo "::error::One or more required tenant/server tables have RLS disabled."
-            exit 1
-          fi
+          supabase db query --linked "
+          do \\$\\$
+          declare
+            missing_rls text;
+          begin
+            select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)
+              into missing_rls
+            from pg_class c
+            join pg_namespace n on n.oid = c.relnamespace
+            where n.nspname = 'public'
+              and c.relkind = 'r'
+              and c.relname in (
+                'workspace','workspace_member','dataset','dataset_version',
+                'research_run','artifact','evidence','research_claim',
+                'audit_event','retention_deletion_operation'
+              )
+              and not c.relrowsecurity;
+            if missing_rls is not null then
+              raise exception 'RLS disabled on required tables: %', missing_rls;
+            end if;
+          end
+          \\$\\$;
+          "
