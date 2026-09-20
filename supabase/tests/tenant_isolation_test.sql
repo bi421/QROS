@@ -69,13 +69,13 @@ select results_eq(
 
 select results_eq(
   $$select count(*)::bigint from public.dataset_version$$,
-  $$values (1::bigint)$,
+  $values (1::bigint)$,
   'tenant A sees only its dataset version'
 );
 
 select results_eq(
   $$select count(*)::bigint from public.research_run$$,
-  $$values (1::bigint)$,
+  $values (1::bigint)$,
   'tenant A sees only its research run'
 );
 
@@ -125,13 +125,13 @@ set local request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
 
 select results_eq(
   $$select count(*)::bigint from public.workspace$$,
-  $$values (1::bigint)$,
+  $values (1::bigint)$,
   'tenant B sees only its workspace'
 );
 
 select results_eq(
   $$select count(*)::bigint from public.dataset$$,
-  $$values (1::bigint)$,
+  $values (1::bigint)$,
   'tenant B sees only its dataset'
 );
 
