@@ -25,18 +25,19 @@ This file is the execution contract for turning QROS into a research-grade multi
 
 ## Phase 2 — Tenant-safe persistence
 - [ ] Make workspace/tenant identity mandatory at every SaaS boundary.
-  - [x] Reject ambiguous multi-workspace auth resolution; support explicit \`X-Workspace-ID\` selection.
+  - [x] Reject ambiguous multi-workspace auth resolution; support explicit `X-Workspace-ID` selection.
 - [ ] Implement canonical Supabase persistence adapters.
   - [x] Add tenant-scoped durable Supabase Research Claim adapter (persistence only; API exposure remains gated).
   - [x] Add tenant-scoped Research Claim customer API with fail-closed persistence and cross-workspace tests.
 - [x] Enforce RLS for every tenant-owned table.
-- [ ] Add tenant-isolation integration tests.
+- [x] Add tenant-isolation integration tests.
   - [x] Golden Path result/evidence API cross-workspace isolation contract tests.
   - [x] Research Claim API cross-workspace lookup and pagination isolation coverage (API contract tests).
+  - [x] Adversarial DB tenant-isolation suite covering cross-workspace reads/writes/deletes, workspace rebinding, child-parent mismatch, and privileged RPC boundaries (PR #129; exact-head CI + Supabase Database Security Tests green).
 - [x] Add repository migration integrity gate (target-environment compatibility still release-gated).
-  - [ ] Verify production migration history against repository with the non-destructive schema parity gate.
-  - [ ] Verify required durable production objects and RLS against the target environment.
-  - [ ] Resolve observed production migration drift through the canonical migration workflow.
+  - [x] Production migration history independently verified against the repository's canonical migration sequence through `202609200009`.
+  - [x] Required durable production objects and RLS verified in the target Supabase environment.
+  - [x] Observed production migration drift resolved through the canonical migration workflow; `research_claim` and `audit_event` are present in production.
 
 ## Phase 3 — Durable execution
 - [x] Introduce idempotency keys for research-run mutation with atomic durable reservation.
@@ -103,7 +104,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [ ] Secret/config validation.
 - [ ] Dependency and container scanning.
 - [ ] Threat-model review.
-- [ ] Tenant isolation red-team tests.
+- [x] Tenant isolation red-team tests.
 
 ## Phase 10 — Production / disaster recovery
 - [ ] Production deployment topology.
@@ -134,7 +135,8 @@ A release is **NOT production-ready** unless all applicable gates are green:
 
 - Structured API errors and request-correlation metadata are implemented and covered by SaaS API tests.
 - Production readiness remains gated on exact-release CI, integration, security, tenant-isolation, target-environment schema parity, and operational verification.
-- 2026-09-20 production audit observed missing `public.research_claim` and `public.audit_event`; this remains a release blocker until migration parity is restored.
+- 2026-09-20 production migration drift was repaired through the canonical migration workflow; the target now contains `public.research_claim`, `public.audit_event`, and the required QROS tenant/server tables with RLS enabled.
+- The target Supabase Security Advisor still reports nine unrelated legacy public tables with RLS disabled. These are not QROS tenant tables and remain a separate security remediation item; enabling RLS blindly would risk breaking their existing access model.
 
 ## Golden Path V1 — active milestone
 - [x] Freeze QROS SaaS architecture and product workflow boundary.
