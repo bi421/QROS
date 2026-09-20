@@ -33,6 +33,7 @@ _SENSITIVE_KEYS = frozenset(
         "secret",
         "signature",
         "billing-signature",
+    "metrics-token",
     }
 )
 
