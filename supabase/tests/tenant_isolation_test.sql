@@ -80,7 +80,7 @@ select results_eq(
 );
 
 select is_empty(
-  $$$select name from public.dataset where id = 'bbbbbbbb-0000-0000-0000-bbbbbbbbbbbb'$$,
+  $$select name from public.dataset where id = 'bbbbbbbb-0000-0000-0000-bbbbbbbbbbbb'$$,
   'tenant A cannot read tenant B dataset by resource id'
 );
 
@@ -116,7 +116,7 @@ select throws_ok(
 );
 
 select is_empty(
-  $$$select id from public.research_run
+  $$select id from public.research_run
      where id = 'bbbbbbbb-2000-0000-0000-bbbbbbbbbbbb'$$,
   'tenant A cannot observe tenant B run by id'
 );
@@ -136,7 +136,7 @@ select results_eq(
 );
 
 select is_empty(
-  $$$select name from public.dataset where id = 'aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa'$$,
+  $$select name from public.dataset where id = 'aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa'$$,
   'tenant B cannot read tenant A dataset by resource id'
 );
 
@@ -248,7 +248,7 @@ select results_eq(
        returning id
     )
     select count(*)::bigint from deleted$$,
-  $$$values (0::bigint)$$,
+  $$values (0::bigint)$$,
   'tenant A cannot delete tenant B dataset by resource id'
 );
 
@@ -261,7 +261,7 @@ select results_eq(
        returning id
     )
     select count(*)::bigint from deleted$$,
-  $$$values (0::bigint)$$,
+  $$values (0::bigint)$$,
   'tenant B cannot delete tenant A dataset by resource id'
 );
 
