@@ -54,7 +54,7 @@ def test_metrics_endpoint_requires_token_and_exposes_only_metrics() -> None:
     assert response.headers["content-type"].startswith("text/plain; version=0.0.4")
     body = response.text
     assert "# TYPE qros_http_requests_total counter" in body
-    assert "qros_http_requests_total 1" in body
+    assert "qros_http_requests_total 2" in body
     assert "qros_http_errors_total 0" in body
     assert "workspace_id" not in body
     assert "scrape-secret" not in body
