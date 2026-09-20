@@ -34,7 +34,8 @@ from researchos.saas.idempotency import (
 from researchos.saas.rate_limit import FixedWindowRateLimiter, RateLimiter
 from researchos.saas.claim_api import ResearchClaimStore, register_research_claim_routes
 from researchos.saas.evidence_api import ResearchEvidenceStore, register_research_evidence_routes
-from researchos.saas.observability import StructuredRequestObserver, observe_request\nfrom researchos.saas.billing import (
+from researchos.saas.observability import StructuredRequestObserver, observe_request
+from researchos.saas.billing import (
     BillingEventConflict,
     BillingEventStore,
     BillingSignatureError,
@@ -83,8 +84,21 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
         supplied = request.headers.get(REQUEST_ID_HEADER, "").strip()
         request_id = supplied[:MAX_REQUEST_ID_LENGTH] if supplied else str(uuid4())
         request.state.request_id = request_id
+        started_at = __import__("time").perf_counter()
         response = await call_next(request)
         response.headers[REQUEST_ID_HEADER] = request_id
+        observer = getattr(request.app.state, "observability", None)
+        if isinstance(observer, StructuredRequestObserver):
+            route = request.scope.get("route")
+            path = getattr(route, "path", request.url.path)
+            observe_request(
+                observer,
+                request_id=request_id,
+                method=request.method,
+                path=path,
+                status_code=response.status_code,
+                started_at=started_at,
+            )
         return response
 
 
@@ -182,6 +196,7 @@ def create_app(
         description="Multi-tenant delivery API for auditable financial research.",
     )
     app.add_middleware(RequestCorrelationMiddleware)
+    app.state.observability = StructuredRequestObserver()
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
@@ -264,6 +279,12 @@ def create_app(
             raise
         except Exception as exc:
             raise HTTPException(status_code=500, detail="dataset version persistence failed") from exc
+
+    @app.get("/metrics", tags=["system"])
+    def metrics() -> Response:
+        """Expose process metrics; production ingress must keep this endpoint internal."""
+        observer = app.state.observability
+        return Response(content=observer.metrics.prometheus_text(), media_type="text/plain; version=0.0.4")
 
     @app.get("/healthz", tags=["system"])
     def healthz() -> dict[str, str]:
