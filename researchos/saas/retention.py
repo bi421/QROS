@@ -185,7 +185,7 @@ def execute_deletion(
             operation_id,
             candidate.resource_type,
             candidate.resource_id,
-            "RECONCILIATION_REQUIRED",
+            DeletionOperationState.RECONCILIATION_REQUIRED,
         )
         return DeletionExecution(
             RetentionDecision.ELIGIBLE, "reconciliation_required", True
