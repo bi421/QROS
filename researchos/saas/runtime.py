@@ -8,6 +8,7 @@ from supabase import create_client
 from researchos.saas.api import create_app
 from researchos.saas.supabase_auth import SupabaseJwtAuthProvider
 from researchos.saas.supabase_membership import SupabaseWorkspaceMembershipResolver
+from researchos.saas.supabase_session import SupabaseSessionValidator
 from researchos.saas.datasets import SupabaseDatasetStorage, SupabaseDatasetStore
 from researchos.saas.queue import SupabaseResearchJobQueue
 from researchos.saas.supabase_job_store import SupabaseResearchJobStore
@@ -23,7 +24,13 @@ def build_production_app():
     key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
     client = create_client(url, key)
     membership = SupabaseWorkspaceMembershipResolver(client)
-    auth = SupabaseJwtAuthProvider(client, membership, expected_issuer=f"{url.rstrip('/')}/auth/v1")
+    session_validator = SupabaseSessionValidator(client)
+    auth = SupabaseJwtAuthProvider(
+        client,
+        membership,
+        expected_issuer=f"{url.rstrip('/')}/auth/v1",
+        session_validator=session_validator,
+    )
     return create_app(
         auth_provider=auth,
         job_store=SupabaseResearchJobStore(client),
