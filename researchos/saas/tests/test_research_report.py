@@ -141,13 +141,19 @@ def test_report_endpoint_fails_closed_without_result_or_evidence_store() -> None
     context = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.VIEWER)
     jobs = InMemoryResearchJobStore()
     job = jobs.create(context.workspace_id, _job(context.workspace_id, "e" * 64))
+
     client = TestClient(create_app(auth_provider=StaticAuth(context), job_store=jobs))
 
-    assert client.get(
-        f"/v1/research-runs/{job.id}/report",
-        headers={"Authorization": "Bearer test"},
-    ).status_code == 503
+    # A missing result is a resource absence, so it must remain a 404.
     assert client.get(
         f"/v1/research-runs/{uuid4()}/report",
         headers={"Authorization": "Bearer test"},
     ).status_code == 404
+
+    # Once a result exists, an unconfigured evidence store is an unavailable
+    # dependency and must fail closed with 503.
+    _result(jobs, context.workspace_id, job)
+    assert client.get(
+        f"/v1/research-runs/{job.id}/report",
+        headers={"Authorization": "Bearer test"},
+    ).status_code == 503
