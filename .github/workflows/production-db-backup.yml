@@ -1,0 +1,61 @@
+name: Production Database Backup
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ secrets.BACKUP_AWS_REGION }}
+      BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+    steps:
+      - name: Validate backup configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${DATABASE_URL}" || { echo "PROD_DATABASE_URL is required"; exit 1; }
+          test -n "${AWS_ACCESS_KEY_ID}" || { echo "BACKUP_AWS_ACCESS_KEY_ID is required"; exit 1; }
+          test -n "${AWS_SECRET_ACCESS_KEY}" || { echo "BACKUP_AWS_SECRET_ACCESS_KEY is required"; exit 1; }
+          test -n "${AWS_DEFAULT_REGION}" || { echo "BACKUP_AWS_REGION is required"; exit 1; }
+          test -n "${BACKUP_S3_BUCKET}" || { echo "BACKUP_S3_BUCKET is required"; exit 1; }
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Create compressed logical backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p backup
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          pg_dump "${DATABASE_URL}" --format=custom --no-owner --file="backup/qros-${stamp}.dump"
+          sha256sum "backup/qros-${stamp}.dump" | tee "backup/qros-${stamp}.sha256"
+          echo "BACKUP_FILE=backup/qros-${stamp}.dump" >> "$GITHUB_ENV"
+          echo "BACKUP_SHA=backup/qros-${stamp}.sha256" >> "$GITHUB_ENV"
+
+      - name: Upload backup to S3
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws s3 cp "${BACKUP_FILE}" "s3://${BACKUP_S3_BUCKET}/qros/postgres/$(basename "${BACKUP_FILE}")" --sse AES256
+          aws s3 cp "${BACKUP_SHA}" "s3://${BACKUP_S3_BUCKET}/qros/postgres/$(basename "${BACKUP_SHA}")" --sse AES256
+
+      - name: Verify remote object
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws s3api head-object --bucket "${BACKUP_S3_BUCKET}" --key "qros/postgres/$(basename "${BACKUP_FILE}")"
+          aws s3api head-object --bucket "${BACKUP_S3_BUCKET}" --key "qros/postgres/$(basename "${BACKUP_SHA}")"
