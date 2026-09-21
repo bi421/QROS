@@ -77,6 +77,7 @@ def test_governed_research_vertical_slice_preserves_lineage_end_to_end() -> None
             artifacts=(ResearchArtifact("result", "result", "2" * 64),),
         ),
     )
+    assert result.status == "SUCCEEDED"
     assert job.claim_id == claim.id
     assert job.plan_hash == plan_hash
 
