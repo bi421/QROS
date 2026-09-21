@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main, develop]
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/feat/') }}
@@ -92,6 +95,15 @@ jobs:
             fi
             sleep 2
           done
+          echo "HTTP health/readiness endpoints passed; verifying Docker HEALTHCHECK contract"
+          for attempt in $(seq 1 15); do
+            health_status=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' qros-api-ci)
+            if [ "$health_status" = "healthy" ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker inspect qros-api-ci
           docker logs qros-api-ci
           exit 1
 
