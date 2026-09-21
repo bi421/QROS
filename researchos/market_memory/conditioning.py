@@ -105,7 +105,6 @@ def compute_conditional_statistics(
     bootstrap_num_resamples: int = 1000,
     bootstrap_seed: int = 42,
     confidence_level: float = 0.95,
-    label_end_getter: Any | None = None,
     dependence_block_size: int = 1,
 ) -> ConditionalResult:
     """Compute deterministic conditional statistics for matching events.
@@ -148,7 +147,8 @@ def compute_conditional_statistics(
     std_val = _std(values)
     positive_count = sum(1 for value in values if value > 0)
     raw_prob = positive_count / n
-    ci_result = block_bootstrap_mean_ci(values, dependence_block_size, bootstrap_num_resamples, bootstrap_seed, confidence_level) if dependence_block_size > 1 else block_bootstrap_mean_ci(values, 1, bootstrap_num_resamples, bootstrap_seed, confidence_level)
+    effective_block_size = min(dependence_block_size, n)
+    ci_result = block_bootstrap_mean_ci(values, effective_block_size, bootstrap_num_resamples, bootstrap_seed, confidence_level)
     ci = ci_result.confidence_interval if len(values) >= 2 else None
 
     if n < 5:
@@ -156,7 +156,7 @@ def compute_conditional_statistics(
         notes = f"Small sample (n={n}); uncertainty_method={ci_result.method if n >= 2 else "none"}"
     else:
         status = EvidenceStatus.UNVALIDATED.value
-        dependence_note = f"; dependence_block_size={dependence_block_size}" if dependence_block_size > 1 else "; iid_bootstrap_only_when_no_overlap"
+        dependence_note = f"; dependence_block_size={effective_block_size}" if effective_block_size > 1 else "; iid_bootstrap_only_when_no_overlap"
         notes = f"Sample n={n}, awaiting temporal validation; uncertainty_method={ci_result.method}{dependence_note}"
 
     return ConditionalResult(
