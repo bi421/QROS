@@ -37,8 +37,8 @@ def classify(log: str) -> Classification:
         text,
         (
             r"no jobs",
-            r"jobs:s*[]",
-            r"total_count:s*0",
+            r"jobs:.*\\[\\]",
+            r"total_count:.*0",
             r"workflow.*(?:cancelled|canceled)",
             r"strategy configuration was canceled",
             r"no steps were run",
