@@ -1,0 +1,89 @@
+name: Storage Recovery Drill
+
+on:
+  workflow_dispatch:
+    inputs:
+      object_name:
+        description: "Unique drill object name"
+        required: true
+        default: "drills/storage-recovery-v1.bin"
+
+permissions:
+  contents: read
+
+jobs:
+  storage-recovery:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate recovery secrets
+        env:
+          SUPABASE_URL: ${{ secrets.QROS_STAGING_SUPABASE_URL }}
+          SERVICE_ROLE_KEY: ${{ secrets.QROS_STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          S3_BUCKET: ${{ secrets.QROS_RECOVERY_S3_BUCKET }}
+          AWS_REGION: ${{ secrets.QROS_RECOVERY_AWS_REGION }}
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_URL"; test -n "$SERVICE_ROLE_KEY"; test -n "$S3_BUCKET"; test -n "$AWS_REGION"
+      - name: Create deterministic drill object
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          p=Path("/tmp/qros-drill.bin")
+          data=b"QROS-STORAGE-RECOVERY-V1\n"+bytes(range(256))*4096
+          p.write_bytes(data)
+          print("source_sha256="+hashlib.sha256(data).hexdigest())
+          PY
+      - name: Upload object to QROS Storage
+        env:
+          SUPABASE_URL: ${{ secrets.QROS_STAGING_SUPABASE_URL }}
+          SERVICE_ROLE_KEY: ${{ secrets.QROS_STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          OBJECT_NAME: ${{ inputs.object_name }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error -X POST "$SUPABASE_URL/storage/v1/object/qros-datasets/$OBJECT_NAME" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "apikey: $SERVICE_ROLE_KEY" -H "Content-Type: application/octet-stream" --data-binary @/tmp/qros-drill.bin
+      - name: Export independent recovery copy
+        env:
+          AWS_REGION: ${{ secrets.QROS_RECOVERY_AWS_REGION }}
+          S3_BUCKET: ${{ secrets.QROS_RECOVERY_S3_BUCKET }}
+          OBJECT_NAME: ${{ inputs.object_name }}
+        run: |
+          set -euo pipefail
+          aws s3 cp /tmp/qros-drill.bin "s3://$S3_BUCKET/qros-storage-drill/$OBJECT_NAME" --region "$AWS_REGION"
+          aws s3api head-object --bucket "$S3_BUCKET" --key "qros-storage-drill/$OBJECT_NAME" --region "$AWS_REGION" >/dev/null
+      - name: Restore independent copy
+        env:
+          AWS_REGION: ${{ secrets.QROS_RECOVERY_AWS_REGION }}
+          S3_BUCKET: ${{ secrets.QROS_RECOVERY_S3_BUCKET }}
+          OBJECT_NAME: ${{ inputs.object_name }}
+        run: |
+          set -euo pipefail
+          aws s3 cp "s3://$S3_BUCKET/qros-storage-drill/$OBJECT_NAME" /tmp/qros-recovery-copy.bin --region "$AWS_REGION"
+          cp /tmp/qros-recovery-copy.bin /tmp/qros-restored.bin
+      - name: Verify restored content hash
+        run: |
+          set -euo pipefail
+          python3 ops/recovery/storage_recovery_verify.py --source /tmp/qros-drill.bin --recovery-copy /tmp/qros-recovery-copy.bin --restored /tmp/qros-restored.bin
+      - name: Re-upload restored object and verify
+        env:
+          SUPABASE_URL: ${{ secrets.QROS_STAGING_SUPABASE_URL }}
+          SERVICE_ROLE_KEY: ${{ secrets.QROS_STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          OBJECT_NAME: ${{ inputs.object_name }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error -X POST "$SUPABASE_URL/storage/v1/object/qros-datasets/$OBJECT_NAME?upsert=true" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "apikey: $SERVICE_ROLE_KEY" -H "Content-Type: application/octet-stream" --data-binary @/tmp/qros-restored.bin
+          curl --fail --silent --show-error "$SUPABASE_URL/storage/v1/object/qros-datasets/$OBJECT_NAME" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "apikey: $SERVICE_ROLE_KEY" -o /tmp/qros-downloaded.bin
+          cmp /tmp/qros-drill.bin /tmp/qros-downloaded.bin
+      - name: Cleanup drill object
+        if: always()
+        env:
+          SUPABASE_URL: ${{ secrets.QROS_STAGING_SUPABASE_URL }}
+          SERVICE_ROLE_KEY: ${{ secrets.QROS_STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          OBJECT_NAME: ${{ inputs.object_name }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error -X DELETE "$SUPABASE_URL/storage/v1/object/qros-datasets/$OBJECT_NAME" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "apikey: $SERVICE_ROLE_KEY" || true
