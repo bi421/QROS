@@ -13,13 +13,13 @@ from researchos.research_core.contracts import ResearchArtifact, ResearchResult,
 class ResearchRunResultRecord:
     workspace_id: UUID
     research_run_id: UUID
-    claim_id: UUID | None = None
-    plan_hash: str | None = None
     source_dataset_sha256: str
     status: str
     manifest_sha256: str
     artifacts: tuple[ResearchArtifact, ...]
     failures: tuple[str, ...] = ()
+    claim_id: UUID | None = None
+    plan_hash: str | None = None
 
     def __post_init__(self) -> None:
         if (self.claim_id is None) != (self.plan_hash is None):
