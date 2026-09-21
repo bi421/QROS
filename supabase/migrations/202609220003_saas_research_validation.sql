@@ -25,9 +25,9 @@ create table if not exists public.research_validation (
         check (length(trim(status)) between 1 and 64),
     constraint research_validation_contract_version_nonempty
         check (length(trim(contract_version)) between 1 and 32),
-    constraint research_validation_workspace_run_fk
-        foreign key (workspace_id, research_run_id)
-        references public.research_run(workspace_id, id)
+    constraint research_validation_run_fk
+        foreign key (research_run_id)
+        references public.research_run(id)
         on delete restrict,
     constraint research_validation_workspace_unique
         unique (workspace_id, research_run_id)
