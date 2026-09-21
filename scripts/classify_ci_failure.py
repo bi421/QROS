@@ -98,6 +98,9 @@ def classify(log: str) -> Classification:
         ),
     )
 
+    if any(pattern == r"test_.*failed" for pattern in contract):
+        implementation = []
+
     if orchestration:
         evidence.extend(orchestration)
         if tooling or prerequisite or static or contract or implementation:
