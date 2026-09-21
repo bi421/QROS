@@ -107,10 +107,11 @@ jobs:
           test "$(jq -er 'length' "${work}/other.json")" = "0" || { echo "cross-tenant dataset data was visible"; cat "${work}/other.json"; exit 1; }
 
           echo "5/10 enqueue research run"
+          run_payload="$(jq -nc --arg dataset_version_id "${version_id}" --arg workflow_id "xauusd_m1_frozen_research_v1" '{dataset_version_id:$dataset_version_id,workflow_id:$workflow_id}')"
           run_status="$(call POST "${base}/v1/research-runs" "${work}/run.json" \
             -H 'Content-Type: application/json' \
             -H "Idempotency-Key: qros-staging-golden-${GITHUB_RUN_ID}" \
-            --data "{"dataset_version_id":"${version_id}","workflow_id":"xauusd_m1_frozen_research_v1"}")"
+            --data "${run_payload}")"
           test "${run_status}" = "202" || { echo "POST /v1/research-runs returned HTTP ${run_status}"; cat "${work}/run.json"; exit 1; }
           run_id="$(jq -er '.id' "${work}/run.json")"
 
