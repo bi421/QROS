@@ -15,6 +15,7 @@ HTTP -> Auth -> TenantContext -> Authorization -> Domain -> Persistence
 - GET /v1/research-runs
 - GET /v1/research-runs/{job_id}
 - GET /v1/research-runs/{job_id}/result
+- GET /v1/research-runs/{job_id}/report
 - GET /v1/research-runs/{job_id}/evidence
 - POST /v1/research-claims
 - GET /v1/research-claims
