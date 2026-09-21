@@ -57,3 +57,26 @@ def test_artifact_manifest_rejects_duplicate_artifact_ids():
     )
     with pytest.raises(ValueError, match="artifact_id must be unique"):
         artifact_manifest_payload(artifacts)
+
+
+
+def test_result_record_preserves_governed_claim_lineage():
+    workspace_id = uuid4()
+    run_id = uuid4()
+    claim_id = uuid4()
+    plan_hash = "a" * 64
+    record = build_result_record(
+        workspace_id,
+        run_id,
+        _result(),
+        claim_id=claim_id,
+        plan_hash=plan_hash,
+    )
+    assert record.claim_id == claim_id
+    assert record.plan_hash == plan_hash
+
+
+def test_result_record_rejects_partial_claim_lineage():
+    import pytest
+    with pytest.raises(ValueError, match="claim_id and plan_hash"):
+        build_result_record(uuid4(), uuid4(), _result(), claim_id=uuid4())
