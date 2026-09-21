@@ -60,6 +60,14 @@ jobs:
           aws s3 cp "${BACKUP_FILE}" "s3://${BACKUP_S3_BUCKET}/qros/postgres/$(basename "${BACKUP_FILE}")" --sse AES256
           aws s3 cp "${BACKUP_SHA}" "s3://${BACKUP_S3_BUCKET}/qros/postgres/$(basename "${BACKUP_SHA}")" --sse AES256
 
+      - name: Verify local backup integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "${BACKUP_FILE}"
+          test -s "${BACKUP_SHA}"
+          sha256sum --check "${BACKUP_SHA}"
+
       - name: Verify remote object
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
