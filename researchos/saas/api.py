@@ -522,7 +522,7 @@ def create_app(
             except Exception:
                 pass
             raise HTTPException(status_code=503, detail="research job queue unavailable") from exc
-        return JSONResponse(status_code=202, content=body)
+        return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
 
     @app.get("/v1/research-runs", response_model=PageResponse, tags=["research"])
     def list_research_runs(
