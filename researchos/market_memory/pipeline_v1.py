@@ -102,6 +102,19 @@ def run_market_memory_pipeline(
         except ValueError:
             return None
 
+    def label_end_getter(event):
+        if event.outcome is None:
+            return None
+        value = event.outcome.data_availability.get(
+            f"realized_end_{_PIPELINE_OUTCOME_HORIZON_DAYS}d"
+        )
+        if value is None:
+            return None
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return None
+
     dependence_audit = audit_label_overlap(events, label_end_getter)
     dependence_block_size = max(1, dependence_audit.max_concurrent_labels)
 
