@@ -102,43 +102,6 @@ def run_market_memory_pipeline(
         except ValueError:
             return None
 
-    def label_end_getter(event):
-        if event.outcome is None:
-            return None
-        value = event.outcome.data_availability.get(
-            f"realized_end_{_PIPELINE_OUTCOME_HORIZON_DAYS}d"
-        )
-        if value is None:
-            return None
-        try:
-            return datetime.fromisoformat(value)
-        except ValueError:
-            return None
-
-    dependence_audit = audit_label_overlap(events, label_end_getter)
-    dependence_block_size = max(1, dependence_audit.max_concurrent_labels)
-
-    hypothesis_count = len(conditions)
-    corrected_alpha = bonferroni_alpha(_PIPELINE_ALPHA, hypothesis_count)
-    corrected_confidence_level = 1.0 - corrected_alpha
-
-    conditional_results = []
-    probability_evidence = {}
-    for spec in conditions:
-        result = compute_conditional_statistics(events, spec, outcome_field="return_1d", bootstrap_seed=seed, dependence_block_size=dependence_block_size)
-        conditional_results.append(result)
-        values = _finite_returns(events, spec)
-        if values:
-            probability_evidence[spec.name] = wilson_proportion_ci(
-                sum(value > 0.0 for value in values),
-                len(values),
-                confidence_level=corrected_confidence_level,
-            )
-
-    train_events, validation_events, test_events = chronological_split(events)
-    validation_results = []
-    oos_results = {}
-
     for cr in conditional_results:
         condition = cr.condition_spec
         train_values = _finite_returns(train_events, condition)
