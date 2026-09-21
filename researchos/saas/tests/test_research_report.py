@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 
-from researchos.research_core.contracts import ResearchArtifact, ResearchResult
+from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW, ResearchArtifact, ResearchResult
 from researchos.saas.api import create_app
 from researchos.saas.contracts import Plan, ResearchJob, ResearchJobStatus, TenantContext, WorkspaceRole
 from researchos.saas.evidence_api import InMemoryResearchEvidenceStore, ResearchEvidenceRecord
@@ -17,7 +17,7 @@ def _job(workspace_id: UUID, dataset_hash: str) -> ResearchJob:
         id=uuid4(),
         workspace_id=workspace_id,
         dataset_version_id=uuid4(),
-        workflow_id="xauusd.m1.frozen.v1",
+        workflow_id=FROZEN_XAUUSD_M1_WORKFLOW,
         status=ResearchJobStatus.QUEUED,
         source_dataset_sha256=dataset_hash,
         created_by=uuid4(),
