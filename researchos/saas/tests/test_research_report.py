@@ -194,7 +194,7 @@ def test_report_includes_governed_finding_lineage_when_present() -> None:
 def test_report_remains_backward_compatible_without_finding() -> None:
     context = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
     jobs = InMemoryResearchJobStore()
-    job = jobs.create(context.workspace_id, _job(context.workspace_id, "g" * 64))
+    job = jobs.create(context.workspace_id, _job(context.workspace_id, "1" * 64))
     record = _result(jobs, context.workspace_id, job)
     report = build_research_report(record, tuple())
     assert report.finding_sha256 is None
