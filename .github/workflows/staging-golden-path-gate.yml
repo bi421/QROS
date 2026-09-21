@@ -1,0 +1,163 @@
+name: Staging Golden Path Gate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  golden-path:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: staging
+    steps:
+      - name: Validate staging configuration
+        env:
+          QROS_BASE_URL: ${{ secrets.QROS_STAGING_BASE_URL }}
+          QROS_JWT: ${{ secrets.QROS_STAGING_JWT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${QROS_BASE_URL}" || { echo "QROS_STAGING_BASE_URL is required"; exit 1; }
+          test -n "${QROS_JWT}" || { echo "QROS_STAGING_JWT is required"; exit 1; }
+
+      - name: Execute Golden Path
+        env:
+          QROS_BASE_URL: ${{ secrets.QROS_STAGING_BASE_URL }}
+          QROS_JWT: ${{ secrets.QROS_STAGING_JWT }}
+          QROS_ISOLATION_JWT: ${{ secrets.QROS_STAGING_ISOLATION_JWT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          base="${QROS_BASE_URL%/}"
+          auth=(-H "Authorization: Bearer ${QROS_JWT}")
+          work="$(mktemp -d)"
+          trap 'rm -rf "${work}"' EXIT
+
+          call() {
+            local method="$1"
+            local url="$2"
+            local body="$3"
+            shift 3
+            curl --silent --show-error --retry 2 --retry-delay 2 \
+              -X "${method}" "${url}" "${auth[@]}" \
+              -o "${body}" -w '%{http_code}' "$@"
+          }
+
+          echo "1/10 health and readiness"
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 "${base}/healthz" > "${work}/healthz.json"
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 "${base}/readyz" > "${work}/readyz.json"
+
+          echo "2/10 authenticated tenant identity"
+          me_status="$(call GET "${base}/v1/me" "${work}/me.json")"
+          test "${me_status}" = "200" || { echo "GET /v1/me returned HTTP ${me_status}"; cat "${work}/me.json"; exit 1; }
+          workspace_id="$(jq -er '.workspace_id' "${work}/me.json")"
+          user_id="$(jq -er '.user_id' "${work}/me.json")"
+          echo "workspace_id=${workspace_id}"
+          echo "user_id=${user_id}"
+
+          echo "3/10 immutable dataset version"
+          printf 'time,close\n2026-01-01T00:00:00Z,100.0\n2026-01-01T00:01:00Z,100.1\n' > "${work}/dataset.csv"
+          expected_sha="$(sha256sum "${work}/dataset.csv" | cut -d' ' -f1)"
+          started_at="$(date +%s)"
+
+          dataset_status="$(call POST "${base}/v1/datasets" "${work}/dataset.json" \
+            -F "name=qros-staging-golden-${GITHUB_RUN_ID}" \
+            -F "file=@${work}/dataset.csv;type=text/csv")"
+          test "${dataset_status}" = "201" || { echo "POST /v1/datasets returned HTTP ${dataset_status}"; cat "${work}/dataset.json"; exit 1; }
+
+          dataset_id="$(jq -er '.id' "${work}/dataset.json")"
+          version_id="$(jq -er '.version.id' "${work}/dataset.json")"
+          version_sha="$(jq -er '.version.content_sha256' "${work}/dataset.json")"
+          test "${version_sha}" = "${expected_sha}" || {
+            echo "dataset content hash mismatch"
+            echo "expected=${expected_sha}"
+            echo "actual=${version_sha}"
+            exit 1
+          }
+
+          versions_status="$(call GET "${base}/v1/datasets/${dataset_id}/versions" "${work}/versions.json")"
+          test "${versions_status}" = "200" || { echo "GET dataset versions returned HTTP ${versions_status}"; cat "${work}/versions.json"; exit 1; }
+          test "$(jq -er 'length' "${work}/versions.json")" = "1"
+          listed_sha="$(jq -er '.[0].content_sha256' "${work}/versions.json")"
+          test "${listed_sha}" = "${expected_sha}" || { echo "listed dataset hash mismatch"; exit 1; }
+
+          echo "4/10 tenant boundary for dataset"
+          if [ -n "${QROS_ISOLATION_JWT:-}" ]; then
+            other_status="$(curl --silent --show-error --retry 2 --retry-delay 2 \
+              -o "${work}/other.json" -w '%{http_code}' \
+              -H "Authorization: Bearer ${QROS_ISOLATION_JWT}" \
+              "${base}/v1/datasets/${dataset_id}/versions")"
+            test "${other_status}" = "200" || { echo "cross-tenant version lookup returned HTTP ${other_status}"; cat "${work}/other.json"; exit 1; }
+            test "$(jq -er 'length' "${work}/other.json")" = "0" || { echo "cross-tenant dataset data was visible"; cat "${work}/other.json"; exit 1; }
+          else
+            echo "QROS_STAGING_ISOLATION_JWT not configured; optional cross-tenant assertion skipped"
+          fi
+
+          echo "5/10 enqueue research run"
+          run_status="$(call POST "${base}/v1/research-runs" "${work}/run.json" \
+            -H 'Content-Type: application/json' \
+            -H "Idempotency-Key: qros-staging-golden-${GITHUB_RUN_ID}" \
+            --data "{"dataset_version_id":"${version_id}","workflow_id":"xauusd_m1_frozen_research_v1"}")"
+          test "${run_status}" = "202" || { echo "POST /v1/research-runs returned HTTP ${run_status}"; cat "${work}/run.json"; exit 1; }
+          run_id="$(jq -er '.id' "${work}/run.json")"
+
+          echo "6/10 queue and worker completion"
+          terminal_status=""
+          for attempt in $(seq 1 120); do
+            poll_status="$(call GET "${base}/v1/research-runs/${run_id}" "${work}/run-status.json")"
+            test "${poll_status}" = "200" || { echo "GET research run returned HTTP ${poll_status}"; cat "${work}/run-status.json"; exit 1; }
+            terminal_status="$(jq -er '.status' "${work}/run-status.json")"
+            case "${terminal_status}" in
+              succeeded|completed|SUCCEEDED|COMPLETED) break ;;
+              failed|FAILED|cancelled|CANCELLED)
+                echo "research run reached terminal failure: ${terminal_status}"
+                cat "${work}/run-status.json"
+                exit 1
+                ;;
+            esac
+            sleep 5
+          done
+          case "${terminal_status}" in
+            succeeded|completed|SUCCEEDED|COMPLETED) ;;
+            *) echo "research run did not reach success within 10 minutes: ${terminal_status}"; cat "${work}/run-status.json"; exit 1 ;;
+          esac
+
+          echo "7/10 result integrity and provenance"
+          result_status="$(call GET "${base}/v1/research-runs/${run_id}/result" "${work}/result.json")"
+          test "${result_status}" = "200" || { echo "GET result returned HTTP ${result_status}"; cat "${work}/result.json"; exit 1; }
+          jq -e --arg ws "${workspace_id}" --arg run "${run_id}" --arg sha "${expected_sha}" '
+            .workspace_id == $ws and
+            .research_run_id == $run and
+            .status == "SUCCEEDED" and
+            .source_dataset_sha256 == $sha and
+            (.manifest_sha256 | type == "string" and test("^[0-9a-fA-F]{64}$")) and
+            (.artifacts | type == "array") and
+            all(.artifacts[]; (.content_sha256 | type == "string" and test("^[0-9a-fA-F]{64}$")))
+          ' "${work}/result.json" > /dev/null
+
+          echo "8/10 evidence visibility and provenance"
+          evidence_status="$(call GET "${base}/v1/research-runs/${run_id}/evidence" "${work}/evidence.json")"
+          test "${evidence_status}" = "200" || { echo "GET evidence returned HTTP ${evidence_status}"; cat "${work}/evidence.json"; exit 1; }
+          jq -e --arg ws "${workspace_id}" --arg run "${run_id}" '
+            type == "array" and all(.[]; .workspace_id == $ws and .research_run_id == $run and (.provenance | type == "object"))
+          ' "${work}/evidence.json" > /dev/null
+
+          echo "9/10 durable research claim"
+          claim_status="$(call POST "${base}/v1/research-claims" "${work}/claim.json" \
+            -H 'Content-Type: application/json' \
+            --data "{"statement":"Staging Golden Path run ${run_id} completed with a persisted evidence-backed result.","claim_type":"EMPIRICAL","research_id":"${run_id}","target_population":"staging-golden-path","instrument":"qros-staging-gate","horizon":"immediate"}")"
+          test "${claim_status}" = "201" || { echo "POST /v1/research-claims returned HTTP ${claim_status}"; cat "${work}/claim.json"; exit 1; }
+          claim_id="$(jq -er '.id' "${work}/claim.json")"
+          claim_get_status="$(call GET "${base}/v1/research-claims/${claim_id}" "${work}/claim-read.json")"
+          test "${claim_get_status}" = "200" || { echo "GET claim returned HTTP ${claim_get_status}"; cat "${work}/claim-read.json"; exit 1; }
+          jq -e --arg ws "${workspace_id}" --arg run "${run_id}" '.workspace_id == $ws and .research_id == $run' "${work}/claim-read.json" > /dev/null
+
+          echo "10/10 Time -> First Valid Research Result"
+          finished_at="$(date +%s)"
+          elapsed="$((finished_at - started_at))"
+          test "${elapsed}" -ge 0
+          echo "TIME_TO_FIRST_VALID_RESEARCH_RESULT_SECONDS=${elapsed}"
+          echo "GOLDEN_PATH_STATUS=PASSED"
