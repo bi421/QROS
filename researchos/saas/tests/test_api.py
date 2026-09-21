@@ -714,7 +714,7 @@ def test_result_endpoint_exposes_governed_claim_lineage():
     job_id=run.json()["id"]
     store = job_store
     lease=store.claim(context.workspace_id, UUID(job_id), "test", 60)
-    result=ResearchResult(status="SUCCEEDED", source_dataset_sha256=run.json()["source_dataset_sha256"], artifacts=(ResearchArtifact("a","result","1"*64),))
+    result=ResearchResult(status="SUCCEEDED", source_dataset_sha256=hashlib.sha256(b"x").hexdigest(), artifacts=(ResearchArtifact("a","result","1"*64),))
     store.record_result(context.workspace_id, UUID(job_id), lease.token, result)
     response=client.get(f"/v1/research-runs/{job_id}/result", headers={"Authorization":"Bearer test"})
     assert response.status_code == 200
