@@ -24,7 +24,11 @@ def diff_base() -> str:
 
 
 def changed_files(base: str) -> list[str]:
-    commands = [("diff", "--name-only", "--diff-filter=ACMR", base, "HEAD"), ("diff", "--name-only", "--diff-filter=ACMR"), ("diff", "--cached", "--name-only", "--diff-filter=ACMR")]
+    commands = [
+        ("diff", "--name-only", "--diff-filter=ACMR", base, "HEAD"),
+        ("diff", "--name-only", "--diff-filter=ACMR"),
+        ("diff", "--cached", "--name-only", "--diff-filter=ACMR"),
+    ]
     files: set[str] = set()
     for command in commands:
         try:
@@ -48,8 +52,20 @@ def run(label: str, command: list[str]) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--task-contract", required=True, help="Path to the task contract")
     parser.add_argument("--profile", choices=("fast", "frozen", "full"), default="fast")
     args = parser.parse_args()
+
+    contract = Path(args.task_contract)
+    if not contract.is_absolute():
+        contract = ROOT / contract
+    status = run(
+        "TASK CONTRACT",
+        [sys.executable, "scripts/validate_task_contract.py", str(contract)],
+    )
+    if status:
+        print("AGENT GATE: FAIL (task contract)")
+        return status
 
     base = diff_base()
     files = changed_files(base)
