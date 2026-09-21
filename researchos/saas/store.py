@@ -140,7 +140,13 @@ class InMemoryResearchJobStore(ResearchJobStore):
                 raise RuntimeError("stale or invalid worker lease")
             if result.source_dataset_sha256 != job.source_dataset_sha256:
                 raise ValueError("research result source hash does not match input dataset")
-            record = build_result_record(workspace_id, job_id, result)
+            record = build_result_record(
+                workspace_id,
+                job_id,
+                result,
+                claim_id=UUID(job.claim_id) if job.claim_id else None,
+                plan_hash=job.plan_hash,
+            )
             existing = self._results.get(job_id)
             if existing is not None:
                 if existing.manifest_sha256 != record.manifest_sha256:
