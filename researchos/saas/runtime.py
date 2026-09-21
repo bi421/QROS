@@ -14,6 +14,7 @@ from researchos.saas.queue import SupabaseResearchJobQueue
 from researchos.saas.supabase_job_store import SupabaseResearchJobStore
 from researchos.saas.supabase_claim_store import SupabaseResearchClaimStore
 from researchos.saas.evidence_api import SupabaseResearchEvidenceStore
+from researchos.saas.supabase_validation_store import SupabaseResearchValidationStore
 from researchos.saas.idempotency import SupabaseIdempotencyStore
 from researchos.saas.billing import SupabaseBillingEventStore
 from researchos.saas.rate_limit import SupabaseRateLimiter
@@ -40,6 +41,7 @@ def build_production_app():
         idempotency_store=SupabaseIdempotencyStore(client),
         claim_store=SupabaseResearchClaimStore(client),
         evidence_store=SupabaseResearchEvidenceStore(client),
+        validation_store=SupabaseResearchValidationStore(client),
         billing_store=SupabaseBillingEventStore(client),
         billing_webhook_secret=os.environ.get("BILLING_WEBHOOK_SECRET"),
         metrics_token=os.environ.get("QROS_METRICS_TOKEN"),
