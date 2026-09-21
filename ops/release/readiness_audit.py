@@ -38,7 +38,7 @@ REQUIRED_MARKERS = {
     ".github/workflows/staging-performance-gate.yml": (
         "workflow_dispatch",
         "p95",
-        "error rate",
+        "max-error-rate",
     ),
     ".github/workflows/storage-recovery-drill.yml": (
         "workflow_dispatch",
