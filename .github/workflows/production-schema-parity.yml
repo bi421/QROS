@@ -44,41 +44,75 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          # Supabase CLI renders this table for humans, and the separator may be
+          # Unicode (│) or ASCII (|). Normalize before parsing so formatting
+          # changes cannot silently disable the production parity gate.
+          normalize_migration_rows() {
+            awk '
+              BEGIN { rows = 0; mismatches = 0 }
+              {
+                gsub(/│/, "|")
+                if ($0 ~ /^[[:space:]]*[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][_-]/) {
+                  n = split($0, col, "|")
+                  if (n < 2) {
+                    print "invalid migration row: " $0 > "/dev/stderr"
+                    exit 3
+                  }
+                  local = col[1]
+                  remote = col[2]
+                  gsub(/^[[:space:]]+|[[:space:]]+$/, "", local)
+                  gsub(/^[[:space:]]+|[[:space:]]+$/, "", remote)
+                  rows++
+                  if (local == "" || remote == "" || local != remote) {
+                    mismatches++
+                    printf "local=%s remote=%s\n", local, remote
+                  }
+                }
+              }
+              END {
+                if (rows == 0) exit 2
+                if (mismatches > 0) exit 1
+                exit 0
+              }
+            '
+          }
+
+          # Contract-test the parser against both table formats before touching
+          # production. This makes the gate fail on parser regressions rather
+          # than silently accepting an unverified migration state.
+          fixture_unicode="$(mktemp)"
+          fixture_ascii="$(mktemp)"
+          trap 'rm -f "$fixture_unicode" "$fixture_ascii"' EXIT
+          cat > "$fixture_unicode" <<'EOF'
+LOCAL   │ REMOTE  │ TIME
+202609210001 │ 202609210001 │ 2026-09-21 00:01:00
+202609210002 │ 202609210002 │ 2026-09-21 00:02:00
+EOF
+          cat > "$fixture_ascii" <<'EOF'
+LOCAL   | REMOTE  | TIME
+202609210001 | 202609210001 | 2026-09-21 00:01:00
+202609210002 | 202609210002 | 2026-09-21 00:02:00
+EOF
+          normalize_migration_rows < "$fixture_unicode" > /dev/null
+          normalize_migration_rows < "$fixture_ascii" > /dev/null
+
           output="$(supabase migration list --linked 2>&1)"
           printf '%s\n' "$output"
 
-          if ! grep -Eq 'LOCAL[[:space:]]*│[[:space:]]*REMOTE[[:space:]]*│[[:space:]]*TIME' <<<"$output"; then
-            echo "::error::Supabase migration list did not return the expected migration table."
-            exit 1
-          fi
-
-          parity="$(awk -F '│' '
-            $3 ~ /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/ {
-              rows++
-              local=$1
-              remote=$2
-              gsub(/^[[:space:]]+|[[:space:]]+$/, "", local)
-              gsub(/^[[:space:]]+|[[:space:]]+$/, "", remote)
-              if (local == "" || remote == "" || local != remote) {
-                mismatch=1
-                printf "local=%s remote=%s\\n", local, remote
-              }
-            }
-            END {
-              if (rows == 0) exit 2
-              if (mismatch) exit 1
-              exit 0
-            }
-          ' <<<"$output")" || {
+          if ! normalize_migration_rows <<<"$output" > /tmp/qros-migration-parity.txt; then
             status=$?
             if [ "$status" -eq 2 ]; then
-              echo "::error::Supabase migration list contained no migration rows."
-            else
+              echo "::error::Supabase migration list contained no parseable migration rows."
+            elif [ "$status" -eq 1 ]; then
               echo "::error::Production and repository migration histories differ."
-              printf '%s' "$parity"
+              cat /tmp/qros-migration-parity.txt
+            else
+              echo "::error::Supabase migration list format could not be parsed safely."
+              cat /tmp/qros-migration-parity.txt || true
             fi
             exit 1
-          }
+          fi
 
           echo "Production and repository migration histories are aligned with exact local/remote version equality."
 
