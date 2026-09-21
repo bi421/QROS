@@ -42,6 +42,7 @@ def build_production_app():
         evidence_store=SupabaseResearchEvidenceStore(client),
         billing_store=SupabaseBillingEventStore(client),
         billing_webhook_secret=os.environ.get("BILLING_WEBHOOK_SECRET"),
+        metrics_token=os.environ.get("QROS_METRICS_TOKEN"),
         rate_limiter=SupabaseRateLimiter(client, limit=120, window_seconds=60),
     )
 
