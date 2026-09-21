@@ -59,7 +59,7 @@ def bootstrap_mean_ci(values: Sequence[float], num_resamples: int = 1000, seed: 
 
 
 def block_bootstrap_mean_ci(values: Sequence[float], block_size: int, num_resamples: int = 1000, seed: int = 42, confidence_level: float = 0.95) -> BootstrapResult:
-    """Deterministic circular moving-block bootstrap for an ordered mean.
+    """Deterministic moving-block bootstrap for an ordered mean.
 
     Blocks preserve within-block order and are sampled with replacement.
     This assumes dependence is predominantly local within the chosen block.
@@ -78,13 +78,13 @@ def block_bootstrap_mean_ci(values: Sequence[float], block_size: int, num_resamp
     rng = random.Random(seed)
     n = len(values)
     point_estimate = sum(values) / n
-    starts = list(range(n))
+    starts = list(range(n - block_size + 1))
     resample_means: list[float] = []
     for _ in range(num_resamples):
         sample: list[float] = []
         while len(sample) < n:
             start = rng.choice(starts)
-            sample.extend(values[(start + offset) % n] for offset in range(block_size))
+            sample.extend(values[start:start + block_size])
         sample = sample[:n]
         resample_means.append(sum(sample) / n)
     resample_means.sort()
@@ -99,7 +99,7 @@ def block_bootstrap_mean_ci(values: Sequence[float], block_size: int, num_resamp
         confidence_level=confidence_level,
         num_resamples=num_resamples,
         seed=seed,
-        method="circular_moving_block_bootstrap",
+        method="moving_block_bootstrap",
     )
 
 
