@@ -695,7 +695,7 @@ def test_result_endpoint_exposes_governed_claim_lineage():
     uploaded = _upload(client, "lineage-result", b"x")
     version_id = uploaded.json()["version"]["id"]
     claim_store = InMemoryClaimStore()
-    claim = ResearchClaim(workspace_id=str(context.workspace_id), hypothesis="h", created_by=str(context.user_id))
+    claim = ResearchClaim(statement="h", workspace_id=str(context.workspace_id), creator=str(context.user_id))
     claim_store.save(context.workspace_id, claim)
     client = TestClient(create_app(
         auth_provider=StaticAuth(context), job_store=InMemoryResearchJobStore(),
