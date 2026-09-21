@@ -115,25 +115,31 @@ begin
             using errcode = '23505';
     end if;
 
-    if v_existing.response_body = p_response_body then
-        insert into public.research_run(
-            id, workspace_id, dataset_version_id, workflow_id, status,
-            created_by, claim_id, plan_hash
-        )
-        values (
-            p_research_run_id, p_workspace_id, p_dataset_version_id,
-            p_workflow_id, 'queued', p_created_by, p_claim_id, p_plan_hash
-        )
-        returning * into v_job;
-
-        return query select to_jsonb(v_job), false;
-    end if;
-
     select *
       into v_job
       from public.research_run
      where id = (v_existing.response_body->>'id')::uuid
        and workspace_id = p_workspace_id;
+
+    if found then
+        if v_existing.request_fingerprint <> p_request_fingerprint then
+            raise exception 'idempotency key reused with different request'
+                using errcode = '23505';
+        end if;
+        return query select to_jsonb(v_job), true;
+    end if;
+
+    insert into public.research_run(
+        id, workspace_id, dataset_version_id, workflow_id, status,
+        created_by, claim_id, plan_hash
+    )
+    values (
+        p_research_run_id, p_workspace_id, p_dataset_version_id,
+        p_workflow_id, 'queued', p_created_by, p_claim_id, p_plan_hash
+    )
+    returning * into v_job;
+
+    return query select to_jsonb(v_job), false;
 
     if not found then
         raise exception 'idempotency record references missing research run';
