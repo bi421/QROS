@@ -44,21 +44,25 @@ class SupabaseResearchJobStore(ResearchJobStore):
             raise ValueError("research job workspace does not match tenant")
         if job.created_by is None:
             raise ValueError("Supabase research jobs require created_by")
-        result = self._client.rpc(
-            "create_research_run_idempotent",
-            {
-                "p_research_run_id": str(job.id),
-                "p_workspace_id": str(job.workspace_id),
-                "p_dataset_version_id": str(job.dataset_version_id),
-                "p_workflow_id": job.workflow_id,
-                "p_created_by": str(job.created_by),
-                "p_idempotency_key": idempotency_key,
-                "p_request_fingerprint": request_fingerprint,
-                "p_response_body": response_body,
-                "p_claim_id": job.claim_id,
-                "p_plan_hash": job.plan_hash,
-            },
-        ).execute()
+        rpc_name = (
+            "create_governed_research_run_idempotent"
+            if job.claim_id is not None
+            else "create_research_run_idempotent"
+        )
+        rpc_args = {
+            "p_research_run_id": str(job.id),
+            "p_workspace_id": str(job.workspace_id),
+            "p_dataset_version_id": str(job.dataset_version_id),
+            "p_workflow_id": job.workflow_id,
+            "p_created_by": str(job.created_by),
+            "p_idempotency_key": idempotency_key,
+            "p_request_fingerprint": request_fingerprint,
+            "p_response_body": response_body,
+        }
+        if job.claim_id is not None:
+            rpc_args["p_claim_id"] = job.claim_id
+            rpc_args["p_plan_hash"] = job.plan_hash
+        result = self._client.rpc(rpc_name, rpc_args).execute()
         rows = result.data or []
         if len(rows) != 1:
             raise RuntimeError("idempotent research run creation returned no unique row")
