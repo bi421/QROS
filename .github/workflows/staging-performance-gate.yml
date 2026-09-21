@@ -51,4 +51,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python ops/performance/staging_load_gate.py             --base-url "${QROS_BASE_URL}"             --path "/v1/me"             --token "${QROS_JWT}"             --duration-seconds "${DURATION_SECONDS}"             --concurrency "${CONCURRENCY}"             --max-error-rate "0.01"             --max-p95-ms "1000"
+          python ops/performance/staging_load_gate.py \
+            --base-url "${QROS_BASE_URL}" \
+            --path "/v1/me" \
+            --token "${QROS_JWT}" \
+            --duration-seconds "${DURATION_SECONDS}" \
+            --concurrency "${CONCURRENCY}" \
+            --max-error-rate "0.01" \
+            --max-p95-ms "1000"
