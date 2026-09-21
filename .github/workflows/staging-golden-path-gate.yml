@@ -65,7 +65,7 @@ jobs:
           {
             echo 'time,open,high,low,close,tick_volume'
             for i in $(seq 0 2999); do
-              ts="$(date -u -d "2026-01-01 00:00:00 +${i} minutes" +%Y-%m-%dT%H:%M:%SZ)"
+              ts="$(date -u -d "2026-01-01 00:00:00 ${i} minutes" +%Y-%m-%dT%H:%M:%SZ)"
               close="$(awk -v i="$i" 'BEGIN { printf "%.6f", 1900 + 0.0005*i + 2.5*sin(i/17.0) }')"
               open="$(awk -v c="$close" 'BEGIN { printf "%.6f", c-0.15 }')"
               high="$(awk -v c="$close" 'BEGIN { printf "%.6f", c+0.35 }')"
@@ -98,7 +98,6 @@ jobs:
           listed_sha="$(jq -er '.[0].content_sha256' "${work}/versions.json")"
           test "${listed_sha}" = "${expected_sha}" || { echo "listed dataset hash mismatch"; exit 1; }
 
-          echo "4/10 tenant boundary for dataset"
           echo "4/10 tenant boundary for dataset"
           other_status="$(curl --silent --show-error --retry 2 --retry-delay 2 \
             -o "${work}/other.json" -w '%{http_code}' \
