@@ -15,6 +15,7 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
+from researchos.market_memory.bootstrap import block_bootstrap_mean_ci
 from researchos.market_memory.event_schema import (
     ConditionalResult,
     ConditionSpec,
@@ -104,6 +105,8 @@ def compute_conditional_statistics(
     bootstrap_num_resamples: int = 1000,
     bootstrap_seed: int = 42,
     confidence_level: float = 0.95,
+    label_end_getter: Any | None = None,
+    dependence_block_size: int = 1,
 ) -> ConditionalResult:
     """Compute deterministic conditional statistics for matching events.
 
@@ -145,14 +148,16 @@ def compute_conditional_statistics(
     std_val = _std(values)
     positive_count = sum(1 for value in values if value > 0)
     raw_prob = positive_count / n
-    ci = _bootstrap_mean_ci(values, bootstrap_num_resamples, bootstrap_seed, confidence_level)
+    ci_result = block_bootstrap_mean_ci(values, dependence_block_size, bootstrap_num_resamples, bootstrap_seed, confidence_level) if dependence_block_size > 1 else block_bootstrap_mean_ci(values, 1, bootstrap_num_resamples, bootstrap_seed, confidence_level)
+    ci = ci_result.confidence_interval if len(values) >= 2 else None
 
     if n < 5:
         status = EvidenceStatus.EXPLORATORY.value
-        notes = f"Small sample (n={n})"
+        notes = f"Small sample (n={n}); uncertainty_method={ci_result.method if n >= 2 else "none"}"
     else:
         status = EvidenceStatus.UNVALIDATED.value
-        notes = f"Sample n={n}, awaiting temporal validation"
+        dependence_note = f"; dependence_block_size={dependence_block_size}" if dependence_block_size > 1 else "; iid_bootstrap_only_when_no_overlap"
+        notes = f"Sample n={n}, awaiting temporal validation; uncertainty_method={ci_result.method}{dependence_note}"
 
     return ConditionalResult(
         condition_name=spec.name,
