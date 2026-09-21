@@ -50,6 +50,16 @@ jobs:
         run: |
           set -euo pipefail
           curl --fail-with-body --silent --show-error -X POST "$SUPABASE_URL/storage/v1/object/qros-datasets/$OBJECT_NAME" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "apikey: $SERVICE_ROLE_KEY" -H "Content-Type: application/octet-stream" --data-binary @/tmp/qros-drill.bin
+      - name: Verify QROS storage upload
+        env:
+          SUPABASE_URL: ${{ secrets.QROS_STAGING_SUPABASE_URL }}
+          SERVICE_ROLE_KEY: ${{ secrets.QROS_STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          OBJECT_NAME: ${{ inputs.object_name }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error "$SUPABASE_URL/storage/v1/object/qros-datasets/$OBJECT_NAME"             -H "Authorization: Bearer $SERVICE_ROLE_KEY"             -H "apikey: $SERVICE_ROLE_KEY"             -o /tmp/qros-storage-source.bin
+          cmp /tmp/qros-drill.bin /tmp/qros-storage-source.bin
+
       - name: Export independent recovery copy
         env:
           AWS_REGION: ${{ secrets.QROS_RECOVERY_AWS_REGION }}
@@ -59,7 +69,7 @@ jobs:
           OBJECT_NAME: ${{ inputs.object_name }}
         run: |
           set -euo pipefail
-          aws s3 cp /tmp/qros-drill.bin "s3://$S3_BUCKET/qros-storage-drill/$OBJECT_NAME" --region "$AWS_REGION"
+          aws s3 cp /tmp/qros-storage-source.bin "s3://$S3_BUCKET/qros-storage-drill/$OBJECT_NAME" --region "$AWS_REGION"
           aws s3api head-object --bucket "$S3_BUCKET" --key "qros-storage-drill/$OBJECT_NAME" --region "$AWS_REGION" >/dev/null
       - name: Restore independent copy
         env:
