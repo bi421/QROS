@@ -50,6 +50,9 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [x] Stable versioned API surface.
 - [ ] Authentication/session boundary.
   - [x] Research Claim endpoints consume the authenticated TenantContext and never trust workspace/creator request fields.
+  - [x] Verified Supabase JWT claim boundary: authenticated role, audience, issuer, UUID subject/session identity (PR #132; exact-head CI + Supabase Database Security Tests green).
+  - [x] Authoritative session-revocation boundary: `session_id` must exist for the authenticated user in `auth.sessions`; revoked sessions return 401 and session-store failure returns 503 (PR #133; exact-head CI + Supabase Database Security Tests green).
+  - [x] Production composition root wires the server-only session validator; the RPC is executable only by `service_role` and pins `search_path = ''`.
 - [x] Authorization policy matrix.
 - [x] Request validation and size limits.
 - [x] Rate limiting and abuse controls.
@@ -136,7 +139,9 @@ A release is **NOT production-ready** unless all applicable gates are green:
 - Structured API errors and request-correlation metadata are implemented and covered by SaaS API tests.
 - Production readiness remains gated on exact-release CI, integration, security, tenant-isolation, target-environment schema parity, and operational verification.
 - 2026-09-20 production migration drift was repaired through the canonical migration workflow; the target now contains `public.research_claim`, `public.audit_event`, and the required QROS tenant/server tables with RLS enabled.
-- The target Supabase Security Advisor still reports nine unrelated legacy public tables with RLS disabled (`Dislike`, `Like`, `Referral`, `User`, `album_consents`, `albums`, `avatars`, `face_embeddings`, `users`). The 2026-09-21 audit verified they are owned by `postgres`, have no RLS policies, and have no direct `anon`/`authenticated` table privileges; `has_table_privilege` also returns false for those roles. Repository code search found no references to the legacy table names. They remain outside the QROS tenant model and require a separately governed disposition (retain/retire/isolate) rather than blind RLS enablement.
+- 2026-09-21 authoritative session validation was added and applied in production as migration `202609210001_saas_auth_session_revocation`; direct verification confirmed service_role EXECUTE only, anon/authenticated EXECUTE denied, pinned empty search_path, and unknown session IDs rejected.
+- The target Supabase Security Advisor currently reports one Auth configuration warning: leaked-password protection is disabled. This is an Auth configuration hardening item, separate from the QROS database tenant model.
+- The target Supabase Security Advisor no longer reports the previously audited nine legacy public tables in the current security-advisor result; no blind RLS changes were made to those legacy objects.
 
 ## Golden Path V1 — active milestone
 - [x] Freeze QROS SaaS architecture and product workflow boundary.
@@ -146,6 +151,6 @@ A release is **NOT production-ready** unless all applicable gates are green:
 - [x] Research Claim durable persistence and customer API.
 - [x] Tenant-scoped Result read API.
 - [x] Tenant-scoped Evidence read API.
-- [ ] Auth provider production integration.
+- [x] Auth provider production composition and authoritative session validation.
 - [ ] End-to-end staging Golden Path execution.
 - [ ] Production Golden Path execution.
