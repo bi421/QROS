@@ -61,7 +61,19 @@ jobs:
           echo "user_id=${user_id}"
 
           echo "3/10 immutable dataset version"
-          printf 'time,close\n2026-01-01T00:00:00Z,100.0\n2026-01-01T00:01:00Z,100.1\n' > "${work}/dataset.csv"
+          # Deterministic synthetic XAUUSD M1 fixture; validates SaaS plumbing only.
+          {
+            echo 'time,open,high,low,close,tick_volume'
+            for i in $(seq 0 2999); do
+              ts="$(date -u -d "2026-01-01 00:00:00 +${i} minutes" +%Y-%m-%dT%H:%M:%SZ)"
+              close="$(awk -v i="$i" 'BEGIN { printf "%.6f", 1900 + 0.0005*i + 2.5*sin(i/17.0) }')"
+              open="$(awk -v c="$close" 'BEGIN { printf "%.6f", c-0.15 }')"
+              high="$(awk -v c="$close" 'BEGIN { printf "%.6f", c+0.35 }')"
+              low="$(awk -v c="$close" 'BEGIN { printf "%.6f", c-0.35 }')"
+              volume="$((100 + (i % 37)))"
+              printf '%s,%s,%s,%s,%s,%s\n' "$ts" "$open" "$high" "$low" "$close" "$volume"
+            done
+          } > "${work}/dataset.csv"
           expected_sha="$(sha256sum "${work}/dataset.csv" | cut -d' ' -f1)"
           started_at="$(date +%s)"
 
@@ -87,14 +99,13 @@ jobs:
           test "${listed_sha}" = "${expected_sha}" || { echo "listed dataset hash mismatch"; exit 1; }
 
           echo "4/10 tenant boundary for dataset"
-          if [ -n "${QROS_ISOLATION_JWT:-}" ]; then
-            other_status="$(curl --silent --show-error --retry 2 --retry-delay 2 \
-              -o "${work}/other.json" -w '%{http_code}' \
-              -H "Authorization: Bearer ${QROS_ISOLATION_JWT}" \
-              "${base}/v1/datasets/${dataset_id}/versions")"
-            test "${other_status}" = "200" || { echo "cross-tenant version lookup returned HTTP ${other_status}"; cat "${work}/other.json"; exit 1; }
-            test "$(jq -er 'length' "${work}/other.json")" = "0" || { echo "cross-tenant dataset data was visible"; cat "${work}/other.json"; exit 1; }
-          fi
+          echo "4/10 tenant boundary for dataset"
+          other_status="$(curl --silent --show-error --retry 2 --retry-delay 2 \
+            -o "${work}/other.json" -w '%{http_code}' \
+            -H "Authorization: Bearer ${QROS_ISOLATION_JWT}" \
+            "${base}/v1/datasets/${dataset_id}/versions")"
+          test "${other_status}" = "200" || { echo "cross-tenant version lookup returned HTTP ${other_status}"; cat "${work}/other.json"; exit 1; }
+          test "$(jq -er 'length' "${work}/other.json")" = "0" || { echo "cross-tenant dataset data was visible"; cat "${work}/other.json"; exit 1; }
 
           echo "5/10 enqueue research run"
           run_status="$(call POST "${base}/v1/research-runs" "${work}/run.json" \
