@@ -96,6 +96,28 @@ def test_observer_records_5xx_as_error() -> None:
     assert snapshot["status_counts"] == {503: 1}
 
 
+def test_5xx_emits_structured_error_event(caplog) -> None:
+    metrics = RequestMetrics()
+    observer = StructuredRequestObserver(metrics)
+    caplog.set_level(logging.ERROR, logger="qros.saas")
+
+    observer.observe(
+        request_id="failure-123",
+        method="POST",
+        path="/v1/research-runs",
+        status_code=503,
+        duration_ms=12.5,
+    )
+
+    assert any(
+        '"event":"http_request_error"' in record.message
+        and '"request_id":"failure-123"' in record.message
+        and '"status_code":503' in record.message
+        for record in caplog.records
+    )
+    assert all("secret" not in record.message.lower() for record in caplog.records)
+
+
 def test_request_id_control_characters_are_neutralized() -> None:
     app = create_app(metrics_token="scrape-secret")
     client = TestClient(app)
