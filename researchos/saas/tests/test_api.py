@@ -697,8 +697,9 @@ def test_result_endpoint_exposes_governed_claim_lineage():
     claim_store = InMemoryClaimStore()
     claim = ResearchClaim(statement="h", workspace_id=str(context.workspace_id), creator=str(context.user_id))
     claim_store.save(context.workspace_id, claim)
+    job_store = InMemoryResearchJobStore()
     client = TestClient(create_app(
-        auth_provider=StaticAuth(context), job_store=InMemoryResearchJobStore(),
+        auth_provider=StaticAuth(context), job_store=job_store,
         dataset_store=InMemoryDatasetStore(), dataset_storage=InMemoryDatasetStorage(), claim_store=claim_store,
     ))
     uploaded = _upload(client, "lineage-result-2", b"x")
@@ -711,7 +712,7 @@ def test_result_endpoint_exposes_governed_claim_lineage():
     run = client.post("/v1/research-runs", headers={"Authorization":"Bearer test","Idempotency-Key":"lineage-run"}, json={"dataset_version_id":version_id,"claim_id":str(claim.id),"plan_hash":plan.json()["plan_hash"]})
     assert run.status_code == 202
     job_id=run.json()["id"]
-    store = client.app.state.job_store
+    store = job_store
     lease=store.claim(context.workspace_id, UUID(job_id), "test", 60)
     result=ResearchResult(status="SUCCEEDED", source_dataset_sha256=run.json()["source_dataset_sha256"], artifacts=(ResearchArtifact("a","result","1"*64),))
     store.record_result(context.workspace_id, UUID(job_id), lease.token, result)
