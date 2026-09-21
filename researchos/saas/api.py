@@ -491,6 +491,8 @@ def create_app(
             status=ResearchJobStatus.QUEUED,
             source_dataset_sha256=version.content_sha256,
             created_by=tenant.user_id,
+            claim_id=request.claim_id,
+            plan_hash=request.plan_hash,
         )
         body = _research_job_response(job).model_dump(mode="json")
         try:
