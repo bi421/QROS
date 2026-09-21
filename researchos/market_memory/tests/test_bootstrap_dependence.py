@@ -6,7 +6,7 @@ def test_block_bootstrap_is_deterministic() -> None:
     first = block_bootstrap_mean_ci(values, block_size=2, num_resamples=200, seed=17)
     second = block_bootstrap_mean_ci(values, block_size=2, num_resamples=200, seed=17)
     assert first.to_dict() == second.to_dict()
-    assert first.method == "circular_moving_block_bootstrap"
+    assert first.method == "moving_block_bootstrap"
 
 
 def test_block_size_one_is_iid_bootstrap_special_case() -> None:
