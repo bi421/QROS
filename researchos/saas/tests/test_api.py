@@ -705,8 +705,8 @@ def test_result_endpoint_exposes_governed_claim_lineage():
     version_id = uploaded.json()["version"]["id"]
     plan = client.post(f"/v1/research-claims/{claim.id}/plan-lock", headers={"Authorization":"Bearer test"}, json={
         "hypothesis":"h","sample_definition":"s","features":["x"],"labels":["y"],
-        "train_validation_test":"tv","exclusions":"e","costs_slippage":"c","statistical_tests":["t"],
-        "metrics":["m"],"stopping_rules":"stop","multiple_testing_policy":"none","replication_policy":"r"})
+        "train_validation_test":"tv","exclusions":["e"],"costs_slippage":"c","statistical_tests":["t"],
+        "metrics":["m"],"stopping_rules":["stop"],"multiple_testing_policy":"none","replication_policy":"r"})
     assert plan.status_code == 200
     run = client.post("/v1/research-runs", headers={"Authorization":"Bearer test","Idempotency-Key":"lineage-run"}, json={"dataset_version_id":version_id,"claim_id":str(claim.id),"plan_hash":plan.json()["plan_hash"]})
     assert run.status_code == 202
