@@ -88,6 +88,20 @@ def run_market_memory_pipeline(
             ConditionSpec("high_volatility", {"volatility_state": "High"}, "Crossovers in high volatility regime"),
         ]
 
+    def label_end_getter(event):
+        """Return the actual future observation timestamp used by the outcome."""
+        if event.outcome is None:
+            return None
+        value = event.outcome.data_availability.get(
+            f"realized_end_{_PIPELINE_OUTCOME_HORIZON_DAYS}d"
+        )
+        if value is None:
+            return None
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return None
+
     dependence_audit = audit_label_overlap(events, label_end_getter)
     dependence_block_size = max(1, dependence_audit.max_concurrent_labels)
 
@@ -111,20 +125,6 @@ def run_market_memory_pipeline(
     train_events, validation_events, test_events = chronological_split(events)
     validation_results = []
     oos_results = {}
-
-    def label_end_getter(event):
-        """Return the actual future observation timestamp used by the outcome."""
-        if event.outcome is None:
-            return None
-        value = event.outcome.data_availability.get(
-            f"realized_end_{_PIPELINE_OUTCOME_HORIZON_DAYS}d"
-        )
-        if value is None:
-            return None
-        try:
-            return datetime.fromisoformat(value)
-        except ValueError:
-            return None
 
     for cr in conditional_results:
         condition = cr.condition_spec
