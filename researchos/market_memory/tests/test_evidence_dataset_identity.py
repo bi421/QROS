@@ -52,3 +52,42 @@ def test_evidence_requires_both_hashes_for_strict_binding() -> None:
             dataset_identity=identity,
             dataset_content_hash="content-a",
         )
+
+
+def test_exact_dataset_identity_changes_provenance_digest() -> None:
+    identity = DatasetIdentity("xauusd-d1", "content-a", "dataset-a")
+    first = create_evidence_record(
+        **_kwargs(),
+        dataset_identity=identity,
+        dataset_content_hash="content-a",
+        dataset_hash="dataset-a",
+    )
+    second = create_evidence_record(
+        **_kwargs(),
+        dataset_identity=DatasetIdentity("xauusd-d1", "content-b", "dataset-a"),
+        dataset_content_hash="content-b",
+        dataset_hash="dataset-a",
+    )
+    assert (
+        first.uncertainty["provenance"]["evidence_computation_digest"]
+        != second.uncertainty["provenance"]["evidence_computation_digest"]
+    )
+
+
+def test_exact_dataset_hash_changes_provenance_digest() -> None:
+    first = create_evidence_record(
+        **_kwargs(),
+        dataset_identity=DatasetIdentity("xauusd-d1", "content-a", "dataset-a"),
+        dataset_content_hash="content-a",
+        dataset_hash="dataset-a",
+    )
+    second = create_evidence_record(
+        **_kwargs(),
+        dataset_identity=DatasetIdentity("xauusd-d1", "content-a", "dataset-b"),
+        dataset_content_hash="content-a",
+        dataset_hash="dataset-b",
+    )
+    assert (
+        first.uncertainty["provenance"]["evidence_computation_digest"]
+        != second.uncertainty["provenance"]["evidence_computation_digest"]
+    )
