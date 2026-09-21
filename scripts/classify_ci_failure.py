@@ -109,7 +109,7 @@ def classify(log: str) -> Classification:
             )
         return Classification("CI orchestration failure", "high", False, tuple(evidence))
 
-    if len([bool(tooling), bool(prerequisite), bool(static), bool(contract), bool(implementation)]) > 1:
+    if sum(bool(group) for group in (tooling, prerequisite, static, contract, implementation)) > 1:
         groups = [tooling, prerequisite, static, contract, implementation]
         evidence.extend(item for group in groups for item in group)
         return Classification("ambiguous/unsafe", "low", False, tuple(evidence))
