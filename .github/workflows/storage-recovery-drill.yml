@@ -28,6 +28,8 @@ jobs:
           SERVICE_ROLE_KEY: ${{ secrets.QROS_STAGING_SUPABASE_SERVICE_ROLE_KEY }}
           S3_BUCKET: ${{ secrets.QROS_RECOVERY_S3_BUCKET }}
           AWS_REGION: ${{ secrets.QROS_RECOVERY_AWS_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.QROS_RECOVERY_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.QROS_RECOVERY_AWS_SECRET_ACCESS_KEY }}
         run: |
           set -euo pipefail
           test -n "$SUPABASE_URL"; test -n "$SERVICE_ROLE_KEY"; test -n "$S3_BUCKET"; test -n "$AWS_REGION"
@@ -55,6 +57,8 @@ jobs:
       - name: Export independent recovery copy
         env:
           AWS_REGION: ${{ secrets.QROS_RECOVERY_AWS_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.QROS_RECOVERY_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.QROS_RECOVERY_AWS_SECRET_ACCESS_KEY }}
           S3_BUCKET: ${{ secrets.QROS_RECOVERY_S3_BUCKET }}
           OBJECT_NAME: ${{ inputs.object_name }}
         run: |
@@ -64,6 +68,8 @@ jobs:
       - name: Restore independent copy
         env:
           AWS_REGION: ${{ secrets.QROS_RECOVERY_AWS_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.QROS_RECOVERY_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.QROS_RECOVERY_AWS_SECRET_ACCESS_KEY }}
           S3_BUCKET: ${{ secrets.QROS_RECOVERY_S3_BUCKET }}
           OBJECT_NAME: ${{ inputs.object_name }}
         run: |
