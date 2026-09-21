@@ -17,6 +17,7 @@ class ProbabilityMethod(str, Enum):
     CONDITIONAL_PROBABILITY = "conditional_probability"
     BAYES = "bayes"
     BINOMIAL = "binomial"
+    BETA_BINOMIAL = "beta_binomial"
     BOOTSTRAP = "bootstrap"
     BLOCK_BOOTSTRAP = "block_bootstrap"
     GARCH = "garch"
