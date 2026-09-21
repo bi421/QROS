@@ -17,12 +17,12 @@ class ResearchEvidenceRecord:
     id: UUID
     workspace_id: UUID
     research_run_id: UUID
-    claim_id: UUID | None
-    plan_hash: str | None
     artifact_id: UUID | None
     claim: str
     status: str
     provenance: dict[str, object]
+    claim_id: UUID | None = None
+    plan_hash: str | None = None
 
 
 class ResearchEvidenceStore(Protocol):
