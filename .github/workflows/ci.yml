@@ -81,6 +81,19 @@ jobs:
       - uses: actions/checkout@v5
       - name: Build image
         run: docker build -t qros-api:ci .
+      - name: Smoke test health endpoint
+        run: |
+          set -euo pipefail
+          docker run -d --rm --name qros-api-ci             -p 18000:8000             -e SUPABASE_URL=http://127.0.0.1:54321             -e SUPABASE_SERVICE_ROLE_KEY=ci-smoke-placeholder             qros-api:ci
+          trap 'docker stop qros-api-ci >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:18000/healthz >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs qros-api-ci
+          exit 1
 
   test-database:
     name: Tenant Isolation (pgTAP)
