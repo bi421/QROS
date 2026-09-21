@@ -75,12 +75,10 @@ def test_governed_research_vertical_slice_preserves_lineage_end_to_end() -> None
             status="SUCCEEDED",
             source_dataset_sha256=job.source_dataset_sha256,
             artifacts=(ResearchArtifact("result", "result", "2" * 64),),
-            claim_id=claim.id,
-            plan_hash=plan_hash,
         ),
     )
-    assert result.claim_id == claim.id
-    assert result.plan_hash == plan_hash
+    assert job.claim_id == claim.id
+    assert job.plan_hash == plan_hash
 
     validations = InMemoryResearchValidationStore()
     validation_payload = {"gate": "PASS", "brier_improvement": 0.1}
