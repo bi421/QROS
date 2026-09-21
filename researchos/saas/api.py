@@ -634,11 +634,19 @@ def create_app(
         evidence_store=evidence_store,
     )
 
+    effective_validation_store = validation_store or InMemoryResearchValidationStore()
     register_research_validation_routes(
         app,
         tenant_dependency=current_tenant,
-        validation_store=validation_store or InMemoryResearchValidationStore(),
+        validation_store=effective_validation_store,
         job_store=store,
+    )
+
+    register_research_finding_routes(
+        app,
+        tenant_dependency=current_tenant,
+        finding_store=finding_store or InMemoryResearchFindingStore(),
+        validation_store=effective_validation_store,
     )
 
     return app
