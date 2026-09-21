@@ -146,6 +146,15 @@ class StructuredRequestObserver:
             }
         )
         _LOGGER.info(json.dumps(event, sort_keys=True, separators=(",", ":")))
+        if status_code >= 500:
+            error_event = {
+                "event": "http_request_error",
+                "request_id": request_id,
+                "method": method,
+                "path": path,
+                "status_code": status_code,
+            }
+            _LOGGER.error(json.dumps(error_event, sort_keys=True, separators=(",", ":")))
 
 
 def observe_request(
