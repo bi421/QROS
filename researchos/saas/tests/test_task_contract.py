@@ -60,7 +60,7 @@ def test_valid_contract_passes(tmp_path: Path) -> None:
 
 def test_missing_required_section_fails(tmp_path: Path) -> None:
     path = tmp_path / "task.md"
-    path.write_text(VALID.replace("## Risk", "## Risk removed"), encoding="utf-8")
+    path.write_text(VALID.replace("## Risk\n", "## Risk removed\n"), encoding="utf-8")
     assert "missing required section: ## Risk" in validate_contract(path)
 
 
