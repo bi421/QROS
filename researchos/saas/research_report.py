@@ -41,12 +41,12 @@ def render_research_report(
         "",
         "## Run identity",
         "",
-        f"- Schema: \`qros-research-report.v1\`",
-        f"- Workspace: \`{record.workspace_id}\`",
-        f"- Research run: \`{record.research_run_id}\`",
+        f"- Schema: `qros-research-report.v1`",
+        f"- Workspace: `{record.workspace_id}`",
+        f"- Research run: `{record.research_run_id}`",
         f"- Status: **{_line(record.status)}**",
-        f"- Source dataset SHA-256: \`{_line(record.source_dataset_sha256)}\`",
-        f"- Result manifest SHA-256: \`{_line(record.manifest_sha256)}\`",
+        f"- Source dataset SHA-256: `{_line(record.source_dataset_sha256)}`",
+        f"- Result manifest SHA-256: `{_line(record.manifest_sha256)}`",
         "",
         "## Artifacts",
         "",
@@ -57,17 +57,17 @@ def render_research_report(
             key=lambda item: (item.artifact_id, item.kind, item.content_sha256),
         ):
             lines.append(
-                f"- \`{_line(artifact.artifact_id)}\` — "
-                f"{_line(artifact.kind)} — SHA-256 \`{_line(artifact.content_sha256)}\`"
+                f"- `{_line(artifact.artifact_id)}` — "
+                f"{_line(artifact.kind)} — SHA-256 `{_line(artifact.content_sha256)}`"
             )
     else:
         lines.append("- None")
     lines.extend(["", "## Evidence lineage", ""])
     if evidence:
         for row in sorted(evidence, key=lambda item: str(item.id)):
-            artifact = f" \\| artifact \`{row.artifact_id}\`" if row.artifact_id else ""
+            artifact = f" \\| artifact `{row.artifact_id}`" if row.artifact_id else ""
             lines.append(
-                f"- \`{row.id}\` — status **{_line(row.status)}** — "
+                f"- `{row.id}` — status **{_line(row.status)}** — "
                 f"{_line(row.claim)}{artifact}"
             )
     else:
