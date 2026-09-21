@@ -202,7 +202,7 @@ def run_market_memory_pipeline(
             "overlap_pairs": dependence_audit.overlap_pairs,
             "max_concurrent_labels": dependence_audit.max_concurrent_labels,
             "interpretation": "Overlap is reported as dependence information; it is not treated as evidence of leakage.",
-            "inference_method": "circular_moving_block_bootstrap" if dependence_block_size > 1 else "percentile_bootstrap",
+            "inference_method": "moving_block_bootstrap" if dependence_block_size > 1 else "percentile_bootstrap",
             "block_size": dependence_block_size,
             "block_size_rule": "maximum concurrent realized labels; block bootstrap only when overlap exists",
             "assumption": "Dependence is treated as predominantly local in event order within the reported block size; this does not establish independence beyond the block.",
