@@ -565,6 +565,8 @@ def create_app(
         return {
             "workspace_id": str(record.workspace_id),
             "research_run_id": str(record.research_run_id),
+            "claim_id": str(record.claim_id) if record.claim_id else None,
+            "plan_hash": record.plan_hash,
             "source_dataset_sha256": record.source_dataset_sha256,
             "status": record.status,
             "manifest_sha256": record.manifest_sha256,
