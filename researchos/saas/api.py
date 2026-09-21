@@ -179,7 +179,8 @@ def _research_job_response(job: ResearchJob) -> ResearchJobResponse:
     """Serialize the domain dataclass explicitly at the HTTP boundary."""
     return ResearchJobResponse(
         id=job.id,
-        workspace_id=job.workspace_id,        dataset_version_id=job.dataset_version_id,
+        workspace_id=job.workspace_id,
+        dataset_version_id=job.dataset_version_id,
         workflow_id=job.workflow_id,
         status=job.status,
     )
@@ -360,7 +361,8 @@ def create_app(
         dataset = Dataset(id=uuid4(), workspace_id=tenant.workspace_id, name=name.strip(), created_by=tenant.user_id)
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         try:
-            digest, size = stream_sha256(file.file, policy.max_dataset_bytes)            if not policy.allows_dataset(size):
+            digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
+            if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
             storage_path = storage_path_for(tenant.workspace_id, dataset.id, digest)
             storage.put(storage_path, file.file)
@@ -539,7 +541,8 @@ def create_app(
     ) -> dict[str, object]:
         record = store.get_result(tenant.workspace_id, job_id)
         if record is None:
-            raise HTTPException(status_code=404, detail="research result not found")        return {
+            raise HTTPException(status_code=404, detail="research result not found")
+        return {
             "workspace_id": str(record.workspace_id),
             "research_run_id": str(record.research_run_id),
             "source_dataset_sha256": record.source_dataset_sha256,
