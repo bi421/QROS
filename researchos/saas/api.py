@@ -36,6 +36,7 @@ from researchos.saas.idempotency import (
 from researchos.saas.rate_limit import FixedWindowRateLimiter, RateLimiter
 from researchos.saas.claim_api import ResearchClaimStore, register_research_claim_routes
 from researchos.saas.evidence_api import ResearchEvidenceStore, register_research_evidence_routes
+from researchos.saas.validation_api import InMemoryResearchValidationStore, ResearchValidationStore, register_research_validation_routes
 from researchos.saas.research_report import build_research_report
 from researchos.saas.observability import StructuredRequestObserver, observe_request
 from researchos.saas.billing import (
@@ -206,6 +207,7 @@ def create_app(
     rate_limiter: RateLimiter | None = None,
     claim_store: ResearchClaimStore | None = None,
     evidence_store: ResearchEvidenceStore | None = None,
+    validation_store: ResearchValidationStore | None = None,
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
@@ -630,6 +632,13 @@ def create_app(
         app,
         tenant_dependency=current_tenant,
         evidence_store=evidence_store,
+    )
+
+    register_research_validation_routes(
+        app,
+        tenant_dependency=current_tenant,
+        validation_store=validation_store or InMemoryResearchValidationStore(),
+        job_store=store,
     )
 
     return app
