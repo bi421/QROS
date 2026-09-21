@@ -16,6 +16,7 @@ jobs:
         env:
           QROS_BASE_URL: ${{ secrets.QROS_STAGING_BASE_URL }}
           QROS_JWT: ${{ secrets.QROS_STAGING_JWT }}
+          QROS_ISOLATION_JWT: ${{ secrets.QROS_STAGING_ISOLATION_JWT }}
         shell: bash
         run: |
           set -euo pipefail
