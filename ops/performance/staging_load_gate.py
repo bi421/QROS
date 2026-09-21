@@ -41,6 +41,7 @@ def main() -> int:
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--path", default="/v1/me")
     parser.add_argument("--token", default="")
+    parser.add_argument("--token-env", default="QROS_JWT")
     parser.add_argument("--duration-seconds", type=float, default=30.0)
     parser.add_argument("--concurrency", type=int, default=8)
     parser.add_argument("--timeout-seconds", type=float, default=10.0)
@@ -51,6 +52,7 @@ def main() -> int:
     if args.duration_seconds <= 0 or args.concurrency <= 0:
         parser.error("duration-seconds and concurrency must be positive")
 
+    token = args.token or __import__("os").environ.get(args.token_env, "")
     url = args.base_url.rstrip("/") + "/" + args.path.lstrip("/")
     deadline = time.monotonic() + args.duration_seconds
     results: list[tuple[float, int, str | None]] = []
@@ -58,7 +60,7 @@ def main() -> int:
     def worker() -> list[tuple[float, int, str | None]]:
         local: list[tuple[float, int, str | None]] = []
         while time.monotonic() < deadline:
-            local.append(request_once(url, args.token or None, args.timeout_seconds))
+            local.append(request_once(url, token or None, args.timeout_seconds))
         return local
 
     started = time.perf_counter()
