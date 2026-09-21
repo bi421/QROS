@@ -22,6 +22,10 @@ REQUIRED_MARKERS = {
         "pg_dump",
         "aws s3 cp",
         "head-object",
+        "BACKUP_AWS_ACCESS_KEY_ID",
+        "BACKUP_AWS_SECRET_ACCESS_KEY",
+        "BACKUP_AWS_REGION",
+        "PROD_DATABASE_URL",
     ),
     ".github/workflows/production-schema-parity.yml": (
         "workflow_dispatch",
@@ -45,6 +49,9 @@ REQUIRED_MARKERS = {
         "sha256",
         "cmp",
         "qros-datasets",
+        "QROS_RECOVERY_AWS_ACCESS_KEY_ID",
+        "QROS_RECOVERY_AWS_SECRET_ACCESS_KEY",
+        "QROS_RECOVERY_AWS_REGION",
     ),
     "docs/operations/PRODUCTION_RECOVERY_CONTROLS_V1.md": (
         "RPO/RTO",
