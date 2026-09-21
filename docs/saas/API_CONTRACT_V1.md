@@ -14,6 +14,8 @@
 - Dataset versions are immutable and identified by SHA-256 content identity.
 - Research runs execute asynchronously.
 - A completed run is not, by itself, evidence of a positive research finding.
+
+Research reports are presentation projections only. They preserve the governed result status, source dataset hash, result manifest hash, artifact hashes, and stored evidence lineage. They must not infer causality, profitability, significance, or a positive finding.
 - Browser clients never receive Supabase service-role credentials.
 - All mutating operations must be idempotent before production launch.
 - Cross-workspace access must fail closed.
@@ -60,6 +62,9 @@ Dataset bytes are streamed through a bounded SHA-256 calculation before persiste
 
 - `POST /v1/research-runs` — enqueue a frozen research workflow.
 - `GET /v1/research-runs/{job_id}` — retrieve a workspace-scoped job.
+- `GET /v1/research-runs/{job_id}/result` — retrieve the immutable governed result projection.
+- `GET /v1/research-runs/{job_id}/evidence` — retrieve tenant-scoped stored evidence lineage.
+- `GET /v1/research-runs/{job_id}/report` — retrieve a deterministic human-readable report projection.
 - `POST /v1/research-claims` — create a tenant-scoped Research Claim.
 - `GET /v1/research-claims/{claim_id}` — retrieve a workspace-scoped Research Claim.
 - `GET /v1/research-claims` — list Research Claims with bounded tenant-scoped pagination.
