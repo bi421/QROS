@@ -99,7 +99,16 @@ class SupabaseResearchJobStore(ResearchJobStore):
         return self._row_to_job(rows[0])
 
     def record_result(self, workspace_id: UUID, job_id: UUID, lease_token: UUID, result: ResearchResult) -> ResearchRunResultRecord:
-        record = build_result_record(workspace_id, job_id, result)
+        job = self.get(workspace_id, job_id)
+        if job is None:
+            raise RuntimeError("research job disappeared before result persistence")
+        record = build_result_record(
+            workspace_id,
+            job_id,
+            result,
+            claim_id=UUID(job.claim_id) if job.claim_id else None,
+            plan_hash=job.plan_hash,
+        )
         response = self._client.rpc(
             "record_research_run_result",
             {
@@ -132,6 +141,17 @@ class SupabaseResearchJobStore(ResearchJobStore):
         if not rows:
             return None
         row = rows[0]
+        run_rows = (
+            self._client.table("research_run")
+            .select("claim_id,plan_hash")
+            .eq("workspace_id", str(workspace_id))
+            .eq("id", str(job_id))
+            .limit(1)
+            .execute()
+        )
+        if not (run_rows.data or []):
+            raise RuntimeError("research run disappeared while reading result")
+        run_row = run_rows.data[0]
         artifact_rows = (
             self._client.table("research_run_artifact")
             .select("artifact_id,kind,content_sha256")
@@ -148,6 +168,8 @@ class SupabaseResearchJobStore(ResearchJobStore):
         return ResearchRunResultRecord(
             workspace_id=UUID(str(row["workspace_id"])),
             research_run_id=UUID(str(row["research_run_id"])),
+            claim_id=UUID(str(run_row["claim_id"])) if run_row.get("claim_id") else None,
+            plan_hash=str(run_row["plan_hash"]) if run_row.get("plan_hash") else None,
             source_dataset_sha256=str(row["source_dataset_sha256"]),
             status=str(row["status"]),
             manifest_sha256=str(row["manifest_sha256"]),

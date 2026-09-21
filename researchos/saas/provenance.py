@@ -18,8 +18,14 @@ class ResearchRunResultRecord:
     manifest_sha256: str
     artifacts: tuple[ResearchArtifact, ...]
     failures: tuple[str, ...] = ()
+    claim_id: UUID | None = None
+    plan_hash: str | None = None
 
     def __post_init__(self) -> None:
+        if (self.claim_id is None) != (self.plan_hash is None):
+            raise ValueError("claim_id and plan_hash must be provided together")
+        if self.plan_hash is not None:
+            _validate_sha256(self.plan_hash, "plan_hash")
         object.__setattr__(
             self,
             "source_dataset_sha256",
@@ -96,10 +102,15 @@ def build_result_record(
     workspace_id: UUID,
     research_run_id: UUID,
     result: ResearchResult,
+    *,
+    claim_id: UUID | None = None,
+    plan_hash: str | None = None,
 ) -> ResearchRunResultRecord:
     return ResearchRunResultRecord(
         workspace_id=workspace_id,
         research_run_id=research_run_id,
+        claim_id=claim_id,
+        plan_hash=plan_hash,
         source_dataset_sha256=result.source_dataset_sha256,
         status=result.status,
         manifest_sha256=manifest_sha256(result),

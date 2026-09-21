@@ -21,6 +21,8 @@ class ResearchEvidenceRecord:
     claim: str
     status: str
     provenance: dict[str, object]
+    claim_id: UUID | None = None
+    plan_hash: str | None = None
 
 
 class ResearchEvidenceStore(Protocol):
@@ -65,6 +67,8 @@ class SupabaseResearchEvidenceStore:
             id=UUID(str(row["id"])),
             workspace_id=UUID(str(row["workspace_id"])),
             research_run_id=UUID(str(row["research_run_id"])),
+            claim_id=UUID(str(row["claim_id"])) if row.get("claim_id") else None,
+            plan_hash=str(row["plan_hash"]) if row.get("plan_hash") else None,
             artifact_id=UUID(str(artifact)) if artifact else None,
             claim=str(row["claim"]),
             status=str(row["status"]),
@@ -74,7 +78,7 @@ class SupabaseResearchEvidenceStore:
     def list_for_run(self, workspace_id: UUID, research_run_id: UUID) -> list[ResearchEvidenceRecord]:
         run = (
             self._client.table("research_run")
-            .select("id")
+            .select("id,claim_id,plan_hash")
             .eq("id", str(research_run_id))
             .eq("workspace_id", str(workspace_id))
             .limit(1)
@@ -90,13 +94,20 @@ class SupabaseResearchEvidenceStore:
             .order("id")
             .execute()
         )
-        return [self._record(row) for row in (result.data or [])]
+        records = []
+        for row in (result.data or []):
+            row["claim_id"] = run.data[0].get("claim_id")
+            row["plan_hash"] = run.data[0].get("plan_hash")
+            records.append(self._record(row))
+        return records
 
 
 class ResearchEvidenceResponse(BaseModel):
     id: str
     workspace_id: str
     research_run_id: str
+    claim_id: str | None
+    plan_hash: str | None
     artifact_id: str | None
     claim: str
     status: str
@@ -135,6 +146,8 @@ def register_research_evidence_routes(
                 id=str(row.id),
                 workspace_id=str(row.workspace_id),
                 research_run_id=str(row.research_run_id),
+                claim_id=str(row.claim_id) if row.claim_id else None,
+                plan_hash=row.plan_hash,
                 artifact_id=str(row.artifact_id) if row.artifact_id else None,
                 claim=row.claim,
                 status=row.status,
