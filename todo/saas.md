@@ -118,6 +118,16 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [ ] RPO/RTO documented and tested.
 - [ ] Operational runbooks.
 
+## Phase 7.5 — Commercial research validation
+- [ ] Define one narrow customer research problem with a measurable outcome.
+- [ ] Define the minimum dataset/input contract required to answer that problem.
+- [ ] Execute one complete governed research workflow from claim through validated finding.
+- [ ] Produce a human-readable research report from the governed result and evidence lineage.
+- [ ] Validate the workflow with at least one external user who was not involved in implementation.
+- [ ] Record concrete user feedback, failure modes, and requested outputs without weakening research-governance rules.
+- [ ] Define a paid pilot offer tied to a specific research deliverable, not infrastructure access alone.
+- [ ] Treat payment, repeat usage, or an explicit qualified pilot commitment as commercial evidence; repository completeness is not commercial evidence.
+
 ## Final launch gate
 A release is **NOT production-ready** unless all applicable gates are green:
 
@@ -129,8 +139,8 @@ A release is **NOT production-ready** unless all applicable gates are green:
 6. Backup/restore is verified.
 7. Observability is live.
 8. CI status is observed for the exact release commit.
-9. No known high-severity security or data-integrity defect remains open.
-10. The release artifact is reproducible and versioned.
+10. No known high-severity security or data-integrity defect remains open.
+11. The release artifact is reproducible and versioned.
 
 - Evidence governance v1: immutable OOS/replication artifact contracts bound to governed edge eligibility (PR #76).
 
