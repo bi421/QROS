@@ -26,6 +26,14 @@ The authoritative Supabase session boundary is now also implemented and applied 
 
 The application production composition wires this validator into `SupabaseJwtAuthProvider`, so a revoked/missing session is rejected with 401 and a session-store validation outage fails closed with 503. PR #133 exact-head CI and Supabase Database Security Tests are green, and the change is merged to main.
 
+### Migration-version parity recheck — 2026-09-21
+
+A fresh production migration-history query was compared against the 37 versioned SQL migrations on `main`. After repairing the production history entries for the already-present rate-limit cleanup, result client-grant deny, content-addressed artifact, and auth-session migrations, the version sets are now exactly equal: **37 repository versions / 37 production versions / 0 missing / 0 extra**.
+
+The production database was also directly verified for the content-addressed artifact boundary: `public.artifact` has the `artifact_content_addressed_path` check constraint and `idx_artifact_workspace_content_sha256` unique index. The existing artifact table contained zero rows at the time of verification, so the migration's duplicate/non-canonical preconditions were satisfied before enforcement.
+
+The remaining production migration names for four historical entries use shorter labels than the repository filenames, but their migration versions are identical; release parity is therefore tracked by the canonical migration version set, not by display-name text.
+
 The current Supabase Security Advisor reports one Auth configuration warning: leaked-password protection is disabled. This is a separate Auth hardening item and is not treated as resolved by repository code.
 
 ## Not yet verified
