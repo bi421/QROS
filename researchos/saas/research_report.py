@@ -41,7 +41,7 @@ def render_research_report(
         "",
         "## Run identity",
         "",
-        f"- Schema: `qros-research-report.v1`",
+        "- Schema: `qros-research-report.v1`",
         f"- Workspace: `{record.workspace_id}`",
         f"- Research run: `{record.research_run_id}`",
         f"- Status: **{_line(record.status)}**",
