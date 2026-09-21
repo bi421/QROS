@@ -12,13 +12,6 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: ${{ secrets.BACKUP_AWS_REGION }}
-      BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
-    steps:
       - name: Validate backup configuration
         shell: bash
         run: |
@@ -35,6 +28,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client
 
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
       - name: Create compressed logical backup
         shell: bash
         run: |
@@ -46,6 +41,11 @@ jobs:
           echo "BACKUP_FILE=backup/qros-${stamp}.dump" >> "$GITHUB_ENV"
           echo "BACKUP_SHA=backup/qros-${stamp}.sha256" >> "$GITHUB_ENV"
 
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.BACKUP_AWS_REGION }}
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
       - name: Upload backup to S3
         shell: bash
         run: |
@@ -53,6 +53,11 @@ jobs:
           aws s3 cp "${BACKUP_FILE}" "s3://${BACKUP_S3_BUCKET}/qros/postgres/$(basename "${BACKUP_FILE}")" --sse AES256
           aws s3 cp "${BACKUP_SHA}" "s3://${BACKUP_S3_BUCKET}/qros/postgres/$(basename "${BACKUP_SHA}")" --sse AES256
 
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.BACKUP_AWS_REGION }}
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
       - name: Verify remote object
         shell: bash
         run: |
