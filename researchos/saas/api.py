@@ -149,6 +149,8 @@ class UnconfiguredAuthProvider:
 class ResearchCreateRequest(BaseModel):
     dataset_version_id: UUID
     workflow_id: str = Field(default=FROZEN_XAUUSD_M1_WORKFLOW, min_length=1, max_length=128)
+    claim_id: str | None = Field(default=None, min_length=1, max_length=256)
+    plan_hash: str | None = Field(default=None, min_length=64, max_length=64)
 
 
 class PageResponse(BaseModel):
@@ -165,6 +167,8 @@ class ResearchJobResponse(BaseModel):
     dataset_version_id: UUID
     workflow_id: str
     status: ResearchJobStatus
+    claim_id: str | None = None
+    plan_hash: str | None = None
 
 
 class DatasetResponse(BaseModel):
@@ -183,6 +187,8 @@ def _research_job_response(job: ResearchJob) -> ResearchJobResponse:
         dataset_version_id=job.dataset_version_id,
         workflow_id=job.workflow_id,
         status=job.status,
+        claim_id=job.claim_id,
+        plan_hash=job.plan_hash,
     )
 
 
@@ -455,6 +461,8 @@ def create_app(
         fingerprint = request_fingerprint({
             "dataset_version_id": str(request.dataset_version_id),
             "workflow_id": request.workflow_id,
+            "claim_id": request.claim_id,
+            "plan_hash": request.plan_hash,
         })
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         if not policy.allows_monthly_runs(store.count_monthly(tenant.workspace_id)):
@@ -464,6 +472,16 @@ def create_app(
         version = datasets.get_version(tenant.workspace_id, request.dataset_version_id)
         if version is None:
             raise HTTPException(status_code=404, detail="dataset version not found")
+        if (request.claim_id is None) != (request.plan_hash is None):
+            raise HTTPException(status_code=422, detail="claim_id and plan_hash are required together")
+        if request.claim_id is not None:
+            if claim_store is None:
+                raise HTTPException(status_code=503, detail="research claim persistence is not configured")
+            claim = claim_store.get(tenant.workspace_id, request.claim_id)
+            if claim is None:
+                raise HTTPException(status_code=404, detail="research claim not found")
+            if not claim.is_plan_locked or claim.plan_hash != request.plan_hash:
+                raise HTTPException(status_code=409, detail="research claim plan is not locked or plan_hash does not match")
 
         job = ResearchJob(
             id=uuid4(),
@@ -473,6 +491,8 @@ def create_app(
             status=ResearchJobStatus.QUEUED,
             source_dataset_sha256=version.content_sha256,
             created_by=tenant.user_id,
+            claim_id=request.claim_id,
+            plan_hash=request.plan_hash,
         )
         body = _research_job_response(job).model_dump(mode="json")
         try:
@@ -502,7 +522,7 @@ def create_app(
             except Exception:
                 pass
             raise HTTPException(status_code=503, detail="research job queue unavailable") from exc
-        return JSONResponse(status_code=202, content=body)
+        return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
 
     @app.get("/v1/research-runs", response_model=PageResponse, tags=["research"])
     def list_research_runs(

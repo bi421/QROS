@@ -99,6 +99,8 @@ class ResearchJob:
     attempt_count: int = 0
     max_attempts: int = 3
     error_code: str | None = None
+    claim_id: str | None = None
+    plan_hash: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "source_dataset_sha256", _validate_sha256(self.source_dataset_sha256, "source_dataset_sha256"))
@@ -106,6 +108,12 @@ class ResearchJob:
             raise TypeError("dataset_version_id must be a UUID")
         if not self.workflow_id.strip():
             raise ValueError("workflow_id must not be empty")
+        if (self.claim_id is None) != (self.plan_hash is None):
+            raise ValueError("claim_id and plan_hash must be provided together")
+        if self.plan_hash is not None and (len(self.plan_hash) != 64 or any(ch not in "0123456789abcdef" for ch in self.plan_hash)):
+            raise ValueError("plan_hash must be a lowercase SHA-256 digest")
+        if self.claim_id is not None and not self.claim_id.strip():
+            raise ValueError("claim_id must not be empty")
         if self.attempt_count < 0:
             raise ValueError("attempt_count must not be negative")
         if self.max_attempts < 1:

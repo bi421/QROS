@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.api import create_app
+from researchos.claims.claim import ResearchClaim
 from researchos.saas.billing import InMemoryBillingEventStore
 from researchos.saas.contracts import Plan, TenantContext, WorkspaceRole
 from researchos.saas.datasets import InMemoryDatasetStorage, InMemoryDatasetStore
@@ -40,7 +41,7 @@ class StaticRateLimiter:
         return self.allowed
 
 
-def _client(workspace_id: UUID | None = None, *, plan: Plan = Plan.PRO, role: WorkspaceRole = WorkspaceRole.RESEARCHER, billing_store=None, billing_secret=None, rate_limiter=None):
+def _client(workspace_id: UUID | None = None, *, plan: Plan = Plan.PRO, role: WorkspaceRole = WorkspaceRole.RESEARCHER, billing_store=None, billing_secret=None, rate_limiter=None, claim_store=None):
     context = TenantContext(
         user_id=uuid4(),
         workspace_id=workspace_id or uuid4(),
@@ -58,10 +59,30 @@ def _client(workspace_id: UUID | None = None, *, plan: Plan = Plan.PRO, role: Wo
             billing_store=billing_store,
             billing_webhook_secret=billing_secret,
             rate_limiter=rate_limiter,
+            claim_store=claim_store,
         )
     )
     return client, context, dataset_store, dataset_storage
 
+
+
+class InMemoryClaimStore:
+    def __init__(self) -> None:
+        self.rows: dict[tuple[UUID, str], ResearchClaim] = {}
+
+    def save(self, workspace_id: UUID, claim: ResearchClaim) -> ResearchClaim:
+        if claim.workspace_id != str(workspace_id):
+            raise ValueError("research claim workspace does not match tenant")
+        self.rows[(workspace_id, claim.id)] = claim
+        return claim
+
+    def get(self, workspace_id: UUID, claim_id: str) -> ResearchClaim | None:
+        return self.rows.get((workspace_id, claim_id))
+
+    def list(self, workspace_id: UUID, *, limit: int = 100, offset: int = 0):
+        values = [claim for (ws, _), claim in self.rows.items() if ws == workspace_id]
+        values.sort(key=lambda claim: claim.id)
+        return values[offset:offset + limit], len(values)
 
 def _upload(client: TestClient, name: str, body: bytes):
     return client.post(
@@ -616,3 +637,52 @@ def test_cross_tenant_workspace_header_cannot_select_another_workspace() -> None
 
     assert response.status_code == 403
     assert response.json()["detail"] == "workspace access denied"
+
+
+def test_governed_research_run_requires_locked_claim_plan_and_persists_binding() -> None:
+    claim_store = InMemoryClaimStore()
+    client, _, _, _ = _client(claim_store=claim_store)
+    created = client.post(
+        "/v1/research-claims",
+        headers={"Authorization": "Bearer test"},
+        json={"statement": "DXY shocks are associated with XAUUSD returns."},
+    )
+    assert created.status_code == 201
+    claim_id = created.json()["id"]
+
+    uploaded = _upload(client, "governed-run", b"x")
+    version_id = uploaded.json()["version"]["id"]
+    missing_lock = client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "governed-missing-lock"},
+        json={"dataset_version_id": version_id, "claim_id": claim_id, "plan_hash": "a" * 64},
+    )
+    assert missing_lock.status_code == 409
+
+    plan = {
+        "hypothesis": "DXY shocks are associated with XAUUSD returns.",
+        "sample_definition": "XAUUSD M1 2021-2025",
+        "features": ["return_1"], "labels": ["return_60m"],
+        "train_validation_test": "time ordered 60/20/20",
+        "exclusions": [], "costs_slippage": "explicit",
+        "statistical_tests": ["paired bootstrap"], "metrics": ["mean_return"],
+        "stopping_rules": ["no early stopping"],
+        "multiple_testing_policy": "pre-registered",
+        "replication_policy": "independent holdout",
+    }
+    locked = client.post(
+        f"/v1/research-claims/{claim_id}/plan-lock",
+        headers={"Authorization": "Bearer test"}, json=plan,
+    )
+    assert locked.status_code == 200
+    plan_hash = locked.json()["plan_hash"]
+
+    run = client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "governed-run"},
+        json={"dataset_version_id": version_id, "claim_id": claim_id, "plan_hash": plan_hash},
+    )
+    assert run.status_code == 202
+    body = run.json()
+    assert body["claim_id"] == claim_id
+    assert body["plan_hash"] == plan_hash
