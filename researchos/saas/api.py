@@ -36,6 +36,7 @@ from researchos.saas.idempotency import (
 from researchos.saas.rate_limit import FixedWindowRateLimiter, RateLimiter
 from researchos.saas.claim_api import ResearchClaimStore, register_research_claim_routes
 from researchos.saas.evidence_api import ResearchEvidenceStore, register_research_evidence_routes
+from researchos.saas.research_report import build_research_report
 from researchos.saas.observability import StructuredRequestObserver, observe_request
 from researchos.saas.billing import (
     BillingEventConflict,
@@ -177,8 +178,7 @@ class DatasetResponse(BaseModel):
 def _research_job_response(job: ResearchJob) -> ResearchJobResponse:
     """Serialize the domain dataclass explicitly at the HTTP boundary."""
     return ResearchJobResponse(
-        id=job.id,
-        workspace_id=job.workspace_id,
+        id=job.id,        workspace_id=job.workspace_id,
         dataset_version_id=job.dataset_version_id,
         workflow_id=job.workflow_id,
         status=job.status,
@@ -357,8 +357,7 @@ def create_app(
         tenant: TenantContext = Depends(current_tenant),
     ) -> DatasetResponse:
         require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.RESEARCHER)
-        dataset = Dataset(id=uuid4(), workspace_id=tenant.workspace_id, name=name.strip(), created_by=tenant.user_id)
-        policy = DEFAULT_USAGE_POLICIES[tenant.plan]
+        dataset = Dataset(id=uuid4(), workspace_id=tenant.workspace_id, name=name.strip(), created_by=tenant.user_id)        policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         try:
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
@@ -537,8 +536,7 @@ def create_app(
     def get_research_run_result(
         job_id: UUID,
         tenant: TenantContext = Depends(current_tenant),
-    ) -> dict[str, object]:
-        record = store.get_result(tenant.workspace_id, job_id)
+    ) -> dict[str, object]:        record = store.get_result(tenant.workspace_id, job_id)
         if record is None:
             raise HTTPException(status_code=404, detail="research result not found")
         return {
@@ -556,6 +554,38 @@ def create_app(
                 for artifact in record.artifacts
             ],
             "failures": list(record.failures),
+        }
+
+    @app.get("/v1/research-runs/{job_id}/report", tags=["research"])
+    def get_research_run_report(
+        job_id: UUID,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> dict[str, object]:
+        record = store.get_result(tenant.workspace_id, job_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="research result not found")
+        if evidence_store is None:
+            raise HTTPException(
+                status_code=503,
+                detail="research evidence persistence is not configured",
+            )
+        try:
+            evidence = evidence_store.list_for_run(tenant.workspace_id, job_id)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="research evidence persistence unavailable",
+            ) from exc
+        report = build_research_report(record, evidence)
+        return {
+            "schema": report.schema,
+            "workspace_id": str(report.workspace_id),
+            "research_run_id": str(report.research_run_id),
+            "status": report.status,
+            "source_dataset_sha256": report.source_dataset_sha256,
+            "manifest_sha256": report.manifest_sha256,
+            "report_sha256": report.report_sha256,
+            "markdown": report.markdown,
         }
 
     @app.get("/v1/research-runs/{job_id}", response_model=ResearchJobResponse, tags=["research"])
