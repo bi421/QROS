@@ -91,7 +91,7 @@ def classify(log: str) -> Classification:
     implementation = _matches(
         text,
         (
-            r"traceback (most recent call last)",
+            r"traceback \(most recent call last\)",
             r"raise (?:valueerror|typeerror|keyerror|attributeerror)",
             r"failed in .*\.py:\d+",
             r"error in .*\.py:\d+",
