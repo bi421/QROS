@@ -16,6 +16,24 @@ REQUIRED_FILES = (
     "docs/operations/PRODUCTION_RECOVERY_CONTROLS_V1.md",
 )
 
+FORBIDDEN_MARKERS = {
+    ".github/workflows/production-db-backup.yml": (
+        "    env:\\n",
+    ),
+    ".github/workflows/production-schema-parity.yml": (
+        "    env:\\n",
+    ),
+    ".github/workflows/staging-release-gate.yml": (
+        "    env:\\n",
+    ),
+    ".github/workflows/staging-performance-gate.yml": (
+        "    env:\\n",
+    ),
+    ".github/workflows/storage-recovery-drill.yml": (
+        "    env:\\n",
+    ),
+}
+
 REQUIRED_MARKERS = {
     ".github/workflows/production-db-backup.yml": (
         "workflow_dispatch",
@@ -76,6 +94,12 @@ def main() -> int:
             if marker.lower() not in text.lower():
                 failures.append(
                     f"missing required marker in {relative}: {marker!r}"
+                )
+
+        for marker in FORBIDDEN_MARKERS.get(relative, ()):
+            if marker.replace("\\n", "\n").lower() in text.lower():
+                failures.append(
+                    f"forbidden release-control marker in {relative}: {marker!r}"
                 )
 
     if failures:
