@@ -20,15 +20,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: staging
-    env:
-      QROS_BASE_URL: ${{ secrets.QROS_STAGING_BASE_URL }}
-      QROS_JWT: ${{ secrets.QROS_STAGING_JWT }}
-      DURATION_SECONDS: ${{ inputs.duration_seconds }}
-      CONCURRENCY: ${{ inputs.concurrency }}
     steps:
       - uses: actions/checkout@v5
 
       - name: Validate release-gate configuration
+        env:
+          QROS_BASE_URL: ${{ secrets.QROS_STAGING_BASE_URL }}
+          QROS_JWT: ${{ secrets.QROS_STAGING_JWT }}
         shell: bash
         run: |
           set -euo pipefail
@@ -36,6 +34,8 @@ jobs:
           test -n "${QROS_JWT}" || { echo "::error::QROS_STAGING_JWT is required"; exit 1; }
 
       - name: Baseline health
+        env:
+          QROS_BASE_URL: ${{ secrets.QROS_STAGING_BASE_URL }}
         shell: bash
         run: |
           set -euo pipefail
@@ -43,6 +43,11 @@ jobs:
           curl --fail --silent --show-error --retry 3 --retry-delay 2 "${QROS_BASE_URL%/}/readyz"
 
       - name: Authenticated load test
+        env:
+          QROS_BASE_URL: ${{ secrets.QROS_STAGING_BASE_URL }}
+          QROS_JWT: ${{ secrets.QROS_STAGING_JWT }}
+          DURATION_SECONDS: ${{ inputs.duration_seconds }}
+          CONCURRENCY: ${{ inputs.concurrency }}
         shell: bash
         run: |
           set -euo pipefail
