@@ -1,0 +1,39 @@
+groups:
+  - name: qros-saas
+    interval: 30s
+    rules:
+      - alert: QROSHighHttp5xxRate
+        expr: rate(qros_http_errors_total[5m]) / clamp_min(rate(qros_http_requests_total[5m]), 1) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: QROS HTTP 5xx rate is above 5%
+          description: More than 5% of observed HTTP responses are 5xx for 10 minutes.
+
+      - alert: QROSHttpErrorBurst
+        expr: rate(qros_http_errors_total[5m]) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: QROS is returning sustained HTTP 5xx responses
+          description: QROS has averaged more than one 5xx response per second for 10 minutes.
+
+      - alert: QROSHighLatencyP95
+        expr: histogram_quantile(0.95, rate(qros_http_request_duration_ms_bucket[5m])) > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: QROS HTTP p95 latency is above 1 second
+          description: HTTP request p95 latency has exceeded 1000ms for 10 minutes.
+
+      - alert: QROSNoTraffic
+        expr: up{job="qros"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: QROS scrape target is down
+          description: Prometheus cannot scrape the QROS target for 5 minutes.
