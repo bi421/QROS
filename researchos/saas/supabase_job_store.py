@@ -172,7 +172,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
             raise ValueError("invalid pagination")
         query = (
             self._client.table("research_run")
-            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code", count="exact")
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash", count="exact")
             .eq("workspace_id", str(workspace_id))
         )
         if status is not None:
