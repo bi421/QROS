@@ -100,7 +100,9 @@ EOF
           output="$(supabase migration list --linked 2>&1)"
           printf '%s\n' "$output"
 
-          if ! normalize_migration_rows <<<"$output" > /tmp/qros-migration-parity.txt; then
+          if normalize_migration_rows <<<"$output" > /tmp/qros-migration-parity.txt; then
+            :
+          else
             status=$?
             if [ "$status" -eq 2 ]; then
               echo "::error::Supabase migration list contained no parseable migration rows."
