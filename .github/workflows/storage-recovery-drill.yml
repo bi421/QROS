@@ -16,10 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 15
-    env:
-      AWS_ACCESS_KEY_ID: \${{ secrets.QROS_RECOVERY_AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: \${{ secrets.QROS_RECOVERY_AWS_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: \${{ secrets.QROS_RECOVERY_AWS_REGION }}
     steps:
       - uses: actions/checkout@v4
       - name: Validate recovery secrets
