@@ -153,7 +153,7 @@ def compute_conditional_statistics(
 
     if n < 5:
         status = EvidenceStatus.EXPLORATORY.value
-        notes = f"Small sample (n={n}); uncertainty_method={ci_result.method if n >= 2 else "none"}"
+        notes = f"Small sample (n={n}); uncertainty_method={ci_result.method if n >= 2 else 'none'}"
     else:
         status = EvidenceStatus.UNVALIDATED.value
         dependence_note = f"; dependence_block_size={effective_block_size}" if effective_block_size > 1 else "; iid_bootstrap_only_when_no_overlap"
