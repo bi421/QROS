@@ -1,0 +1,49 @@
+name: Staging Performance Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration_seconds:
+        description: "Load duration"
+        required: false
+        default: "30"
+      concurrency:
+        description: "Concurrent workers"
+        required: false
+        default: "8"
+
+permissions:
+  contents: read
+
+jobs:
+  load:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: staging
+    env:
+      QROS_BASE_URL: ${{ secrets.QROS_STAGING_BASE_URL }}
+      QROS_JWT: ${{ secrets.QROS_STAGING_JWT }}
+      DURATION_SECONDS: ${{ inputs.duration_seconds }}
+      CONCURRENCY: ${{ inputs.concurrency }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate release-gate configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${QROS_BASE_URL}" || { echo "::error::QROS_STAGING_BASE_URL is required"; exit 1; }
+          test -n "${QROS_JWT}" || { echo "::error::QROS_STAGING_JWT is required"; exit 1; }
+
+      - name: Baseline health
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 "${QROS_BASE_URL%/}/healthz"
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 "${QROS_BASE_URL%/}/readyz"
+
+      - name: Authenticated load test
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ops/performance/staging_load_gate.py             --base-url "${QROS_BASE_URL}"             --path "/v1/me"             --token "${QROS_JWT}"             --duration-seconds "${DURATION_SECONDS}"             --concurrency "${CONCURRENCY}"             --max-error-rate "0.01"             --max-p95-ms "1000"
