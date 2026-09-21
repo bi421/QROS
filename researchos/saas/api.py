@@ -472,6 +472,16 @@ def create_app(
         version = datasets.get_version(tenant.workspace_id, request.dataset_version_id)
         if version is None:
             raise HTTPException(status_code=404, detail="dataset version not found")
+        if (request.claim_id is None) != (request.plan_hash is None):
+            raise HTTPException(status_code=422, detail="claim_id and plan_hash are required together")
+        if request.claim_id is not None:
+            if claim_store is None:
+                raise HTTPException(status_code=503, detail="research claim persistence is not configured")
+            claim = claim_store.get(tenant.workspace_id, request.claim_id)
+            if claim is None:
+                raise HTTPException(status_code=404, detail="research claim not found")
+            if not claim.is_plan_locked or claim.plan_hash != request.plan_hash:
+                raise HTTPException(status_code=409, detail="research claim plan is not locked or plan_hash does not match")
 
         job = ResearchJob(
             id=uuid4(),
