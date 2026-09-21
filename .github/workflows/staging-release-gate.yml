@@ -1,0 +1,46 @@
+name: Staging Release Gate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      QROS_BASE_URL: ${{ secrets.QROS_STAGING_BASE_URL }}
+      QROS_JWT: ${{ secrets.QROS_STAGING_JWT }}
+    steps:
+      - name: Validate release-gate configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${QROS_BASE_URL}" || { echo "QROS_STAGING_BASE_URL is required"; exit 1; }
+          test -n "${QROS_JWT}" || { echo "QROS_STAGING_JWT is required"; exit 1; }
+
+      - name: Public health checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 "${QROS_BASE_URL%/}/healthz"
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 "${QROS_BASE_URL%/}/readyz"
+
+      - name: Authenticated release smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="$(mktemp)"
+          trap 'rm -f "${body}"' EXIT
+          status="$(curl --silent --show-error --retry 2 --retry-delay 2 \
+            -o "${body}" -w '%{http_code}' \
+            -H "Authorization: Bearer ${QROS_JWT}" \
+            "${QROS_BASE_URL%/}/v1/me")"
+          test "${status}" = "200" || {
+            echo "Authenticated /v1/me returned HTTP ${status}"
+            cat "${body}"
+            exit 1
+          }
