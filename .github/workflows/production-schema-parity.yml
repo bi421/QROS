@@ -47,23 +47,40 @@ jobs:
           output="$(supabase migration list --linked 2>&1)"
           printf '%s\n' "$output"
 
-          if awk -F '│' '
+          if ! grep -Eq 'LOCAL[[:space:]]*│[[:space:]]*REMOTE[[:space:]]*│[[:space:]]*TIME' <<<"$output"; then
+            echo "::error::Supabase migration list did not return the expected migration table."
+            exit 1
+          fi
+
+          parity="$(awk -F '│' '
             $3 ~ /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/ {
+              rows++
               local=$1
               remote=$2
               gsub(/^[[:space:]]+|[[:space:]]+$/, "", local)
               gsub(/^[[:space:]]+|[[:space:]]+$/, "", remote)
-              if (local == "" || remote == "") {
-                found=1
+              if (local == "" || remote == "" || local != remote) {
+                mismatch=1
+                printf "local=%s remote=%s\\n", local, remote
               }
             }
-            END { exit found ? 0 : 1 }
-          ' <<<"$output"; then
-            echo "::error::Production migration history differs from repository migration history."
+            END {
+              if (rows == 0) exit 2
+              if (mismatch) exit 1
+              exit 0
+            }
+          ' <<<"$output")" || {
+            status=$?
+            if [ "$status" -eq 2 ]; then
+              echo "::error::Supabase migration list contained no migration rows."
+            else
+              echo "::error::Production and repository migration histories differ."
+              printf '%s' "$parity"
+            fi
             exit 1
-          fi
+          }
 
-          echo "Production and repository migration histories are aligned."
+          echo "Production and repository migration histories are aligned with exact local/remote version equality."
 
       - name: Verify db push dry-run is executable and non-destructive
         env:
