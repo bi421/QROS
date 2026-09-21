@@ -249,3 +249,91 @@ def test_claim_and_run_identity_remain_workspace_scoped_across_golden_path_bound
     assert other_list.json()["total"] == 1
     assert owner_list.json()["items"][0]["id"] == claim_id
     assert other_list.json()["items"][0]["id"] == other_created.json()["id"]
+
+
+def _plan_payload(hypothesis: str) -> dict[str, object]:
+    return {
+        "hypothesis": hypothesis,
+        "sample_definition": "XAUUSD M1 2021-2025, event-time only",
+        "features": ["return_1"],
+        "labels": ["return_60m"],
+        "train_validation_test": "time ordered 60/20/20",
+        "exclusions": ["missing timestamps"],
+        "costs_slippage": "explicit transaction-cost model",
+        "statistical_tests": ["paired bootstrap"],
+        "metrics": ["mean_return", "brier_score"],
+        "stopping_rules": ["no early stopping"],
+        "multiple_testing_policy": "pre-registered familywise policy",
+        "replication_policy": "independent holdout replication",
+    }
+
+
+def test_claim_plan_lock_is_persisted_and_immutable() -> None:
+    client, _, store = _client()
+    created = client.post(
+        "/v1/research-claims",
+        headers={"Authorization": "Bearer test"},
+        json=_payload("DXY shocks are associated with XAUUSD returns."),
+    )
+    assert created.status_code == 201
+    claim_id = created.json()["id"]
+
+    locked = client.post(
+        f"/v1/research-claims/{claim_id}/plan-lock",
+        headers={"Authorization": "Bearer test"},
+        json=_plan_payload("DXY shocks are associated with XAUUSD returns."),
+    )
+    assert locked.status_code == 200
+    body = locked.json()
+    assert body["is_plan_locked"] is True
+    assert len(body["plan_hash"]) == 64
+
+    replay = client.post(
+        f"/v1/research-claims/{claim_id}/plan-lock",
+        headers={"Authorization": "Bearer test"},
+        json=_plan_payload("DXY shocks are associated with XAUUSD returns."),
+    )
+    assert replay.status_code == 200
+    assert replay.json()["plan_hash"] == body["plan_hash"]
+
+    changed = _plan_payload("Changed hypothesis")
+    changed["features"] = ["return_5"]
+    changed_response = client.post(
+        f"/v1/research-claims/{claim_id}/plan-lock",
+        headers={"Authorization": "Bearer test"},
+        json=changed,
+    )
+    assert changed_response.status_code == 422
+    assert "already locked" in changed_response.json()["detail"]
+    assert store.save_calls == 3
+
+
+def test_plan_lock_is_tenant_scoped_and_viewer_forbidden() -> None:
+    owner = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
+    other = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
+    store = FakeClaimStore()
+    owner_client, _, _ = _client(context=owner, store=store)
+    other_client, _, _ = _client(context=other, store=store)
+
+    created = owner_client.post(
+        "/v1/research-claims",
+        headers={"Authorization": "Bearer test"},
+        json=_payload("Tenant-scoped plan"),
+    )
+    claim_id = created.json()["id"]
+
+    assert other_client.post(
+        f"/v1/research-claims/{claim_id}/plan-lock",
+        headers={"Authorization": "Bearer test"},
+        json=_plan_payload("Tenant-scoped plan"),
+    ).status_code == 404
+
+    viewer_client, _, _ = _client(
+        context=TenantContext(uuid4(), owner.workspace_id, Plan.PRO, WorkspaceRole.VIEWER),
+        store=store,
+    )
+    assert viewer_client.post(
+        f"/v1/research-claims/{claim_id}/plan-lock",
+        headers={"Authorization": "Bearer test"},
+        json=_plan_payload("Tenant-scoped plan"),
+    ).status_code == 403
