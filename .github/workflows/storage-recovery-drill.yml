@@ -17,7 +17,7 @@ jobs:
     environment: staging
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Validate recovery secrets
         env:
           SUPABASE_URL: ${{ secrets.QROS_STAGING_SUPABASE_URL }}
@@ -31,6 +31,23 @@ jobs:
           test -n "$SUPABASE_URL"; test -n "$SERVICE_ROLE_KEY"; test -n "$S3_BUCKET"; test -n "$AWS_REGION"
           test -n "$AWS_ACCESS_KEY_ID"
           test -n "$AWS_SECRET_ACCESS_KEY"
+      - name: Validate drill object name
+        env:
+          OBJECT_NAME: ${{ inputs.object_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${OBJECT_NAME}" in
+            ""|/*|*..*|*\\\\*)
+              echo "::error::object_name must be a non-empty relative storage key without traversal or backslashes"
+              exit 1
+              ;;
+          esac
+          case "${OBJECT_NAME}" in
+            drills/*) ;;
+            *) echo "::error::object_name must stay under the drills/ prefix"; exit 1 ;;
+          esac
+
       - name: Create deterministic drill object
         run: |
           set -euo pipefail
