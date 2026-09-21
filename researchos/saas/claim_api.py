@@ -9,7 +9,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from researchos.claims.claim import ResearchClaim, ResearchClaimType
+from researchos.claims.claim import ResearchClaim, ResearchClaimType, ResearchPlan
 from researchos.saas.contracts import TenantContext, WorkspaceRole
 
 
@@ -39,6 +39,21 @@ class ResearchClaimCreateRequest(BaseModel):
     minimum_evidence_requirements: list[str] = Field(default_factory=list, max_length=100)
     research_id: str | None = Field(default=None, max_length=256)
     ontology_tags: list[str] = Field(default_factory=list, max_length=100)
+
+
+class ResearchPlanLockRequest(BaseModel):
+    hypothesis: str = Field(min_length=1, max_length=10_000)
+    sample_definition: str = Field(min_length=1, max_length=10_000)
+    features: list[str] = Field(min_length=1, max_length=100)
+    labels: list[str] = Field(default_factory=list, max_length=100)
+    train_validation_test: str = Field(min_length=1, max_length=2_000)
+    exclusions: list[str] = Field(default_factory=list, max_length=100)
+    costs_slippage: str = Field(min_length=1, max_length=5_000)
+    statistical_tests: list[str] = Field(default_factory=list, max_length=100)
+    metrics: list[str] = Field(min_length=1, max_length=100)
+    stopping_rules: list[str] = Field(default_factory=list, max_length=100)
+    multiple_testing_policy: str = Field(min_length=1, max_length=2_000)
+    replication_policy: str = Field(min_length=1, max_length=2_000)
 
 
 class ResearchClaimResponse(BaseModel):
@@ -164,6 +179,51 @@ def register_research_claim_routes(
             ) from exc
         return _response(persisted)
 
+    @router.post(
+        "/v1/research-claims/{claim_id}/plan-lock",
+        response_model=ResearchClaimResponse,
+        tags=["research-claims"],
+    )
+    def lock_research_claim_plan(
+        claim_id: str,
+        request: ResearchPlanLockRequest,
+        context: TenantContext = Depends(tenant_dependency),
+    ) -> ResearchClaimResponse:
+        require_write_role(context)
+        if not claim_id.strip() or len(claim_id) > 256:
+            raise HTTPException(status_code=422, detail="invalid claim id")
+        store = require_store()
+        try:
+            claim = store.get(context.workspace_id, claim_id)
+            if claim is None:
+                raise HTTPException(status_code=404, detail="research claim not found")
+            plan = ResearchPlan(
+                hypothesis=request.hypothesis,
+                sample_definition=request.sample_definition,
+                features=tuple(request.features),
+                labels=tuple(request.labels),
+                train_validation_test=request.train_validation_test,
+                exclusions=tuple(request.exclusions),
+                costs_slippage=request.costs_slippage,
+                statistical_tests=tuple(request.statistical_tests),
+                metrics=tuple(request.metrics),
+                stopping_rules=tuple(request.stopping_rules),
+                multiple_testing_policy=request.multiple_testing_policy,
+                replication_policy=request.replication_policy,
+            )
+            claim.lock_plan(plan)
+            persisted = store.save(context.workspace_id, claim)
+        except HTTPException:
+            raise
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="research claim plan-lock persistence failed",
+            ) from exc
+        return _response(persisted)
+
     @router.get(
         "/v1/research-claims/{claim_id}",
         response_model=ResearchClaimResponse,
@@ -227,6 +287,7 @@ __all__ = [
     "ResearchClaimCreateRequest",
     "ResearchClaimPageResponse",
     "ResearchClaimResponse",
+    "ResearchPlanLockRequest",
     "ResearchClaimStore",
     "register_research_claim_routes",
 ]
