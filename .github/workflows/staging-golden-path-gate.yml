@@ -21,6 +21,7 @@ jobs:
           set -euo pipefail
           test -n "${QROS_BASE_URL}" || { echo "QROS_STAGING_BASE_URL is required"; exit 1; }
           test -n "${QROS_JWT}" || { echo "QROS_STAGING_JWT is required"; exit 1; }
+          test -n "${QROS_ISOLATION_JWT}" || { echo "QROS_STAGING_ISOLATION_JWT is required for the tenant-isolation gate"; exit 1; }
 
       - name: Execute Golden Path
         env:
@@ -92,8 +93,6 @@ jobs:
               "${base}/v1/datasets/${dataset_id}/versions")"
             test "${other_status}" = "200" || { echo "cross-tenant version lookup returned HTTP ${other_status}"; cat "${work}/other.json"; exit 1; }
             test "$(jq -er 'length' "${work}/other.json")" = "0" || { echo "cross-tenant dataset data was visible"; cat "${work}/other.json"; exit 1; }
-          else
-            echo "QROS_STAGING_ISOLATION_JWT not configured; optional cross-tenant assertion skipped"
           fi
 
           echo "5/10 enqueue research run"
@@ -142,7 +141,7 @@ jobs:
           evidence_status="$(call GET "${base}/v1/research-runs/${run_id}/evidence" "${work}/evidence.json")"
           test "${evidence_status}" = "200" || { echo "GET evidence returned HTTP ${evidence_status}"; cat "${work}/evidence.json"; exit 1; }
           jq -e --arg ws "${workspace_id}" --arg run "${run_id}" '
-            type == "array" and all(.[]; .workspace_id == $ws and .research_run_id == $run and (.provenance | type == "object"))
+            type == "array" and length > 0 and all(.[]; .workspace_id == $ws and .research_run_id == $run and (.provenance | type == "object"))
           ' "${work}/evidence.json" > /dev/null
 
           echo "9/10 durable research claim"
