@@ -15,7 +15,10 @@ Required staging environment secrets:
 - `QROS_STAGING_SUPABASE_SERVICE_ROLE_KEY`
 - `QROS_RECOVERY_S3_BUCKET`
 - `QROS_RECOVERY_AWS_REGION`
-- standard AWS credentials for the GitHub environment.
+- `QROS_RECOVERY_AWS_ACCESS_KEY_ID`
+- `QROS_RECOVERY_AWS_SECRET_ACCESS_KEY`
+
+The workflow maps the two AWS credential secrets explicitly to the AWS SDK/CLI environment variables `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. The region is mapped to `AWS_DEFAULT_REGION`.
 
 This proves a controlled recovery path only; it does not prove that every production object is independently backed up.
 
