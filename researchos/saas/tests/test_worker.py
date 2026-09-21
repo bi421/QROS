@@ -211,3 +211,24 @@ def test_direct_job_write_rejects_mismatched_workspace():
     other = uuid4()
     with pytest.raises(ValueError, match="workspace does not match tenant"):
         store.create(other, _job(owner))
+
+
+def test_recovered_worker_reuses_idempotent_result_after_lease_loss():
+    now = [datetime(2026, 9, 21, tzinfo=timezone.utc)]
+    store = InMemoryResearchJobStore(clock=lambda: now[0])
+    workspace_id = uuid4()
+    job = store.create(workspace_id, _job(workspace_id, max_attempts=3))
+    result = _result()
+
+    first = store.claim(workspace_id, job.id, "worker-a", 10)
+    first_record = store.record_result(workspace_id, job.id, first.token, result)
+
+    now[0] += timedelta(seconds=11)
+    second = store.claim(workspace_id, job.id, "worker-b", 10)
+    recovered_record = store.record_result(workspace_id, job.id, second.token, result)
+    store.finish(workspace_id, job.id, second.token, ResearchJobStatus.SUCCEEDED)
+
+    assert recovered_record.manifest_sha256 == first_record.manifest_sha256
+    assert store.get_result(workspace_id, job.id) == first_record
+    assert store.get(workspace_id, job.id).status == ResearchJobStatus.SUCCEEDED
+    assert store.get(workspace_id, job.id).attempt_count == 2
