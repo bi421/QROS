@@ -74,7 +74,7 @@ def classify(log: str) -> Classification:
             r"syntaxerror:",
             r"trailing whitespace",
             r"no newline at end of file",
-            r"[efw]d{3}",
+            r"\b[efw]\d{3}\b",
         ),
     )
     contract = _matches(
