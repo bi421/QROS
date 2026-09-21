@@ -605,7 +605,8 @@ def create_app(
                 status_code=503,
                 detail="research evidence persistence unavailable",
             ) from exc
-        report = build_research_report(record, evidence)
+        finding = finding_store.get(tenant.workspace_id, job_id) if finding_store is not None else None
+        report = build_research_report(record, evidence, finding)
         return {
             "schema": report.schema,
             "workspace_id": str(report.workspace_id),
@@ -614,6 +615,7 @@ def create_app(
             "source_dataset_sha256": report.source_dataset_sha256,
             "manifest_sha256": report.manifest_sha256,
             "report_sha256": report.report_sha256,
+            "finding_sha256": report.finding_sha256,
             "markdown": report.markdown,
         }
 

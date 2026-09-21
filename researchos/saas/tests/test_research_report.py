@@ -157,3 +157,45 @@ def test_report_endpoint_fails_closed_without_result_or_evidence_store() -> None
         f"/v1/research-runs/{job.id}/report",
         headers={"Authorization": "Bearer test"},
     ).status_code == 503
+
+
+
+def test_report_includes_governed_finding_lineage_when_present() -> None:
+    context = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
+    jobs = InMemoryResearchJobStore()
+    evidence = InMemoryResearchEvidenceStore()
+    from researchos.saas.finding import ResearchFindingRecord, VALIDATED_STATUS
+    from researchos.saas.finding_api import InMemoryResearchFindingStore
+    findings = InMemoryResearchFindingStore()
+    job = jobs.create(context.workspace_id, _job(context.workspace_id, "f" * 64))
+    record = _result(jobs, context.workspace_id, job)
+    payload = {"finding": "validated outcome", "metrics": {"brier_improvement": 0.1}}
+    finding = ResearchFindingRecord(
+        id=uuid4(), workspace_id=context.workspace_id, research_run_id=job.id,
+        validation_id=uuid4(), result_manifest_sha256=record.manifest_sha256,
+        validation_sha256="a" * 64, claim_id="claim-1", plan_hash="b" * 64,
+        finding_sha256=ResearchFindingRecord.compute_finding_sha256(payload),
+        status=VALIDATED_STATUS, payload=payload,
+    )
+    findings.create(finding)
+    client = TestClient(create_app(
+        auth_provider=StaticAuth(context), job_store=jobs,
+        evidence_store=evidence, finding_store=findings,
+    ))
+    response = client.get(f"/v1/research-runs/{job.id}/report", headers={"Authorization": "Bearer test"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["finding_sha256"] == finding.finding_sha256
+    assert finding.validation_sha256 in body["markdown"]
+    assert finding.finding_sha256 in body["markdown"]
+    assert "Governed finding lineage" in body["markdown"]
+
+
+def test_report_remains_backward_compatible_without_finding() -> None:
+    context = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
+    jobs = InMemoryResearchJobStore()
+    job = jobs.create(context.workspace_id, _job(context.workspace_id, "1" * 64))
+    record = _result(jobs, context.workspace_id, job)
+    report = build_research_report(record, tuple())
+    assert report.finding_sha256 is None
+    assert "Governed finding lineage" not in report.markdown

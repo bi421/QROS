@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from researchos.saas.evidence_api import ResearchEvidenceRecord
+from researchos.saas.finding import ResearchFindingRecord
 from researchos.saas.provenance import ResearchRunResultRecord
 
 
@@ -25,6 +26,7 @@ class ResearchReport:
     manifest_sha256: str
     markdown: str
     report_sha256: str
+    finding_sha256: str | None = None
 
 
 def _line(value: object) -> str:
@@ -34,6 +36,7 @@ def _line(value: object) -> str:
 def render_research_report(
     record: ResearchRunResultRecord,
     evidence: tuple[ResearchEvidenceRecord, ...],
+    finding: ResearchFindingRecord | None = None,
 ) -> str:
     """Render stable Markdown without interpreting or upgrading evidence."""
     lines = [
@@ -72,6 +75,17 @@ def render_research_report(
             )
     else:
         lines.append("- No evidence records were attached to this run.")
+    if finding is not None:
+        lines.extend(["", "## Governed finding lineage", ""])
+        lines.extend([
+            f"- Finding SHA-256: `{_line(finding.finding_sha256)}`",
+            f"- Validation SHA-256: `{_line(finding.validation_sha256)}`",
+            f"- Validation ID: `{_line(finding.validation_id)}`",
+            f"- Claim ID: `{_line(finding.claim_id) if finding.claim_id else 'None'}`",
+            f"- Plan hash: `{_line(finding.plan_hash) if finding.plan_hash else 'None'}`",
+            f"- Status: **{_line(finding.status)}**",
+            f"- Payload: `{_line(finding.payload)}`",
+        ])
     lines.extend(["", "## Failures", ""])
     if record.failures:
         lines.extend(f"- {_line(failure)}" for failure in record.failures)
@@ -94,8 +108,9 @@ def render_research_report(
 def build_research_report(
     record: ResearchRunResultRecord,
     evidence: list[ResearchEvidenceRecord] | tuple[ResearchEvidenceRecord, ...],
+    finding: ResearchFindingRecord | None = None,
 ) -> ResearchReport:
-    markdown = render_research_report(record, tuple(evidence))
+    markdown = render_research_report(record, tuple(evidence), finding)
     report_sha256 = hashlib.sha256(markdown.encode("utf-8")).hexdigest()
     return ResearchReport(
         schema="qros-research-report.v1",
@@ -106,6 +121,7 @@ def build_research_report(
         manifest_sha256=record.manifest_sha256,
         markdown=markdown,
         report_sha256=report_sha256,
+        finding_sha256=finding.finding_sha256 if finding is not None else None,
     )
 
 
