@@ -89,7 +89,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [ ] Experiment/run/result explorer.
 - [ ] Evidence lineage graph view.
 - [ ] Validation/finding/replication status views.
-- [ ] Research report export.
+- [x] Deterministic governed research report export API (Markdown projection with result/evidence lineage hashes).
 - [ ] Audit trail UI.
 
 ## Phase 8 — Billing and commercial controls
@@ -122,7 +122,7 @@ This file is the execution contract for turning QROS into a research-grade multi
 - [ ] Define one narrow customer research problem with a measurable outcome.
 - [ ] Define the minimum dataset/input contract required to answer that problem.
 - [ ] Execute one complete governed research workflow from claim through validated finding.
-- [ ] Produce a human-readable research report from the governed result and evidence lineage.
+- [x] Produce a human-readable research report from the governed result and evidence lineage.
 - [ ] Validate the workflow with at least one external user who was not involved in implementation.
 - [ ] Record concrete user feedback, failure modes, and requested outputs without weakening research-governance rules.
 - [ ] Define a paid pilot offer tied to a specific research deliverable, not infrastructure access alone.
