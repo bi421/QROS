@@ -149,6 +149,8 @@ class UnconfiguredAuthProvider:
 class ResearchCreateRequest(BaseModel):
     dataset_version_id: UUID
     workflow_id: str = Field(default=FROZEN_XAUUSD_M1_WORKFLOW, min_length=1, max_length=128)
+    claim_id: str | None = Field(default=None, min_length=1, max_length=256)
+    plan_hash: str | None = Field(default=None, min_length=64, max_length=64)
 
 
 class PageResponse(BaseModel):
@@ -165,6 +167,8 @@ class ResearchJobResponse(BaseModel):
     dataset_version_id: UUID
     workflow_id: str
     status: ResearchJobStatus
+    claim_id: str | None = None
+    plan_hash: str | None = None
 
 
 class DatasetResponse(BaseModel):
@@ -183,6 +187,8 @@ def _research_job_response(job: ResearchJob) -> ResearchJobResponse:
         dataset_version_id=job.dataset_version_id,
         workflow_id=job.workflow_id,
         status=job.status,
+        claim_id=job.claim_id,
+        plan_hash=job.plan_hash,
     )
 
 
@@ -455,6 +461,8 @@ def create_app(
         fingerprint = request_fingerprint({
             "dataset_version_id": str(request.dataset_version_id),
             "workflow_id": request.workflow_id,
+            "claim_id": request.claim_id,
+            "plan_hash": request.plan_hash,
         })
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         if not policy.allows_monthly_runs(store.count_monthly(tenant.workspace_id)):
