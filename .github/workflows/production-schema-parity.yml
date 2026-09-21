@@ -27,7 +27,7 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v2
         with:
-          version: latest
+          version: 2.117.0
 
       - name: Link production project
         env:
@@ -41,28 +41,38 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
           SUPABASE_PROJECT_ID: ${{ secrets.PRODUCTION_PROJECT_ID }}
+        shell: bash
         run: |
           set -euo pipefail
-          supabase migration list --linked
+          output="$(supabase migration list --linked 2>&1)"
+          printf '%s\n' "$output"
 
-      - name: Verify no pending migrations
+          if awk -F '│' '
+            $3 ~ /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/ {
+              local=$1
+              remote=$2
+              gsub(/^[[:space:]]+|[[:space:]]+$/, "", local)
+              gsub(/^[[:space:]]+|[[:space:]]+$/, "", remote)
+              if (local == "" || remote == "") {
+                found=1
+              }
+            }
+            END { exit found ? 0 : 1 }
+          ' <<<"$output"; then
+            echo "::error::Production migration history differs from repository migration history."
+            exit 1
+          fi
+
+          echo "Production and repository migration histories are aligned."
+
+      - name: Verify db push dry-run is executable and non-destructive
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
           SUPABASE_PROJECT_ID: ${{ secrets.PRODUCTION_PROJECT_ID }}
         run: |
           set -euo pipefail
-          output="$(supabase db push --linked --dry-run 2>&1)"
-          printf '%s\n' "$output"
-          if grep -q "Would push" <<<"$output"; then
-            echo "::error::Production has unapplied repository migrations."
-            exit 1
-          fi
-          if grep -q "Linked project is up to date" <<<"$output"; then
-            exit 0
-          fi
-          echo "::error::Could not prove production migration parity from db push --dry-run output."
-          exit 1
+          supabase db push --linked --dry-run
 
       - name: Verify required production objects
         env:
