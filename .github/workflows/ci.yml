@@ -6,119 +6,61 @@ on:
   pull_request:
     branches: [main, develop]
 
-# Preserve an independent verification result for every main commit.
-# New pushes must not cancel a run already executing for the same branch.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref }}
-  # Cancel stale feature/PR runs so a fix does not leave obsolete CI consuming time.
   cancel-in-progress: ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/feat/') }}
 
 jobs:
-  repository-integrity:
+  integrity:
     name: Repository Integrity Gate
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-      - name: Setup Python 3.12
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Check repository text integrity
-        run: python scripts/check_text_integrity.py
-      - name: Compile Python sources
-        run: python -m compileall -q researchos scripts
-      - name: Validate Supabase migrations
-        run: python scripts/check_migrations.py
+          cache: pip
+      - run: python scripts/check_text_integrity.py
+      - run: python -m compileall -q researchos scripts
+      - run: python scripts/check_migrations.py
 
-  python-primary:
+  test-python:
     name: Python Tests
-    needs: [repository-integrity]
+    needs: [integrity]
     runs-on: ubuntu-24.04
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
-      fail-fast: false
+      fail-fast: true
     steps:
       - uses: actions/checkout@v5
-      - name: Setup Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python -m pip install pytest pytest-cov ruff
-          python -m pip install -e ".[dev,test,saas]"
-      - name: Run ruff
-        run: ruff check .
-      - name: Run pytest
-        run: python -m pytest researchos/tests/ researchos/research_core/tests/ researchos/saas/tests/ -v --tb=short -x --import-mode=importlib
+      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: python -m pip install pytest pytest-cov ruff -e ".[dev,test,saas]"
+      - run: ruff check .
+        if: matrix.python-version == '3.12'
+      - run: python -m pytest researchos/tests/ researchos/research_core/tests/ researchos/saas/tests/ -v --tb=short -x --import-mode=importlib
 
-  quant-engine:
-    name: Quant Engine (C++ / nanobind)
-    needs: [repository-integrity]
+  build-engine:
+    name: Build Quant Engine (nanobind)
+    needs: [integrity]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-      - name: Setup Python 3.12
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build cmake g++
-      - name: Install Python dependencies
-        run: |
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qq ninja-build cmake g++
+      - run: |
           python -m pip install --upgrade pip
           python -m pip install nanobind scikit-build-core pytest
-      - name: Configure C++ Engine
-        run: |
-          cmake -S researchos/engines/quant \
-            -B researchos/engines/quant/build \
-            -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_PYTHON_BINDINGS=ON
-      - name: Build C++ Engine
-        run: cmake --build researchos/engines/quant/build -j
-      - name: Test Python Integration
-        env:
-          PYTHONPATH: researchos/engines/quant/python
-        run: python -m pytest researchos/engines/quant/tests/ -v -x
-
-  container-build:
-    name: Production Container Build
-    needs: [repository-integrity]
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v5
-      - name: Build production image
-        run: docker build --pull -t qros-api:ci .
-
-  health-evidence:
-    name: Health Evidence
-    needs: [repository-integrity, python-primary, quant-engine]
-    if: ${{ needs.repository-integrity.result == 'success' && needs.python-primary.result == 'success' && needs.quant-engine.result == 'success' }}
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v5
-      - name: Setup Python 3.12
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: pip
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build cmake g++
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,test,saas]"
-          python -m pip install nanobind scikit-build-core pytest ruff
-      - name: Build C++ Engine
+      - name: Build engine
         run: |
           cmake -S researchos/engines/quant \
             -B researchos/engines/quant/build \
@@ -126,9 +68,40 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_PYTHON_BINDINGS=ON
           cmake --build researchos/engines/quant/build -j
-      - name: Run health check
+      - name: Test engine integration
         env:
           PYTHONPATH: researchos/engines/quant/python
-        run: |
-          python -m pytest researchos/tests/ researchos/research_core/tests/ -v --tb=short -x
-          ruff check .
+        run: python -m pytest researchos/engines/quant/tests/ -v -x
+
+  build-container:
+    name: Production Container Image
+    needs: [test-python, build-engine]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build image
+        run: docker build -t qros-api:ci .
+
+  test-database:
+    name: Tenant Isolation (pgTAP)
+    needs: [integrity]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: supabase/setup-cli@v2
+        with:
+          version: latest
+      - run: supabase init
+      - run: supabase start
+      - run: supabase test db supabase/tests/tenant_isolation_test.sql
+      - if: always()
+        run: supabase stop
+
+  ci-complete:
+    name: CI Pipeline Complete
+    needs: [test-python, build-engine, build-container, test-database]
+    if: success()
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo "All checks passed"
