@@ -37,7 +37,7 @@ def classify(log: str) -> Classification:
         text,
         (
             r"no jobs",
-            r"jobs:.*\\[\\]",
+            r"jobs:.*\[\]",
             r"total_count:.*0",
             r"workflow.*(?:cancelled|canceled)",
             r"strategy configuration was canceled",
@@ -93,8 +93,8 @@ def classify(log: str) -> Classification:
         (
             r"traceback (most recent call last)",
             r"raise (?:valueerror|typeerror|keyerror|attributeerror)",
-            r"failed in .*.py:d+",
-            r"error in .*.py:d+",
+            r"failed in .*\.py:\d+",
+            r"error in .*\.py:\d+",
         ),
     )
 
