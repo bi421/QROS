@@ -27,7 +27,7 @@ def validate_contract(path: Path) -> list[str]:
 
     text = path.read_text(encoding="utf-8")
     for section in REQUIRED_SECTIONS:
-        if not re.search(rf"(?m)^{re.escape(section)}\\s*$", text):
+        if not re.search(rf"(?m)^{re.escape(section)}\s*$", text):
             errors.append(f"missing required section: {section}")
 
     for match in PLACEHOLDER_RE.finditer(text):
