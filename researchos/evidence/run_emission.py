@@ -84,7 +84,8 @@ def _config_to_dict(config: Any) -> dict[str, Any]:
     to_dict = getattr(config, "to_dict", None)
     if to_dict is None:
         return {}
-    return to_dict()
+    value = to_dict()
+    return value if isinstance(value, dict) else {}
 
 
 def run_payload(
