@@ -56,10 +56,18 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - run: python -m pip install --upgrade pip setuptools wheel
-      - run: python -m pip install pytest pytest-cov ruff -e ".[dev,test,saas]"
+      - run: python -m pip install pytest pytest-cov ruff nanobind scikit-build-core cmake -e ".[dev,test,saas]"
+      - name: Build C++ backend for canonical regression suite
+        if: matrix.python-version == '3.11'
+        run: |
+          cmake -S researchos/engines/quant -B researchos/engines/quant/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_PYTHON_BINDINGS=ON
+          cmake --build researchos/engines/quant/build -j
       - run: ruff check .
         if: matrix.python-version == '3.12'
-      - run: python -m pytest researchos/tests/ researchos/research_core/tests/ researchos/saas/tests/ -v --tb=short -x --import-mode=importlib
+      - name: Test canonical suite
+        env:
+          PYTHONPATH: researchos/engines/quant/python
+        run: python -m pytest researchos/tests/ researchos/research_core/tests/ researchos/saas/tests/ -v --tb=short -x --import-mode=importlib
 
   build-engine:
     name: Build Quant Engine (nanobind)
