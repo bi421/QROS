@@ -62,4 +62,5 @@ class LSTMPredictor:
     def predict(self, X: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
         if self.model is None:
             raise RuntimeError("Model must be built before prediction.")
-        return self.scaler.inverse_transform(self.model.predict(X, verbose=0))
+        predictions: Any = self.model.predict(X, verbose=0)
+        return np.asarray(self.scaler.inverse_transform(predictions), dtype=float)
