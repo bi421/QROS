@@ -1,7 +1,6 @@
-"""
-Dataset Builder — validation.
+"""Dataset Builder — validation.
 
-Functions that validate a ``ResearchDataset`` and raise descriptive
+Functions that validate a ResearchDataset and raise descriptive
 exceptions when the structure is invalid.
 """
 
@@ -12,8 +11,8 @@ import math
 from .dataset_contracts import ResearchDataset
 
 
-def validate_dataset(dataset) -> None:
-    """Run the full validation suite on ``dataset``."""
+def validate_dataset(dataset: ResearchDataset) -> None:
+    """Run the full validation suite on the dataset."""
     if not isinstance(dataset, ResearchDataset):
         raise TypeError(f"expected ResearchDataset, got {type(dataset).__name__}")
     validate_shapes(dataset)
@@ -23,7 +22,7 @@ def validate_dataset(dataset) -> None:
     validate_alignment(dataset)
 
 
-def validate_shapes(dataset) -> None:
+def validate_shapes(dataset: ResearchDataset) -> None:
     """Ensure features, labels and sample_count agree on the row count."""
     if len(dataset.features) != dataset.sample_count:
         raise ValueError(f"features length {len(dataset.features)} != sample_count {dataset.sample_count}")
@@ -31,8 +30,8 @@ def validate_shapes(dataset) -> None:
         raise ValueError(f"labels length {len(dataset.labels)} != sample_count {dataset.sample_count}")
 
 
-def validate_feature_count(dataset) -> None:
-    """Ensure every feature row has exactly ``feature_count`` columns."""
+def validate_feature_count(dataset: ResearchDataset) -> None:
+    """Ensure every feature row has exactly feature_count columns."""
     for idx, row in enumerate(dataset.features):
         if len(row) != dataset.feature_count:
             raise ValueError(f"feature row {idx} has {len(row)} columns, expected {dataset.feature_count}")
@@ -40,8 +39,8 @@ def validate_feature_count(dataset) -> None:
         raise ValueError(f"feature_names length {len(dataset.feature_names)} != feature_count {dataset.feature_count}")
 
 
-def validate_no_none(dataset) -> None:
-    """Ensure no ``None`` values appear in features or labels."""
+def validate_no_none(dataset: ResearchDataset) -> None:
+    """Ensure no None values appear in features or labels."""
     for idx, row in enumerate(dataset.features):
         for col, value in enumerate(row):
             if value is None:
@@ -51,7 +50,7 @@ def validate_no_none(dataset) -> None:
             raise ValueError(f"None label at index {idx}")
 
 
-def validate_no_nan(dataset) -> None:
+def validate_no_nan(dataset: ResearchDataset) -> None:
     """Ensure no NaN values appear in features or labels."""
     for idx, row in enumerate(dataset.features):
         for col, value in enumerate(row):
@@ -62,12 +61,8 @@ def validate_no_nan(dataset) -> None:
             raise ValueError(f"NaN label at index {idx}")
 
 
-def validate_alignment(dataset) -> None:
-    """Ensure feature rows and labels are structurally aligned.
-
-    Alignment means ``features[i]`` corresponds to ``labels[i]``; this is
-    guaranteed structurally when both sequences have the same length.
-    """
+def validate_alignment(dataset: ResearchDataset) -> None:
+    """Ensure feature rows and labels are structurally aligned."""
     if len(dataset.features) != len(dataset.labels):
         raise ValueError(f"alignment violated: {len(dataset.features)} feature rows vs {len(dataset.labels)} labels")
 
