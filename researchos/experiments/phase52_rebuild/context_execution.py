@@ -6,7 +6,6 @@ from typing import Any
 
 from researchos.experiments.phase52.execution import _run_prepared
 from researchos.experiments.phase52.experiment import Phase52Config
-from researchos.experiments.phase52.macro_features import MacroFeatureBuilder
 from researchos.experiments.phase52.prepared import Phase52PreparedData
 
 from .context_pipeline import ContextAwareFeatureBuild
