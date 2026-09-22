@@ -10,18 +10,27 @@ Implements:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Protocol
 
 import numpy as np
 
 
+class _ExplainabilityModel(Protocol):
+    def forward(
+        self,
+        X: np.ndarray,
+        training: bool = False,
+        mc_dropout: bool = False,
+    ) -> np.ndarray: ...
+
+
 def permutation_importance(
-    model: Any,
+    model: _ExplainabilityModel,
     X: np.ndarray,
     y: np.ndarray,
     n_repeats: int = 10,
     rng: np.random.Generator | None = None,
-) -> dict[str, Any]:
+) -> dict[str, np.ndarray | float]:
     """Compute permutation-based feature importance.
 
     Args:
@@ -45,7 +54,7 @@ def permutation_importance(
     importance_std = np.zeros(n_features, dtype=np.float32)
 
     for feat_idx in range(n_features):
-        losses = []
+        losses: list[float] = []
         for _ in range(n_repeats):
             X_permuted = X.copy()
             perm_idx = rng.permutation(X.shape[0])
@@ -64,7 +73,7 @@ def permutation_importance(
 
 
 def integrated_gradients(
-    model: Any,
+    model: _ExplainabilityModel,
     X: np.ndarray,
     baseline: np.ndarray | None = None,
     n_steps: int = 50,
@@ -106,11 +115,11 @@ def integrated_gradients(
 
 
 def monte_carlo_dropout(
-    model: Any,
+    model: _ExplainabilityModel,
     X: np.ndarray,
     n_samples: int = 100,
     rng: np.random.Generator | None = None,
-) -> dict[str, Any]:
+) -> dict[str, np.ndarray]:
     """Monte Carlo dropout for uncertainty quantification.
 
     Args:
@@ -125,7 +134,7 @@ def monte_carlo_dropout(
     if rng is None:
         rng = np.random.default_rng(42)
 
-    preds = []
+    preds: list[np.ndarray] = []
     for _ in range(n_samples):
         pred = model.forward(X, training=False, mc_dropout=True)
         preds.append(pred)
@@ -146,7 +155,7 @@ def monte_carlo_dropout(
 
 
 def prediction_confidence(
-    model: Any,
+    model: _ExplainabilityModel,
     X: np.ndarray,
     n_samples: int = 100,
 ) -> np.ndarray:
