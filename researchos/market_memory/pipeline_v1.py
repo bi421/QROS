@@ -114,7 +114,7 @@ def run_market_memory_pipeline(
     corrected_alpha = bonferroni_alpha(_PIPELINE_ALPHA, hypothesis_count)
     corrected_confidence_level = 1.0 - corrected_alpha
 
-    conditional_results = []
+    conditional_results: list[object] = []
     probability_evidence: dict[str, object] = {}
     for spec in conditions:
         result = compute_conditional_statistics(events, spec, outcome_field="return_1d", bootstrap_seed=seed, dependence_block_size=dependence_block_size)
