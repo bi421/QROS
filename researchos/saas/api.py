@@ -14,6 +14,7 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
+from starlette.types import Receive, Scope, Send
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, PageRequest, ResearchJob, ResearchJobStatus, TenantContext, WorkspaceRole
@@ -85,14 +86,14 @@ def _error_payload(request: Request, status_code: int, detail: object) -> dict[s
 class RequestCorrelationMiddleware(BaseHTTPMiddleware):
     """Attach one bounded correlation ID to every HTTP request and response."""
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(self, request: Request, call_next: object) -> Response:
         supplied = request.headers.get(REQUEST_ID_HEADER, "").strip()
         request_id = supplied[:MAX_REQUEST_ID_LENGTH] if supplied else str(uuid4())
         request_id = "".join(char if ord(char) >= 32 and ord(char) != 127 else "-" for char in request_id)
         request.state.request_id = request_id
         started_at = time.perf_counter()
         try:
-            response = await call_next(request)
+            response = await call_next(request)  # type: ignore[operator]
         except Exception:
             observer = getattr(request.app.state, "observability", None)
             if isinstance(observer, StructuredRequestObserver):
