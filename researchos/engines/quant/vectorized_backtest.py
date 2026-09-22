@@ -1,7 +1,15 @@
+from collections.abc import Sequence
+
 import numpy as np
 
 
-def vectorized_backtest(prices, signals, initial_capital=100000.0, commission=0.001, slippage=0.0005):
+def vectorized_backtest(
+    prices: Sequence[float],
+    signals: Sequence[tuple[str, float]],
+    initial_capital: float = 100000.0,
+    commission: float = 0.001,
+    slippage: float = 0.0005,
+) -> dict[str, float | int]:
     """
     Fully vectorized backtest (no Python loops).
     signals: list of (action, price) tuples
@@ -25,7 +33,7 @@ def vectorized_backtest(prices, signals, initial_capital=100000.0, commission=0.
     np.where(actions == -1)[0]
 
     # Pair them chronologically
-    trades = []
+    trades: list[tuple[str, float, float]] = []
     capital = initial_capital
     entry_price = 0.0
     position = 0.0
@@ -45,7 +53,7 @@ def vectorized_backtest(prices, signals, initial_capital=100000.0, commission=0.
     position = 0.0
     entry_price = 0.0
     trades = []
-    equity = [initial_capital]
+    equity_values: list[float] = [initial_capital]
 
     for action, price in signals:
         if action == "BUY" and position == 0:
@@ -61,7 +69,7 @@ def vectorized_backtest(prices, signals, initial_capital=100000.0, commission=0.
             capital += revenue
             trades.append(("SELL", price, pnl))
             position = 0.0
-        equity.append(capital + position * price)
+        equity_values.append(capital + position * price)
 
     # Close any remaining position at last price
     if position > 0 and len(prices) > 0:
@@ -71,9 +79,9 @@ def vectorized_backtest(prices, signals, initial_capital=100000.0, commission=0.
         capital += revenue
         trades.append(("CLOSE", closing_price, pnl))
         position = 0.0
-        equity.append(capital)
+        equity_values.append(capital)
 
-    equity = np.array(equity)
+    equity = np.array(equity_values)
     returns = np.diff(equity) / equity[:-1]
     total_return = (capital - initial_capital) / initial_capital
 
