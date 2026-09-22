@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from .contracts import Phase52Result
 from .execution import run_prepared_phase52_comparison
 from .experiment import Phase52Config
 from .prepared import Phase52PreparedData
