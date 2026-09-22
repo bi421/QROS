@@ -396,8 +396,8 @@ class SequenceModel:
             pred = self.forward(x, training=False, mc_dropout=True)
             preds.append(pred)
         preds = np.stack(preds)
-        mean = np.mean(preds, axis=0)
-        std = np.std(preds, axis=0)
+        mean = np.mean(preds_array, axis=0)
+        std = np.std(preds_array, axis=0)
         return mean, std
 
 
