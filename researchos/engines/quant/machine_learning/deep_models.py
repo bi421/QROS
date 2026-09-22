@@ -13,7 +13,7 @@ Architecture:
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import Any, Literal, cast
 
 import numpy as np
 
@@ -23,20 +23,20 @@ import numpy as np
 
 
 def sigmoid(x: np.ndarray) -> np.ndarray:
-    return 1.0 / (1.0 + np.exp(-np.clip(x, -500, 500)))
+    return cast(np.ndarray, 1.0 / (1.0 + np.exp(-np.clip(x, -500, 500))))
 
 
 def tanh(x: np.ndarray) -> np.ndarray:
-    return np.tanh(x)
+    return cast(np.ndarray, np.tanh(x))
 
 
 def relu(x: np.ndarray) -> np.ndarray:
-    return np.maximum(0, x)
+    return cast(np.ndarray, np.maximum(0, x))
 
 
 def softmax(x: np.ndarray, axis: int = -1) -> np.ndarray:
     e = np.exp(x - np.max(x, axis=axis, keepdims=True))
-    return e / np.sum(e, axis=axis, keepdims=True)
+    return cast(np.ndarray, e / np.sum(e, axis=axis, keepdims=True))
 
 
 def dropout(x: np.ndarray, rate: float, rng: np.random.Generator, training: bool = True) -> np.ndarray:
@@ -369,7 +369,7 @@ class SequenceModel:
         self.hidden_dim = hidden_dim
 
         if model_type == "lstm":
-            self.backbone = LSTM(input_dim, hidden_dim, self.rng)
+            self.backbone: Any = LSTM(input_dim, hidden_dim, self.rng)
         elif model_type == "gru":
             self.backbone = GRU(input_dim, hidden_dim, self.rng)
         elif model_type == "transformer":
@@ -391,7 +391,7 @@ class SequenceModel:
 
     def predict_with_uncertainty(self, x: np.ndarray, n_samples: int = 100) -> tuple[np.ndarray, np.ndarray]:
         """Monte Carlo dropout for uncertainty quantification."""
-        preds = []
+        preds: list[np.ndarray] = []
         for _ in range(n_samples):
             pred = self.forward(x, training=False, mc_dropout=True)
             preds.append(pred)
@@ -479,7 +479,7 @@ class SimpleTrainer:
             eps = 1e-4
             for p in params:
                 grad = np.zeros_like(p)
-                it = np.nditer(p, flags=["multi_index"], op_flags=["readwrite"])
+                it = np.nditer(p, flags=["multi_index"], op_flags=cast(list[Literal["readwrite"]], ["readwrite"]))
                 while not it.finished:
                     ix = it.multi_index
                     old_val = p[ix]

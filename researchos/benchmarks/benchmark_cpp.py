@@ -82,7 +82,7 @@ def timed(fn: Callable[[], Any], budget: float = _BUDGET_SECONDS) -> float:
     return _time_once(fn)
 
 
-def build_cases(py: PythonQuantBackend, cpp: CppQuantAdapter) -> list[tuple[str, Callable[[Any], Any], Callable[[Any], Any]]]:
+def build_cases(py: PythonQuantBackend, cpp: CppQuantAdapter) -> list[tuple[str, Callable[[list[float]], Any], Callable[[list[float]], Any]]]:
     """Return (name, python_call, cpp_call) pairs for every operation.
 
     Each callable is invoked with a per-size prepared fixture.
