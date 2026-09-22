@@ -127,6 +127,8 @@ def validate_backend_capability(
     ):
         raise ValueError(f"backend permits randomness: {binding.backend}")
     supported = backend_capabilities.get("supported_operations", ())
+    if not isinstance(supported, (list, tuple, set, frozenset)):
+        raise ValueError(f"backend capability supported_operations is invalid: {binding.backend}")
     if binding.operation not in supported:
         raise ValueError(
             f"backend does not support operation {binding.operation}: {binding.backend}"
