@@ -79,7 +79,9 @@ def _resolve_feature_indices(
 
 
 def _evaluate_model(
-    est, val_features, val_labels: Sequence[float]
+    est: EmpiricalProbabilityEstimator | MultivariateEmpiricalProbabilityEstimator,
+    val_features: Sequence[Sequence[float]],
+    val_labels: Sequence[float],
 ) -> tuple[ModelResult, list[int], list[dict[int, float]]]:
     preds: list[int] = []
     probs: list[dict[int, float]] = []
@@ -312,7 +314,7 @@ def run_phase52(
         )
         val_source_indices = source_indices[val_start : val_start + val_size]
         if cfg.estimator_feature is not None:
-            est = EmpiricalProbabilityEstimator(
+            est: EmpiricalProbabilityEstimator | MultivariateEmpiricalProbabilityEstimator = EmpiricalProbabilityEstimator(
                 n_bins=cfg.n_bins, feature_indices=feature_indices
             ).fit(tr_feat, tr_lab)
         else:
@@ -428,8 +430,10 @@ def run_phase52_comparison(
 ) -> dict[str, Phase52Result]:
     """Run all five feature sets with identical data, labels, folds and costs."""
     base = config or Phase52Config()
+    kwargs_without_config = dict(kwargs)
+    kwargs_without_config.pop("config", None)
     return {
-        feature_set: run_phase52(*args, config=replace(base, feature_set=feature_set), **kwargs)
+        feature_set: run_phase52(*args, config=replace(base, feature_set=feature_set), **kwargs_without_config)
         for feature_set in FEATURE_SET_NAMES
     }
 
