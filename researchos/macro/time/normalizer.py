@@ -56,7 +56,7 @@ class TimeNormalizer:
     @staticmethod
     def _require_utc(dt: datetime) -> datetime:
         """Normalize a concrete datetime and preserve a non-optional type."""
-        utc_dt = TimeNormalizer._require_utc(dt)
+        utc_dt = TimeNormalizer.to_utc(dt)
         assert utc_dt is not None
         return utc_dt
 
