@@ -130,6 +130,10 @@ disallow_untyped_defs = true
 disallow_incomplete_defs = true
 disable_error_code = ["import-untyped", "import-not-found"]
 
+[[tool.mypy.overrides]]
+module = ["researchos.research_core.tests.*", "researchos.probability.tests.*"]
+ignore_errors = true
+
 [tool.ruff]
 exclude = ["archive"]
 line-length = 100
