@@ -10,16 +10,16 @@ def vectorized_backtest_with_tpsl(
     stop_loss_pct: float = 0.02,
     take_profit_pct: float = 0.04,
     trailing_stop: bool = True,
-) -> dict:
+) -> dict[str, object]:
     capital = initial_capital
     position = 0.0
     entry_price = 0.0
-    trades = []
-    equity_curve = [capital]
+    trades: list[tuple[str, float, float, float]] = []
+    equity_curve: list[float] = [capital]
 
-    sl_price = None
-    tp_price = None
-    trailing_high = None
+    sl_price: float | None = None
+    tp_price: float | None = None
+    trailing_high: float | None = None
 
     for action, price in signals:
         if action == "BUY" and position == 0:
