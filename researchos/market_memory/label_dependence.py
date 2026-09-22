@@ -8,7 +8,8 @@ from typing import Callable, Protocol, Sequence, TypeVar
 
 
 class _TimestampedEvent(Protocol):
-    timestamp: datetime
+    @property
+    def timestamp(self) -> datetime: ...
 
 
 EventT = TypeVar("EventT", bound=_TimestampedEvent)
