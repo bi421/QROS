@@ -92,7 +92,7 @@ def research_dataset_to_runner_dataset(dataset: ResearchDataset) -> list[dict[st
             }
             for i in range(252)
         ]
-    bars: list[dict] = []
+    bars: list[dict[str, float]] = []
     for row in feature_rows:
         row_values = list(row)
         close = float(row_values[0]) if row_values else 100.0
