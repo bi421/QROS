@@ -134,7 +134,7 @@ disable_error_code = ["import-untyped", "import-not-found"]
 [[tool.mypy.overrides]]
 module = ["researchos.research_core.tests.*", "researchos.probability.tests.*"]
 ignore_errors = true
-\n[[tool.mypy.overrides]]
+[[tool.mypy.overrides]]
 module = [
     "researchos.quant_engine.*",
     "researchos.macro.*",
