@@ -2,19 +2,24 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from collections.abc import Callable, Sequence
 
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
 
 
-def _rolling_apply(values: list[float | None], period: int, fn) -> list[float | None]:
+def _rolling_apply(
+    values: Sequence[float | None],
+    period: int,
+    fn: Callable[[list[float]], float],
+) -> list[float | None]:
     """Apply fn to each trailing window of `period` values. None while the
     window is shorter than `period` or contains a None."""
     n = len(values)
     out: list[float | None] = [None] * n
     for i in range(period - 1, n):
-        window = values[i - period + 1 : i + 1]
+        window = list(values[i - period + 1 : i + 1])
         if any(v is None for v in window):
             continue
         out[i] = fn(window)
@@ -35,7 +40,7 @@ def _pstd(xs: list[float]) -> float:
 # ---------------------------------------------------------------------------
 
 
-def returns(prices) -> list[float | None]:
+def returns(prices: Sequence[float]) -> list[float | None]:
     prices = list(prices)
     out: list[float | None] = [None] * len(prices)
     for i in range(1, len(prices)):
@@ -44,7 +49,7 @@ def returns(prices) -> list[float | None]:
     return out
 
 
-def log_returns(prices) -> list[float | None]:
+def log_returns(prices: Sequence[float]) -> list[float | None]:
     prices = list(prices)
     out: list[float | None] = [None] * len(prices)
     for i in range(1, len(prices)):
@@ -55,7 +60,7 @@ def log_returns(prices) -> list[float | None]:
 
 
 # kept for backward compatibility with earlier callers
-def returns_feature(prices) -> list[float]:
+def returns_feature(prices: Sequence[float]) -> list[float]:
     prices = list(prices)
     if len(prices) < 2:
         return []
@@ -70,17 +75,17 @@ def returns_feature(prices) -> list[float]:
 # ---------------------------------------------------------------------------
 
 
-def rolling_mean(prices, period: int) -> list[float | None]:
+def rolling_mean(prices: Sequence[float], period: int) -> list[float | None]:
     prices = list(prices)
     return _rolling_apply(prices, period, _mean)
 
 
-def rolling_std(prices, period: int) -> list[float | None]:
+def rolling_std(prices: Sequence[float], period: int) -> list[float | None]:
     prices = list(prices)
     return _rolling_apply(prices, period, _pstd)
 
 
-def rolling_volatility(prices, period: int) -> list[float | None]:
+def rolling_volatility(prices: Sequence[float], period: int) -> list[float | None]:
     rets = returns(prices)
     return _rolling_apply(rets, period, _pstd)
 
