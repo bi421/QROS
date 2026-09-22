@@ -4,6 +4,8 @@ import math
 from dataclasses import dataclass
 from collections.abc import Callable, Sequence
 
+import numpy as np
+
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
@@ -500,3 +502,39 @@ class FeatureBuilder:
             n_observations=len(rows),
             labels=labels_out,
         )
+
+
+# Legacy ML-vs-indicators compatibility surface. These adapters delegate to the
+# canonical feature primitives above and keep older research scripts executable.
+def generate_features(
+    *, close: Sequence[float], volumes: Sequence[float], lookback: int = 60
+) -> np.ndarray:
+    if lookback <= 0:
+        raise ValueError("lookback must be positive")
+    if len(close) != len(volumes):
+        raise ValueError("close and volumes must have equal length")
+    feature_set = FeatureBuilder(
+        close=list(close), high=list(close), low=list(close), volume=list(volumes)
+    ).build(drop_na=False)
+    return np.asarray(
+        [[np.nan if value is None else float(value) for value in row] for row in feature_set.data],
+        dtype=float,
+    )
+
+
+def generate_signals_vectorized(prices: Sequence[float], lookback: int = 60) -> np.ndarray:
+    if lookback <= 0:
+        raise ValueError("lookback must be positive")
+    states = trend_state(prices, max(2, lookback // 3), max(3, lookback))
+    return np.asarray([0.0 if state is None else state for state in states], dtype=float)
+
+
+def compute_indicator_metrics(trades: Sequence[dict[str, object]]) -> dict[str, float | int]:
+    pnl = [float(t["pnl_pct"]) for t in trades if isinstance(t.get("pnl_pct"), (int, float))]
+    wins = sum(value > 0.0 for value in pnl)
+    return {
+        "trade_count": len(pnl),
+        "win_rate": (100.0 * wins / len(pnl)) if pnl else 0.0,
+        "total_pnl_pct": sum(pnl),
+        "average_pnl_pct": (sum(pnl) / len(pnl)) if pnl else 0.0,
+    }
