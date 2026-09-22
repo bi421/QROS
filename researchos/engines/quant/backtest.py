@@ -5,6 +5,8 @@ Backtest engine for strategies.
 from dataclasses import dataclass
 from typing import Any, Protocol, Sequence
 
+import numpy as np
+
 
 class _BacktestSignal(Protocol):
     price: float
@@ -13,8 +15,6 @@ class _BacktestSignal(Protocol):
 
 class _BacktestStrategy(Protocol):
     def generate_signals(self, prices: Sequence[float]) -> list[_BacktestSignal]: ...
-
-import numpy as np
 
 
 @dataclass
