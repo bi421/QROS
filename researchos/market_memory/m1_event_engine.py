@@ -74,9 +74,13 @@ def extract_xauusd_m1_sma_crossover_events(
         def preceding_return(days: int) -> float | None:
             target = timestamp - timedelta(days=days)
             j = bisect_right(timestamps, target, hi=i) - 1
-            if j < 0 or closes[j] == 0:
+            if j < 0:
                 return None
-            return (closes[i] - closes[j]) / closes[j]
+            close_now = float(closes[i])
+            close_then = float(closes[j])
+            if close_then == 0.0:
+                return None
+            return (close_now - close_then) / close_then
 
         context = EventContext(
             event_id=event_id,

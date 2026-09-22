@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from researchos.market_memory.conditioning import ConditionSpec, MultipleTestingAudit, compute_conditional_statistics, filter_events
 from researchos.market_memory.event_extractor import extract_sma_crossover_events
-from researchos.market_memory.event_schema import ConditionalResult, EventType, EvidenceStatus, MarketEvent, MarketMemoryReport, ValidationResult
+from researchos.market_memory.event_schema import ConditionalResult, ConditionalResult, EventType, EvidenceStatus, MarketEvent, MarketMemoryReport, ValidationResult
 from researchos.market_memory.evidence import create_evidence_record
 from researchos.market_memory.label_dependence import audit_label_overlap
 from researchos.market_memory.oos_validation import OOSValidationResult, walk_forward_validate
