@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import os
 
+from fastapi import FastAPI
+
 from supabase import create_client
 
 from researchos.saas.api import create_app
@@ -21,7 +23,7 @@ from researchos.saas.billing import SupabaseBillingEventStore
 from researchos.saas.rate_limit import SupabaseRateLimiter
 
 
-def build_production_app():
+def build_production_app() -> FastAPI:
     url = os.environ["SUPABASE_URL"]
     key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
     client = create_client(url, key)
