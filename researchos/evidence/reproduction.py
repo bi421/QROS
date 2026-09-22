@@ -274,6 +274,8 @@ class ReproductionEngine:
         # ---------------------------------------------------------------
         # 5. Extract original result_hash
         # ---------------------------------------------------------------
+        if chain.result is None:
+            raise ReconstructionFailure("Result envelope is None")
         payload = chain.result.payload
         if not isinstance(payload, Mapping):
             raise ReconstructionFailure(f"Result payload is not a mapping: {type(payload).__name__}")
