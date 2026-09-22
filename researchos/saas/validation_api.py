@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Callable, Protocol
 from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
 
 from researchos.saas.validation import ResearchValidationRecord
+from researchos.saas.contracts import TenantContext
 
 
 class ResearchValidationStore(Protocol):
@@ -44,15 +45,15 @@ class ResearchValidationRequest(BaseModel):
 def register_research_validation_routes(
     app: FastAPI,
     *,
-    tenant_dependency,
+    tenant_dependency: Callable[..., TenantContext],
     validation_store: ResearchValidationStore | None,
-    job_store,
+    job_store: object,
 ) -> None:
     @app.post("/v1/research-runs/{job_id}/validation", status_code=status.HTTP_201_CREATED, tags=["research"])
     def create_validation(
         job_id: UUID,
         request: ResearchValidationRequest,
-        tenant=Depends(tenant_dependency),
+        tenant: TenantContext = Depends(tenant_dependency),
     ) -> dict[str, object]:
         if validation_store is None:
             raise HTTPException(status_code=503, detail="research validation persistence is not configured")
@@ -99,7 +100,7 @@ def register_research_validation_routes(
         }
 
     @app.get("/v1/research-runs/{job_id}/validation", tags=["research"])
-    def get_validation(job_id: UUID, tenant=Depends(tenant_dependency)) -> dict[str, object]:
+    def get_validation(job_id: UUID, tenant: TenantContext = Depends(tenant_dependency)) -> dict[str, object]:
         if validation_store is None:
             raise HTTPException(status_code=503, detail="research validation persistence is not configured")
         record = validation_store.get(tenant.workspace_id, job_id)
