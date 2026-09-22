@@ -14,6 +14,7 @@ REQUIRED_FILES = (
     ".github/workflows/staging-performance-gate.yml",
     ".github/workflows/storage-recovery-drill.yml",
     "docs/operations/PRODUCTION_RECOVERY_CONTROLS_V1.md",
+    "scripts/ci/production_schema_parity.sh",
 )
 
 REQUIRED_MARKERS = {
@@ -30,9 +31,7 @@ REQUIRED_MARKERS = {
     ),
     ".github/workflows/production-schema-parity.yml": (
         "workflow_dispatch",
-        "supabase migration list --linked",
-        "supabase db push --linked --dry-run",
-        "relrowsecurity",
+        "scripts/ci/production_schema_parity.sh",
     ),
     ".github/workflows/staging-release-gate.yml": (
         "workflow_dispatch",
@@ -60,6 +59,11 @@ REQUIRED_MARKERS = {
         "RPO/RTO",
         "Release blockers",
         "exact-release smoke",
+    ),
+    "scripts/ci/production_schema_parity.sh": (
+        "supabase migration list --linked",
+        "supabase db push --linked --dry-run",
+        "relrowsecurity",
     ),
 }
 
