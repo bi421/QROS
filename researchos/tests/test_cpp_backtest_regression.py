@@ -199,7 +199,8 @@ def test_sma_20_50_numeric_parity(cpp_engine: CppQuantAdapter):
         if np.isinf(expected):
             assert np.isinf(actual)
         else:
-            expected_value = round(expected, 8) if key == "max_drawdown" else expected\n        assert actual == pytest.approx(expected_value, rel=RTOL, abs=ATOL), key
+            expected_value = round(expected, 8) if key == "max_drawdown" else expected
+        assert actual == pytest.approx(expected_value, rel=RTOL, abs=ATOL), key
 
 
 def test_cpp_returns_match_reference_series(cpp_engine: CppQuantAdapter):
