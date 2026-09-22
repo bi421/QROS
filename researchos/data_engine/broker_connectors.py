@@ -58,7 +58,7 @@ class MT5Connector:
                 print(f"⚠️ MT5 init error: {e}")
 
     def is_available(self) -> bool:
-        return self.initialized
+        return bool(self.initialized)
 
     def fetch_ohlcv(self, symbol: str, timeframe: str, start: datetime, end: datetime) -> pd.DataFrame:
         """
