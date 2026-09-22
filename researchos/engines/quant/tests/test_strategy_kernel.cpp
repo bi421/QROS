@@ -487,7 +487,7 @@ TEST(StrategyKernel, SignalRiskAmountOverride) {
   EXPECT_DOUBLE_EQ(r.trades[0].quantity, 250.0);
 }
 
-TEST(StrategyKernel, SignalQuantityOverridesSizing) {
+TEST(StrategyKernel, SignalQuantityDoesNotOverrideSizing) {
   auto cfg = zero_cost_cfg();
   cfg.trade.sizing = PositionSizing::FixedLot;
   cfg.trade.fixed_lot = 2.0;
@@ -497,22 +497,24 @@ TEST(StrategyKernel, SignalQuantityOverridesSizing) {
       mk(100, 105, 99.5, 104, 1),
   };
   auto r = run_kernel(cfg, bars, {open_sig_qty(0, 7.0)});
-  EXPECT_DOUBLE_EQ(r.trades[0].quantity, 7.0);
-  EXPECT_DOUBLE_EQ(r.trades[0].net_pnl, 14.0);
+  ASSERT_EQ(r.trades.size(), 1u);
+  EXPECT_DOUBLE_EQ(r.trades[0].quantity, 2.0);
+  EXPECT_DOUBLE_EQ(r.trades[0].net_pnl, 4.0);
 }
 
-TEST(StrategyKernel, RiskSizingWithoutStopUsesDefaultQuantity) {
+TEST(StrategyKernel, RiskSizingWithoutStopRejectsEntry) {
   auto cfg = zero_cost_cfg();
   cfg.trade.sizing = PositionSizing::RiskPercent;
   cfg.trade.default_quantity = 4.0;
-  cfg.trade.stop_loss = 0.0; // no stop
+  cfg.trade.stop_loss = 0.0;
   std::vector<OHLCV> bars = {
       mk(100, 100, 100, 100, 0),
       mk(100, 100, 100, 100, 1),
   };
   auto r = run_kernel(cfg, bars, {open_sig(0)});
-  ASSERT_EQ(r.trades.size(), 1u);
-  EXPECT_DOUBLE_EQ(r.trades[0].quantity, 4.0);
+  EXPECT_EQ(r.trades.size(), 0u);
+  EXPECT_EQ(r.signals_opened, 0u);
+  EXPECT_EQ(r.signals_ignored, 1u);
 }
 
 // ── Trailing stop ──────────────────────────────────────────────────────────
