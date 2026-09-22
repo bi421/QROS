@@ -34,7 +34,7 @@ def moving_average(
     if min_periods is None:
         min_periods = window
 
-    result = []
+    result: list[float | None] = []
     for i in range(len(values)):
         if i < window - 1:
             result.append(None)
@@ -197,7 +197,7 @@ def trend_analysis(
         }
 
     # Calculate slope using linear regression
-    x = list(range(len(values)))
+    x = [float(i) for i in range(len(values))]
     reg = linear_regression(x, values)
 
     # Calculate trend strength
