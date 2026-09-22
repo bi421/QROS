@@ -24,12 +24,13 @@ import argparse
 import json
 import os
 import sys
+from typing import Any
 
 from researchos.data_engine.loader import CsvLoader
 from researchos.experiments.phase51 import Phase51Config, run_phase51
 
 
-def _load_candles(csv_path: str, fmt: str, symbol: str, timeframe: str):
+def _load_candles(csv_path: str, fmt: str, symbol: str, timeframe: str) -> tuple[list[float], list[float], list[float], list[float], list[Any]]:
     """Load candles from CSV using the verified CsvLoader."""
     loader = CsvLoader()
     if fmt == "mt5":

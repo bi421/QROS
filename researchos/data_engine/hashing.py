@@ -86,7 +86,10 @@ def compute_record_hash(record: Any) -> str:
         SHA-256 hash string.
     """
     if hasattr(record, "hash"):
-        return record.hash
+        value = getattr(record, "hash")
+        if isinstance(value, str):
+            return value
+        return str(value)
 
     if hasattr(record, "to_dict"):
         return deterministic_hash(record.to_dict())

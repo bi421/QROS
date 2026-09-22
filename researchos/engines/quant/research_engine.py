@@ -285,6 +285,7 @@ class PythonResearchBackend(ResearchComputationInterface, QuantComputationInterf
             yield_curve_metrics,
         )
 
+        output: Any
         if analytics == "macro_statistics":
             output = macro_series_statistics(list(inputs))
         elif analytics == "yield_curve":
@@ -476,8 +477,8 @@ def research_capabilities(backend: Any) -> BackendCapabilities:
     base = default_capabilities(backend)
     return BackendCapabilities(
         backend_name=type(backend).__name__,
-        version=getattr(backend, "get_version", lambda: type(backend).__name__)(),
-        supported_operations=list(RESEARCH_OPERATIONS) + list(base.supported_operations),
+        version=str(getattr(backend, "get_version", lambda: type(backend).__name__)()),
+        supported_operations=tuple(RESEARCH_OPERATIONS) + tuple(base.supported_operations),
         deterministic=base.deterministic,
         stateless=base.stateless,
         no_timestamps=base.no_timestamps,

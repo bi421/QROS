@@ -265,7 +265,7 @@ class SupabaseDatasetStore:
 class SupabaseDatasetStorage:
     """Server-side Supabase Storage adapter for private dataset objects."""
 
-    def __init__(self, supabase_client: object, bucket: str = "qros-datasets") -> None:
+    def __init__(self, supabase_client: Any, bucket: str = "qros-datasets") -> None:
         self._client = supabase_client
         self._bucket = bucket
 

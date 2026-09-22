@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol, Sequence
+from typing import Awaitable, Callable, Protocol, Sequence
 from uuid import UUID, uuid4
 import hashlib
 import hmac
@@ -85,7 +85,7 @@ def _error_payload(request: Request, status_code: int, detail: object) -> dict[s
 class RequestCorrelationMiddleware(BaseHTTPMiddleware):
     """Attach one bounded correlation ID to every HTTP request and response."""
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         supplied = request.headers.get(REQUEST_ID_HEADER, "").strip()
         request_id = supplied[:MAX_REQUEST_ID_LENGTH] if supplied else str(uuid4())
         request_id = "".join(char if ord(char) >= 32 and ord(char) != 127 else "-" for char in request_id)

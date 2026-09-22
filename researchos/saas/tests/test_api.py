@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from io import BytesIO
 from uuid import UUID, uuid4
 import hashlib
@@ -7,6 +9,7 @@ import threading
 
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from starlette.responses import Response
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.api import create_app
@@ -41,7 +44,16 @@ class StaticRateLimiter:
         return self.allowed
 
 
-def _client(workspace_id: UUID | None = None, *, plan: Plan = Plan.PRO, role: WorkspaceRole = WorkspaceRole.RESEARCHER, billing_store=None, billing_secret=None, rate_limiter=None, claim_store=None):
+def _client(
+    workspace_id: UUID | None = None,
+    *,
+    plan: Plan = Plan.PRO,
+    role: WorkspaceRole = WorkspaceRole.RESEARCHER,
+    billing_store: InMemoryBillingEventStore | None = None,
+    billing_secret: str | None = None,
+    rate_limiter: StaticRateLimiter | None = None,
+    claim_store: InMemoryClaimStore | None = None,
+) -> tuple[TestClient, TenantContext, InMemoryDatasetStore, InMemoryDatasetStorage]:
     context = TenantContext(
         user_id=uuid4(),
         workspace_id=workspace_id or uuid4(),
@@ -79,12 +91,12 @@ class InMemoryClaimStore:
     def get(self, workspace_id: UUID, claim_id: str) -> ResearchClaim | None:
         return self.rows.get((workspace_id, claim_id))
 
-    def list(self, workspace_id: UUID, *, limit: int = 100, offset: int = 0):
+    def list(self, workspace_id: UUID, *, limit: int = 100, offset: int = 0) -> tuple[list[ResearchClaim], int]:
         values = [claim for (ws, _), claim in self.rows.items() if ws == workspace_id]
         values.sort(key=lambda claim: claim.id)
         return values[offset:offset + limit], len(values)
 
-def _upload(client: TestClient, name: str, body: bytes):
+def _upload(client: TestClient, name: str, body: bytes) -> Response:
     return client.post(
         "/v1/datasets",
         headers={"Authorization": "Bearer test", "Idempotency-Key": "test-key"},
@@ -689,7 +701,7 @@ def test_governed_research_run_requires_locked_claim_plan_and_persists_binding()
 
 
 
-def test_result_endpoint_exposes_governed_claim_lineage():
+def test_result_endpoint_exposes_governed_claim_lineage() -> None:
     from researchos.research_core.contracts import ResearchArtifact, ResearchResult
     client, context, _, _ = _client()
     uploaded = _upload(client, "lineage-result", b"x")
