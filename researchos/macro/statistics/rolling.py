@@ -65,7 +65,7 @@ def rolling_std(
     if min_periods is None:
         min_periods = window
 
-    result: list[dict[str, float | None]] = []
+    result: list[float | None] = []
     for i in range(len(values)):
         if i < window - 1:
             result.append(None)
@@ -98,7 +98,7 @@ def rolling_variance(
     if min_periods is None:
         min_periods = window
 
-    result: list[float] = []
+    result: list[float | None] = []
     for i in range(len(values)):
         if i < window - 1:
             result.append(None)
@@ -131,7 +131,7 @@ def rolling_zscore(
     if min_periods is None:
         min_periods = window
 
-    result = []
+    result: list[float | None] = []
     for i in range(len(values)):
         if i < window - 1:
             result.append(None)
@@ -171,7 +171,7 @@ def rolling_percentile(
     if min_periods is None:
         min_periods = window
 
-    result = []
+    result: list[float | None] = []
     for i in range(len(values)):
         if i < window - 1:
             result.append(None)
@@ -204,7 +204,7 @@ def rolling_statistics(
     if min_periods is None:
         min_periods = window
 
-    result = []
+    result: list[dict[str, float | None]] = []
     for i in range(len(values)):
         if i < window - 1:
             result.append(
@@ -255,7 +255,7 @@ def expanding_mean(values: list[float]) -> list[float]:
     Returns:
         List of expanding means
     """
-    result = []
+    result: list[float] = []
     for i in range(len(values)):
         result.append(mean(values[: i + 1]))
     return result
@@ -271,7 +271,7 @@ def expanding_std(values: list[float]) -> list[float]:
     Returns:
         List of expanding stds
     """
-    result = []
+    result: list[float] = []
     for i in range(len(values)):
         result.append(std(values[: i + 1]))
     return result
