@@ -4,7 +4,7 @@ import sqlite3
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from researchos.core.base_object import BaseObject
 from researchos.core.identity import deterministic_hash
@@ -57,7 +57,7 @@ BUSY_TIMEOUT_MS = 5000
 MAX_WRITE_RETRIES = 5
 
 
-OBJECT_REGISTRY: dict[str, type] = {
+OBJECT_REGISTRY: dict[str, type[BaseObject]] = {
     "Observation": Observation,
     "MarketState": MarketState,
     "MacroState": MacroState,
@@ -154,7 +154,7 @@ class _TransactionContext:
         self._release_lock()
         raise sqlite3.OperationalError(f"Could not acquire read lock after {MAX_WRITE_RETRIES} retries") from last_exc
 
-    def __exit__(self, exc_type: type | None, exc_val: BaseException | None, exc_tb: object | None) -> bool:
+    def __exit__(self, exc_type: type | None, exc_val: BaseException | None, exc_tb: object | None) -> Literal[False]:
         last_exc: Exception | None = None
         try:
             for attempt in range(MAX_WRITE_RETRIES):
@@ -212,11 +212,11 @@ class ResearchRepository(RepositoryInterface[BaseObject]):
         exc_type: type | None,
         exc_val: BaseException | None,
         exc_tb: object | None,
-    ) -> bool:
+    ) -> Literal[False]:
         self.close()
         return False
 
-    def __del__(self):
+    def __del__(self) -> None:
         """Best-effort cleanup for callers that do not explicitly close."""
         try:
             self.close()
@@ -224,7 +224,7 @@ class ResearchRepository(RepositoryInterface[BaseObject]):
             # Never allow destructor cleanup to raise.
             pass
 
-    def _configure_conn(self, conn: sqlite3.Connection):
+    def _configure_conn(self, conn: sqlite3.Connection) -> None:
         """Apply standard PRAGMAs to a connection."""
         conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
         conn.execute("PRAGMA journal_mode=WAL")
@@ -257,7 +257,8 @@ class ResearchRepository(RepositoryInterface[BaseObject]):
         """Run PRAGMA integrity_check and return the result."""
         cursor = self._get_conn().cursor()
         cursor.execute("PRAGMA integrity_check")
-        result = cursor.fetchone()[0]
+        row = cursor.fetchone()
+        result = str(row[0]) if row else ""
         if result != "ok":
             logger.warning("Database integrity check failed: %s", result)
         return result
@@ -267,7 +268,7 @@ class ResearchRepository(RepositoryInterface[BaseObject]):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _migrate_v1_to_v2(cursor: sqlite3.Cursor):
+    def _migrate_v1_to_v2(cursor: sqlite3.Cursor) -> None:
         """Add reasoning_chain_id and ontology_tags to audit_logs (v1 → v2)."""
         columns = [row[1] for row in cursor.execute("PRAGMA table_info(audit_logs)")]
         if "reasoning_chain_id" not in columns:
@@ -276,7 +277,7 @@ class ResearchRepository(RepositoryInterface[BaseObject]):
             cursor.execute("ALTER TABLE audit_logs ADD COLUMN ontology_tags TEXT DEFAULT '[]'")
 
     @staticmethod
-    def _migrate_v2_to_v3(cursor: sqlite3.Cursor):
+    def _migrate_v2_to_v3(cursor: sqlite3.Cursor) -> None:
         """Create the evidence & lineage tables (Phase 5.3a, v2 → v3).
 
         Additive only: any pre-existing tables are preserved.  The new tables
@@ -323,13 +324,13 @@ class ResearchRepository(RepositoryInterface[BaseObject]):
         row = cursor.fetchone()
         return row[0] if row else 0
 
-    def _set_schema_version(self, cursor: sqlite3.Cursor, version: int):
+    def _set_schema_version(self, cursor: sqlite3.Cursor, version: int) -> None:
         cursor.execute(
             "INSERT OR REPLACE INTO _schema_version (key, version) VALUES (?, ?)",
             (SCHEMA_VERSION_KEY, version),
         )
 
-    def _run_migrations(self):
+    def _run_migrations(self) -> None:
         conn = self._get_conn()
         cursor = conn.cursor()
         current = self._get_schema_version(cursor)
@@ -468,7 +469,8 @@ class ResearchRepository(RepositoryInterface[BaseObject]):
             )
         else:
             cursor.execute("SELECT COUNT(*) FROM objects")
-        return cursor.fetchone()[0]
+        row = cursor.fetchone()
+        return int(row[0]) if row else 0
 
     # ------------------------------------------------------------------
     # Object rehydration (Phase 2 — from_dict support)
@@ -491,6 +493,8 @@ class ResearchRepository(RepositoryInterface[BaseObject]):
         if data is None:
             return None
         object_type = data.get("object_type")
+        if not isinstance(object_type, str):
+            raise ValueError("Stored object is missing a valid object_type")
         cls = OBJECT_REGISTRY.get(object_type)
         if cls is None:
             raise ValueError(f"No registered class for object_type '{object_type}'. Register the class in OBJECT_REGISTRY.")
@@ -608,7 +612,7 @@ class ResearchRepository(RepositoryInterface[BaseObject]):
     # Legacy ResearchCycle storage
     # ------------------------------------------------------------------
 
-    def save_cycle(self, cycle: ResearchCycle):
+    def save_cycle(self, cycle: ResearchCycle) -> None:
         with self._transaction() as cursor:
             cursor.execute(
                 """
@@ -626,7 +630,7 @@ class ResearchRepository(RepositoryInterface[BaseObject]):
         # Also save to objects table for load_object/get discoverability
         self.save_object(cycle)
 
-    def load_cycle(self, cycle_id: str) -> dict | None:
+    def load_cycle(self, cycle_id: str) -> dict[str, Any] | None:
         conn = self._get_conn()
         cursor = conn.cursor()
         cursor.execute("SELECT data FROM cycles WHERE id = ?", (cycle_id,))
@@ -639,7 +643,7 @@ class ResearchRepository(RepositoryInterface[BaseObject]):
     # Audit trail storage
     # ------------------------------------------------------------------
 
-    def save_audit_entry(self, entry: AuditEntry):
+    def save_audit_entry(self, entry: AuditEntry) -> None:
         with self._transaction() as txn:
             txn.execute("SELECT entry_hash FROM audit_logs ORDER BY rowid DESC LIMIT 1")
             row = txn.fetchone()
