@@ -38,13 +38,13 @@ def _compute_sma(prices: list[float], period: int) -> list[float | None]:
     """Compute Simple Moving Average. Returns None for insufficient data."""
     if len(prices) < period:
         return [None] * len(prices)
-    sma = [None] * (period - 1)
+    sma: list[float | None] = [None] * (period - 1)
     for i in range(period - 1, len(prices)):
         sma.append(sum(prices[i - period + 1 : i + 1]) / period)
     return sma
 
 
-def _compute_atr(highs: list[float], lows: list[float], closes: list[float], period: int = 14) -> list[float | None]:
+def _compute_atr(highs: list[float], lows: list[float], closes: list[float], period: int = 14) -> list[float]:
     """Compute Average True Range."""
     if len(closes) < period + 1:
         return [0.0] * len(closes)
@@ -58,14 +58,14 @@ def _compute_atr(highs: list[float], lows: list[float], closes: list[float], per
         )
         trs.append(tr)
 
-    atr = [0.0] * period
+    atr: list[float] = [0.0] * period
     atr.append(sum(trs[1 : period + 1]) / period)
     for i in range(period + 1, len(trs)):
         atr.append((atr[-1] * (period - 1) + trs[i]) / period)
     return atr
 
 
-def _compute_rsi(closes: list[float], period: int = 14) -> list[float | None]:
+def _compute_rsi(closes: list[float], period: int = 14) -> list[float]:
     """Compute Relative Strength Index."""
     if len(closes) < period + 1:
         return [50.0] * len(closes)
@@ -77,7 +77,7 @@ def _compute_rsi(closes: list[float], period: int = 14) -> list[float | None]:
     avg_gain = sum(gains[:period]) / period
     avg_loss = sum(losses[:period]) / period
 
-    rsi = [50.0] * period
+    rsi: list[float] = [50.0] * period
     for i in range(period, len(gains)):
         avg_gain = (avg_gain * (period - 1) + gains[i]) / period
         avg_loss = (avg_loss * (period - 1) + losses[i]) / period
