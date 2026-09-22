@@ -26,6 +26,20 @@ jobs:
       - name: Initialize local Supabase configuration
         run: supabase init
 
+      - name: Isolate local database port
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("supabase/config.toml")
+          text = path.read_text(encoding="utf-8")
+          marker = "port = 54322"
+          if marker not in text:
+              raise SystemExit("Expected generated Supabase db port declaration was not found")
+          path.write_text(text.replace(marker, "port = 54332", 1), encoding="utf-8")
+          PY
+
       - name: Start local Supabase
         run: supabase start
 
