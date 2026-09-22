@@ -1,8 +1,7 @@
-"""
-Advanced Backtest Engine with Risk Management (Stop Loss, Take Profit, Max Hold).
-"""
+"""Advanced Backtest Engine with Risk Management (Stop Loss, Take Profit, Max Hold)."""
 
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -25,13 +24,13 @@ class AdvancedBacktestResult:
 class AdvancedBacktestEngine:
     def __init__(
         self,
-        initial_capital=100000.0,
-        commission=0.001,
-        slippage=0.0005,
-        stop_loss=0.15,  # 15% алдагдалд зогсоох
-        take_profit=0.30,  # 30% ашигт авах
-        max_hold_days=30,  # Хамгийн их 30 хоног барих
-    ):
+        initial_capital: float = 100000.0,
+        commission: float = 0.001,
+        slippage: float = 0.0005,
+        stop_loss: float = 0.15,  # 15% алдагдалд зогсоох
+        take_profit: float = 0.30,  # 30% ашигт авах
+        max_hold_days: int = 30,  # Хамгийн их 30 хоног барих
+    ) -> None:
         self.initial_capital = initial_capital
         self.commission = commission
         self.slippage = slippage
@@ -39,7 +38,7 @@ class AdvancedBacktestEngine:
         self.take_profit = take_profit
         self.max_hold_days = max_hold_days
 
-    def run(self, prices: list[float], strategy) -> AdvancedBacktestResult:
+    def run(self, prices: list[float], strategy: Any) -> AdvancedBacktestResult:
         signals = strategy.generate_signals(prices)
         if not signals:
             return AdvancedBacktestResult(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, [])
@@ -58,36 +57,29 @@ class AdvancedBacktestEngine:
         current_consec = 0
         num_trades = 0
 
-        # Дохиог өдрөөр нь index-дэх dictionary болгох
         signal_map = {sig.day_index: sig for sig in signals}
 
         for day in range(35, len(prices)):
             current_price = prices[day]
 
-            # 1. Хэрэв байршилтай бол гарах нөхцөл шалгах
             if position > 0:
                 force_sell = False
                 sell_reason = ""
 
-                # Stop Loss
                 if current_price <= buy_price * (1 - self.stop_loss):
                     force_sell = True
                     sell_reason = "Stop Loss"
-                # Take Profit
                 elif current_price >= buy_price * (1 + self.take_profit):
                     force_sell = True
                     sell_reason = "Take Profit"
-                # Max Hold Days
                 elif (day - entry_day) >= self.max_hold_days:
                     force_sell = True
                     sell_reason = "Max Hold Days"
-                # Стратегийн SELL дохио
                 elif day in signal_map and signal_map[day].action == "SELL":
                     force_sell = True
                     sell_reason = "Strategy SELL Signal"  # noqa: F841
 
                 if force_sell:
-                    # Гүйлгээ хаах
                     revenue = position * current_price * (1 - self.commission - self.slippage)
                     sell_comm = current_price * self.commission * position
                     sell_slip = current_price * self.slippage * position
@@ -109,7 +101,6 @@ class AdvancedBacktestEngine:
                     position = 0.0
                     num_trades += 1
 
-            # 2. Хэрэв байршилгүй бол стратегийн BUY дохио шалгах
             elif position == 0 and day in signal_map and signal_map[day].action == "BUY":
                 cost_per_share = current_price * (1 + self.commission + self.slippage)
                 if capital >= cost_per_share:
@@ -120,7 +111,6 @@ class AdvancedBacktestEngine:
                     total_commission += current_price * self.commission * position
                     total_slippage += current_price * self.slippage * position
 
-            # 3. Max Drawdown тооцох
             current_value = capital if position == 0 else position * current_price
             if current_value > peak_capital:
                 peak_capital = current_value
@@ -128,7 +118,6 @@ class AdvancedBacktestEngine:
             if drawdown > max_drawdown:
                 max_drawdown = drawdown
 
-        # Эцсийн тооцоо
         final_value = capital if position == 0 else position * prices[-1]
         total_return = (final_value - self.initial_capital) / self.initial_capital
 
