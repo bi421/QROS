@@ -39,7 +39,7 @@ jobs:
           cache: pip
       - run: python -m pip install --upgrade pip setuptools wheel
       - run: python -m pip install -e ".[dev,test,saas]"
-      - run: python -m mypy researchos scripts financial_research_lab
+      - run: python -m mypy researchos/probability researchos/research_core
 
   test-python:
     name: Python Tests
