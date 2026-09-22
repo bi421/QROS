@@ -220,7 +220,7 @@ class ResearchPipeline:
 
         if research_id:
             self.validator.require_exists(research_id, "Research")
-            research = self.repo.get(research_id)
+            research = self._require(research_id, Research)
             if not research.evidence_registry_id:
                 registry = EvidenceRegistry(research_id=research_id)
                 self.repo.save(registry)
@@ -388,7 +388,7 @@ class ResearchPipeline:
 
         self.repo.save(hypothesis)
 
-        research = self.repo.get(research_id)
+        research = self._require(research_id, Research)
         if not research.hypothesis_set_id:
             hs = HypothesisSet(research_id=research_id)
             self.repo.save(hs)
@@ -470,7 +470,7 @@ class ResearchPipeline:
 
         self.repo.save(scenario)
 
-        research = self.repo.get(research_id)
+        research = self._require(research_id, Research)
         if not research.scenario_set_id:
             ss = ScenarioSet(research_id=research_id)
             self.repo.save(ss)
@@ -533,7 +533,7 @@ class ResearchPipeline:
 
         if research_id:
             self.validator.require_exists(research_id, "Research")
-            research = self.repo.get(research_id)
+            research = self._require(research_id, Research)
             if not research.confidence_report_id:
                 cr = ConfidenceReport(research_id=research_id)
                 self.repo.save(cr)
@@ -587,7 +587,7 @@ class ResearchPipeline:
 
         self.repo.save(contradiction)
 
-        research = self.repo.get(research_id)
+        research = self._require(research_id, Research)
         if not research.contradiction_report_id:
             cr = ContradictionReport(research_id=research_id)
             self.repo.save(cr)
@@ -663,7 +663,7 @@ class ResearchPipeline:
 
         self.repo.save(report)
 
-        research = self.repo.get(research_id)
+        research = self._require(research_id, Research)
         research.report_id = report.id
         research.complete()
         self.repo.save(research)
@@ -716,7 +716,7 @@ class ResearchPipeline:
 
         self.repo.save(validation)
 
-        research = self.repo.get(research_id)
+        research = self._require(research_id, Research)
         research.validate()
         self.repo.save(research)
 
