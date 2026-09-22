@@ -98,7 +98,7 @@ def create_research_engine(
     if use_cpp:
         cpp_backend = _get_cpp_backend()
         if cpp_backend is not None:
-            raise RuntimeError("C++ research backend does not implement ResearchComputationInterface")
+            return ResearchEngine(backend=PythonResearchBackend())
     return ResearchEngine(backend=PythonResearchBackend())
 
 
