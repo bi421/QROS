@@ -101,7 +101,7 @@ def register_research_validation_routes(
         }
 
     @app.get("/v1/research-runs/{job_id}/validation", tags=["research"])
-    def get_validation(job_id: UUID, tenant=Depends(tenant_dependency)) -> dict[str, object]:
+    def get_validation(job_id: UUID, tenant: TenantContext = Depends(tenant_dependency)) -> dict[str, object]:
         if validation_store is None:
             raise HTTPException(status_code=503, detail="research validation persistence is not configured")
         record = validation_store.get(tenant.workspace_id, job_id)
