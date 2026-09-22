@@ -104,7 +104,7 @@ async def dashboard():
 
 
 @app.websocket("/ws")
-async def ws_endpoint(websocket: WebSocket):
+async def ws_endpoint(websocket: WebSocket) -> None:
     await websocket.accept()
     try:
         while True:
