@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timezone
+from typing import Callable
 
 from researchos.market_memory.conditioning import ConditionSpec, MultipleTestingAudit, compute_conditional_statistics, filter_events
 from researchos.market_memory.event_extractor import extract_sma_crossover_events
@@ -129,13 +130,15 @@ def run_market_memory_pipeline(
 
     for cr in conditional_results:
         condition = cr.condition_spec
+        matcher: Callable[[MarketEvent], bool] = lambda event, spec=condition: bool(filter_events([event], spec))
+        outcome_getter: Callable[[MarketEvent], float | None] = lambda event: event.outcome.return_1d if event.outcome else None
         train_values = _finite_returns(train_events, condition)
         val_values = _finite_returns(validation_events, condition)
         test_values = _finite_returns(test_events, condition)
         oos = walk_forward_validate(
             events,
-            lambda event, spec=condition: bool(filter_events([event], spec)),
-            lambda event: event.outcome.return_1d if event.outcome else None,
+            matcher,
+            outcome_getter,
             initial_train_size=max(100, min(500, len(events) // 3 or 1)),
             validation_size=max(20, min(100, len(events) // 10 or 1)),
             test_size=max(20, min(100, len(events) // 10 or 1)),
