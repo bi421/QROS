@@ -10,6 +10,22 @@ from researchos.research_core.evidence import EvidenceArtifact, EvidenceKind
 from researchos.research_core.multiple_testing import adjust_p_values
 
 
+class _EdgeEvaluateKwargs(TypedDict, total=False):
+    sample_size: int
+    out_of_sample: bool
+    replicated: bool
+    observed_effect_size: float
+    uncertainty_lower_bound: float | None
+    out_of_sample_evidence_id: str | None
+    replication_evidence_id: str | None
+    out_of_sample_evidence: EvidenceArtifact | None
+    replication_evidence: EvidenceArtifact | None
+    multiple_testing_result: object
+    multiple_testing_hypothesis_index: int
+    calibration_result: CalibrationResult | None
+    economic_cost_context: EconomicCostContext | None
+
+
 DATASET_SHA = "a" * 64
 CONTENT_SHA = "b" * 64
 
@@ -135,7 +151,7 @@ def _strict_edge() -> EdgeDefinition:
     )
 
 
-def _passing_evidence() -> dict[str, object]:
+def _passing_evidence() -> _EdgeEvaluateKwargs:
     return {
         "sample_size": 100,
         "out_of_sample": True,
