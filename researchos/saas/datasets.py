@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from hashlib import sha256
-from typing import BinaryIO, Protocol
+from typing import Any, BinaryIO, Protocol
 from uuid import UUID
 
 
@@ -149,7 +149,7 @@ class InMemoryDatasetStorage:
 class SupabaseDatasetStore:
     """Supabase/Postgres adapter; RLS remains the tenant authorization boundary."""
 
-    def __init__(self, supabase_client: object) -> None:
+    def __init__(self, supabase_client: Any) -> None:
         self._client = supabase_client
 
     @staticmethod
