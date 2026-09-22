@@ -285,7 +285,7 @@ class EconomicCalendar:
         Returns:
             List of occurrence datetimes
         """
-        occurrences = []
+        occurrences: list[datetime] = []
         current = TimeNormalizer.to_utc(from_date)
         end_utc = TimeNormalizer.to_utc(to_date)
 
@@ -325,7 +325,7 @@ class EconomicCalendar:
         Returns:
             (is_valid, list_of_errors)
         """
-        errors = []
+        errors: list[str] = []
 
         # Check for duplicate event IDs
         event_ids = [e.event_id for e in self.events]
