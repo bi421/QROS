@@ -153,7 +153,7 @@ class GRUCell:
         r = sigmoid(x @ self.W_r + h_prev @ self.U_r + self.b_r)
         h_tilde = tanh(x @ self.W_h + (r * h_prev) @ self.U_h + self.b_h)
         h = (1 - z) * h_prev + z * h_tilde
-        return h
+        return cast(np.ndarray, h)
 
 
 class GRU:
@@ -204,7 +204,7 @@ class SelfAttention:
         attn = dropout(attn, 0.1, self.rng, True)
         context = attn @ V
         context = context.transpose(0, 2, 1, 3).reshape(batch_size, seq_len, self.d_model)
-        return context @ self.W_o
+        return cast(np.ndarray, context @ self.W_o)
 
 
 class FeedForward:
@@ -218,7 +218,7 @@ class FeedForward:
     def forward(self, x: np.ndarray, training: bool = True, dropout_rate: float = 0.0) -> np.ndarray:
         x = relu(x @ self.W1 + self.b1)
         x = dropout(x, dropout_rate, self.rng, training)
-        return x @ self.W2 + self.b2
+        return cast(np.ndarray, x @ self.W2 + self.b2)
 
 
 class TransformerBlock:
@@ -234,7 +234,7 @@ class TransformerBlock:
     def _layer_norm(self, x: np.ndarray, gain: np.ndarray, bias: np.ndarray) -> np.ndarray:
         mean = np.mean(x, axis=-1, keepdims=True)
         var = np.var(x, axis=-1, keepdims=True)
-        return gain * (x - mean) / np.sqrt(var + 1e-6) + bias
+        return cast(np.ndarray, gain * (x - mean) / np.sqrt(var + 1e-6) + bias)
 
     def forward(self, x: np.ndarray, training: bool = True, dropout_rate: float = 0.0) -> np.ndarray:
         attn_out = self.attn.forward(x)
@@ -308,7 +308,7 @@ class TCNBlock:
         x = self._layer_norm(x, self.ln2_gain, self.ln2_bias)
         if res.shape[-1] != x.shape[-1]:
             res = res @ xavier_init((res.shape[-1], x.shape[-1]), self.rng)
-        return x + res
+        return cast(np.ndarray, x + res)
 
 
 class TCN:
@@ -328,7 +328,7 @@ class TCN:
             x = block.forward(x, training, dropout_rate)
         mean = np.mean(x, axis=-1, keepdims=True)
         var = np.var(x, axis=-1, keepdims=True)
-        return self.final_gain * (x - mean) / np.sqrt(var + 1e-6) + self.final_bias
+        return cast(np.ndarray, self.final_gain * (x - mean) / np.sqrt(var + 1e-6) + self.final_bias)
 
 
 # ──────────────────────────────────────────────────────────────
@@ -342,7 +342,7 @@ class RegressionHead:
         self.b = np.zeros(output_dim, dtype=np.float32)
 
     def forward(self, x: np.ndarray) -> np.ndarray:
-        return x @ self.W + self.b
+        return cast(np.ndarray, x @ self.W + self.b)
 
 
 class ClassificationHead:
