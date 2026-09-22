@@ -73,7 +73,50 @@ jobs:
         run: |
           set -euo pipefail
           sql=$(printf '%s\n' \
+            'do  \
+            'begin' \
+            "  if to_regclass('public.research_claim') is null then" \
+            "    raise exception 'required object missing: public.research_claim';" \
+            '  end if;' \
+            "  if to_regclass('public.audit_event') is null then" \
+            "    raise exception 'required object missing: public.audit_event';" \
+            '  end if;' \
+            "  if to_regclass('public.retention_deletion_operation') is null then" \
+            "    raise exception 'required object missing: public.retention_deletion_operation';" \
+            '  end if;' \
+            'end' \
+            ')
+          supabase db query --linked "$sql"
+
+      - name: Verify public tenant tables remain RLS protected
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.PRODUCTION_PROJECT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sql=$(printf '%s\n' \
             'do $' \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
++' \
             'begin' \
             "  if to_regclass('public.research_claim') is null then" \
             "    raise exception 'required object missing: public.research_claim';" \
@@ -115,4 +158,693 @@ jobs:
             '  end if;' \
             'end' \
             '$;')
+          supabase db query --linked "$sql"
+ \
+            'begin' \
+            "  if to_regclass('public.research_claim') is null then" \
+            "    raise exception 'required object missing: public.research_claim';" \
+            '  end if;' \
+            "  if to_regclass('public.audit_event') is null then" \
+            "    raise exception 'required object missing: public.audit_event';" \
+            '  end if;' \
+            "  if to_regclass('public.retention_deletion_operation') is null then" \
+            "    raise exception 'required object missing: public.retention_deletion_operation';" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
+
+      - name: Verify public tenant tables remain RLS protected
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.PRODUCTION_PROJECT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sql=$(printf '%s\n' \
+            'do  \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
++' \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
+ \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
++'$;')
+          supabase db query --linked "$sql"
+
+      - name: Verify public tenant tables remain RLS protected
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.PRODUCTION_PROJECT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sql=$(printf '%s\n' \
+            'do $' \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            ')
+          supabase db query --linked "$sql"
++' \
+            'begin' \
+            "  if to_regclass('public.research_claim') is null then" \
+            "    raise exception 'required object missing: public.research_claim';" \
+            '  end if;' \
+            "  if to_regclass('public.audit_event') is null then" \
+            "    raise exception 'required object missing: public.audit_event';" \
+            '  end if;' \
+            "  if to_regclass('public.retention_deletion_operation') is null then" \
+            "    raise exception 'required object missing: public.retention_deletion_operation';" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
+
+      - name: Verify public tenant tables remain RLS protected
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.PRODUCTION_PROJECT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sql=$(printf '%s\n' \
+            'do $' \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
+ \
+            'begin' \
+            "  if to_regclass('public.research_claim') is null then" \
+            "    raise exception 'required object missing: public.research_claim';" \
+            '  end if;' \
+            "  if to_regclass('public.audit_event') is null then" \
+            "    raise exception 'required object missing: public.audit_event';" \
+            '  end if;' \
+            "  if to_regclass('public.retention_deletion_operation') is null then" \
+            "    raise exception 'required object missing: public.retention_deletion_operation';" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
+
+      - name: Verify public tenant tables remain RLS protected
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.PRODUCTION_PROJECT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sql=$(printf '%s\n' \
+            'do  \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
++' \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
+ \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
++'$;')
+          supabase db query --linked "$sql"
++' \
+            'begin' \
+            "  if to_regclass('public.research_claim') is null then" \
+            "    raise exception 'required object missing: public.research_claim';" \
+            '  end if;' \
+            "  if to_regclass('public.audit_event') is null then" \
+            "    raise exception 'required object missing: public.audit_event';" \
+            '  end if;' \
+            "  if to_regclass('public.retention_deletion_operation') is null then" \
+            "    raise exception 'required object missing: public.retention_deletion_operation';" \
+            '  end if;' \
+            'end' \
+            ')
+          supabase db query --linked "$sql"
+
+      - name: Verify public tenant tables remain RLS protected
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.PRODUCTION_PROJECT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sql=$(printf '%s\n' \
+            'do $' \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
+ \
+            'begin' \
+            "  if to_regclass('public.research_claim') is null then" \
+            "    raise exception 'required object missing: public.research_claim';" \
+            '  end if;' \
+            "  if to_regclass('public.audit_event') is null then" \
+            "    raise exception 'required object missing: public.audit_event';" \
+            '  end if;' \
+            "  if to_regclass('public.retention_deletion_operation') is null then" \
+            "    raise exception 'required object missing: public.retention_deletion_operation';" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
+
+      - name: Verify public tenant tables remain RLS protected
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.PRODUCTION_PROJECT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sql=$(printf '%s\n' \
+            'do  \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
++' \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
+ \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
++'$;')
+          supabase db query --linked "$sql"
+
+      - name: Verify public tenant tables remain RLS protected
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.PRODUCTION_PROJECT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sql=$(printf '%s\n' \
+            'do $' \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            ')
+          supabase db query --linked "$sql"
+ \
+            'begin' \
+            "  if to_regclass('public.research_claim') is null then" \
+            "    raise exception 'required object missing: public.research_claim';" \
+            '  end if;' \
+            "  if to_regclass('public.audit_event') is null then" \
+            "    raise exception 'required object missing: public.audit_event';" \
+            '  end if;' \
+            "  if to_regclass('public.retention_deletion_operation') is null then" \
+            "    raise exception 'required object missing: public.retention_deletion_operation';" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
+
+      - name: Verify public tenant tables remain RLS protected
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.PRODUCTION_PROJECT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sql=$(printf '%s\n' \
+            'do  \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
++' \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
+ \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
++'$;')
+          supabase db query --linked "$sql"
+ \
+            'begin' \
+            "  if to_regclass('public.research_claim') is null then" \
+            "    raise exception 'required object missing: public.research_claim';" \
+            '  end if;' \
+            "  if to_regclass('public.audit_event') is null then" \
+            "    raise exception 'required object missing: public.audit_event';" \
+            '  end if;' \
+            "  if to_regclass('public.retention_deletion_operation') is null then" \
+            "    raise exception 'required object missing: public.retention_deletion_operation';" \
+            '  end if;' \
+            'end' \
+            ')
+          supabase db query --linked "$sql"
+
+      - name: Verify public tenant tables remain RLS protected
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.PRODUCTION_PROJECT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sql=$(printf '%s\n' \
+            'do  \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
++' \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
+ \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
++'$;')
+          supabase db query --linked "$sql"
+
+      - name: Verify public tenant tables remain RLS protected
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.PRODUCTION_PROJECT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sql=$(printf '%s\n' \
+            'do  \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            ')
+          supabase db query --linked "$sql"
++' \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
+ \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
++'$;')
+          supabase db query --linked "$sql"
++' \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            ')
+          supabase db query --linked "$sql"
+ \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            '$;')
+          supabase db query --linked "$sql"
++'$;')
+          supabase db query --linked "$sql"
+ \
+            'declare' \
+            '  missing_rls text;' \
+            'begin' \
+            "  select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)" \
+            '    into missing_rls' \
+            '  from pg_class c' \
+            '  join pg_namespace n on n.oid = c.relnamespace' \
+            "  where n.nspname = 'public'" \
+            "    and c.relkind = 'r'" \
+            "    and c.relname in ('workspace','workspace_member','dataset','dataset_version'," \
+            "      'research_run','artifact','evidence','research_claim','audit_event','retention_deletion_operation')" \
+            '    and not c.relrowsecurity;' \
+            '  if missing_rls is not null then' \
+            "    raise exception 'RLS disabled on required tables: %', missing_rls;" \
+            '  end if;' \
+            'end' \
+            ')
+          supabase db query --linked "$sql"
++'$;')
           supabase db query --linked "$sql"
