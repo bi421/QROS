@@ -222,7 +222,7 @@ class EdgeRegistry:
     def get(self, edge_id: str) -> EdgeDefinition:
         return self._definitions[edge_id]
 
-    def evaluate(self, **kwargs: object) -> EdgeRegistrySnapshot:
+    def evaluate(self, **kwargs: Any) -> EdgeRegistrySnapshot:
         decisions = tuple(
             EdgeDecision(
                 definition.edge_id,
