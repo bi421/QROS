@@ -92,7 +92,7 @@ class EventWindowSpec:
         Returns:
             List of TimeWindow objects
         """
-        windows = []
+        windows: list[TimeWindow] = []
         event_utc = TimeNormalizer.to_utc(event_time)
 
         # Generate pre-event windows
@@ -263,7 +263,7 @@ class CalendarEvent:
         Returns:
             (is_valid, list_of_errors)
         """
-        errors = []
+        errors: list[str] = []
 
         # Validate event_id format
         if not self.event_id.startswith("EVT_"):
