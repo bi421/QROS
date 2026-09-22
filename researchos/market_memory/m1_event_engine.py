@@ -57,7 +57,7 @@ def extract_xauusd_m1_sma_crossover_events(
     for i in range(slow_period, len(frame)):
         prev_fast, prev_slow = sma_fast[i - 1], sma_slow[i - 1]
         curr_fast, curr_slow = sma_fast[i], sma_slow[i]
-        if None in (prev_fast, prev_slow, curr_fast, curr_slow):
+        if prev_fast is None or prev_slow is None or curr_fast is None or curr_slow is None:
             continue
 
         if prev_fast <= prev_slow and curr_fast > curr_slow:
