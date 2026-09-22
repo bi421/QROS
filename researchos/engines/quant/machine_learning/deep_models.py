@@ -521,3 +521,59 @@ class SimpleTrainer:
                 p[:] = bp
 
         return {"best_val_loss": best_val_loss}
+
+
+class MLPRegressor:
+    """Small NumPy MLP retained for the legacy ML comparison surface."""
+
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dim: int = 64,
+        output_dim: int = 1,
+        dropout_rate: float = 0.0,
+        random_state: int = 42,
+    ) -> None:
+        if input_dim <= 0 or hidden_dim <= 0 or output_dim <= 0:
+            raise ValueError("MLP dimensions must be positive")
+        self.dropout_rate = dropout_rate
+        rng = np.random.default_rng(random_state)
+        self.W1 = xavier_init((input_dim, hidden_dim), rng)
+        self.b1 = np.zeros(hidden_dim, dtype=np.float32)
+        self.W2 = xavier_init((hidden_dim, output_dim), rng)
+        self.b2 = np.zeros(output_dim, dtype=np.float32)
+
+    def forward(self, X: np.ndarray, training: bool = False) -> np.ndarray:
+        inputs = np.asarray(X, dtype=np.float32)
+        hidden = np.maximum(inputs @ self.W1 + self.b1, 0.0)
+        if training and self.dropout_rate > 0.0:
+            keep = 1.0 - self.dropout_rate
+            hidden = hidden * (np.random.default_rng(0).random(hidden.shape) < keep) / keep
+        return hidden @ self.W2 + self.b2
+
+    def train(self, X: np.ndarray, y: np.ndarray, epochs: int = 50, batch_size: int = 32, learning_rate: float = 1e-3) -> None:
+        inputs = np.asarray(X, dtype=np.float32)
+        targets = np.asarray(y, dtype=np.float32).reshape(-1, 1)
+        if len(inputs) != len(targets):
+            raise ValueError("X and y must have equal sample counts")
+        for _ in range(max(0, epochs)):
+            for start in range(0, len(inputs), max(1, batch_size)):
+                xb = inputs[start : start + max(1, batch_size)]
+                yb = targets[start : start + max(1, batch_size)]
+                z1 = xb @ self.W1 + self.b1
+                h = np.maximum(z1, 0.0)
+                pred = h @ self.W2 + self.b2
+                error = pred - yb
+                scale = 2.0 / max(1, len(xb))
+                grad_w2 = scale * h.T @ error
+                grad_b2 = scale * error.sum(axis=0)
+                grad_h = error @ self.W2.T
+                grad_z1 = grad_h * (z1 > 0.0)
+                grad_w1 = scale * xb.T @ grad_z1
+                grad_b1 = scale * grad_z1.sum(axis=0)
+                self.W2 -= learning_rate * grad_w2
+                self.b2 -= learning_rate * grad_b2
+                self.W1 -= learning_rate * grad_w1
+                self.b1 -= learning_rate * grad_b1
+
+    fit = train
