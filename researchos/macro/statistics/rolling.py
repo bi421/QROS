@@ -32,7 +32,7 @@ def rolling_mean(
     if min_periods is None:
         min_periods = window
 
-    result = []
+    result: list[float | None] = []
     for i in range(len(values)):
         if i < window - 1:
             result.append(None)
@@ -65,7 +65,7 @@ def rolling_std(
     if min_periods is None:
         min_periods = window
 
-    result = []
+    result: list[dict[str, float | None]] = []
     for i in range(len(values)):
         if i < window - 1:
             result.append(None)
@@ -98,7 +98,7 @@ def rolling_variance(
     if min_periods is None:
         min_periods = window
 
-    result = []
+    result: list[float] = []
     for i in range(len(values)):
         if i < window - 1:
             result.append(None)
