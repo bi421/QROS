@@ -2,9 +2,9 @@ name: Mypy Production Source Diagnostic v8
 
 on:
   workflow_dispatch:
-  push:
+  pull_request:
     branches:
-      - chore/mypy-current-source-diagnostic-v8
+      - main
 
 jobs:
   mypy-production-diagnostic:
