@@ -91,7 +91,7 @@ class TimeNormalizer:
         if dt is None:
             return None
 
-        utc_dt = TimeNormalizer.to_utc(dt)
+        utc_dt = TimeNormalizer._require_utc(dt)
 
         # Round down to nearest minute
         return utc_dt.replace(second=0, microsecond=0)
@@ -109,7 +109,7 @@ class TimeNormalizer:
         if dt is None:
             return None
 
-        utc_dt = TimeNormalizer.to_utc(dt)
+        utc_dt = TimeNormalizer._require_utc(dt)
 
         # Round down to nearest hour
         return utc_dt.replace(minute=0, second=0, microsecond=0)
@@ -127,7 +127,7 @@ class TimeNormalizer:
         if dt is None:
             return None
 
-        utc_dt = TimeNormalizer.to_utc(dt)
+        utc_dt = TimeNormalizer._require_utc(dt)
 
         # Round down to start of day
         return utc_dt.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -170,7 +170,7 @@ class TimeNormalizer:
         Returns:
             New datetime with hours added
         """
-        utc_dt = TimeNormalizer.to_utc(dt)
+        utc_dt = TimeNormalizer._require_utc(dt)
         return utc_dt + timedelta(hours=hours)
 
     @staticmethod
@@ -181,7 +181,7 @@ class TimeNormalizer:
         Returns:
             New datetime with days added
         """
-        utc_dt = TimeNormalizer.to_utc(dt)
+        utc_dt = TimeNormalizer._require_utc(dt)
         return utc_dt + timedelta(days=days)
 
     @staticmethod
@@ -196,7 +196,7 @@ class TimeNormalizer:
         Returns:
             (business_start, business_end) in UTC
         """
-        utc_dt = TimeNormalizer.to_utc(dt)
+        utc_dt = TimeNormalizer._require_utc(dt)
 
         # Get start of business day
         business_start = utc_dt.replace(hour=start_hour, minute=0, second=0, microsecond=0)
@@ -220,7 +220,7 @@ class TimeNormalizer:
         - Not a holiday
         - During trading hours
         """
-        utc_dt = TimeNormalizer.to_utc(dt)
+        utc_dt = TimeNormalizer._require_utc(dt)
 
         # Check if weekend (5=Saturday, 6=Sunday)
         if utc_dt.weekday() >= 5:
@@ -239,7 +239,7 @@ class TimeNormalizer:
         Returns:
             Next trading day at 00:00 UTC
         """
-        utc_dt = TimeNormalizer.to_utc(dt)
+        utc_dt = TimeNormalizer._require_utc(dt)
 
         # Start from next day
         next_day = utc_dt + timedelta(days=1)
@@ -259,7 +259,7 @@ class TimeNormalizer:
         Returns:
             Previous trading day at 00:00 UTC
         """
-        utc_dt = TimeNormalizer.to_utc(dt)
+        utc_dt = TimeNormalizer._require_utc(dt)
 
         # Start from previous day
         prev_day = utc_dt - timedelta(days=1)
@@ -316,7 +316,7 @@ class TimeNormalizer:
         - No timezone abbreviation
         - Consistent across runs
         """
-        utc_dt = TimeNormalizer.to_utc(dt)
+        utc_dt = TimeNormalizer._require_utc(dt)
         return utc_dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
 
     @staticmethod
@@ -334,4 +334,4 @@ class TimeNormalizer:
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=UTC)
 
-        return TimeNormalizer.to_utc(dt)
+        return TimeNormalizer._require_utc(dt)
