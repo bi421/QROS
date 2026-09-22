@@ -5,9 +5,16 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Callable, Sequence
+from typing import Callable, Protocol, Sequence, TypeVar
 
 from researchos.market_memory.statistical_evidence import wilson_proportion_ci
+
+
+class _TimestampedEvent(Protocol):
+    timestamp: datetime
+
+
+EventT = TypeVar("EventT", bound=_TimestampedEvent)
 
 
 @dataclass(frozen=True)
@@ -46,10 +53,10 @@ class OOSValidationResult:
 
 
 def assert_label_boundaries(
-    train_events: Sequence[object],
-    validation_events: Sequence[object],
-    test_events: Sequence[object],
-    label_end_getter: Callable[[object], datetime | None],
+    train_events: Sequence[EventT],
+    validation_events: Sequence[EventT],
+    test_events: Sequence[EventT],
+    label_end_getter: Callable[[EventT], datetime | None],
 ) -> None:
     """Fail closed unless realized label windows stay inside their partition."""
     if not train_events or not validation_events or not test_events:
@@ -72,9 +79,9 @@ def assert_label_boundaries(
 
 
 def walk_forward_validate(
-    events: Sequence[object],
-    matcher: Callable[[object], bool],
-    outcome_getter: Callable[[object], float | None],
+    events: Sequence[EventT],
+    matcher: Callable[[EventT], bool],
+    outcome_getter: Callable[[EventT], float | None],
     *,
     initial_train_size: int = 100,
     validation_size: int = 50,
@@ -85,8 +92,8 @@ def walk_forward_validate(
     purge_days: int = 0,
     embargo_days: int = 0,
     max_outcome_horizon_days: int | None = None,
-    label_end_getter: Callable[[object], datetime | None] | None = None,
-    fit_callback: Callable[[Sequence[object]], Callable[[object], bool]] | None = None,
+    label_end_getter: Callable[[EventT], datetime | None] | None = None,
+    fit_callback: Callable[[Sequence[EventT]], Callable[[EventT], bool]] | None = None,
 ) -> OOSValidationResult:
     """Evaluate a condition with chronological, purged walk-forward folds.
 
@@ -195,7 +202,7 @@ def walk_forward_validate(
     )
 
 
-def _matched_values(events: Sequence[object], matcher: Callable[[object], bool], getter: Callable[[object], float | None]) -> list[float]:
+def _matched_values(events: Sequence[EventT], matcher: Callable[[EventT], bool], getter: Callable[[EventT], float | None]) -> list[float]:
     values: list[float] = []
     for event in events:
         if matcher(event):
