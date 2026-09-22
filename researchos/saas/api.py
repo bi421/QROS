@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, Sequence
 from uuid import UUID, uuid4
 import hashlib
 import hmac
@@ -156,7 +156,7 @@ class ResearchCreateRequest(BaseModel):
 
 
 class PageResponse(BaseModel):
-    items: list[object]
+    items: Sequence[object]
     total: int
     limit: int
     offset: int
