@@ -167,6 +167,8 @@ class GoldFactorModel:
         """
         if not self._is_fitted:
             raise RuntimeError("Model not fitted. Call fit() first.")
+        if self.coefficients is None:
+            raise RuntimeError("Model coefficients are unavailable.")
 
         # Add intercept column
         X_with_intercept = pd.concat(
@@ -215,6 +217,8 @@ class GoldFactorModel:
         """
         if not self._is_fitted:
             raise RuntimeError("Model not fitted. Call fit() first.")
+        if self.coefficients is None or self.residuals is None or self.factor_returns is None or self.r_squared is None:
+            raise RuntimeError("Fitted model state is incomplete.")
 
         # Compute t-statistics for coefficients
         n = len(self.residuals)
@@ -247,7 +251,7 @@ class GoldFactorModel:
             "factor_correlations": corr_matrix.tolist(),
         }
 
-    def plot_diagnostic(self, save_path: Optional[str] = None):
+    def plot_diagnostic(self, save_path: Optional[str] = None) -> None:
         """
         Create diagnostic plots for the model.
 
