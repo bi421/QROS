@@ -6,7 +6,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Sequence
+from typing import Any, Sequence
 
 from researchos.probability.calibration import CalibrationResult
 from researchos.probability.economic_cost import EconomicCostContext
