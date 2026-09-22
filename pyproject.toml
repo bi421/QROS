@@ -142,7 +142,7 @@ ignore = ["E501"]
 [tool.ruff.lint.per-file-ignores]
 "scripts/**" = ["E402"]
 "src/**" = ["E402"]
-"researchos/tests/**"] = ["E402"]
+"researchos/tests/**" = ["E402"]
 
 [tool.ruff.format]
 quote-style = "double"
