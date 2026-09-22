@@ -96,6 +96,10 @@ def run_production_quant_backend_audit(
                 )
 
     statistics = dict(statistics_result.output)
+    mean_value = statistics.get("mean", 0.0)
+    stddev_value = statistics.get("stddev", statistics.get("std", 0.0))
+    if mean_value is None or stddev_value is None:
+        raise RuntimeError("Production statistics backend returned incomplete numeric metadata")
     return ProductionQuantBackendAudit(
         returns={
             **returns_metadata,
@@ -104,8 +108,8 @@ def run_production_quant_backend_audit(
         statistics={
             **statistics_metadata,
             "count": int(statistics.get("count", len(returns_result.output))),
-            "mean": float(statistics.get("mean", 0.0)),
-            "stddev": float(statistics.get("stddev", statistics.get("std", 0.0))),
+            "mean": float(mean_value),
+            "stddev": float(stddev_value),
         },
     )
 
