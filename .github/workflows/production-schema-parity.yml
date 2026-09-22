@@ -87,7 +87,7 @@ jobs:
           end
           $$;
           SQL
-)
+          )
           supabase db query --linked "$sql"
 
       - name: Verify public tenant tables remain RLS protected
@@ -121,5 +121,5 @@ jobs:
           end
           $$;
           SQL
-)
+          )
           supabase db query --linked "$sql"
