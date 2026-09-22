@@ -130,8 +130,11 @@ def run_market_memory_pipeline(
 
     for cr in conditional_results:
         condition = cr.condition_spec
-        matcher: Callable[[MarketEvent], bool] = lambda event, spec=condition: bool(filter_events([event], spec))
-        outcome_getter: Callable[[MarketEvent], float | None] = lambda event: event.outcome.return_1d if event.outcome else None
+        def matcher(event: MarketEvent, spec: object = condition) -> bool:
+            return bool(filter_events([event], spec))
+
+        def outcome_getter(event: MarketEvent) -> float | None:
+            return event.outcome.return_1d if event.outcome else None
         train_values = _finite_returns(train_events, condition)
         val_values = _finite_returns(validation_events, condition)
         test_values = _finite_returns(test_events, condition)
