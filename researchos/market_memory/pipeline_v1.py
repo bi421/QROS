@@ -1,10 +1,9 @@
-"""Market Memory Pipeline — end-to-end market memory research pipeline."""
+""""Market Memory Pipeline — end-to-end market memory research pipeline."""
 
 from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timezone
-from typing import Callable
 
 from researchos.market_memory.conditioning import ConditionSpec, MultipleTestingAudit, compute_conditional_statistics, filter_events
 from researchos.market_memory.event_extractor import extract_sma_crossover_events
