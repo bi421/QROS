@@ -6,7 +6,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Sequence
+from typing import Any, Sequence
 
 from researchos.probability.calibration import CalibrationResult
 from researchos.probability.economic_cost import EconomicCostContext
@@ -222,7 +222,7 @@ class EdgeRegistry:
     def get(self, edge_id: str) -> EdgeDefinition:
         return self._definitions[edge_id]
 
-    def evaluate(self, **kwargs: object) -> EdgeRegistrySnapshot:
+    def evaluate(self, **kwargs: Any) -> EdgeRegistrySnapshot:
         decisions = tuple(
             EdgeDecision(
                 definition.edge_id,

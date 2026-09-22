@@ -121,7 +121,7 @@ class ProbabilityAnalysis:
         return {
             "analysis_id": self.analysis_id,
             "claim_id": self.claim_id,
-            "method": self.method.value,
+            "method": ProbabilityMethod(self.method).value,
             "population_definition": self.population_definition,
             "time_window": self.time_window,
             "data_version": self.data_version,
