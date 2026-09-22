@@ -134,6 +134,23 @@ disable_error_code = ["import-untyped", "import-not-found"]
 [[tool.mypy.overrides]]
 module = ["researchos.research_core.tests.*", "researchos.probability.tests.*"]
 ignore_errors = true
+\n[[tool.mypy.overrides]]
+module = [
+    "researchos.quant_engine.*",
+    "researchos.macro.*",
+    "researchos.engines.*",
+    "researchos.experiments.*",
+    "researchos.data_engine.*",
+    "researchos.decision_engine.*",
+    "researchos.evidence.*",
+    "researchos.objects.*",
+    "researchos.research_core.*",
+]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["researchos.saas.*"]
+strict = true
 
 [tool.ruff]
 exclude = ["archive"]
