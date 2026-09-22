@@ -41,12 +41,15 @@ class ResearchInput:
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> ResearchInput:
+        raw_dataset = data["dataset"]
+        if not isinstance(raw_dataset, dict):
+            raise TypeError("dataset must be a mapping")
         return cls(
             schema_version=str(data["schema_version"]),
             research_id=str(data["research_id"]),
             question=str(data["question"]),
             methodology_version=str(data["methodology_version"]),
-            dataset=ValidatedDatasetRef.from_dict(dict(data["dataset"])),
+            dataset=ValidatedDatasetRef.from_dict(raw_dataset),
         )
 
 
