@@ -129,7 +129,7 @@ jobs:
           test "$(jq -er '.is_plan_locked' "${work}/plan-lock.json")" = "true"
 
           echo "6/13 enqueue research run"
-          run_payload="$(jq -nc --arg dataset_version_id "${version_id}" --arg workflow_id "xauusd_m1_frozen_research_v1" '{dataset_version_id:$dataset_version_id,workflow_id:$workflow_id,claim_id:$claim_id,plan_hash:$plan_hash}')"
+          run_payload="$(jq -nc --arg dataset_version_id "${version_id}" --arg workflow_id "xauusd_m1_frozen_research_v1" --arg claim_id "${claim_id}" --arg plan_hash "${plan_hash}" '{dataset_version_id:$dataset_version_id,workflow_id:$workflow_id,claim_id:$claim_id,plan_hash:$plan_hash}')"
           run_status="$(call POST "${base}/v1/research-runs" "${work}/run.json" \
             -H 'Content-Type: application/json' \
             -H "Idempotency-Key: qros-staging-golden-${GITHUB_RUN_ID}" \
