@@ -75,7 +75,9 @@ def _wilder_rma(values: list[float], period: int) -> list[float | None]:
             # First RMA = simple mean of first `period` values.
             prev = sum(values[:period]) / period
         elif i >= period:
-            prev = alpha * v + (1.0 - alpha) * prev  # type: ignore[arg-type]
+            if prev is None:
+                raise RuntimeError("Wilder RMA state missing after warm-up")
+            prev = alpha * v + (1.0 - alpha) * prev
         if i >= period - 1:
             out[i] = prev
     return out
@@ -344,9 +346,11 @@ def keltner_channel(
     upper: list[float | None] = [None] * length
     lower: list[float | None] = [None] * length
     for i in range(length):
-        if middle[i] is not None and atr_vals[i] is not None:
-            upper[i] = middle[i] + multiplier * atr_vals[i]
-            lower[i] = middle[i] - multiplier * atr_vals[i]
+        middle_value = middle[i]
+        atr_value = atr_vals[i]
+        if middle_value is not None and atr_value is not None:
+            upper[i] = middle_value + multiplier * atr_value
+            lower[i] = middle_value - multiplier * atr_value
     return {"upper": upper, "middle": middle, "lower": lower}
 
 
@@ -383,12 +387,15 @@ def obv(bars: Bars) -> list[float | None]:
         return out
     out[0] = bars.volume[0]
     for i in range(1, length):
+        previous = out[i - 1]
+        if previous is None:
+            raise RuntimeError("OBV state missing after initialization")
         if bars.close[i] > bars.close[i - 1]:
-            out[i] = out[i - 1] + bars.volume[i]
+            out[i] = previous + bars.volume[i]
         elif bars.close[i] < bars.close[i - 1]:
-            out[i] = out[i - 1] - bars.volume[i]
+            out[i] = previous - bars.volume[i]
         else:
-            out[i] = out[i - 1]
+            out[i] = previous
     return out
 
 
@@ -527,13 +534,15 @@ def dmi(bars: Bars, period: int = 14) -> dict[str, list[float | None]]:
             plus_di[i] = 0.0
             minus_di[i] = 0.0
             continue
-        plus_di[i] = 100.0 * p / t
-        minus_di[i] = 100.0 * m / t
-        s = plus_di[i] + minus_di[i]
+        plus_value = 100.0 * p / t
+        minus_value = 100.0 * m / t
+        plus_di[i] = plus_value
+        minus_di[i] = minus_value
+        s = plus_value + minus_value
         if s == 0:
             dx[i] = 0.0
         else:
-            dx[i] = 100.0 * abs(plus_di[i] - minus_di[i]) / s
+            dx[i] = 100.0 * abs(plus_value - minus_value) / s
 
     dx_vals = [v for v in dx if v is not None]
     adx_raw = _wilder_rma(dx_vals, period)
@@ -549,8 +558,9 @@ def dmi(bars: Bars, period: int = 14) -> dict[str, list[float | None]]:
     for i in range(length):
         if adx[i] is not None:
             prev = adx[i - period] if i - period >= 0 else None
-            if prev is not None:
-                adxr[i] = (adx[i] + prev) / 2.0
+            adx_value = adx[i]
+            if prev is not None and adx_value is not None:
+                adxr[i] = (adx_value + prev) / 2.0
 
     return {"+di": plus_di, "-di": minus_di, "adx": adx, "adxr": adxr}
 
@@ -577,8 +587,10 @@ def macd(
 
     macd_line: list[float | None] = [None] * length
     for i in range(length):
-        if ema_fast[i] is not None and ema_slow[i] is not None:
-            macd_line[i] = ema_fast[i] - ema_slow[i]
+        fast_value = ema_fast[i]
+        slow_value = ema_slow[i]
+        if fast_value is not None and slow_value is not None:
+            macd_line[i] = fast_value - slow_value
 
     macd_vals = [v for v in macd_line if v is not None]
     signal_raw = _ema(macd_vals, signal)
@@ -592,8 +604,10 @@ def macd(
 
     histogram: list[float | None] = [None] * length
     for i in range(length):
-        if macd_line[i] is not None and signal_line[i] is not None:
-            histogram[i] = macd_line[i] - signal_line[i]
+        macd_value = macd_line[i]
+        signal_value = signal_line[i]
+        if macd_value is not None and signal_value is not None:
+            histogram[i] = macd_value - signal_value
 
     return {
         "macd": macd_line,
