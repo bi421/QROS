@@ -14,7 +14,7 @@ from researchos.market_memory.oos_validation import OOSValidationResult, walk_fo
 from researchos.market_memory.outcome_engine import compute_forward_outcomes
 from researchos.market_memory.production_gate import check_production_evidence_readiness
 from researchos.market_memory.self_audit import run_self_audit
-from researchos.market_memory.statistical_evidence import bonferroni_alpha, wilson_proportion_ci
+from researchos.market_memory.statistical_evidence import ProportionEvidence, bonferroni_alpha, wilson_proportion_ci
 from researchos.market_memory.temporal_validation import chronological_split, check_temporal_integrity
 
 
@@ -115,7 +115,7 @@ def run_market_memory_pipeline(
     corrected_confidence_level = 1.0 - corrected_alpha
 
     conditional_results: list[ConditionalResult] = []
-    probability_evidence: dict[str, object] = {}
+    probability_evidence: dict[str, ProportionEvidence] = {}
     for spec in conditions:
         result = compute_conditional_statistics(events, spec, outcome_field="return_1d", bootstrap_seed=seed, dependence_block_size=dependence_block_size)
         conditional_results.append(result)
