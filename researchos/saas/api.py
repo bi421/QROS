@@ -9,7 +9,7 @@ import hmac
 import json
 import time
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -156,7 +156,7 @@ class ResearchCreateRequest(BaseModel):
 
 
 class PageResponse(BaseModel):
-    items: Sequence[object]
+    items: list[dict[str, object]]
     total: int
     limit: int
     offset: int
@@ -549,7 +549,9 @@ def create_app(
             status=status_filter,
             workflow_id=workflow_id,
         )
-        items = [_research_job_response(job).model_dump(mode="json") for job in jobs]
+        items: list[dict[str, object]] = [
+            _research_job_response(job).model_dump(mode="json") for job in jobs
+        ]
         return PageResponse(
             items=items,
             total=total,
@@ -626,11 +628,13 @@ def create_app(
             raise HTTPException(status_code=404, detail="research run not found")
         return _research_job_response(job)
 
+    claim_router = APIRouter()
     register_research_claim_routes(
-        app,
+        claim_router,
         tenant_dependency=current_tenant,
         claim_store=claim_store,
     )
+    app.include_router(claim_router)
 
     register_research_evidence_routes(
         app,
