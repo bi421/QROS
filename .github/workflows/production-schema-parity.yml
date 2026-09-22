@@ -73,20 +73,20 @@ jobs:
         run: |
           set -euo pipefail
           sql=$(cat <<'SQL'
-do $$
-begin
-  if to_regclass('public.research_claim') is null then
-    raise exception 'required object missing: public.research_claim';
-  end if;
-  if to_regclass('public.audit_event') is null then
-    raise exception 'required object missing: public.audit_event';
-  end if;
-  if to_regclass('public.retention_deletion_operation') is null then
-    raise exception 'required object missing: public.retention_deletion_operation';
-  end if;
+          do $$
+          begin
+            if to_regclass('public.research_claim') is null then
+              raise exception 'required object missing: public.research_claim';
+            end if;
+            if to_regclass('public.audit_event') is null then
+              raise exception 'required object missing: public.audit_event';
+            end if;
+            if to_regclass('public.retention_deletion_operation') is null then
+              raise exception 'required object missing: public.retention_deletion_operation';
+            end if;
 end
-$$;
-SQL
+          $$;
+          SQL
 )
           supabase db query --linked "$sql"
 
@@ -99,10 +99,10 @@ SQL
         run: |
           set -euo pipefail
           sql=$(cat <<'SQL'
-do $$
+          do $$
 declare
   missing_rls text;
-begin
+          begin
   select string_agg(format('%I.%I', n.nspname, c.relname), ', ' order by c.relname)
     into missing_rls
   from pg_class c
@@ -116,10 +116,10 @@ begin
     )
     and not c.relrowsecurity;
   if missing_rls is not null then
-    raise exception 'RLS disabled on required tables: %', missing_rls;
-  end if;
+              raise exception 'RLS disabled on required tables: %', missing_rls;
+            end if;
 end
-$$;
-SQL
+          $$;
+          SQL
 )
           supabase db query --linked "$sql"
