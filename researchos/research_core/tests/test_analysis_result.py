@@ -1,9 +1,27 @@
 from __future__ import annotations
 
+from typing import Any, TypedDict
+
 import pytest
 
 from researchos.research_core.analysis_result import AnalysisResult, AnalysisState
 from researchos.research_core.intelligence import ResearchContext, ResearchPlanner
+
+
+class _AnalysisResultFromPlanKwargs(TypedDict):
+    analysis_id: str
+    claim_id: str
+    population_definition: str
+    time_window: str
+    data_version: str
+    feature_version: str
+    label_version: str
+    sample_size: int
+    point_estimate: Any
+    uncertainty_interval: tuple[float, float] | None
+    probability_definition: str
+    effect_size: Any
+    result_artifact_hash: str
 
 
 def _plan():
@@ -20,7 +38,7 @@ def _plan():
 
 def test_analysis_result_binds_plan_identity_and_is_deterministic() -> None:
     plan = _plan()
-    kwargs = dict(
+    kwargs: _AnalysisResultFromPlanKwargs = {
         analysis_id="analysis-1",
         claim_id="claim-1",
         population_definition="XAUUSD M1 returns",
