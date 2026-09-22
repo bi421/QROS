@@ -25,11 +25,12 @@ import json
 import os
 import sys
 
+from researchos.data_engine.candle import Candle
 from researchos.data_engine.loader import CsvLoader
 from researchos.experiments.phase51 import Phase51Config, run_phase51
 
 
-def _load_candles(csv_path: str, fmt: str, symbol: str, timeframe: str):
+def _load_candles(csv_path: str, fmt: str, symbol: str, timeframe: str) -> tuple[list[float], list[float], list[float], list[float], list[Candle]]:
     """Load candles from CSV using the verified CsvLoader."""
     loader = CsvLoader()
     if fmt == "mt5":
@@ -105,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if result.model is not None:
         print(f"MODEL ACCURACY:  {result.model.accuracy:.4f}")
-        print(f"BASELINE ACC:    {result.baseline.accuracy:.4f}")
+        if result.baseline is not None:\n            print(f"BASELINE ACC:    {result.baseline.accuracy:.4f}")
     if result.cost is not None:
         print(f"NET ACCURACY:    {result.cost.net_accuracy_all:.4f}")
     if result.significance is not None:
