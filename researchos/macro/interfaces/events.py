@@ -7,7 +7,7 @@ Status: FROZEN
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Callable
 
 from researchos.macro.interfaces.base import EventInterface
 
@@ -28,7 +28,7 @@ class MacroEventBus(EventInterface, ABC):
     def subscribe(
         self,
         event_type: str,
-        handler: callable,
+        handler: Callable[..., Any],
     ) -> str:
         """
         Subscribe to events of a specific type.
