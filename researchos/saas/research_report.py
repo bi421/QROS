@@ -68,10 +68,10 @@ def render_research_report(
     lines.extend(["", "## Evidence lineage", ""])
     if evidence:
         for row in sorted(evidence, key=lambda item: str(item.id)):
-            artifact = f" \\| artifact `{row.artifact_id}`" if row.artifact_id else ""
+            evidence_artifact_suffix = f" \\| artifact `{row.artifact_id}`" if row.artifact_id else ""
             lines.append(
                 f"- `{row.id}` — status **{_line(row.status)}** — "
-                f"{_line(row.claim)}{artifact}"
+                f"{_line(row.claim)}{evidence_artifact_suffix}"
             )
     else:
         lines.append("- No evidence records were attached to this run.")
