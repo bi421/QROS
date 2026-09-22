@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from researchos.market_memory.evidence import create_evidence_record
 from researchos.research_identity import DatasetIdentity
 
 
-def _kwargs() -> dict[str, object]:
+def _kwargs() -> dict[str, Any]:
     return {
         "finding_name": "bullish_crossover",
         "dataset_id": "xauusd-d1",
