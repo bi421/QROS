@@ -129,7 +129,7 @@ class DatasetRepository(RepositoryInterface[T]):
         self._metadata_store[dataset.id] = meta
 
 
-class SqliteDatasetRepository(RepositoryInterface[T]):
+class SqliteDatasetRepository(RepositoryInterface[Any]):
     """
     SQLite-backed repository for HistoricalDataset objects.
     """
