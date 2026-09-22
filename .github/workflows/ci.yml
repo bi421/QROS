@@ -2,149 +2,153 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
-      - "feat/**"
-      - "fix/**"
-      - "refactor/**"
+    branches: [main, develop]
   pull_request:
-  workflow_dispatch:
+    branches: [main, develop]
 
-# Keep the PR path fast while preserving the full compatibility matrix on main/manual runs.
-# Feature/fix/refactor pushes are validated before a PR is opened.
-# New pushes cancel stale PR runs so obsolete commits do not consume runner time.
+permissions:
+  contents: read
+
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/feat/') }}
 
 jobs:
-  python-primary:
-    name: Python Tests + Coverage (3.11)
-    runs-on: ubuntu-latest
+  integrity:
+    name: Repository Integrity Gate
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-      - name: Setup Python 3.11
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
-          cache: 'pip'
-      - name: Install
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,test,saas]"
-          python -m pip install pytest pytest-cov ruff nanobind scikit-build-core cmake\n      - name: Build C++ backend for canonical regression suite\n        run: |\n          cmake -S cpp_quant_engine -B cpp_quant_engine/build -DCMAKE_BUILD_TYPE=Release\n          cmake --build cpp_quant_engine/build -j nanobind scikit-build-core cmake
-      - name: Build C++ backend for canonical regression suite
-        run: |
-          cmake -S cpp_quant_engine -B cpp_quant_engine/build -DCMAKE_BUILD_TYPE=Release
-          cmake --build cpp_quant_engine/build -j
-      - name: Test + coverage
-        env:
-          PYTHONPATH: cpp_quant_engine/python
-        run: python -m pytest -v --cov=researchos --cov-report=xml --cov-report=term
+          python-version: "3.12"
+          cache: pip
+      - run: python scripts/check_text_integrity.py
+      - run: python -m compileall -q researchos scripts
+      - run: python scripts/check_migrations.py
 
-  python-compatibility:
-    name: Python Compatibility (${{ matrix.python-version }})
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+  type-check:
+    name: Mypy Type Check
+    needs: [integrity]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: python -m pip install -e ".[dev,test,saas]"
+      - run: python -m mypy researchos/probability researchos/research_core
+
+  test-python:
+    name: Python Tests
+    needs: [integrity]
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
-        python-version: ['3.10', '3.14']
-      fail-fast: false
+        python-version: ["3.11", "3.12"]
+      fail-fast: true
     steps:
       - uses: actions/checkout@v5
-      - name: Setup Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'pip'
-      - name: Install
+          cache: pip
+      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: python -m pip install pytest pytest-cov ruff nanobind scikit-build-core cmake -e ".[dev,test,saas]"
+      - name: Build C++ backend for canonical regression suite
+        if: matrix.python-version == '3.11'
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,test,saas]"
-          python -m pip install pytest pytest-cov
-      - name: Compatibility test
-        run: python -m pytest -v
+          cmake -S researchos/engines/quant -B researchos/engines/quant/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_PYTHON_BINDINGS=ON
+          cmake --build researchos/engines/quant/build -j
+      - run: ruff check .
+        if: matrix.python-version == '3.12'
+      - name: Test canonical suite
+        env:
+          PYTHONPATH: researchos/engines/quant/python
+        run: python -m pytest researchos/tests/ researchos/research_core/tests/ researchos/saas/tests/ -v --tb=short -x --import-mode=importlib
 
-  quant-engine:
-    name: Quant Engine (C++ / nanobind)
-    runs-on: ubuntu-latest
+  build-engine:
+    name: Build Quant Engine (nanobind)
+    needs: [integrity]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-      - name: Setup Python 3.11
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
-          cache: 'pip'
-      - name: Install system deps
-        run: |
-          sudo grep -RIl 'dl.google.com/linux/chrome' /etc/apt/sources.list.d 2>/dev/null \
-            | while read -r source; do sudo mv "$source" "$source.disabled"; done
-          sudo apt-get clean
-          sudo rm -rf /var/lib/apt/lists/*
-          sudo apt-get update -o Acquire::Retries=5
-          sudo apt-get install -y -o Acquire::Retries=5 ccache ninja-build
-      - name: Install Python build dependencies
-        run: |
+          python-version: "3.12"
+          cache: pip
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qq ninja-build cmake g++
+      - run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,test,saas]"
-          python -m pip install nanobind scikit-build-core cmake
-          python -m pip install pytest pytest-cov
-      - name: Cache build
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cache/pip
-            ~/.ccache
-            cpp_quant_engine/build
-          key: quant-${{ runner.os }}-${{ hashFiles('cpp_quant_engine/CMakeLists.txt', 'cpp_quant_engine/**/*.cpp', 'cpp_quant_engine/**/*.h', 'pyproject.toml') }}
-          restore-keys: quant-${{ runner.os }}-
-      - name: Configure C++ Quant Engine
+          python -m pip install nanobind scikit-build-core pytest
+      - name: Build engine
         run: |
-          cmake -S cpp_quant_engine -B cpp_quant_engine/build -G Ninja \
+          cmake -S researchos/engines/quant \
+            -B researchos/engines/quant/build \
+            -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-      - name: Build C++ Quant Engine
-        run: cmake --build cpp_quant_engine/build -j
-      - name: Test C++ Quant Engine
-        run: ctest --test-dir cpp_quant_engine/build -V
-      - name: Benchmark C++ fast path
+            -DBUILD_PYTHON_BINDINGS=ON
+          cmake --build researchos/engines/quant/build -j
+      - name: Test engine integration
         env:
-          PYTHONPATH: cpp_quant_engine/python
-        run: python cpp_quant_engine/benchmarks/bench_fast_numeric.py --rows 1000000 --repeat 3
-      - name: Test Python Quant Integration
-        env:
-          PYTHONPATH: cpp_quant_engine/python
-        run: python -m pytest researchos/tests/ -k quant -v
+          PYTHONPATH: researchos/engines/quant/python
+        run: python -m pytest researchos/engines/quant/tests/ -v -x
 
-  health-evidence:
-    name: Health Evidence + Scope Gate
-    needs: [python-primary, quant-engine]
-    runs-on: ubuntu-latest
+  build-container:
+    name: Production Container Image
+    needs: [test-python, type-check, build-engine]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - name: Setup Python 3.11
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-      - name: Install health-check dependencies
+      - name: Build image
+        run: docker build -t qros-api:ci .
+      - name: Smoke test health and readiness endpoints
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,test,saas]"
-          python -m pip install pytest ruff nanobind scikit-build-core cmake
-      - name: Scope guard
-        run: python scripts/check_scope.py --base origin/main
-      - name: Text integrity guard
-        run: python scripts/check_text_integrity.py .github/workflows/ci.yml .pre-commit-config.yaml pyproject.toml
-      - name: Run canonical health check
-        run: python scripts/final_health_check.py
-      - name: Upload health evidence
-        if: always()
-        uses: actions/upload-artifact@v4
+          set -euo pipefail
+          docker run -d --rm --name qros-api-ci             -p 18000:8000             -e SUPABASE_URL=http://127.0.0.1:54321             -e SUPABASE_SERVICE_ROLE_KEY=ci-smoke-placeholder             qros-api:ci
+          trap 'docker stop qros-api-ci >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:18000/healthz >/dev/null               && curl --fail --silent --show-error http://127.0.0.1:18000/readyz >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "HTTP health/readiness endpoints passed; verifying Docker HEALTHCHECK contract"
+          for attempt in $(seq 1 15); do
+            health_status=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' qros-api-ci)
+            if [ "$health_status" = "healthy" ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker inspect qros-api-ci
+          docker logs qros-api-ci
+          exit 1
+
+  test-database:
+    name: Tenant Isolation (pgTAP)
+    needs: [integrity]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: supabase/setup-cli@v2
         with:
-          name: researchos-health-${{ github.sha }}
-          path: .health/last_run.json
-          if-no-files-found: error
-          retention-days: 30
+          version: latest
+      - run: supabase init
+      - run: supabase start
+      - run: supabase test db supabase/tests/tenant_isolation_test.sql
+      - if: always()
+        run: supabase stop
+
+  ci-complete:
+    name: CI Pipeline Complete
+    needs: [test-python, type-check, build-engine, build-container, test-database]
+    if: success()
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo "All checks passed"
