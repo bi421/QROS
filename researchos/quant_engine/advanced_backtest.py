@@ -3,6 +3,7 @@ Advanced Backtest Engine with Risk Management (Stop Loss, Take Profit, Max Hold)
 """
 
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -25,13 +26,13 @@ class AdvancedBacktestResult:
 class AdvancedBacktestEngine:
     def __init__(
         self,
-        initial_capital=100000.0,
-        commission=0.001,
-        slippage=0.0005,
-        stop_loss=0.15,  # 15% алдагдалд зогсоох
-        take_profit=0.30,  # 30% ашигт авах
-        max_hold_days=30,  # Хамгийн их 30 хоног барих
-    ):
+        initial_capital: float = 100000.0,
+        commission: float = 0.001,
+        slippage: float = 0.0005,
+        stop_loss: float = 0.15,  # 15% алдагдалд зогсоох
+        take_profit: float = 0.30,  # 30% ашигт авах
+        max_hold_days: int = 30,  # Хамгийн их 30 хоног барих
+    ) -> None:
         self.initial_capital = initial_capital
         self.commission = commission
         self.slippage = slippage
@@ -39,7 +40,7 @@ class AdvancedBacktestEngine:
         self.take_profit = take_profit
         self.max_hold_days = max_hold_days
 
-    def run(self, prices: list[float], strategy) -> AdvancedBacktestResult:
+    def run(self, prices: list[float], strategy: Any) -> AdvancedBacktestResult:
         signals = strategy.generate_signals(prices)
         if not signals:
             return AdvancedBacktestResult(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, [])
