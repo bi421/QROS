@@ -31,9 +31,7 @@ REQUIRED_MARKERS = {
     ),
     ".github/workflows/production-schema-parity.yml": (
         "workflow_dispatch",
-        "supabase migration list --linked",
-        "supabase db push --linked --dry-run",
-        "relrowsecurity",
+        "scripts/ci/production_schema_parity.sh",
     ),
     ".github/workflows/staging-release-gate.yml": (
         "workflow_dispatch",
