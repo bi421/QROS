@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from bisect import bisect_right
 from datetime import timedelta
+from typing import cast
 
 import polars as pl
 
@@ -91,7 +92,7 @@ def extract_xauusd_m1_sma_crossover_events(
             tick_volume=int(volumes[i]),
             sma_fast=curr_fast,
             sma_slow=curr_slow,
-            atr=atr[i],
+            atr=cast(float, atr[i]),
             rsi=rsi[i] if rsi[i] is not None else 50.0,
             macd_line=macd_line[i],
             macd_signal=macd_signal[i],
