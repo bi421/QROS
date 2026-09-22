@@ -106,8 +106,30 @@ jobs:
           test "${other_status}" = "200" || { echo "cross-tenant version lookup returned HTTP ${other_status}"; cat "${work}/other.json"; exit 1; }
           test "$(jq -er 'length' "${work}/other.json")" = "0" || { echo "cross-tenant dataset data was visible"; cat "${work}/other.json"; exit 1; }
 
-          echo "5/10 enqueue research run"
-          run_payload="$(jq -nc --arg dataset_version_id "${version_id}" --arg workflow_id "xauusd_m1_frozen_research_v1" '{dataset_version_id:$dataset_version_id,workflow_id:$workflow_id}')"
+          echo "5/13 create and plan-lock governed research claim"
+          claim_payload="$(jq -nc \
+            --arg statement "Staging Golden Path governed research claim for run ${GITHUB_RUN_ID}." \
+            --arg claim_type "EMPIRICAL" --arg research_id "staging-golden-${GITHUB_RUN_ID}" \
+            --arg target_population "staging-golden-path" --arg instrument "qros-staging-gate" --arg horizon "immediate" \
+            '{statement:$statement,claim_type:$claim_type,research_id:$research_id,target_population:$target_population,instrument:$instrument,horizon:$horizon}')"
+          claim_status="$(call POST "${base}/v1/research-claims" "${work}/claim.json" -H 'Content-Type: application/json' --data "${claim_payload}")"
+          test "${claim_status}" = "201" || { echo "POST /v1/research-claims returned HTTP ${claim_status}"; cat "${work}/claim.json"; exit 1; }
+          claim_id="$(jq -er '.id' "${work}/claim.json")"
+          plan_payload="$(jq -nc \
+            --arg hypothesis "The frozen XAUUSD M1 staging workflow produces a deterministic governed research result from the immutable dataset version." \
+            --arg sample_definition "All rows in the immutable 3000-row staging XAUUSD M1 fixture." \
+            --arg train_validation_test "Staging plumbing contract only; no predictive inference claim." \
+            --arg costs_slippage "Not applicable to synthetic staging plumbing validation." \
+            --arg multiple_testing_policy "No multiple-testing inference is performed by this staging gate." \
+            --arg replication_policy "Repeat the same immutable fixture and workflow contract deterministically." \
+            '{hypothesis:$hypothesis,sample_definition:$sample_definition,features:["open","high","low","close","tick_volume"],labels:["close"],train_validation_test:$train_validation_test,exclusions:["No production market inference"],costs_slippage:$costs_slippage,statistical_tests:[],metrics:["result_integrity"],stopping_rules:["Stop on contract violation"],multiple_testing_policy:$multiple_testing_policy,replication_policy:$replication_policy}')"
+          plan_status="$(call POST "${base}/v1/research-claims/${claim_id}/plan-lock" "${work}/plan-lock.json" -H 'Content-Type: application/json' --data "${plan_payload}")"
+          test "${plan_status}" = "200" || { echo "POST plan-lock returned HTTP ${plan_status}"; cat "${work}/plan-lock.json"; exit 1; }
+          plan_hash="$(jq -er '.plan_hash' "${work}/plan-lock.json")"
+          test "$(jq -er '.is_plan_locked' "${work}/plan-lock.json")" = "true"
+
+          echo "6/13 enqueue research run"
+          run_payload="$(jq -nc --arg dataset_version_id "${version_id}" --arg workflow_id "xauusd_m1_frozen_research_v1" '{dataset_version_id:$dataset_version_id,workflow_id:$workflow_id,claim_id:$claim_id,plan_hash:$plan_hash}')"
           run_status="$(call POST "${base}/v1/research-runs" "${work}/run.json" \
             -H 'Content-Type: application/json' \
             -H "Idempotency-Key: qros-staging-golden-${GITHUB_RUN_ID}" \
@@ -115,7 +137,7 @@ jobs:
           test "${run_status}" = "202" || { echo "POST /v1/research-runs returned HTTP ${run_status}"; cat "${work}/run.json"; exit 1; }
           run_id="$(jq -er '.id' "${work}/run.json")"
 
-          echo "6/10 queue and worker completion"
+          echo "7/13 queue and worker completion"
           terminal_status=""
           for attempt in $(seq 1 120); do
             poll_status="$(call GET "${base}/v1/research-runs/${run_id}" "${work}/run-status.json")"
@@ -136,7 +158,7 @@ jobs:
             *) echo "research run did not reach success within 10 minutes: ${terminal_status}"; cat "${work}/run-status.json"; exit 1 ;;
           esac
 
-          echo "7/10 result integrity and provenance"
+          echo "8/13 result integrity and provenance"
           result_status="$(call GET "${base}/v1/research-runs/${run_id}/result" "${work}/result.json")"
           test "${result_status}" = "200" || { echo "GET result returned HTTP ${result_status}"; cat "${work}/result.json"; exit 1; }
           jq -e --arg ws "${workspace_id}" --arg run "${run_id}" --arg sha "${expected_sha}" '
@@ -149,32 +171,41 @@ jobs:
             all(.artifacts[]; (.content_sha256 | type == "string" and test("^[0-9a-fA-F]{64}$")))
           ' "${work}/result.json" > /dev/null
 
-          echo "8/10 evidence visibility and provenance"
+          echo "9/13 evidence visibility and provenance"
           evidence_status="$(call GET "${base}/v1/research-runs/${run_id}/evidence" "${work}/evidence.json")"
           test "${evidence_status}" = "200" || { echo "GET evidence returned HTTP ${evidence_status}"; cat "${work}/evidence.json"; exit 1; }
           jq -e --arg ws "${workspace_id}" --arg run "${run_id}" '
             type == "array" and length > 0 and all(.[]; .workspace_id == $ws and .research_run_id == $run and (.provenance | type == "object"))
           ' "${work}/evidence.json" > /dev/null
 
-          echo "9/10 durable research claim"
-          claim_payload="$(jq -nc \
-            --arg statement "Staging Golden Path run ${run_id} completed with a persisted evidence-backed result." \
-            --arg claim_type "EMPIRICAL" \
-            --arg research_id "${run_id}" \
-            --arg target_population "staging-golden-path" \
-            --arg instrument "qros-staging-gate" \
-            --arg horizon "immediate" \
-            '{statement:$statement,claim_type:$claim_type,research_id:$research_id,target_population:$target_population,instrument:$instrument,horizon:$horizon}')"
-          claim_status="$(call POST "${base}/v1/research-claims" "${work}/claim.json" \
-            -H 'Content-Type: application/json' \
-            --data "${claim_payload}")"
-          test "${claim_status}" = "201" || { echo "POST /v1/research-claims returned HTTP ${claim_status}"; cat "${work}/claim.json"; exit 1; }
-          claim_id="$(jq -er '.id' "${work}/claim.json")"
+          echo "10/13 verify governed claim binding"
           claim_get_status="$(call GET "${base}/v1/research-claims/${claim_id}" "${work}/claim-read.json")"
           test "${claim_get_status}" = "200" || { echo "GET claim returned HTTP ${claim_get_status}"; cat "${work}/claim-read.json"; exit 1; }
-          jq -e --arg ws "${workspace_id}" --arg run "${run_id}" '.workspace_id == $ws and .research_id == $run' "${work}/claim-read.json" > /dev/null
+          jq -e --arg ws "${workspace_id}" --arg run "${run_id}" --arg plan "${plan_hash}" --arg rid "staging-golden-${GITHUB_RUN_ID}" '.workspace_id == $ws and .research_id == $rid and .is_plan_locked == true and .plan_hash == $plan' "${work}/claim-read.json" > /dev/null
 
-          echo "10/10 Time -> First Valid Research Result"
+          echo "11/13 record governed validation"
+          validation_payload="$(jq -nc --arg manifest "$(jq -er '.manifest_sha256' "${work}/result.json")" '{result_manifest_sha256:$manifest,status:"VALIDATED",payload:{metrics:{result_integrity:1.0},checks:{deterministic_fixture:true,evidence_present:true}}}')"
+          validation_status="$(call POST "${base}/v1/research-runs/${run_id}/validation" "${work}/validation.json" -H 'Content-Type: application/json' --data "${validation_payload}")"
+          test "${validation_status}" = "201" || { echo "POST validation returned HTTP ${validation_status}"; cat "${work}/validation.json"; exit 1; }
+          validation_sha="$(jq -er '.validation_sha256' "${work}/validation.json")"
+          test "$(jq -er '.status' "${work}/validation.json")" = "VALIDATED"
+          test "$(jq -er '.claim_id' "${work}/validation.json")" = "${claim_id}"
+          test "$(jq -er '.plan_hash' "${work}/validation.json")" = "${plan_hash}"
+
+          echo "12/13 record governed finding and report"
+          finding_payload="$(jq -nc --arg validation_sha "${validation_sha}" --arg statement "Staging Golden Path validation completed for the immutable synthetic fixture." '{validation_sha256:$validation_sha,payload:{statement:$statement,classification:"STAGING_GOVERNED_VALIDATION"}}')"
+          finding_status="$(call POST "${base}/v1/research-runs/${run_id}/finding" "${work}/finding.json" -H 'Content-Type: application/json' --data "${finding_payload}")"
+          test "${finding_status}" = "201" || { echo "POST finding returned HTTP ${finding_status}"; cat "${work}/finding.json"; exit 1; }
+          finding_sha="$(jq -er '.finding_sha256' "${work}/finding.json")"
+          test "$(jq -er '.validation_sha256' "${work}/finding.json")" = "${validation_sha}"
+          test "$(jq -er '.claim_id' "${work}/finding.json")" = "${claim_id}"
+          test "$(jq -er '.plan_hash' "${work}/finding.json")" = "${plan_hash}"
+
+          report_status="$(call GET "${base}/v1/research-runs/${run_id}/report" "${work}/report.json")"
+          test "${report_status}" = "200" || { echo "GET report returned HTTP ${report_status}"; cat "${work}/report.json"; exit 1; }
+          jq -e --arg ws "${workspace_id}" --arg run "${run_id}" --arg manifest "$(jq -er '.manifest_sha256' "${work}/result.json")" --arg finding "${finding_sha}" '.workspace_id == $ws and .research_run_id == $run and .manifest_sha256 == $manifest and .finding_sha256 == $finding and (.markdown | type == "string" and contains("Governed finding lineage"))' "${work}/report.json" > /dev/null
+
+          echo "13/13 Time -> First Valid Research Result"
           finished_at="$(date +%s)"
           elapsed="$((finished_at - started_at))"
           test "${elapsed}" -ge 0
