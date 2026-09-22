@@ -66,7 +66,7 @@ from researchos.quant_engine.machine_learning.dataset_contracts import (
 # =========================================================================
 
 
-def research_dataset_to_runner_dataset(dataset: ResearchDataset) -> list[dict]:
+def research_dataset_to_runner_dataset(dataset: ResearchDataset) -> list[dict[str, float]]:
     """Deterministically convert a ``ResearchDataset`` into the OHLCV contract
     the certified ``BaseExperimentRunner`` boundary normalizes.
 

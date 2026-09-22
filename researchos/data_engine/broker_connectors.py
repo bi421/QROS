@@ -116,7 +116,12 @@ class DataComparator:
     """
 
     @staticmethod
-    def compare(df1: pd.DataFrame, df2: pd.DataFrame, source1: str = "MT5", source2: str = "Other") -> dict:
+    def compare(
+        df1: pd.DataFrame,
+        df2: pd.DataFrame,
+        source1: str = "MT5",
+        source2: str = "Other",
+    ) -> dict[str, object]:
         """
         Compare two OHLCV DataFrames.
         Returns correlation, MAPE, missing bars, etc.
