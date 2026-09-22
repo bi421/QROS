@@ -106,8 +106,10 @@ def _compute_macd(closes: list[float], fast: int = 12, slow: int = 26, signal: i
     ema_slow = ema(closes, slow)
     macd_line = [0.0] * len(closes)
     for i in range(len(closes)):
-        if ema_fast[i] is not None and ema_slow[i] is not None:
-            macd_line[i] = ema_fast[i] - ema_slow[i]
+        fast_value = ema_fast[i]
+        slow_value = ema_slow[i]
+        if fast_value is not None and slow_value is not None:
+            macd_line[i] = fast_value - slow_value
 
     # Signal line
     valid_macd = [m for m in macd_line if m != 0.0 or macd_line.index(m) >= slow - 1]
@@ -248,6 +250,8 @@ def extract_sma_crossover_events(
         prev_slow = sma_slow[i - 1]
         curr_fast = sma_fast[i]
         curr_slow = sma_slow[i]
+        assert prev_fast is not None and prev_slow is not None
+        assert curr_fast is not None and curr_slow is not None
 
         direction = None
         if prev_fast <= prev_slow and curr_fast > curr_slow:
