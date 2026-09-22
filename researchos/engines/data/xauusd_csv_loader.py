@@ -19,7 +19,7 @@ class XauCsvLoader:
         # ... Ñ†ÑÐ²ÑÑ€Ð»ÑÐ³ÑÑ ...
 
         # Deterministic hash - Ñ‚Ð°Ð½Ñ‹ self-validation-Ð´ Ñ…ÑÑ€ÑÐ³Ñ‚ÑÐ¹
-        content_hash = hashlib.sha256(df.to_csv().encode()).hexdigest()
+        content_hash = hashlib.sha256(df.write_csv().encode()).hexdigest()
 
         # Parquet Ñ€ÑƒÑƒ - DuckDB-Ð°Ð°Ñ 10x Ñ…ÑƒÑ€Ð´Ð°Ð½
         curated_path = Path("data/curated/xauusd/m1/xauusd_m1.parquet")
