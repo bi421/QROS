@@ -41,6 +41,7 @@ dependencies = [
     "numpy>=1.24",
     "polars>=1.0",
     "pydantic>=2.0",
+    "plotly>=5.0",
 ]
 
 [project.optional-dependencies]
