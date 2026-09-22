@@ -14,7 +14,7 @@ class _BacktestSignal(Protocol):
 
 
 class _BacktestStrategy(Protocol):
-    def generate_signals(self, prices: Sequence[float]) -> list[_BacktestSignal]: ...
+    def generate_signals(self, prices: Sequence[float]) -> Sequence[_BacktestSignal]: ...
 
 
 @dataclass
@@ -24,7 +24,7 @@ class BacktestResult:
     max_drawdown: float  # Хамгийн их уналт (жишээ нь -0.25 → -25%)
     win_rate: float  # Ялалтын хувь (0-1)
     num_trades: int  # Нийт хаагдсан арилжааны тоо
-    signals: list[_BacktestSignal]  # Дохионууд
+    signals: Sequence[_BacktestSignal]  # Дохионууд
 
 
 class BacktestEngine:
