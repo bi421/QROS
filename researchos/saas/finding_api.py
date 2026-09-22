@@ -1,13 +1,14 @@
 """HTTP boundary for recording an already-validated research finding."""
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Callable, Protocol
 from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
 
 from researchos.saas.finding import ResearchFindingRecord, VALIDATED_STATUS
+from researchos.saas.contracts import TenantContext
 
 
 class ResearchFindingStore(Protocol):
@@ -41,15 +42,15 @@ class ResearchFindingRequest(BaseModel):
 def register_research_finding_routes(
     app: FastAPI,
     *,
-    tenant_dependency,
+    tenant_dependency: Callable[..., TenantContext],
     finding_store: ResearchFindingStore | None,
-    validation_store,
+    validation_store: object,
 ) -> None:
     @app.post("/v1/research-runs/{job_id}/finding", status_code=status.HTTP_201_CREATED, tags=["research"])
     def create_finding(
         job_id: UUID,
         request: ResearchFindingRequest,
-        tenant=Depends(tenant_dependency),
+        tenant: TenantContext = Depends(tenant_dependency),
     ) -> dict[str, object]:
         if finding_store is None:
             raise HTTPException(status_code=503, detail="research finding persistence is not configured")
