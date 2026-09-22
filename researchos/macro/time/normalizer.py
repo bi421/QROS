@@ -7,6 +7,7 @@ Status: FROZEN
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import overload
 
 UTC = timezone.utc
 
@@ -18,6 +19,14 @@ class TimeNormalizer:
     MIL-TIME-001: All timestamps are stored in UTC.
     MIL-TIME-004: Calendar reconstruction is reproducible.
     """
+
+    @staticmethod
+    @overload
+    def to_utc(dt: None) -> None: ...
+
+    @staticmethod
+    @overload
+    def to_utc(dt: datetime) -> datetime: ...
 
     @staticmethod
     def to_utc(dt: datetime | None) -> datetime | None:
