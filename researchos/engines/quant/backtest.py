@@ -3,9 +3,18 @@ Backtest engine for strategies.
 """
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol, Sequence
 
 import numpy as np
+
+
+class _BacktestSignal(Protocol):
+    price: float
+    action: str
+
+
+class _BacktestStrategy(Protocol):
+    def generate_signals(self, prices: Sequence[float]) -> list[_BacktestSignal]: ...
 
 
 @dataclass
@@ -15,7 +24,7 @@ class BacktestResult:
     max_drawdown: float  # Хамгийн их уналт (жишээ нь -0.25 → -25%)
     win_rate: float  # Ялалтын хувь (0-1)
     num_trades: int  # Нийт хаагдсан арилжааны тоо
-    signals: list[Any]  # Дохионууд
+    signals: list[_BacktestSignal]  # Дохионууд
 
 
 class BacktestEngine:
@@ -35,7 +44,7 @@ class BacktestEngine:
         self.commission = commission
         self.slippage = slippage
 
-    def run(self, prices: list[float], strategy) -> BacktestResult:
+    def run(self, prices: list[float], strategy: _BacktestStrategy) -> BacktestResult:
         """
         Бэктест ажиллуулах.
         :param prices: Үнийн жагсаалт (жишээ нь өдрийн хаалтын үнэ)
@@ -53,7 +62,7 @@ class BacktestEngine:
         capital = self.initial_capital
         position = 0.0
         entry_price = 0.0
-        trades = []  # (action, price, timestamp, size, net_value, pnl)
+        trades: list[tuple[str, float, Any, float, float, float]] = []  # (action, price, timestamp, size, net_value, pnl)
         equity_curve = [capital]
 
         for signal in signals:
