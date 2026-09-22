@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 from collections.abc import Sequence
-from typing import Any
-
 from researchos.experiments.phase51.baseline import baseline_always_predict
 from researchos.experiments.phase51.calibration import _brier_from_proba, evaluate_calibration
 from researchos.experiments.phase51.cost import apply_costs
