@@ -40,7 +40,10 @@ def finding_payload(finding: Any) -> dict[str, Any]:
     """Project an EvidenceRecord into a deterministic payload."""
     data = finding.to_dict()
     data.pop("created_at", None)
-    return _primitives(data)
+    projected = _primitives(data)
+    if not isinstance(projected, dict):
+        raise TypeError("finding payload must project to a dictionary")
+    return projected
 
 
 def finding_hash(finding: Any) -> str:
