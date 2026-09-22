@@ -54,6 +54,13 @@ class TimeNormalizer:
         return dt.astimezone(UTC)
 
     @staticmethod
+    def _require_utc(dt: datetime) -> datetime:
+        """Normalize a concrete datetime and preserve a non-optional type."""
+        utc_dt = TimeNormalizer._require_utc(dt)
+        assert utc_dt is not None
+        return utc_dt
+
+    @staticmethod
     def normalize_timestamp(dt: datetime | None) -> datetime | None:
         """
         Normalize timestamp to UTC with second precision.
@@ -66,7 +73,7 @@ class TimeNormalizer:
         if dt is None:
             return None
 
-        utc_dt = TimeNormalizer.to_utc(dt)
+        utc_dt = TimeNormalizer._require_utc(dt)
 
         # Round down to nearest second
         return utc_dt.replace(microsecond=0)
@@ -281,7 +288,7 @@ class TimeNormalizer:
         Returns:
             (window_start, window_end) in UTC
         """
-        event_utc = TimeNormalizer.to_utc(event_time)
+        event_utc = TimeNormalizer._require_utc(event_time)
 
         if window_type == "pre":
             start = event_utc + offset - timedelta(hours=1)
