@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import sys
+from typing import Any
 
 from researchos.data_engine.loader import CsvLoader
 from researchos.experiments.phase52 import FEATURE_SET_NAMES, Phase52Config, run_phase52, run_phase52_comparison
@@ -13,7 +14,7 @@ from researchos.experiments.phase52.alignment import validate_exact_timestamp_al
 from researchos.experiments.phase52.timestamp_adapter import normalize_epoch_timestamp_csv
 
 
-def _load_candles(csv_path: str, fmt: str, symbol: str, timeframe: str):
+def _load_candles(csv_path: str, fmt: str, symbol: str, timeframe: str) -> tuple[list[float], list[float], list[float], list[float], list[Any]]:
     loader = CsvLoader()
     if fmt == "mt5":
         candles = loader.load_mt5_candles(csv_path, symbol=symbol, timeframe=timeframe)
@@ -24,7 +25,7 @@ def _load_candles(csv_path: str, fmt: str, symbol: str, timeframe: str):
     return ([c.close for c in candles], [c.high for c in candles], [c.low for c in candles], [c.volume for c in candles], [c.timestamp for c in candles])
 
 
-def _load_macro_series(csv_path: str, fmt: str, symbol: str, timeframe: str):
+def _load_macro_series(csv_path: str, fmt: str, symbol: str, timeframe: str) -> tuple[list[float], list[Any]]:
     """Load a macro series without repairing or fabricating observations."""
     loader = CsvLoader()
     if fmt == "mt5":
@@ -42,7 +43,11 @@ def _load_macro_series(csv_path: str, fmt: str, symbol: str, timeframe: str):
     return [c.close for c in candles], [c.timestamp for c in candles]
 
 
-def _build_common_observation_sample(close, high, low, volume, timestamps, macro, macro_timestamps, required_symbols):
+def _build_common_observation_sample(
+    close: list[float], high: list[float], low: list[float], volume: list[float],
+    timestamps: list[Any], macro: dict[str, list[float]], macro_timestamps: dict[str, list[Any]],
+    required_symbols: tuple[str, ...],
+) -> tuple[list[float], list[float], list[float], list[float], list[Any], dict[str, list[float]], dict[str, list[Any]]]:
     """Build the explicit common-observation sample without calendar repair."""
     if len({*timestamps}) != len(timestamps):
         raise ValueError("XAUUSD: duplicate timestamps")
@@ -89,7 +94,7 @@ def _build_common_observation_sample(close, high, low, volume, timestamps, macro
     return filtered
 
 
-def _print_result(result):
+def _print_result(result: Any) -> None:
     print(f"{result.metadata.get('feature_set', '(legacy)'):18} | {result.outcome:10} | folds={result.num_folds:3d} | accuracy={result.model.accuracy:.4f} | brier={result.model.brier_score:.4f} | hash={result.reproducibility_hash}")
 
 
