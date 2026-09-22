@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from researchos.saas.finding import ResearchFindingRecord, VALIDATED_STATUS
 from researchos.saas.contracts import TenantContext
+from researchos.saas.validation_api import ResearchValidationStore
 
 
 class ResearchFindingStore(Protocol):
@@ -44,7 +45,7 @@ def register_research_finding_routes(
     *,
     tenant_dependency: Callable[..., TenantContext],
     finding_store: ResearchFindingStore | None,
-    validation_store: object,
+    validation_store: ResearchValidationStore,
 ) -> None:
     @app.post("/v1/research-runs/{job_id}/finding", status_code=status.HTTP_201_CREATED, tags=["research"])
     def create_finding(
