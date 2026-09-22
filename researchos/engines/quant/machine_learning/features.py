@@ -20,9 +20,10 @@ def _rolling_apply(
     out: list[float | None] = [None] * n
     for i in range(period - 1, n):
         window = list(values[i - period + 1 : i + 1])
-        if any(v is None for v in window):
+        numeric_window = [v for v in window if v is not None]
+        if len(numeric_window) != period:
             continue
-        out[i] = fn(window)
+        out[i] = fn(numeric_window)
     return out
 
 
@@ -150,10 +151,12 @@ def rsi_feature(prices, period: int = 14) -> list[float | None]:
     for i in range(period, n):
         g_window = gains[i - period + 1 : i + 1]
         l_window = losses[i - period + 1 : i + 1]
-        if any(v is None for v in g_window) or any(v is None for v in l_window):
+        numeric_gains = [v for v in g_window if v is not None]
+        numeric_losses = [v for v in l_window if v is not None]
+        if len(numeric_gains) != period or len(numeric_losses) != period:
             continue
-        avg_gain = _mean(g_window)
-        avg_loss = _mean(l_window)
+        avg_gain = _mean(numeric_gains)
+        avg_loss = _mean(numeric_losses)
         if avg_loss == 0:
             out[i] = 100.0
         else:
@@ -216,12 +219,16 @@ def bollinger_feature(prices, period: int = 20, std_factor: float = 2.0) -> dict
     lower: list[float | None] = [None] * n
     pct_b: list[float | None] = [None] * n
     for i in range(n):
-        if mid[i] is None or std[i] is None:
+        mid_value = mid[i]
+        std_value = std[i]
+        if mid_value is None or std_value is None:
             continue
-        upper[i] = mid[i] + std_factor * std[i]
-        lower[i] = mid[i] - std_factor * std[i]
-        band = upper[i] - lower[i]
-        pct_b[i] = (prices[i] - lower[i]) / band if band != 0 else None
+        upper_value = mid_value + std_factor * std_value
+        lower_value = mid_value - std_factor * std_value
+        upper[i] = upper_value
+        lower[i] = lower_value
+        band = upper_value - lower_value
+        pct_b[i] = (prices[i] - lower_value) / band if band != 0 else None
     return {
         "bb_upper": upper,
         "bb_middle": mid,
@@ -250,11 +257,12 @@ def cci_feature(high, low, close, period: int = 20) -> list[float | None]:
     sma_tp = rolling_mean(tp, period)
     out: list[float | None] = [None] * n
     for i in range(period - 1, n):
-        if sma_tp[i] is None:
+        sma_value = sma_tp[i]
+        if sma_value is None:
             continue
         window = tp[i - period + 1 : i + 1]
-        mean_dev = _mean([abs(x - sma_tp[i]) for x in window])
-        out[i] = (tp[i] - sma_tp[i]) / (0.015 * mean_dev) if mean_dev != 0 else 0.0
+        mean_dev = _mean([abs(x - sma_value) for x in window])
+        out[i] = (tp[i] - sma_value) / (0.015 * mean_dev) if mean_dev != 0 else 0.0
     return out
 
 
@@ -328,9 +336,11 @@ def volatility_ratio(prices, short_period: int = 10, long_period: int = 30) -> l
     n = len(short_vol)
     out: list[float | None] = [None] * n
     for i in range(n):
-        if short_vol[i] is None or long_vol[i] is None or long_vol[i] == 0:
+        short_value = short_vol[i]
+        long_value = long_vol[i]
+        if short_value is None or long_value is None or long_value == 0:
             continue
-        out[i] = short_vol[i] / long_vol[i]
+        out[i] = short_value / long_value
     return out
 
 
@@ -339,13 +349,14 @@ def volatility_percentile(prices, period: int = 20, lookback: int = 60) -> list[
     n = len(vol)
     out: list[float | None] = [None] * n
     for i in range(n):
-        if vol[i] is None:
+        vol_value = vol[i]
+        if vol_value is None:
             continue
         start = max(0, i - lookback + 1)
         window = [v for v in vol[start : i + 1] if v is not None]
         if not window:
             continue
-        rank = sum(1 for v in window if v <= vol[i])
+        rank = sum(1 for v in window if v <= vol_value)
         out[i] = rank / len(window)
     return out
 
@@ -372,11 +383,13 @@ def trend_state(prices, short_period: int = 20, long_period: int = 50) -> list[f
     n = len(prices)
     out: list[float | None] = [None] * n
     for i in range(n):
-        if short_ma[i] is None or long_ma[i] is None:
+        short_value = short_ma[i]
+        long_value = long_ma[i]
+        if short_value is None or long_value is None:
             continue
-        if short_ma[i] > long_ma[i]:
+        if short_value > long_value:
             out[i] = 1.0
-        elif short_ma[i] < long_ma[i]:
+        elif short_value < long_value:
             out[i] = -1.0
         else:
             out[i] = 0.0
@@ -389,11 +402,13 @@ def volatility_regime(prices, short_period: int = 20, long_period: int = 60) -> 
     n = len(prices)
     out: list[float | None] = [None] * n
     for i in range(n):
-        if short_vol[i] is None or long_vol[i] is None:
+        short_value = short_vol[i]
+        long_value = long_vol[i]
+        if short_value is None or long_value is None:
             continue
-        if short_vol[i] > long_vol[i]:
+        if short_value > long_value:
             out[i] = 1.0
-        elif short_vol[i] < long_vol[i]:
+        elif short_value < long_value:
             out[i] = -1.0
         else:
             out[i] = 0.0
@@ -418,7 +433,7 @@ def momentum_regime(prices, period: int = 14) -> list[float | None]:
 @dataclass
 class FeatureSet:
     feature_names: list[str]
-    data: list[list[float]]
+    data: list[list[float | None]]
     n_features: int
     n_observations: int
     labels: list[float] | None = None
@@ -466,16 +481,17 @@ class FeatureBuilder:
         columns["momentum_regime"] = momentum_regime(close, 14)
 
         feature_names = list(columns.keys())
-        rows: list[list[float]] = []
-        labels_out: list[float] | None = [] if self.labels is not None else None
+        rows: list[list[float | None]] = []
+        labels = self.labels
+        labels_out: list[float] | None = [] if labels is not None else None
 
         for i in range(n):
             row = [columns[name][i] for name in feature_names]
             if drop_na and any(v is None or (isinstance(v, float) and math.isnan(v)) for v in row):
                 continue
             rows.append(row)
-            if labels_out is not None:
-                labels_out.append(self.labels[i])
+            if labels_out is not None and labels is not None:
+                labels_out.append(labels[i])
 
         return FeatureSet(
             feature_names=feature_names,
