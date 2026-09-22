@@ -14,7 +14,7 @@ class CycleRequest(BaseModel):
 
 
 @app.post("/cycles/run")
-def run_cycle(req: CycleRequest):
+def run_cycle(req: CycleRequest) -> dict[str, object]:
     try:
         research = pipeline.start_research(question=req.topic)
 
@@ -37,6 +37,6 @@ def get_cycle(cycle_id: str):
 
 
 @app.get("/audit/verify")
-def verify_audit():
+def verify_audit() -> dict[str, object]:
     is_valid = repo.verify_audit_chain()
     return {"audit_chain_valid": is_valid, "status": "SECURE" if is_valid else "COMPROMISED"}
