@@ -42,12 +42,12 @@ class GoldFactorModel:
         else:
             self.factor_names = factor_names or []
 
-        self.model = None
-        self.coefficients = None
-        self.r_squared = None
-        self.residuals = None
-        self.factor_returns = None
-        self.gold_returns = None
+        self.model: dict[str, Any] | None = None
+        self.coefficients: np.ndarray | None = None
+        self.r_squared: float | None = None
+        self.residuals: np.ndarray | None = None
+        self.factor_returns: np.ndarray | None = None
+        self.gold_returns: pd.Series | None = None
         self._is_fitted = False
 
     def fit(
@@ -78,10 +78,10 @@ class GoldFactorModel:
         """
 
         # Compute gold returns
-        self.gold_returns = gold_data["close"].pct_change().dropna()
+        gold_returns = gold_data["close"].pct_change().dropna()
 
         # Compute factor returns and align
-        factor_returns_dict = {}
+        factor_returns_dict: dict[str, pd.Series] = {}
         for name, df in factor_data.items():
             if name not in self.factor_names:
                 continue
@@ -91,13 +91,13 @@ class GoldFactorModel:
                 factor_returns_dict[name] = df["return"].dropna()
 
         # Align all data
-        common_index = self.gold_returns.index
+        common_index = gold_returns.index
         for name, returns in factor_returns_dict.items():
             common_index = common_index.intersection(returns.index)
 
-        self.gold_returns = self.gold_returns.loc[common_index]
+        gold_returns = gold_returns.loc[common_index]
 
-        X_list = [self.gold_returns]
+        X_list: list[pd.Series] = [gold_returns]
         for name in self.factor_names:
             if name in factor_returns_dict:
                 X_list.append(factor_returns_dict[name])
@@ -117,7 +117,7 @@ class GoldFactorModel:
         )
         X_design.columns = ["intercept"] + self.factor_names
 
-        y_arr = self.gold_returns.values
+        y_arr = gold_returns.values
 
         # Ridge regression to handle multicollinearity
         lambda_ridge = 0.01
@@ -127,21 +127,21 @@ class GoldFactorModel:
         coeffs = np.linalg.solve(A, b)
 
         # Store results
+        residuals = y_arr - X_design.values @ coeffs
+        r_squared = float(1 - (np.sum(residuals**2) / np.sum((y_arr - np.mean(y_arr)) ** 2))) if np.sum((y_arr - np.mean(y_arr)) ** 2) > 0 else 0.0
+
+        self.gold_returns = gold_returns
         self.coefficients = coeffs
         self.factor_returns = factor_df.values
-        self.residuals = y_arr - X_design.values @ coeffs
-
-        # Compute R-squared
-        ss_res = np.sum(self.residuals**2)
-        ss_tot = np.sum((y_arr - np.mean(y_arr)) ** 2)
-        self.r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0
+        self.residuals = residuals
+        self.r_squared = r_squared
 
         # Store model metadata
         self.model = {
             "coefficients": coeffs,
             "factor_names": self.factor_names,
-            "r_squared": self.r_squared,
-            "residual_std": np.std(self.residuals),
+            "r_squared": r_squared,
+            "residual_std": float(np.std(residuals)),
             "n_observations": len(y_arr),
             "lookback": lookback,
             "frequency": frequency,
