@@ -23,7 +23,7 @@ class IntegrationContext:
     callable interfaces, avoiding direct imports and hard coupling.
     """
 
-    research_cycle_adapter: Callable | None = None
+    research_cycle_adapter: Callable[..., dict[str, Any]] | None = None
     reasoning_chain_adapter: Callable | None = None
     validation_adapter: Callable | None = None
     experiment_framework_adapter: Callable | None = None
