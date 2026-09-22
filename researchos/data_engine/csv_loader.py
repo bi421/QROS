@@ -736,13 +736,17 @@ class CsvLoader:
         """Parse CSV text and return rows as dicts."""
         return self._parse_csv_reader(io.StringIO(text))
 
-    def _parse_csv_reader(self, source) -> list[dict[str, str]]:
+    def _parse_csv_reader(self, source: io.TextIOBase) -> list[dict[str, str]]:
         """Parse CSV from a reader source."""
         reader = csv.DictReader(source, delimiter=self.config.delimiter)
-        rows = []
+        rows: list[dict[str, str]] = []
         for row in reader:
-            # Strip whitespace from keys and values
-            cleaned = {k.strip(): v.strip() for k, v in row.items()}
+            # Strip whitespace from keys and values; tolerate missing cells.
+            cleaned = {
+                k.strip(): (v.strip() if v is not None else "")
+                for k, v in row.items()
+                if k is not None
+            }
             rows.append(cleaned)
         return rows
 
