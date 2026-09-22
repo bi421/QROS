@@ -95,7 +95,7 @@ def _compute_macd(closes: list[float], fast: int = 12, slow: int = 26, signal: i
         return [0.0] * len(closes), [0.0] * len(closes), [0.0] * len(closes)
 
     # Compute EMAs
-    def ema(prices: list[float], period: int) -> list[float]:
+    def ema(prices: list[float], period: int) -> list[float | None]:
         k = 2.0 / (period + 1)
         e = [sum(prices[:period]) / period]
         for p in prices[period:]:
