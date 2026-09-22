@@ -182,7 +182,7 @@ def certify_runtime(
         dataset_parent_hash = dataset_envelope.artifact_hash
     else:
         dataset_parent_hash = dataset_hash
-        dataset_envelope = repository.get_artifact(dataset_parent_hash)
+        dataset_envelope: EvidenceEnvelope | None = repository.get_artifact(dataset_parent_hash)
         if dataset_envelope is None:
             raise ValueError(f"dataset evidence artifact '{dataset_parent_hash}' does not exist")
         if dataset_envelope.artifact_type != "Dataset":
