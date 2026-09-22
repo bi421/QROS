@@ -157,9 +157,17 @@ jobs:
           ' "${work}/evidence.json" > /dev/null
 
           echo "9/10 durable research claim"
+          claim_payload="$(jq -nc \
+            --arg statement "Staging Golden Path run ${run_id} completed with a persisted evidence-backed result." \
+            --arg claim_type "EMPIRICAL" \
+            --arg research_id "${run_id}" \
+            --arg target_population "staging-golden-path" \
+            --arg instrument "qros-staging-gate" \
+            --arg horizon "immediate" \
+            '{statement:$statement,claim_type:$claim_type,research_id:$research_id,target_population:$target_population,instrument:$instrument,horizon:$horizon}')"
           claim_status="$(call POST "${base}/v1/research-claims" "${work}/claim.json" \
             -H 'Content-Type: application/json' \
-            --data "{"statement":"Staging Golden Path run ${run_id} completed with a persisted evidence-backed result.","claim_type":"EMPIRICAL","research_id":"${run_id}","target_population":"staging-golden-path","instrument":"qros-staging-gate","horizon":"immediate"}")"
+            --data "${claim_payload}")"
           test "${claim_status}" = "201" || { echo "POST /v1/research-claims returned HTTP ${claim_status}"; cat "${work}/claim.json"; exit 1; }
           claim_id="$(jq -er '.id' "${work}/claim.json")"
           claim_get_status="$(call GET "${base}/v1/research-claims/${claim_id}" "${work}/claim-read.json")"
