@@ -16,7 +16,7 @@ app = FastAPI()
 app.include_router(manual_router)
 
 
-def get_data_and_signals() -> tuple[object | None, object | None, object | None, list[tuple[object, object]], list[tuple[object, object]]]:
+def get_data_and_signals() -> tuple[object | None, object | None, object | None, list[tuple[object, object]] | None, list[tuple[object, object]] | None]:
     files = glob.glob("data/raw/histdata/xauusd/DAT_ASCII_XAUUSD_M1_*.csv")
     if not files:
         return None, None, None, None, None
