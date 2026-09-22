@@ -8,6 +8,7 @@ all feature sets consume the same immutable observations, labels and folds.
 from __future__ import annotations
 
 from dataclasses import replace
+from collections.abc import Sequence
 from typing import Any
 
 from researchos.experiments.phase51.baseline import baseline_always_predict
@@ -24,7 +25,9 @@ from .prepared import Phase52PreparedData
 
 
 def _model_eval(
-    estimator: Any, features, labels
+    estimator: EmpiricalProbabilityEstimator | MultivariateEmpiricalProbabilityEstimator,
+    features: Sequence[Sequence[float]],
+    labels: Sequence[float],
 ) -> tuple[ModelResult, list[int], list[dict[int, float]]]:
     predictions: list[int] = []
     probabilities: list[dict[int, float]] = []
@@ -61,7 +64,7 @@ def _model_eval(
     )
 
 
-def _baseline(predictions, actuals) -> BaselineResult:
+def _baseline(predictions: Sequence[int], actuals: Sequence[float]) -> BaselineResult:
     accuracy = (
         sum(int(p) == int(a) for p, a in zip(predictions, actuals)) / len(actuals)
         if actuals
@@ -143,7 +146,7 @@ def _run_prepared(prepared: Phase52PreparedData, cfg: Phase52Config) -> Phase52R
         )
         validation_source_indices = source_indices[train_end:validation_end]
         if cfg.estimator_feature is not None:
-            estimator = EmpiricalProbabilityEstimator(
+            estimator: EmpiricalProbabilityEstimator | MultivariateEmpiricalProbabilityEstimator = EmpiricalProbabilityEstimator(
                 n_bins=cfg.n_bins, feature_indices=feature_indices
             ).fit(train_features, train_labels)
         else:
@@ -260,7 +263,11 @@ def _run_prepared(prepared: Phase52PreparedData, cfg: Phase52Config) -> Phase52R
     )
 
 
-def _model_eval_from_predictions(predictions, actuals, probabilities) -> ModelResult:
+def _model_eval_from_predictions(
+    predictions: Sequence[int],
+    actuals: Sequence[float],
+    probabilities: Sequence[dict[int, float]],
+) -> ModelResult:
     def precision(cls: int) -> float:
         tp = sum(int(p) == cls and int(a) == cls for p, a in zip(predictions, actuals))
         fp = sum(int(p) == cls and int(a) != cls for p, a in zip(predictions, actuals))
