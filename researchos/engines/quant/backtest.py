@@ -3,7 +3,16 @@ Backtest engine for strategies.
 """
 
 from dataclasses import dataclass
-from typing import Any, Protocol, Sequence\n\n\nclass _BacktestSignal(Protocol):\n    price: float\n    action: str\n\n\nclass _BacktestStrategy(Protocol):\n    def generate_signals(self, prices: Sequence[float]) -> list[_BacktestSignal]: ...
+from typing import Any, Protocol, Sequence
+
+
+class _BacktestSignal(Protocol):
+    price: float
+    action: str
+
+
+class _BacktestStrategy(Protocol):
+    def generate_signals(self, prices: Sequence[float]) -> list[_BacktestSignal]: ...
 
 import numpy as np
 
