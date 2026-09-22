@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import numpy as np
 
@@ -78,7 +78,7 @@ def run_ml_comparison(
         fold_start = time.time()
 
         # Split data
-        X_train, X_test = X[fold.train_index], X[fold.test_index]
+        X_train, X_test = X[fold.train_indices], X[fold.test_indices]
         y_train, y_test = y[fold.train_index], y[fold.test_index]
 
         # Train MLP
@@ -192,7 +192,7 @@ def run_indicator_strategy(
     )
 
     # Compute metrics
-    metrics = compute_indicator_metrics(trades)
+    metrics: dict[Any, Any] = compute_indicator_metrics(trades)
     metrics["total_time"] = time.time() - start_time
 
     return metrics
