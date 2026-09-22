@@ -31,8 +31,6 @@ from researchos.repository.memory import MemoryRepository
 
 class _PersistableMarketObject(Protocol):
     id: str
-    dataset_source: str
-
     def to_dict(self) -> dict[str, object]: ...
 
 
@@ -97,7 +95,7 @@ class MarketMemoryRepository:
         if not self._sqlite_conn:
             return
         data = json.dumps(obj.to_dict(), sort_keys=True, default=str)
-        dataset_source = getattr(obj, "dataset_source", "")
+        dataset_source = str(getattr(obj, "dataset_source", ""))
         self._sqlite_conn.execute(
             "INSERT OR REPLACE INTO market_memory_objects (id, object_type, data, dataset_source, saved_at) VALUES (?, ?, ?, ?, ?)",
             (obj.id, object_type, data, dataset_source, datetime.now(timezone.utc).isoformat()),
