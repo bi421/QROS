@@ -1,4 +1,5 @@
 import asyncio
+import asyncio
 import glob
 import json
 from datetime import datetime
@@ -15,7 +16,7 @@ app = FastAPI()
 app.include_router(manual_router)
 
 
-def get_data_and_signals():
+def get_data_and_signals() -> tuple[object | None, object | None, object | None, list[tuple[object, object]], list[tuple[object, object]]]:
     files = glob.glob("data/raw/histdata/xauusd/DAT_ASCII_XAUUSD_M1_*.csv")
     if not files:
         return None, None, None, None, None
@@ -104,7 +105,7 @@ async def dashboard():
 
 
 @app.websocket("/ws")
-async def ws_endpoint(websocket: WebSocket):
+async def ws_endpoint(websocket: WebSocket) -> None:
     await websocket.accept()
     try:
         while True:
