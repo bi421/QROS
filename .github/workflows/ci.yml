@@ -27,6 +27,20 @@ jobs:
       - run: python -m compileall -q researchos scripts
       - run: python scripts/check_migrations.py
 
+  type-check:
+    name: Mypy Type Check
+    needs: [integrity]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: python -m pip install -e ".[dev,test,saas]"
+      - run: python -m mypy researchos scripts financial_research_lab
+
   test-python:
     name: Python Tests
     needs: [integrity]
@@ -78,7 +92,7 @@ jobs:
 
   build-container:
     name: Production Container Image
-    needs: [test-python, build-engine]
+    needs: [test-python, type-check, build-engine]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -125,7 +139,7 @@ jobs:
 
   ci-complete:
     name: CI Pipeline Complete
-    needs: [test-python, build-engine, build-container, test-database]
+    needs: [test-python, type-check, build-engine, build-container, test-database]
     if: success()
     runs-on: ubuntu-24.04
     steps:
