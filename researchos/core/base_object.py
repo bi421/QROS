@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Mapping, TypeVar, cast
+from typing import Any, TypeVar, cast
 
 from researchos.core.identity import deterministic_hash, generate_id
 from researchos.core.lifecycle import Lifecycle
@@ -73,7 +73,7 @@ class BaseObject:
         )
 
     @classmethod
-    def from_dict(cls: type[T], data: Mapping[str, Any]) -> T:
+    def from_dict(cls: type[T], data: dict[str, Any]) -> T:
         obj = cast(T, cls.__new__(cls))
 
         obj.id = data.get("id")
