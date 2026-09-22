@@ -206,7 +206,8 @@ def main() -> int:
         "|---|---|---:|---|---|---|---|",
     ]
     for r in rows:
-        def esc(value: str) -> str:\n            return value.replace("|", "\\|").replace("\n", "<br>")
+        def esc(value: str) -> str:
+            return value.replace("|", "\\|").replace("\n", "<br>")
         report.append(f"| {esc(r.category)} | {esc(r.file)} | {r.line} | {esc(r.claim)} | `{esc(r.command)}` | {esc(r.result)} | {r.severity} |")
     if not rows:
         report.append("| CLEAN | — | — | No findings | — | AUDIT_CLEAN | PASS |")
