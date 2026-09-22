@@ -1,6 +1,6 @@
-"""
-Train and predict using ML models.
-"""
+"""Train and predict using ML models."""
+
+from typing import Any
 
 import joblib
 import pandas as pd
@@ -14,7 +14,7 @@ def train_model(
     model_type: str = "random_forest",
     test_size: float = 0.3,
     random_state: int = 42,
-):
+) -> tuple[Any, Any, dict[str, Any]]:
     feature_cols = [col for col in df.columns if col not in ["target", "datetime"]]
     X = df[feature_cols].values
     y = df["target"].values
@@ -42,9 +42,9 @@ def train_model(
                 eval_metric="logloss",
             )
         except ImportError:
-            raise ImportError("XGBoost ?????????? ?????. 'pip install xgboost' ?????????? ??.")
+            raise ImportError("XGBoost is required. Install it with 'pip install xgboost'.")
     else:
-        raise ValueError(f"???????? ?????: {model_type}")
+        raise ValueError(f"Unknown model type: {model_type}")
 
     model.fit(X_train_scaled, y_train)
 
@@ -59,7 +59,12 @@ def train_model(
     return model, scaler, metrics
 
 
-def predict(model, scaler, df: pd.DataFrame, feature_names: list):
+def predict(
+    model: Any,
+    scaler: Any,
+    df: pd.DataFrame,
+    feature_names: list[str],
+) -> tuple[Any, Any]:
     X = df[feature_names].values
     X_scaled = scaler.transform(X)
     probs = model.predict_proba(X_scaled)[:, 1]
@@ -67,10 +72,15 @@ def predict(model, scaler, df: pd.DataFrame, feature_names: list):
     return probs, preds
 
 
-def save_model(model, scaler, metrics, filepath="ml_model.pkl"):
+def save_model(
+    model: Any,
+    scaler: Any,
+    metrics: Any,
+    filepath: str = "ml_model.pkl",
+) -> None:
     joblib.dump({"model": model, "scaler": scaler, "metrics": metrics}, filepath)
 
 
-def load_model(filepath="ml_model.pkl"):
+def load_model(filepath: str = "ml_model.pkl") -> tuple[Any, Any, Any]:
     data = joblib.load(filepath)
     return data["model"], data["scaler"], data["metrics"]
