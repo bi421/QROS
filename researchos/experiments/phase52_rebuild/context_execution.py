@@ -7,7 +7,7 @@ from typing import Any
 from researchos.experiments.phase52.execution import _run_prepared
 from researchos.experiments.phase52.experiment import Phase52Config
 from researchos.experiments.phase52.macro_features import MacroFeatureBuilder
-from researchos.experiments.phase52.provenance import build_input_provenance
+from researchos.experiments.phase52.prepared import Phase52PreparedData
 
 from .context_pipeline import ContextAwareFeatureBuild
 from .feature_contract import FEATURE_SET_NAMES, Phase52FeatureContract
@@ -92,55 +92,33 @@ class _PreparedView:
 
 def _prepared_view(
     build: ContextAwareFeatureBuild, feature_set: str, cfg: Phase52Config
-) -> _PreparedView:
+) -> Phase52PreparedData:
     research = build.research_observations
-    close = tuple(o.close for o in research)
-    high = tuple(o.high for o in research)
-    low = tuple(o.low for o in research)
-    volume = tuple(o.tick_volume for o in research)
+    close = tuple(float(o.close) for o in research)
+    high = tuple(float(o.high) for o in research)
+    low = tuple(float(o.low) for o in research)
+    volume = tuple(float(o.tick_volume) for o in research)
     timestamps = tuple(o.timestamp for o in research)
-    macro = {
+    macro: dict[str, tuple[float | None, ...]] = {
         "DXY": tuple(o.dxy for o in research),
         "US10Y": tuple(o.us10y for o in research),
         "VIX": tuple(o.vix for o in research),
     }
-    macro_timestamps = {symbol: timestamps for symbol in macro}
-    diagnostics = MacroFeatureBuilder(aligned_length=len(research), factor_series=macro).build()
-    provenance = build_input_provenance(
-        timestamps,
+    macro_timestamps: dict[str, tuple[object, ...]] = {
+        symbol: tuple(timestamps) for symbol in macro
+    }
+    return Phase52PreparedData.build(
         close,
         high,
         low,
         volume,
+        timestamps,
         macro_timestamps,
         macro,
-        ("DXY", "US10Y", "VIX"),
+        horizon=cfg.horizon,
+        threshold=cfg.threshold,
+        required_macro_symbols=cfg.required_macro_symbols,
     )
-
-    dataset = build.datasets[feature_set]
-    metadata = dict(dataset.metadata)
-    expected_source_indices = tuple(range(dataset.sample_count))
-    if tuple(metadata.get("source_indices", ())) != expected_source_indices:
-        raise AssertionError(f"context dataset source-index contract failed for {feature_set}")
-    view = _DatasetView(
-        feature_names=dataset.feature_names,
-        features=dataset.rows,
-        labels=dataset.labels,
-        metadata=metadata,
-    )
-    return _PreparedView(
-        close=close,
-        high=high,
-        low=low,
-        volume=volume,
-        timestamps=timestamps,
-        macro_timestamps=macro_timestamps,
-        macro_factor_series=macro,
-        dataset=view,
-        macro_diagnostics=diagnostics,
-        input_provenance=provenance,
-    )
-
 
 def run_context_aware_phase52_comparison(
     build: ContextAwareFeatureBuild,
