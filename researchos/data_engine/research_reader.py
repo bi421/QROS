@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from researchos.data_engine.boundary import ValidatedDatasetRef
+from researchos.data_engine.candle import Candle
 from researchos.data_engine.contracts import DatasetStatus
 from researchos.data_engine.dataset import HistoricalDataset
 
@@ -52,11 +53,14 @@ class DatasetResearchReader:
             raise ValueError("Phase 5.1 research requires candle data")
 
         records = dataset.records
+        if not all(isinstance(record, Candle) for record in records):
+            raise ValueError("validated candle dataset contains non-candle records")
+        candle_records = tuple(record for record in records if isinstance(record, Candle))
         return ResearchSeries(
-            close=tuple(float(record.close) for record in records),
-            high=tuple(float(record.high) for record in records),
-            low=tuple(float(record.low) for record in records),
-            volume=tuple(float(record.volume) for record in records),
+            close=tuple(float(record.close) for record in candle_records),
+            high=tuple(float(record.high) for record in candle_records),
+            low=tuple(float(record.low) for record in candle_records),
+            volume=tuple(float(record.volume) for record in candle_records),
         )
 
 
