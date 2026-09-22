@@ -224,14 +224,14 @@ def extract_sma_crossover_events(
     if len(df) < slow_period + 1:
         raise ValueError(f"Insufficient data: need at least {slow_period + 1} bars, got {len(df)}")
 
-    closes = df["close"].to_list()
+    closes: list[float] = [float(value) for value in df["close"].to_list()]
     timestamps = df["timestamp"].to_list()
-    highs = df["high"].to_list()
-    lows = df["low"].to_list()
-    volumes = df["tick_volume"].to_list()
+    highs: list[float] = [float(value) for value in df["high"].to_list()]
+    lows: list[float] = [float(value) for value in df["low"].to_list()]
+    volumes: list[float] = [float(value) for value in df["tick_volume"].to_list()]
 
-    sma_fast = _compute_sma(closes, fast_period)
-    sma_slow = _compute_sma(closes, slow_period)
+    sma_fast: list[float | None] = _compute_sma(closes, fast_period)
+    sma_slow: list[float | None] = _compute_sma(closes, slow_period)
     atr = _compute_atr(highs, lows, closes)
     rsi = _compute_rsi(closes)
     macd_line, macd_signal, macd_histogram = _compute_macd(closes)
