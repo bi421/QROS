@@ -2,9 +2,8 @@ name: Mypy Production Source Diagnostic v10
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - chore/mypy-current-source-diagnostic-v10
+  pull_request:
+    types: [opened, synchronize, reopened]
 
 jobs:
   mypy-production-diagnostic:
