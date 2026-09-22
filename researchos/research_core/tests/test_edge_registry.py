@@ -1,3 +1,5 @@
+from typing import TypedDict
+
 from researchos.probability.economic_cost import EconomicCostContext
 from researchos.probability.calibration import CalibrationResult
 from researchos.research_core.edge_registry import (
