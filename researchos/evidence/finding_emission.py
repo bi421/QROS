@@ -40,7 +40,10 @@ def finding_payload(finding: Any) -> dict[str, Any]:
     """Project an EvidenceRecord into a deterministic payload."""
     data = finding.to_dict()
     data.pop("created_at", None)
-    return _primitives(data)
+    payload = _primitives(data)
+    if not isinstance(payload, dict):
+        raise TypeError("finding payload must be a mapping")
+    return payload
 
 
 def finding_hash(finding: Any) -> str:
