@@ -193,6 +193,8 @@ class GoldFactorModel:
         if not self._is_fitted:
             raise RuntimeError("Model not fitted. Call fit() first.")
 
+        if self.factor_returns is None or self.coefficients is None:
+            raise RuntimeError("Model fitted state is incomplete.")
         # Compute factor contributions
         factor_std = np.std(self.factor_returns, axis=0)
         coef_std_product = self.coefficients[1:] * factor_std  # Skip intercept
