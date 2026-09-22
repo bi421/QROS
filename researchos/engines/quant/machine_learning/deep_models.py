@@ -13,6 +13,7 @@ Architecture:
 from __future__ import annotations
 
 import math
+from typing import Any
 
 import numpy as np
 
@@ -427,9 +428,9 @@ class SimpleTrainer:
         self.rng = np.random.default_rng(42)
 
     def _get_all_params(self) -> list[np.ndarray]:
-        params = []
+        params: list[np.ndarray] = []
 
-        def collect(module):
+        def collect(module: Any) -> None:
             if hasattr(module, "get_params"):
                 params.extend(module.get_params())
             if hasattr(module, "cell"):
@@ -495,9 +496,9 @@ class SimpleTrainer:
 
         return total_loss / max(n_batches, 1)
 
-    def fit(self, X: np.ndarray, y: np.ndarray, X_val: np.ndarray, y_val: np.ndarray, epochs: int = 50, batch_size: int = 32, patience: int = 5) -> dict:
+    def fit(self, X: np.ndarray, y: np.ndarray, X_val: np.ndarray, y_val: np.ndarray, epochs: int = 50, batch_size: int = 32, patience: int = 5) -> dict[str, float]:
         best_val_loss = float("inf")
-        best_params = None
+        best_params: list[np.ndarray] | None = None
         wait = 0
 
         for epoch in range(epochs):
