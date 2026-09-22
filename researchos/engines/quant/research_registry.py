@@ -27,7 +27,7 @@ from __future__ import annotations
 from researchos.engines.quant.backend import PythonQuantBackend
 from researchos.engines.quant.interface import QuantComputationInterface
 from researchos.engines.quant.research_engine import PythonResearchBackend, ResearchEngine
-from researchos.engines.quant.research_interface import RESEARCH_OPERATIONS
+from researchos.engines.quant.research_interface import RESEARCH_OPERATIONS, ResearchComputationInterface
 from researchos.engines.quant.router import BackendRouter
 
 
@@ -79,7 +79,7 @@ def create_research_router(
 
 
 def create_research_engine(
-    backend: QuantComputationInterface | None = None,
+    backend: ResearchComputationInterface | None = None,
     use_cpp: bool = False,
 ) -> ResearchEngine:
     """Create a ``ResearchEngine`` over a research backend.
@@ -98,7 +98,7 @@ def create_research_engine(
     if use_cpp:
         cpp_backend = _get_cpp_backend()
         if cpp_backend is not None:
-            return ResearchEngine(backend=cpp_backend)
+            raise RuntimeError("C++ research backend does not implement ResearchComputationInterface")
     return ResearchEngine(backend=PythonResearchBackend())
 
 
