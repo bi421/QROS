@@ -359,6 +359,25 @@ class TestConditioning:
         assert result.raw_probability == 1.0  # both positive
         assert result.mean_return == pytest.approx(0.015)
 
+    def test_conditional_statistics_uses_dependence_aware_bootstrap(self):
+        events = [
+            _make_event_with_outcome("e1", "bullish", 0.01, "2021-01-01T00:00:00"),
+            _make_event_with_outcome("e2", "bullish", 0.03, "2021-01-02T00:00:00"),
+            _make_event_with_outcome("e3", "bullish", -0.01, "2021-01-03T00:00:00"),
+            _make_event_with_outcome("e4", "bullish", 0.02, "2021-01-04T00:00:00"),
+        ]
+        spec = ConditionSpec(name="bullish", conditions={"direction": "bullish"})
+        result = compute_conditional_statistics(
+            events,
+            spec,
+            bootstrap_num_resamples=200,
+            bootstrap_seed=42,
+            dependence_block_size=2,
+        )
+        assert result.confidence_interval is not None
+        assert "moving_block_bootstrap" in result.notes
+        assert "dependence_block_size=2" in result.notes
+
     def test_conditional_statistics_no_match(self):
         events = [_make_event_with_outcome("e1", "bullish", 0.01)]
         spec = ConditionSpec(name="bearish", conditions={"direction": "bearish"})

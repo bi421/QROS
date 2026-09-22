@@ -88,22 +88,6 @@ def run_market_memory_pipeline(
             ConditionSpec("high_volatility", {"volatility_state": "High"}, "Crossovers in high volatility regime"),
         ]
 
-    hypothesis_count = len(conditions)
-    corrected_alpha = bonferroni_alpha(_PIPELINE_ALPHA, hypothesis_count)
-    corrected_confidence_level = 1.0 - corrected_alpha
-
-    conditional_results = []
-    probability_evidence = {}
-    for spec in conditions:
-        result = compute_conditional_statistics(events, spec, outcome_field="return_1d", bootstrap_seed=seed)
-        conditional_results.append(result)
-        values = _finite_returns(events, spec)
-        if values:
-            probability_evidence[spec.name] = wilson_proportion_ci(
-                sum(value > 0.0 for value in values),
-                len(values),
-                confidence_level=corrected_confidence_level,
-            )
 
     train_events, validation_events, test_events = chronological_split(events)
     validation_results = []
@@ -122,6 +106,26 @@ def run_market_memory_pipeline(
             return datetime.fromisoformat(value)
         except ValueError:
             return None
+
+    dependence_audit = audit_label_overlap(events, label_end_getter)
+    dependence_block_size = max(1, dependence_audit.max_concurrent_labels)
+
+    hypothesis_count = len(conditions)
+    corrected_alpha = bonferroni_alpha(_PIPELINE_ALPHA, hypothesis_count)
+    corrected_confidence_level = 1.0 - corrected_alpha
+
+    conditional_results = []
+    probability_evidence = {}
+    for spec in conditions:
+        result = compute_conditional_statistics(events, spec, outcome_field="return_1d", bootstrap_seed=seed, dependence_block_size=dependence_block_size)
+        conditional_results.append(result)
+        values = _finite_returns(events, spec)
+        if values:
+            probability_evidence[spec.name] = wilson_proportion_ci(
+                sum(value > 0.0 for value in values),
+                len(values),
+                confidence_level=corrected_confidence_level,
+            )
 
     for cr in conditional_results:
         condition = cr.condition_spec
@@ -160,7 +164,6 @@ def run_market_memory_pipeline(
             notes=notes,
         ))
 
-    dependence_audit = audit_label_overlap(events, label_end_getter)
     audit = run_self_audit(
         events,
         conditional_results,
@@ -200,6 +203,10 @@ def run_market_memory_pipeline(
             "overlap_pairs": dependence_audit.overlap_pairs,
             "max_concurrent_labels": dependence_audit.max_concurrent_labels,
             "interpretation": "Overlap is reported as dependence information; it is not treated as evidence of leakage.",
+            "inference_method": "moving_block_bootstrap" if dependence_block_size > 1 else "percentile_bootstrap",
+            "block_size": dependence_block_size,
+            "block_size_rule": "maximum concurrent realized labels; block bootstrap only when overlap exists",
+            "assumption": "Dependence is treated as predominantly local in event order within the reported block size; this does not establish independence beyond the block.",
         }
         if oos:
             uncertainty["oos"] = {
@@ -214,7 +221,7 @@ def run_market_memory_pipeline(
             condition_definition=str(cr.condition_spec.to_dict()["conditions"]), sample_size=cr.sample_size,
             time_range=(events[0].timestamp.isoformat() if events else "", events[-1].timestamp.isoformat() if events else ""),
             computation_method="forward_return_analysis", code_module="researchos.market_memory.pipeline_v1",
-            statistical_method="Bonferroni-adjusted Wilson probability CI + percentile bootstrap mean CI + purged walk-forward OOS + realized-label boundary and dependence audit",
+            statistical_method="Bonferroni-adjusted Wilson probability CI + dependence-aware block bootstrap mean CI when labels overlap + purged walk-forward OOS + realized-label boundary and dependence audit",
             result={"raw_probability": cr.raw_probability, "mean_return": cr.mean_return, "std_return": cr.std_return},
             uncertainty=uncertainty, validation_method="walk_forward_expanding_purged", random_seed=seed, status=status,
         ))
