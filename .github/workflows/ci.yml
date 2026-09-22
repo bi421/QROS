@@ -41,6 +41,21 @@ jobs:
       - run: python -m pip install -e ".[dev,test,saas]"
       - run: python -m mypy researchos/probability researchos/research_core
 
+
+  mypy-full-diagnostic:
+    name: Mypy Full Production Diagnostic v8
+    needs: [integrity]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: python -m pip install -e ".[dev,test,saas]"
+      - run: python -m mypy researchos --exclude '(^|/)tests/' --allow-untyped-defs
+
   test-python:
     name: Python Tests
     needs: [integrity]
