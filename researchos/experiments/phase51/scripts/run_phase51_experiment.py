@@ -106,7 +106,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if result.model is not None:
         print(f"MODEL ACCURACY:  {result.model.accuracy:.4f}")
-        if result.baseline is not None:\n            print(f"BASELINE ACC:    {result.baseline.accuracy:.4f}")
+        if result.baseline is not None:
+            print(f"BASELINE ACC:    {result.baseline.accuracy:.4f}")
     if result.cost is not None:
         print(f"NET ACCURACY:    {result.cost.net_accuracy_all:.4f}")
     if result.significance is not None:
