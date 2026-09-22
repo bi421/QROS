@@ -91,7 +91,7 @@ class GoldFactorModel:
                 factor_returns_dict[name] = df["return"].dropna()
 
         # Align all data
-        common_index = self.gold_returns.index
+        common_index = gold_returns.index
         for name, returns in factor_returns_dict.items():
             common_index = common_index.intersection(returns.index)
 
@@ -127,21 +127,21 @@ class GoldFactorModel:
         coeffs = np.linalg.solve(A, b)
 
         # Store results
+        residuals = y_arr - X_design.values @ coeffs
+        r_squared = float(1 - (np.sum(residuals**2) / np.sum((y_arr - np.mean(y_arr)) ** 2))) if np.sum((y_arr - np.mean(y_arr)) ** 2) > 0 else 0.0
+
+        self.gold_returns = gold_returns
         self.coefficients = coeffs
         self.factor_returns = factor_df.values
-        self.residuals = y_arr - X_design.values @ coeffs
-
-        # Compute R-squared
-        ss_res = np.sum(self.residuals**2)
-        ss_tot = np.sum((y_arr - np.mean(y_arr)) ** 2)
-        self.r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0
+        self.residuals = residuals
+        self.r_squared = r_squared
 
         # Store model metadata
         self.model = {
             "coefficients": coeffs,
             "factor_names": self.factor_names,
-            "r_squared": self.r_squared,
-            "residual_std": np.std(self.residuals),
+            "r_squared": r_squared,
+            "residual_std": float(np.std(residuals)),
             "n_observations": len(y_arr),
             "lookback": lookback,
             "frequency": frequency,
