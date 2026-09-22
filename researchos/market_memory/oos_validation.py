@@ -7,14 +7,14 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Callable, Protocol, Sequence, TypeVar
 
+from researchos.market_memory.statistical_evidence import wilson_proportion_ci
+
 
 class _TimestampedEvent(Protocol):
     timestamp: datetime
 
 
 EventT = TypeVar("EventT", bound=_TimestampedEvent)
-
-from researchos.market_memory.statistical_evidence import wilson_proportion_ci
 
 
 @dataclass(frozen=True)
