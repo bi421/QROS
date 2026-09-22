@@ -46,7 +46,7 @@ class DataLoader:
         timeframe: str,
         file_path: str | None = None,
         force_format: str | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> List[Candle]:
         symbol = symbol.lower()
 
@@ -135,7 +135,7 @@ class DataLoader:
         return candles
 
     @classmethod
-    def _load_from_path(cls, path: str, symbol: str, timeframe: str, format_type: str | None, **kwargs) -> List[Candle]:
+    def _load_from_path(cls, path: str, symbol: str, timeframe: str, format_type: str | None, **kwargs: Any) -> List[Candle]:
         loader = CsvLoader()
         if format_type == FORMAT_MT5:
             return loader.load_mt5_candles(path, symbol=symbol, timeframe=timeframe, **kwargs)
