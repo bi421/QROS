@@ -22,25 +22,11 @@ class Plan(str, Enum):
 
 
 class WorkspaceRole(str, Enum):
-    """Server-authoritative membership roles used by the API authorization layer."""
-
     OWNER = "owner"
     ADMIN = "admin"
     RESEARCHER = "researcher"
     VIEWER = "viewer"
-
-
-@dataclass(frozen=True)
-class PageRequest:
-    """Bounded offset pagination with explicit deterministic sorting."""
-    limit: int = 50
-    offset: int = 0
-
-    def __post_init__(self) -> None:
-        if not 1 <= self.limit <= 100:
-            raise ValueError("limit must be between 1 and 100")
-        if self.offset < 0:
-            raise ValueError("offset must not be negative")
+    BILLING_ADMIN = "billing_admin"
 
 
 class ResearchJobStatus(str, Enum):
@@ -58,7 +44,7 @@ class TenantContext:
     user_id: UUID
     workspace_id: UUID
     plan: Plan
-    role: WorkspaceRole = WorkspaceRole.VIEWER
+    role: WorkspaceRole = WorkspaceRole.OWNER
 
 
 @dataclass(frozen=True)
@@ -99,8 +85,6 @@ class ResearchJob:
     attempt_count: int = 0
     max_attempts: int = 3
     error_code: str | None = None
-    claim_id: str | None = None
-    plan_hash: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "source_dataset_sha256", _validate_sha256(self.source_dataset_sha256, "source_dataset_sha256"))
@@ -108,12 +92,6 @@ class ResearchJob:
             raise TypeError("dataset_version_id must be a UUID")
         if not self.workflow_id.strip():
             raise ValueError("workflow_id must not be empty")
-        if (self.claim_id is None) != (self.plan_hash is None):
-            raise ValueError("claim_id and plan_hash must be provided together")
-        if self.plan_hash is not None and (len(self.plan_hash) != 64 or any(ch not in "0123456789abcdef" for ch in self.plan_hash)):
-            raise ValueError("plan_hash must be a lowercase SHA-256 digest")
-        if self.claim_id is not None and not self.claim_id.strip():
-            raise ValueError("claim_id must not be empty")
         if self.attempt_count < 0:
             raise ValueError("attempt_count must not be negative")
         if self.max_attempts < 1:
@@ -132,11 +110,10 @@ DEFAULT_USAGE_POLICIES: dict[Plan, UsagePolicy] = {
 
 __all__ = [
     "DEFAULT_USAGE_POLICIES",
-    "PageRequest",
     "Plan",
     "ResearchJob",
     "ResearchJobStatus",
     "TenantContext",
-    "UsagePolicy",
     "WorkspaceRole",
+    "UsagePolicy",
 ]
