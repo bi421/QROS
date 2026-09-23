@@ -1,6 +1,6 @@
 -- Tenant-scoped Supabase Storage authorization for private dataset objects.
--- Folder prefix is the authoritative tenant boundary:
--- tenant/{tenant_id}/datasets/{sha256(content)}/{version}/
+-- Object namespace: tenant/{workspace_id}/datasets/{sha256(content)}/{version}/.
+-- Authorization is derived from workspace membership, not editable JWT metadata.
 
 insert into storage.buckets (id, name, public)
 values ('qros-datasets', 'qros-datasets', false)
@@ -14,7 +14,7 @@ to authenticated
 using (
     bucket_id = 'qros-datasets'
     and (storage.foldername(name))[1] = 'tenant'
-    and (storage.foldername(name))[2] = (select auth.jwt() ->> 'tenant_id')
+    and public.is_workspace_member(((storage.foldername(name))[2])::uuid)
 );
 
 drop policy if exists qros_datasets_tenant_insert on storage.objects;
@@ -25,7 +25,7 @@ to authenticated
 with check (
     bucket_id = 'qros-datasets'
     and (storage.foldername(name))[1] = 'tenant'
-    and (storage.foldername(name))[2] = (select auth.jwt() ->> 'tenant_id')
+    and public.is_workspace_member(((storage.foldername(name))[2])::uuid)
 );
 
 drop policy if exists qros_datasets_tenant_update on storage.objects;
@@ -36,12 +36,12 @@ to authenticated
 using (
     bucket_id = 'qros-datasets'
     and (storage.foldername(name))[1] = 'tenant'
-    and (storage.foldername(name))[2] = (select auth.jwt() ->> 'tenant_id')
+    and public.is_workspace_member(((storage.foldername(name))[2])::uuid)
 )
 with check (
     bucket_id = 'qros-datasets'
     and (storage.foldername(name))[1] = 'tenant'
-    and (storage.foldername(name))[2] = (select auth.jwt() ->> 'tenant_id')
+    and public.is_workspace_member(((storage.foldername(name))[2])::uuid)
 );
 
 drop policy if exists qros_datasets_tenant_delete on storage.objects;
@@ -52,5 +52,5 @@ to authenticated
 using (
     bucket_id = 'qros-datasets'
     and (storage.foldername(name))[1] = 'tenant'
-    and (storage.foldername(name))[2] = (select auth.jwt() ->> 'tenant_id')
+    and public.is_workspace_member(((storage.foldername(name))[2])::uuid)
 );
