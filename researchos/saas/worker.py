@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from threading import Event, Thread
+import time
 from typing import Protocol
 from uuid import UUID, uuid4
 
@@ -69,7 +70,7 @@ class ResearchWorker:
                 daemon=True,
             )
             heartbeat.start()
-            started_at = __import__("time").perf_counter()
+            started_at = time.perf_counter()
             try:
                 with span(
                     "qros.execution",
