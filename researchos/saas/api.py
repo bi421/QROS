@@ -89,7 +89,7 @@ def _error_payload(request: Request, status_code: int, detail: object) -> dict[s
         if detail_message is not None
         else detail
         if isinstance(detail, str)
-        else "request failed"
+        else "Internal error"
     )
     payload: dict[str, object] = {
         "code": str(detail_code) if detail_code else _error_code(status_code),
@@ -289,7 +289,12 @@ def create_app(
         del exc
         return JSONResponse(
             status_code=500,
-            content=_error_payload(request, 500, "internal server error"),
+            content={
+                "code": "internal_error",
+                "message": "Internal error",
+                "request_id": getattr(request.state, "request_id", None),
+                "correlation_id": getattr(request.state, "correlation_id", getattr(request.state, "request_id", None)),
+            },
         )
 
     def current_tenant(
