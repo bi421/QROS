@@ -87,6 +87,7 @@ class SupabaseResearchFindingStore(ResearchFindingStore):
                 count="exact",
             )
             .eq("workspace_id", str(workspace_id))
+            .is_("deleted_at", "null")
         )
         if status:
             query = query.eq("status", status)
@@ -106,6 +107,7 @@ class SupabaseResearchFindingStore(ResearchFindingStore):
                 "validation_sha256,claim_id,plan_hash,finding_sha256,status,payload,contract_version"
             )
             .eq("workspace_id", str(workspace_id))
+            .is_("deleted_at", "null")
             .eq("research_run_id", str(research_run_id))
             .limit(1)
             .execute()
