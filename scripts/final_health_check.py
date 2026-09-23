@@ -22,6 +22,7 @@ REQUIRED_CHECKS = (
     "ruff",
     "pytest",
     "red_team_tenant_isolation",
+    "real_tenant_isolation",
     "rls_tenant_isolation",
     "authz_matrix",
     "backup_verify_contract",
@@ -117,6 +118,17 @@ def main() -> int:
             "cross_tenant or workspace_header",
         ],
     )
+    checks["real_tenant_isolation"] = command_result(
+        "real_tenant_isolation",
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "researchos/saas/tests/test_tenant_isolation_real.py",
+            "--real-db",
+            "-v",
+        ],
+    )
 
     if args.skip_rls:
         checks["rls_tenant_isolation"] = {
@@ -195,7 +207,7 @@ def main() -> int:
         "branch": git_value(["branch", "--show-current"]),
         "checks": checks,
         "test_results": {
-            name: checks[name]["status"] for name in ("pytest", "red_team_tenant_isolation")
+            name: checks[name]["status"] for name in ("pytest", "red_team_tenant_isolation", "real_tenant_isolation")
         },
         "coverage": coverage,
         "rls_check": checks["rls_tenant_isolation"],
