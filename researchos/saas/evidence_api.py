@@ -164,13 +164,13 @@ def register_research_evidence_routes(
     evidence_store: ResearchEvidenceStore | None,
 ) -> None:
     @router.get(
-        "/v1/research-runs/{research_run_id}/evidence",
+        "/v1/research-runs/{job_id}/evidence",
         response_model=list[ResearchEvidenceResponse],
         tags=["evidence"],
     )
     @require_permission("evidence", "list")
     def list_research_run_evidence(
-        research_run_id: UUID,
+        job_id: UUID,
         context: TenantContext = Depends(tenant_dependency),
     ) -> list[ResearchEvidenceResponse]:
         if evidence_store is None:
@@ -179,7 +179,7 @@ def register_research_evidence_routes(
                 detail="research evidence persistence is not configured",
             )
         try:
-            rows = evidence_store.list_for_run(context.workspace_id, research_run_id)
+            rows = evidence_store.list_for_run(context.workspace_id, job_id)
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
