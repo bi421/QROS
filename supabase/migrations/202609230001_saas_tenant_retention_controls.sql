@@ -31,6 +31,16 @@ revoke all on table public.workspace_retention_policy, public.tenant_deletion_to
 grant all on table public.workspace_retention_policy, public.tenant_deletion_tombstone
     to service_role;
 
+-- The deletion-operation row is an audit/control record, not tenant content.
+-- Keep it after workspace purge by detaching the workspace foreign key.
+alter table public.retention_deletion_operation
+    drop constraint if exists retention_deletion_operation_workspace_id_fkey;
+alter table public.retention_deletion_operation
+    alter column workspace_id drop not null;
+alter table public.retention_deletion_operation
+    add constraint retention_deletion_operation_workspace_id_fkey
+    foreign key (workspace_id) references public.workspace(id) on delete set null;
+
 alter table public.workspace_retention_policy enable row level security;
 alter table public.workspace_retention_policy force row level security;
 alter table public.tenant_deletion_tombstone enable row level security;
@@ -58,8 +68,7 @@ begin
         'research_finding',
         'research_run_result',
         'research_run_artifact',
-        'audit_event',
-        'retention_deletion_operation'
+        'audit_event'
     ]
     loop
         execute format('alter table public.%I add column if not exists deleted_at timestamptz', table_name);
@@ -220,8 +229,7 @@ begin
         'research_run_result',
         'research_run_artifact',
         'dataset_version',
-        'audit_event',
-        'retention_deletion_operation'
+        'audit_event'
     ]
     loop
         execute format('drop trigger if exists prevent_tombstoned_insert on public.%I', table_name);
