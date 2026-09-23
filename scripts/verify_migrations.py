@@ -92,13 +92,14 @@ def main() -> int:
     ensure_tools()
     SCHEMA_DIFF.parent.mkdir(parents=True, exist_ok=True)
 
-    # A clean local reset is the authoritative migration replay mechanism.
-    # It recreates local Postgres and applies every migration in timestamp order.
-    if not (ROOT / "supabase" / "config.toml").exists():
-        run(["supabase", "init"])
-    run(["supabase", "stop", "--no-backup"], check=False)
-    run(["supabase", "start"])
-    try:
+    external_database = bool(os.environ.get("QROS_VERIFY_DATABASE_URL"))
+    if external_database:
+        print(f"verifying external database: {DB_URL}")
+    else:
+        if not (ROOT / "supabase" / "config.toml").exists():
+            run(["supabase", "init"])
+        run(["supabase", "stop", "--no-backup"], check=False)
+        run(["supabase", "start"])
         run(["supabase", "db", "reset", "--local", "--no-seed"])
 
         tenant_columns = query(
@@ -200,7 +201,9 @@ def main() -> int:
                     if normalize_sql(policy["with_check"]) != normalize_sql(TENANT_PREDICATE):
                         policy_gaps.append(f"{table}.{policy_name}:WITH CHECK mismatch")
 
-        diff = run(["supabase", "db", "diff", "--local", "--schema", "public"], check=False)
+        diff_command = (["supabase", "db", "diff", "--db-url", DB_URL, "--schema", "public"]
+                        if external_database else ["supabase", "db", "diff", "--local", "--schema", "public"])
+        diff = run(diff_command, check=False)
         SCHEMA_DIFF.write_text(diff.stdout + diff.stderr, encoding="utf-8")
 
         checks = {
@@ -226,7 +229,8 @@ def main() -> int:
         )
         return 1 if failed else 0
     finally:
-        run(["supabase", "stop"], check=False)
+        if not external_database:
+            run(["supabase", "stop"], check=False)
 
 
 if __name__ == "__main__":
