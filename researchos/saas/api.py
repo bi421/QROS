@@ -88,7 +88,9 @@ def _error_code(status_code: int) -> str:
     }.get(status_code, "http_error")
 
 
-def _error_payload(request: Request, status_code: int, detail: object) -> dict[str, object]:
+def _error_payload(
+    request: Request, status_code: int, detail: object, details: object | None = None
+) -> dict[str, object]:
     message = detail if isinstance(detail, str) else "request failed"
     code = (
         detail
@@ -105,6 +107,8 @@ def _error_payload(request: Request, status_code: int, detail: object) -> dict[s
             or getattr(request.state, "request_id", None),
         },
     }
+    if details is not None:
+        payload["error"]["details"] = details
     return payload
 
 
@@ -205,8 +209,8 @@ def create_app(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
         return JSONResponse(
-            status_code=422,
-            content=_error_payload(request, 422, exc.errors()),
+            status_code=400,
+            content=_error_payload(request, 400, "INVALID_REQUEST", details=exc.errors()),
         )
 
     @app.exception_handler(Exception)
