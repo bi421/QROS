@@ -141,7 +141,9 @@ class InMemoryDatasetStorage:
     def __init__(self) -> None:
         self._objects: dict[str, bytes] = {}
 
-    def put(self, storage_path: str, file: BinaryIO) -> None:
+    def put(self, storage_path: str, file: BinaryIO, *, tenant_id: UUID | None = None, access_token: str | None = None) -> None:
+        if tenant_id is not None and not storage_path.startswith(f"tenant/{tenant_id}/"):
+            raise PermissionError("storage path is outside tenant context")
         payload = file.read()
         existing = self._objects.get(storage_path)
         if existing is not None:
@@ -152,22 +154,28 @@ class InMemoryDatasetStorage:
         self._objects[storage_path] = payload
         file.seek(0)
 
-    def remove(self, storage_path: str) -> None:
+    def remove(self, storage_path: str, *, tenant_id: UUID | None = None, access_token: str | None = None) -> None:
+        if tenant_id is not None and not storage_path.startswith(f"tenant/{tenant_id}/"):
+            raise PermissionError("storage path is outside tenant context")
         self._objects.pop(storage_path, None)
 
     def get(self, storage_path: str) -> bytes | None:
         return self._objects.get(storage_path)
 
-    def verify_sha256(self, storage_path: str, expected_sha256: str) -> bool:
+    def verify_sha256(self, storage_path: str, expected_sha256: str, *, tenant_id: UUID | None = None, access_token: str | None = None) -> bool:
+        if tenant_id is not None and not storage_path.startswith(f"tenant/{tenant_id}/"):
+            raise PermissionError("storage path is outside tenant context")
         payload = self._objects.get(storage_path)
         return payload is not None and sha256(payload).hexdigest() == expected_sha256.lower()
 
-    def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
+    def create_signed_download_url(self, storage_path: str, expires_in: int, *, tenant_id: UUID | None = None, access_token: str | None = None) -> str:
+        if tenant_id is not None and not storage_path.startswith(f"tenant/{tenant_id}/"):
+            raise PermissionError("storage path is outside tenant context")
         if storage_path not in self._objects:
             raise FileNotFoundError(storage_path)
-        if not 1 <= expires_in <= 900:
-            raise ValueError("signed URL expiry must be between 1 and 900 seconds")
-        return f"memory://{storage_path}?expires_in={expires_in}"
+        if expires_in != 3600:
+            raise ValueError("dataset signed URL expiry must be exactly 3600 seconds")
+        return f"memory://{storage_path}?expires_in=3600"
 
 
 class SupabaseDatasetStore:
