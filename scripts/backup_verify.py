@@ -23,7 +23,7 @@ def main() -> int:
 
     if not args.database_url:
         raise SystemExit("QROS_BACKUP_DATABASE_URL or --database-url is required")
-    for tool in ("pg_dump", "psql"):
+    for tool in ("pg_dump", "pg_restore", "psql"):
         if shutil.which(tool) is None:
             raise SystemExit(f"{tool} is required")
 
