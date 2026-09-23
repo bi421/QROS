@@ -10,6 +10,7 @@ import structlog
 
 from researchos.saas.auth.permissions import current_request_id
 from researchos.saas.tracing import job_span
+from researchos.saas.observability import metrics_registry
 
 from researchos.research_core.contracts import ResearchResult
 from researchos.saas.contracts import ResearchJobStatus
@@ -81,6 +82,7 @@ class ResearchWorker:
         try:
             result = self._executor.execute(job_id)
         except Exception:
+            metrics_registry().job_finished(time.perf_counter() - started, True)
             self._store.finish(
                 workspace_id,
                 job_id,
@@ -114,6 +116,7 @@ class ResearchWorker:
                 pass
             raise
         self._store.finish(workspace_id, job_id, lease.token, target)
+        metrics_registry().job_finished(time.perf_counter() - started, target == ResearchJobStatus.FAILED)
         log.info(
             "job_completed",
             timestamp=time.time(),
