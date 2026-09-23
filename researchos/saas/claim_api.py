@@ -6,12 +6,13 @@ import hashlib
 from typing import Any, Protocol
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from researchos.claims.claim import ResearchClaim, ResearchClaimType, ResearchPlan
 from researchos.saas.auth.authorization import require_permission
 from researchos.saas.contracts import TenantContext, WorkspaceRole
+from researchos.saas.pagination import PaginationParameterError, pagination_envelope, parse_list_query
 
 
 class ResearchClaimStore(Protocol):
@@ -22,7 +23,7 @@ class ResearchClaimStore(Protocol):
         ...
 
     def list(
-        self, workspace_id: UUID, *, limit: int = 100, offset: int = 0
+        self, workspace_id: UUID, *, limit: int = 100, offset: int = 0, sort_by: str = "created_at", sort_order: str = "desc", status: str | None = None
     ) -> tuple[list[ResearchClaim], int]:
         ...
 
@@ -73,11 +74,8 @@ class ResearchClaimResponse(BaseModel):
 
 
 class ResearchClaimPageResponse(BaseModel):
-    items: list[ResearchClaimResponse]
-    total: int
-    limit: int
-    offset: int
-    has_more: bool
+    data: list[ResearchClaimResponse]
+    pagination: dict[str, int]
 
 
 def _response(claim: ResearchClaim) -> ResearchClaimResponse:
@@ -258,33 +256,55 @@ def register_research_claim_routes(
     )
     @require_permission("job", "list")
     def list_research_claims(
-        limit: int = 50,
-        offset: int = 0,
+        page: str = "1",
+        page_size: str = "20",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        status_filter: str | None = Query(default=None, alias="filter[status]"),
         context: TenantContext = Depends(tenant_dependency),
     ) -> ResearchClaimPageResponse:
-        if not 1 <= limit <= 100 or offset < 0:
-            raise HTTPException(status_code=422, detail="invalid pagination")
+        try:
+            query = parse_list_query(
+                page=page,
+                page_size=page_size,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                status=status_filter,
+                allowed_sort_fields=frozenset({"created_at", "status", "statement"}),
+            )
+        except PaginationParameterError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
         store = require_store()
         try:
             claims, total = store.list(
                 context.workspace_id,
-                limit=limit,
-                offset=offset,
+                limit=query.page_size,
+                offset=query.offset,
+                sort_by=query.sort_by,
+                sort_order=query.sort_order,
+                status=query.status,
             )
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "INVALID_SORT" if "sort" in str(exc) else "INVALID_FILTER", "message": str(exc)},
+            ) from exc
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="research claim persistence unavailable",
             ) from exc
         items = [_response(claim) for claim in claims]
-        return ResearchClaimPageResponse(
-            items=items,
-            total=total,
-            limit=limit,
-            offset=offset,
-            has_more=offset + len(items) < total,
+        return ResearchClaimPageResponse.model_validate(
+            pagination_envelope(
+                data=[item.model_dump(mode="json") for item in items],
+                page=query.page,
+                page_size=query.page_size,
+                total=total,
+            )
         )
 
 
