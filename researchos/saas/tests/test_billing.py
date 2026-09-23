@@ -11,6 +11,7 @@ from researchos.saas.billing import (
     SupabaseBillingEventStore,
     parse_billing_event,
     verify_hmac_signature,
+    verify_stripe_signature,
 )
 
 
@@ -65,6 +66,7 @@ class BillingClient:
                 "billing_event", rows=billing_rows, insert_error=insert_error
             ),
             "subscription": TableQuery("subscription"),
+            "entitlement": TableQuery("entitlement"),
         }
 
     def table(self, name):
@@ -132,3 +134,17 @@ def test_supabase_billing_store_replays_identical_processed_event() -> None:
     store = SupabaseBillingEventStore(client)
 
     assert store.process(_event(), "test", "a" * 64) is False
+
+
+def test_stripe_signature_verification_accepts_valid_timestamped_signature() -> None:
+    import time
+    body = b'{"id":"evt_stripe_1","type":"customer.subscription.updated"}'
+    timestamp = int(time.time())
+    signed = f"{timestamp}.".encode() + body
+    signature = hmac.new(b"secret", signed, hashlib.sha256).hexdigest()
+    verify_stripe_signature(body, f"t={timestamp},v1={signature}", "secret", now=timestamp)
+
+
+def test_stripe_signature_rejects_replay_timestamp() -> None:
+    with pytest.raises(BillingSignatureError):
+        verify_stripe_signature(b"{}", "t=1,v1=00", "secret", now=1000)
