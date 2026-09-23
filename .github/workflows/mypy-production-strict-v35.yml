@@ -37,3 +37,5 @@ strict_equality = true
 exclude = (^|/)(tests|archive|build-nanobind|\\.venv|venv)/
 EOF
           python -m mypy researchos --config-file /tmp/mypy-production-strict-v35.ini --exclude '(^|/)tests/'
+
+# Re-run diagnostic trigger.
