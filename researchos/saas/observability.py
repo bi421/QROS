@@ -23,6 +23,17 @@ except ImportError:  # pragma: no cover
 
 _LOGGER = structlog.get_logger("qros.saas") if structlog is not None else None
 
+if structlog is not None:
+    structlog.configure(
+        processors=[
+            structlog.contextvars.merge_contextvars,
+            structlog.processors.TimeStamper(fmt="iso", utc=True, key="timestamp"),
+            structlog.processors.add_log_level,
+            structlog.processors.JSONRenderer(),
+        ],
+        cache_logger_on_first_use=True,
+    )
+
 _SENSITIVE_KEYS = frozenset(
     {
         "authorization",
