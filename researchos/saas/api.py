@@ -1,4 +1,4 @@
-"""Secure HTTP boundary for the QROS SaaS MVP."""
+﻿"""Secure HTTP boundary for the QROS SaaS MVP."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import json
 import logging
 import time
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -45,6 +45,7 @@ from researchos.saas.validation_api import InMemoryResearchValidationStore, Rese
 from researchos.saas.finding_api import InMemoryResearchFindingStore, register_research_finding_routes
 from researchos.saas.research_report import build_research_report
 from researchos.saas.observability import StructuredRequestObserver, observe_request
+from researchos.saas.pagination import paginate, validate_filter_tenant_id
 from researchos.saas.billing import (
     BillingEventConflict,
     BillingEventStore,
@@ -445,12 +446,26 @@ def create_app(
             raise HTTPException(status_code=404, detail="dataset not found")
         return persist_version(dataset_id=dataset_id, tenant=tenant, file=file)
 
-    @app.get("/v1/datasets/{dataset_id}/versions", response_model=list[DatasetVersion], tags=["datasets"])
+    @app.get("/v1/datasets/{dataset_id}/versions", tags=["datasets"])
     def list_dataset_versions(
         dataset_id: UUID,
+        page: int = Query(default=1, ge=1),
+        page_size: int = Query(default=20, ge=1, le=100),
+        sort_by: str = Query(default="version_no"),
+        sort_order: str = Query(default="desc"),
+        filter_status: str | None = Query(default=None, alias="filter[status]"),
+        filter_tenant_id: UUID | None = Query(default=None, alias="filter[tenant_id]"),
         tenant: TenantContext = Depends(current_tenant),
-    ) -> list[DatasetVersion]:
-        return datasets.list_versions(tenant.workspace_id, dataset_id)
+    ) -> dict[str, object]:
+        validate_filter_tenant_id(filter_tenant_id, tenant.workspace_id)
+        if filter_status is not None:
+            raise HTTPException(status_code=400, detail="INVALID_FILTER")
+        if sort_order not in {"asc", "desc"}:
+            raise HTTPException(status_code=400, detail="INVALID_SORT")
+        items = datasets.list_versions(tenant.workspace_id, dataset_id)
+        if sort_by not in {"version_no", "content_sha256", "byte_size"}:
+            raise HTTPException(status_code=400, detail="INVALID_SORT")
+        return paginate(items, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order)
 
     @app.get("/v1/datasets/{dataset_id}/versions/{version_id}/download", response_model=dict[str, str], tags=["datasets"])
     def create_dataset_download_url(
@@ -550,7 +565,6 @@ def create_app(
                 )
             except Exception:
                 pass
-<<<<<<< HEAD
             raise RuntimeError("research job queue unavailable") from exc
         return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
 
