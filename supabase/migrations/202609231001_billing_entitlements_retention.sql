@@ -21,6 +21,8 @@ left join public.subscription s on s.workspace_id = w.id
 on conflict (tenant_id) do nothing;
 
 alter table public.entitlements enable row level security;
+revoke all on table public.entitlements from anon, authenticated;
+grant all on table public.entitlements to service_role;
 drop policy if exists tenant_select on public.entitlements;
 drop policy if exists tenant_insert on public.entitlements;
 drop policy if exists tenant_update on public.entitlements;
