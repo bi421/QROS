@@ -3,14 +3,6 @@
 -- four authenticated policies. The claim is issued by the trusted auth hook;
 -- authorization data must live in app metadata, not user metadata.
 
-create or replace function public.qros_tenant_claim()
-returns uuid
-language sql
-stable
-as $$
-  select nullif(auth.jwt() ->> 'tenant_id', '')::uuid
-$$;
-
 -- Add the canonical tenant key to all tenant-owned tables.
 alter table public.workspace add column if not exists tenant_id uuid;
 alter table public.workspace_member add column if not exists tenant_id uuid;
