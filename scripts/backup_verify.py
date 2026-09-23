@@ -143,7 +143,6 @@ def main() -> int:
                     "--format=custom",
                     "--data-only",
                     "--schema=public",
-                    "--table=auth.users",
                     "--no-owner",
                     "--no-acl",
                     "--file",
