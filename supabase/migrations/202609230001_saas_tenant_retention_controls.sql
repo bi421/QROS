@@ -360,6 +360,17 @@ begin
         insert into public.tenant_deletion_tombstone(
             table_name, row_id, workspace_id, historical_hash, deleted_at, purged_at
         )
+        select 'workspace', w.id::text, w.id,
+               encode(digest(coalesce(w.id::text,'') || '|' || coalesce(w.created_at::text,''), 'sha256'), 'hex'),
+               w.deleted_at, p_now
+          from public.workspace w
+         where w.id = workspace_row.id
+           and w.deleted_at is not null
+        on conflict (table_name, row_id) do nothing;
+
+        insert into public.tenant_deletion_tombstone(
+            table_name, row_id, workspace_id, historical_hash, deleted_at, purged_at
+        )
         select 'evidence', e.id::text, e.workspace_id,
                encode(digest(
                    coalesce(e.id::text,'') || '|' ||
