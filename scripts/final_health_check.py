@@ -1,4 +1,4 @@
-﻿"""Run the exact release health gate and emit health_evidence_<sha>.json."""
+"""Run the exact release health gate and emit health_evidence_<sha>.json."""
 from __future__ import annotations
 
 import argparse
