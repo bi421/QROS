@@ -405,7 +405,7 @@ def test_validation_errors_include_structured_error_metadata() -> None:
         headers={"Authorization": "Bearer test", "Idempotency-Key": "validation"},
         json={"dataset_version_id": "not-a-uuid"},
     )
-    assert response.status_code == 422
+    assert response.status_code == 400
     payload = response.json()
     assert payload["error"]["code"] == "validation_error"
     assert payload["error"]["request_id"]
