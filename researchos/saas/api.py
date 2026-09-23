@@ -13,6 +13,8 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
+from researchos.saas.api.middleware import RequestContextMiddleware
+from researchos.saas.observability import configure_logging, metrics_text
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, ResearchJob, ResearchJobStatus, TenantContext
@@ -47,6 +49,7 @@ IDEMPOTENCY_HEADER = "Idempotency-Key"
 MAX_REQUEST_ID_LENGTH = 128
 
 logger = logging.getLogger(__name__)
+configure_logging()
 
 
 def _error_code(status_code: int) -> str:
@@ -85,18 +88,6 @@ def _validate_dataset_name(name: str) -> str:
     if not normalized or "/" in normalized or "\" in normalized or ".." in normalized:
         raise HTTPException(status_code=400, detail="INVALID_PATH")
     return normalized
-
-
-class RequestCorrelationMiddleware(BaseHTTPMiddleware):
-    """Attach one bounded correlation ID to every HTTP request and response."""
-
-    async def dispatch(self, request: Request, call_next) -> Response:
-        supplied = request.headers.get(REQUEST_ID_HEADER, "").strip()
-        request_id = supplied[:MAX_REQUEST_ID_LENGTH] if supplied else str(uuid4())
-        request.state.request_id = request_id
-        response = await call_next(request)
-        response.headers[REQUEST_ID_HEADER] = request_id
-        return response
 
 
 class AuthProvider(Protocol):
@@ -174,7 +165,7 @@ def create_app(
         version="1.0.0",
         description="Multi-tenant delivery API for auditable financial research.",
     )
-    app.add_middleware(RequestCorrelationMiddleware)
+    app.add_middleware(RequestContextMiddleware)
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
@@ -256,6 +247,10 @@ def create_app(
     @app.get("/healthz", tags=["system"])
     def healthz() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/metrics", include_in_schema=False, tags=["system"])
+    def metrics() -> Response:
+        return Response(content=metrics_text(), media_type="text/plain; version=0.0.4")
 
     @app.get("/readyz", tags=["system"])
     def readyz() -> dict[str, str]:
