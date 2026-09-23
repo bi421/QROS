@@ -286,22 +286,28 @@ def register_research_claim_routes(
             allowed=frozenset({"status", "tenant_id"}),
         )
         store = require_store()
-        try:
-            if tenant_filter is not None and tenant_filter != str(context.workspace_id):
-                claims, total = [], 0
-            else:
+        if tenant_filter is not None and tenant_filter != str(context.workspace_id):
+            claims, total = [], 0
+        else:
+            try:
                 claims, total = store.list(
-                context.workspace_id,
-                limit=query.page_size,
-                offset=query.offset,
-                sort_by=query.sort_by,
-                sort_order=query.sort_order,
-                status=query.status,
+                    context.workspace_id,
+                    limit=query.page_size,
+                    offset=query.offset,
+                    sort_by=query.sort_by,
+                    sort_order=query.sort_order,
+                    status=query.status,
                 )
             except ValueError as exc:
-                raise HTTPException(status_code=400, detail={"code": "INVALID_SORT" if "sort" in str(exc) else "INVALID_FILTER", "message": str(exc)}) from exc
+                raise HTTPException(
+                    status_code=400,
+                    detail={"code": "INVALID_SORT" if "sort" in str(exc) else "INVALID_FILTER", "message": str(exc)},
+                ) from exc
             except Exception as exc:
-                raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="research claim persistence unavailable") from exc
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="research claim persistence unavailable",
+                ) from exc
         items = [_response(claim) for claim in claims]
         return ResearchClaimPageResponse.model_validate(
             pagination_envelope(
