@@ -90,7 +90,7 @@ class SupabaseResearchEvidenceStore:
         runs = (
             self._client.table("research_run")
             .select("id,claim_id,plan_hash")
-            .eq("workspace_id", str(workspace_id))
+            .eq("workspace_id", str(workspace_id)).is_("deleted_at", "null")
             .eq("claim_id", claim_id)
             .execute()
         )
