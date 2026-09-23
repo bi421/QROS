@@ -387,18 +387,20 @@ def create_app(
     async def billing_webhook(
         request: Request,
         x_billing_signature: str | None = Header(default=None, alias="X-Billing-Signature"),
+        stripe_signature: str | None = Header(default=None, alias="Stripe-Signature"),
         x_billing_provider: str | None = Header(default=None, alias="X-Billing-Provider"),
     ) -> dict[str, str]:
         if billing is None or not billing_webhook_secret:
             raise HTTPException(status_code=503, detail="billing webhook is not configured")
-        if not x_billing_signature or not x_billing_provider:
+        signature = stripe_signature or x_billing_signature
+        if not signature or not x_billing_provider:
             raise HTTPException(status_code=400, detail="billing signature and provider are required")
         payload = await request.body()
         try:
-            if x_billing_signature.startswith("t="):
-                verify_stripe_signature(payload, x_billing_signature, billing_webhook_secret)
+            if signature.startswith("t="):
+                verify_stripe_signature(payload, signature, billing_webhook_secret)
             else:
-                verify_hmac_signature(payload, x_billing_signature, billing_webhook_secret)
+                verify_hmac_signature(payload, signature, billing_webhook_secret)
             event = parse_billing_event(payload)
         except BillingSignatureError as exc:
             raise HTTPException(status_code=401, detail="invalid billing webhook signature") from exc
