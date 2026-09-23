@@ -590,9 +590,30 @@ def create_app(
             "claim_id": request.claim_id,
             "plan_hash": request.plan_hash,
         })
+        try:
+            entitlement = entitlements.get(tenant.workspace_id, tenant.plan.value)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="entitlement service unavailable") from exc
+        monthly_jobs = store.count_monthly(tenant.workspace_id)
+        if not entitlement.allows_jobs(monthly_jobs):
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "code": "ENTITLEMENT_EXCEEDED",
+                    "message": "monthly job entitlement exceeded",
+                    "upgrade_url": "https://qros.ai/upgrade",
+                },
+            )
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
-        if not policy.allows_monthly_runs(store.count_monthly(tenant.workspace_id)):
-            raise HTTPException(status_code=402, detail="research run limit reached")
+        if not policy.allows_monthly_runs(monthly_jobs):
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "code": "ENTITLEMENT_EXCEEDED",
+                    "message": "monthly job entitlement exceeded",
+                    "upgrade_url": "https://qros.ai/upgrade",
+                },
+            )
         if not policy.allows_concurrency(store.count_active(tenant.workspace_id)):
             raise HTTPException(status_code=429, detail="concurrent research run limit reached")
         version = datasets.get_version(tenant.workspace_id, request.dataset_version_id)
