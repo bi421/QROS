@@ -1,4 +1,4 @@
-""""API-first boundary from validated research evidence to knowledge proposals.
+"""API-first boundary from validated research evidence to knowledge proposals.
 
 Phase 4 establishes a deterministic, auditable bridge:
 Research -> Evidence -> Learning -> Knowledge.
