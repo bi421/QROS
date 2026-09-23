@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 MIGRATIONS=ROOT/"supabase"/"migrations"
-TENANT_TABLES={"dataset","dataset_version","research_run","artifact","evidence","usage_event","audit_log","subscription","workspace_member"}
+TENANT_TABLES={"dataset","dataset_version","research_run","artifact","evidence","usage_event","audit_log","subscription","workspace_member","research_run_result","research_run_artifact"}
 TABLE_RE=re.compile(r"create table if not exists public\.([a-z_]+)",re.I)
 
 def static_check() -> None:
