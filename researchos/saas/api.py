@@ -19,7 +19,7 @@ from opentelemetry import trace
 _TRACER = trace.get_tracer("qros.saas")
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
-from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, PageRequest, ResearchJob, ResearchJobStatus, TenantContext, WorkspaceRole
+from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, ResearchJob, ResearchJobStatus, TenantContext, WorkspaceRole
 from researchos.saas.datasets import (
     Dataset,
     DatasetStorage,
