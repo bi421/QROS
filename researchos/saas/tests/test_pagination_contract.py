@@ -79,7 +79,8 @@ def test_all_list_endpoints_return_standard_pagination_envelope(
     response = client.get(path, headers={"Authorization": "Bearer test"})
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"data", "pagination"}
+    assert set(body) == {"data", "pagination", "request_id"}
+    assert body["request_id"] == response.headers["X-Request-ID"]
     assert body["pagination"] == {
         "page": 1,
         "page_size": 20,
@@ -96,6 +97,10 @@ def test_all_list_endpoints_return_standard_pagination_envelope(
         "/v1/research-runs",
         "/v1/research-claims",
         "/v1/findings",
+        "/v1/datasets/00000000-0000-0000-0000-000000000000/versions",
+        "/v1/research-runs/00000000-0000-0000-0000-000000000000/logs",
+        "/v1/jobs/00000000-0000-0000-0000-000000000000/logs",
+        "/v1/claims/00000000-0000-0000-0000-000000000000/evidence_graph",
     ],
 )
 def test_page_size_overflow_is_client_error(
@@ -129,7 +134,27 @@ def test_invalid_sort_field_returns_invalid_sort_code(
     assert response.status_code == 400
     body = response.json()
     assert body["code"] == "INVALID_SORT"
-    assert body["error"]["code"] == "INVALID_SORT"
+    assert body["request_id"] == response.headers["X-Request-ID"]
+    assert body["correlation_id"] == body["request_id"]
+
+
+def test_invalid_filter_returns_structured_400(client: TestClient) -> None:
+    response = client.get(
+        "/v1/findings?filter%5Bunknown%5D=x",
+        headers={"Authorization": "Bearer test"},
+    )
+    assert response.status_code == 400
+    body = response.json()
+    assert body["code"] == "INVALID_FILTER"
+    assert body["request_id"] == response.headers["X-Request-ID"]
+    assert body["correlation_id"] == body["request_id"]
+
+
+def test_openapi_contains_contract_alias_endpoints(client: TestClient) -> None:
+    paths = client.get("/openapi.json").json()["paths"]
+    assert "/v1/datasets/{dataset_id}/versions" in paths
+    assert "/v1/jobs/{job_id}/logs" in paths
+    assert "/v1/claims/{claim_id}/evidence_graph" in paths
 
 
 def test_standard_filter_syntax_is_accepted_for_jobs(client: TestClient) -> None:
