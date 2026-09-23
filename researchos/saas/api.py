@@ -174,12 +174,20 @@ class ResearchJobResponse(BaseModel):
     plan_hash: str | None = None
 
 
+class DatasetPageResponse(BaseModel):
+    items: list[DatasetResponse]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+
 class DatasetResponse(BaseModel):
     id: UUID
     workspace_id: UUID
     name: str
     created_by: UUID
-    version: DatasetVersion
+    version: DatasetVersion | None
 
 
 def _research_job_response(job: ResearchJob) -> ResearchJobResponse:
@@ -363,6 +371,39 @@ def create_app(
     @require_permission("workspace", "read")
     def me(tenant: TenantContext = Depends(current_tenant)) -> dict[str, str]:
         return {"user_id": str(tenant.user_id), "workspace_id": str(tenant.workspace_id), "plan": tenant.plan.value}
+
+    @app.get("/v1/datasets", response_model=DatasetPageResponse, tags=["datasets"])
+    @require_permission("dataset", "list")
+    def list_datasets(
+        limit: int = 50,
+        offset: int = 0,
+        name: str | None = None,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> DatasetPageResponse:
+        try:
+            page = PageRequest(limit=limit, offset=offset)
+            if name is not None and not 1 <= len(name.strip()) <= 256:
+                raise ValueError("name filter must be between 1 and 256 characters")
+            rows, total = datasets.list_datasets(
+                tenant.workspace_id, limit=page.limit, offset=page.offset, name_filter=name
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        items = [
+            DatasetResponse(
+                id=row.id, workspace_id=row.workspace_id, name=row.name,
+                created_by=row.created_by,
+                version=sorted(
+                    datasets.list_versions(tenant.workspace_id, row.id),
+                    key=lambda item: item.version_no,
+                )[-1] if datasets.list_versions(tenant.workspace_id, row.id) else None,
+            )
+            for row in rows
+        ]
+        return DatasetPageResponse(
+            items=items, total=total, limit=page.limit, offset=page.offset,
+            has_more=page.offset + len(items) < total,
+        )
 
     @app.post("/v1/datasets", response_model=DatasetResponse, status_code=201, tags=["datasets"])
     @require_permission("dataset", "create")
@@ -566,6 +607,16 @@ def create_app(
             offset=page.offset,
             has_more=page.offset + len(items) < total,
         )
+
+    @app.get("/v1/research-runs/{job_id}/logs", response_model=list[dict[str, object]], tags=["research"])
+    @require_permission("job", "read")
+    def get_research_run_logs(
+        job_id: UUID,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> list[dict[str, object]]:
+        if store.get(tenant.workspace_id, job_id) is None:
+            raise HTTPException(status_code=404, detail="research run not found")
+        return store.logs(tenant.workspace_id, job_id)
 
     @app.get("/v1/research-runs/{job_id}/result", tags=["research"])
     @require_permission("job", "read")
