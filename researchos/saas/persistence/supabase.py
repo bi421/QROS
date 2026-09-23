@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
+from researchos.saas.retention_reconciliation import DeletionOperationState, SupabaseDeletionOperationStore
 from researchos.saas.persistence.tenant import (
     RetentionConfig,
     DeletionReceipt,
@@ -42,6 +43,7 @@ class SupabaseTenantPersistence:
 
     def __init__(self, supabase_client: Any) -> None:
         self._client = supabase_client
+        self._operations = SupabaseDeletionOperationStore(supabase_client)
 
     def is_workspace_deleted(self, workspace_id: UUID) -> bool:
         result = (
@@ -63,14 +65,55 @@ class SupabaseTenantPersistence:
     ) -> DeletionReceipt:
         policy = retention or RetentionConfig()
         when = deleted_at or datetime.now(timezone.utc)
-        result = self._client.rpc(
-            "soft_delete_workspace",
-            {
-                "p_workspace_id": str(workspace_id),
-                "p_deleted_at": when.isoformat(),
-                "p_retention_days": policy.retention_days,
-            },
-        ).execute()
+        operation_id = f"workspace-delete-{workspace_id}"
+        operation = self._operations.reserve(
+            workspace_id,
+            operation_id,
+            "workspace",
+            str(workspace_id),
+        )
+        if operation.state is DeletionOperationState.COMPLETED:
+            result = self._client.rpc(
+                "soft_delete_workspace",
+                {
+                    "p_workspace_id": str(workspace_id),
+                    "p_deleted_at": when.isoformat(),
+                    "p_retention_days": policy.retention_days,
+                },
+            ).execute()
+        else:
+            self._operations.transition(
+                workspace_id,
+                operation_id,
+                "workspace",
+                str(workspace_id),
+                DeletionOperationState.DELETE_ATTEMPTED,
+            )
+            try:
+                result = self._client.rpc(
+                    "soft_delete_workspace",
+                    {
+                        "p_workspace_id": str(workspace_id),
+                        "p_deleted_at": when.isoformat(),
+                        "p_retention_days": policy.retention_days,
+                    },
+                ).execute()
+            except Exception:
+                self._operations.transition(
+                    workspace_id,
+                    operation_id,
+                    "workspace",
+                    str(workspace_id),
+                    DeletionOperationState.RECONCILIATION_REQUIRED,
+                )
+                raise
+            self._operations.transition(
+                workspace_id,
+                operation_id,
+                "workspace",
+                str(workspace_id),
+                DeletionOperationState.COMPLETED,
+            )
         rows = result.data or []
         if len(rows) != 1:
             raise TenantPersistenceError("workspace soft-delete returned no receipt")
