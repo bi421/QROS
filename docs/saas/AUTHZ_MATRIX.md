@@ -32,7 +32,7 @@ Legend: **✓** allowed, **—** forbidden.
 | Resource | create | read | list | update | delete |
 |---|---:|---:|---:|---:|---:|
 | dataset | ✓ | ✓ | ✓ | ✓ | — |
-| job | ✓ | ✓ | ✓ | — | — |
+| job | ✓ | ✓ | ✓ | ✓ | — |
 | evidence | — | ✓ | ✓ | — | — |
 | finding | ✓ | ✓ | ✓ | — | — |
 | billing | — | — | — | — | — |
