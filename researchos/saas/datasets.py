@@ -57,6 +57,9 @@ class DatasetStore(Protocol):
     def list_versions(self, workspace_id: UUID, dataset_id: UUID) -> list[DatasetVersion]:
         ...
 
+    def find_version_by_hash(self, workspace_id: UUID, dataset_id: UUID, content_sha256: str) -> DatasetVersion | None:
+        ...
+
 
 class DatasetStorage(Protocol):
     def put(self, storage_path: str, file: BinaryIO) -> None:
@@ -101,8 +104,6 @@ class InMemoryDatasetStore:
         existing = [v for v in self._versions.values() if v.dataset_id == version.dataset_id]
         if any(v.version_no == version.version_no for v in existing):
             raise ValueError("dataset version number already exists")
-        if any(v.content_sha256 == version.content_sha256 for v in existing):
-            raise ValueError("dataset content already exists")
         self._versions[version.id] = version
         return version
 
@@ -121,10 +122,10 @@ class InMemoryDatasetStore:
     def list_versions(self, workspace_id: UUID, dataset_id: UUID) -> list[DatasetVersion]:
         if self.get_dataset(workspace_id, dataset_id) is None:
             return []
-        return sorted(
-            (v for v in self._versions.values() if v.dataset_id == dataset_id),
-            key=lambda v: v.version_no,
-        )
+        return sorted((v for v in self._versions.values() if v.dataset_id == dataset_id), key=lambda v: v.version_no)
+
+    def find_version_by_hash(self, workspace_id: UUID, dataset_id: UUID, content_sha256: str) -> DatasetVersion | None:
+        return next((v for v in self.list_versions(workspace_id, dataset_id) if v.content_sha256 == content_sha256), None)
 
 
 class InMemoryDatasetStorage:
@@ -287,6 +288,13 @@ class SupabaseDatasetStore:
         )
         return [self._version(row) for row in (result.data or [])]
 
+    def find_version_by_hash(self, workspace_id: UUID, dataset_id: UUID, content_sha256: str) -> DatasetVersion | None:
+        result = (self._client.table("dataset_version").select("id,dataset_id,version_no,content_sha256,storage_path,byte_size,created_by").eq("dataset_id", str(dataset_id)).eq("content_sha256", content_sha256).limit(1).execute())
+        rows = result.data or []
+        if not rows or self.get_dataset(workspace_id, dataset_id) is None:
+            return None
+        return self._version(rows[0])
+
 
 class SupabaseDatasetStorage:
     """Server-side Supabase Storage adapter for private dataset objects."""
@@ -337,9 +345,11 @@ def stream_sha256(file: BinaryIO, max_bytes: int) -> tuple[str, int]:
     return digest.hexdigest(), size
 
 
-def storage_path_for(workspace_id: UUID, dataset_id: UUID, digest: str) -> str:
-    """Return a tenant-scoped content-addressed object path."""
-    return f"{workspace_id}/datasets/{dataset_id}/sha256/{digest}"
+def storage_path_for(workspace_id: UUID, dataset_id: UUID, digest: str, version_no: int) -> str:
+    """Return the canonical tenant/content/version object path."""
+    if version_no < 1:
+        raise ValueError("version_no must be positive")
+    return f"tenant/{workspace_id}/datasets/{digest}/{version_no}"
 
 
 __all__ = [
