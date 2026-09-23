@@ -227,7 +227,7 @@ def create_app(
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
-            storage_path = storage_path_for(tenant.workspace_id, dataset_id, digest)
+            storage_path = storage_path_for(tenant.workspace_id, digest, len(datasets.list_versions(tenant.workspace_id, dataset_id)) + 1)
             storage.put(storage_path, file.file)
             try:
                 version = datasets.create_version(
@@ -306,7 +306,7 @@ def create_app(
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
-            storage_path = storage_path_for(tenant.workspace_id, dataset.id, digest)
+            storage_path = storage_path_for(tenant.workspace_id, digest, 1)
             storage.put(storage_path, file.file)
             try:
                 persisted_dataset = datasets.create_dataset(tenant.workspace_id, dataset)
