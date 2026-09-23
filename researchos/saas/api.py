@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol, Sequence
+from typing import Protocol
 from uuid import UUID, uuid4
 import hashlib
 import hmac
@@ -16,7 +16,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response, StreamingResponse
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
-from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, PageRequest, ResearchJob, ResearchJobStatus, TenantContext, WorkspaceRole
+from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, ResearchJob, ResearchJobStatus, TenantContext, WorkspaceRole
 from researchos.saas.storage.signed_urls import DEFAULT_EXPIRY_SECONDS, SignedUrlError, bind_signed_url
 from researchos.saas.datasets import (
     Dataset,
