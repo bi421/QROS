@@ -39,14 +39,6 @@ class DatasetStore(Protocol):
         """Create a dataset only when its tenant identity matches the boundary."""
         ...
 
-    def list_datasets(self, workspace_id: UUID, *, limit: int = 50, offset: int = 0, name_filter: str | None = None) -> tuple[list[Dataset], int]:
-        if not 1 <= limit <= 100 or offset < 0:
-            raise ValueError("invalid pagination")
-        needle = name_filter.strip().lower() if name_filter else None
-        rows = [d for d in self._datasets.values() if d.workspace_id == workspace_id and (needle is None or needle in d.name.lower())]
-        rows.sort(key=lambda item: item.id.hex)
-        return rows[offset:offset + limit], len(rows)
-
     def delete_dataset(self, workspace_id: UUID, dataset_id: UUID) -> None:
         ...
 
@@ -89,6 +81,14 @@ class InMemoryDatasetStore:
             raise ValueError("dataset already exists")
         self._datasets[dataset.id] = dataset
         return dataset
+
+    def list_datasets(self, workspace_id: UUID, *, limit: int = 50, offset: int = 0, name_filter: str | None = None) -> tuple[list[Dataset], int]:
+        if not 1 <= limit <= 100 or offset < 0:
+            raise ValueError("invalid pagination")
+        needle = name_filter.strip().lower() if name_filter else None
+        rows = [d for d in self._datasets.values() if d.workspace_id == workspace_id and (needle is None or needle in d.name.lower())]
+        rows.sort(key=lambda item: item.id.hex)
+        return rows[offset:offset + limit], len(rows)
 
     def delete_dataset(self, workspace_id: UUID, dataset_id: UUID) -> None:
         dataset = self.get_dataset(workspace_id, dataset_id)
