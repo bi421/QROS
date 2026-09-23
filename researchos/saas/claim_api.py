@@ -265,6 +265,7 @@ def register_research_claim_routes(
         status_filter: str | None = Query(default=None, alias="filter[status]"),
         tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
         context: TenantContext = Depends(tenant_dependency),
+        request: Request,
     ) -> ResearchClaimPageResponse:
         try:
             validate_filter_keys(
