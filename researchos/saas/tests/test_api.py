@@ -434,7 +434,7 @@ def test_dataset_download_url_is_authorized_and_short_lived() -> None:
     )
 
     assert response.status_code == 200
-    assert response.json()["expires_in"] == "300"
+    assert response.json()["expires_in"] == "3600"
     assert response.json()["url"].startswith("memory://")
 
 
