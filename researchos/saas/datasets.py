@@ -32,9 +32,20 @@ class DatasetVersion:
 
 
 class DatasetStore(Protocol):
+    def list_datasets(self, workspace_id: UUID, *, limit: int = 50, offset: int = 0, name_filter: str | None = None) -> tuple[list[Dataset], int]:
+        ...
+
     def create_dataset(self, workspace_id: UUID, dataset: Dataset) -> Dataset:
         """Create a dataset only when its tenant identity matches the boundary."""
         ...
+
+    def list_datasets(self, workspace_id: UUID, *, limit: int = 50, offset: int = 0, name_filter: str | None = None) -> tuple[list[Dataset], int]:
+        if not 1 <= limit <= 100 or offset < 0:
+            raise ValueError("invalid pagination")
+        needle = name_filter.strip().lower() if name_filter else None
+        rows = [d for d in self._datasets.values() if d.workspace_id == workspace_id and (needle is None or needle in d.name.lower())]
+        rows.sort(key=lambda item: item.id.hex)
+        return rows[offset:offset + limit], len(rows)
 
     def delete_dataset(self, workspace_id: UUID, dataset_id: UUID) -> None:
         ...
@@ -193,6 +204,16 @@ class SupabaseDatasetStore:
         if len(rows) != 1:
             raise RuntimeError("dataset insert returned no unique row")
         return self._dataset(rows[0])
+
+    def list_datasets(self, workspace_id: UUID, *, limit: int = 50, offset: int = 0, name_filter: str | None = None) -> tuple[list[Dataset], int]:
+        if not 1 <= limit <= 100 or offset < 0:
+            raise ValueError("invalid pagination")
+        query = self._client.table("dataset").select("id,workspace_id,name,created_by", count="exact").eq("workspace_id", str(workspace_id))
+        if name_filter:
+            query = query.ilike("name", f"%{name_filter.strip()}%")
+        result = query.order("id").range(offset, offset + limit - 1).execute()
+        rows = [self._dataset(row) for row in (result.data or [])]
+        return rows, int(result.count or 0)
 
     def delete_dataset(self, workspace_id: UUID, dataset_id: UUID) -> None:
         self._client.table("dataset").delete().eq("id", str(dataset_id)).eq(
