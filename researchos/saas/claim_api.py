@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
 
 from researchos.claims.claim import ResearchClaim, ResearchClaimType, ResearchPlan
+from researchos.saas.auth.authorization import require_permission
 from researchos.saas.contracts import TenantContext, WorkspaceRole
 
 
@@ -142,6 +143,7 @@ def register_research_claim_routes(
         status_code=status.HTTP_201_CREATED,
         tags=["research-claims"],
     )
+    @require_permission("job", "create")
     def create_research_claim(
         request: ResearchClaimCreateRequest,
         context: TenantContext = Depends(tenant_dependency),
@@ -184,6 +186,7 @@ def register_research_claim_routes(
         response_model=ResearchClaimResponse,
         tags=["research-claims"],
     )
+    @require_permission("job", "update")
     def lock_research_claim_plan(
         claim_id: str,
         request: ResearchPlanLockRequest,
@@ -229,6 +232,7 @@ def register_research_claim_routes(
         response_model=ResearchClaimResponse,
         tags=["research-claims"],
     )
+    @require_permission("job", "read")
     def get_research_claim(
         claim_id: str,
         context: TenantContext = Depends(tenant_dependency),
@@ -252,6 +256,7 @@ def register_research_claim_routes(
         response_model=ResearchClaimPageResponse,
         tags=["research-claims"],
     )
+    @require_permission("job", "list")
     def list_research_claims(
         limit: int = 50,
         offset: int = 0,

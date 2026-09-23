@@ -40,6 +40,7 @@ from researchos.saas.validation_api import InMemoryResearchValidationStore, Rese
 from researchos.saas.finding_api import InMemoryResearchFindingStore, register_research_finding_routes
 from researchos.saas.research_report import build_research_report
 from researchos.saas.observability import StructuredRequestObserver, observe_request
+from researchos.saas.auth.authorization import require_permission
 from researchos.saas.billing import (
     BillingEventConflict,
     BillingEventStore,
@@ -331,6 +332,7 @@ def create_app(
         return {"status": "ready"}
 
     @app.post("/v1/billing/webhook", status_code=200, tags=["billing"])
+    @require_permission("billing", "create", service_principal=True)
     async def billing_webhook(
         request: Request,
         x_billing_signature: str | None = Header(default=None, alias="X-Billing-Signature"),
@@ -358,10 +360,12 @@ def create_app(
         return {"status": "processed" if processed else "replayed"}
 
     @app.get("/v1/me", response_model=dict[str, str], tags=["identity"])
+    @require_permission("workspace", "read")
     def me(tenant: TenantContext = Depends(current_tenant)) -> dict[str, str]:
         return {"user_id": str(tenant.user_id), "workspace_id": str(tenant.workspace_id), "plan": tenant.plan.value}
 
     @app.post("/v1/datasets", response_model=DatasetResponse, status_code=201, tags=["datasets"])
+    @require_permission("dataset", "create")
     def upload_dataset(
         name: str = Form(..., min_length=1, max_length=256),
         file: UploadFile = File(...),
@@ -410,6 +414,7 @@ def create_app(
         )
 
     @app.post("/v1/datasets/{dataset_id}/versions", response_model=DatasetVersion, status_code=201, tags=["datasets"])
+    @require_permission("dataset", "update")
     def upload_dataset_version(
         dataset_id: UUID,
         file: UploadFile = File(...),
@@ -421,6 +426,7 @@ def create_app(
         return persist_version(dataset_id=dataset_id, tenant=tenant, file=file)
 
     @app.get("/v1/datasets/{dataset_id}/versions", response_model=list[DatasetVersion], tags=["datasets"])
+    @require_permission("dataset", "list")
     def list_dataset_versions(
         dataset_id: UUID,
         tenant: TenantContext = Depends(current_tenant),
@@ -428,6 +434,7 @@ def create_app(
         return datasets.list_versions(tenant.workspace_id, dataset_id)
 
     @app.get("/v1/datasets/{dataset_id}/versions/{version_id}/download", response_model=dict[str, str], tags=["datasets"])
+    @require_permission("dataset", "read")
     def create_dataset_download_url(
         dataset_id: UUID,
         version_id: UUID,
@@ -448,6 +455,7 @@ def create_app(
         return {"url": url, "expires_in": "300"}
 
     @app.post("/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"])
+    @require_permission("job", "create")
     def create_research_run(
         request: ResearchCreateRequest,
         tenant: TenantContext = Depends(current_tenant),
@@ -529,6 +537,7 @@ def create_app(
         return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
 
     @app.get("/v1/research-runs", response_model=PageResponse, tags=["research"])
+    @require_permission("job", "list")
     def list_research_runs(
         limit: int = 50,
         offset: int = 0,
@@ -559,6 +568,7 @@ def create_app(
         )
 
     @app.get("/v1/research-runs/{job_id}/result", tags=["research"])
+    @require_permission("job", "read")
     def get_research_run_result(
         job_id: UUID,
         tenant: TenantContext = Depends(current_tenant),
@@ -586,6 +596,7 @@ def create_app(
         }
 
     @app.get("/v1/research-runs/{job_id}/report", tags=["research"])
+    @require_permission("job", "read")
     def get_research_run_report(
         job_id: UUID,
         tenant: TenantContext = Depends(current_tenant),
@@ -620,6 +631,7 @@ def create_app(
         }
 
     @app.get("/v1/research-runs/{job_id}", response_model=ResearchJobResponse, tags=["research"])
+    @require_permission("job", "read")
     def get_research_run(job_id: UUID, tenant: TenantContext = Depends(current_tenant)) -> ResearchJobResponse:
         job = store.get(tenant.workspace_id, job_id)
         if job is None:

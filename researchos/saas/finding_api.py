@@ -8,6 +8,7 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
 
 from researchos.saas.finding import ResearchFindingRecord, VALIDATED_STATUS
+from researchos.saas.auth.authorization import require_permission
 
 
 class ResearchFindingStore(Protocol):
@@ -46,6 +47,7 @@ def register_research_finding_routes(
     validation_store,
 ) -> None:
     @app.post("/v1/research-runs/{job_id}/finding", status_code=status.HTTP_201_CREATED, tags=["research"])
+    @require_permission("finding", "create")
     def create_finding(
         job_id: UUID,
         request: ResearchFindingRequest,
@@ -82,6 +84,7 @@ def register_research_finding_routes(
         return _response(persisted)
 
     @app.get("/v1/research-runs/{job_id}/finding", tags=["research"])
+    @require_permission("finding", "read")
     def get_finding(job_id: UUID, tenant=Depends(tenant_dependency)) -> dict[str, object]:
         if finding_store is None:
             raise HTTPException(status_code=503, detail="research finding persistence is not configured")
