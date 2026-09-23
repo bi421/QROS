@@ -246,7 +246,10 @@ def create_app(
                 return duplicate
             next_version = max((v.version_no for v in existing_versions), default=0) + 1
             storage_path = storage_path_for(tenant.workspace_id, digest, next_version)
-            storage.put(storage_path, file.file)
+            object_created = False
+            if not storage.exists(storage_path):
+                storage.put(storage_path, file.file)
+                object_created = True
             try:
                 version = datasets.create_version(
                     tenant.workspace_id,
@@ -261,7 +264,8 @@ def create_app(
                     ),
                 )
             except Exception:
-                storage.remove(storage_path)
+                if object_created:
+                    storage.remove(storage_path)
                 raise
             return version
         except ValueError as exc:
