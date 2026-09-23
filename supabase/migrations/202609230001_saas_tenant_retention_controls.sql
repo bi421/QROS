@@ -41,6 +41,7 @@ declare
     table_name text;
 begin
     foreach table_name in array array[
+        'workspace',
         'workspace_member',
         'subscription',
         'dataset',
@@ -173,6 +174,11 @@ begin
     elsif tg_table_name = 'api_idempotency' then
         workspace_value := new.workspace_id;
         row_key := new.workspace_id::text || ':' || new.key;
+    elsif tg_table_name = 'dataset_version' then
+        select d.workspace_id into workspace_value
+          from public.dataset d
+         where d.id = new.dataset_id;
+        row_key := new.id::text;
     else
         workspace_value := new.workspace_id;
         row_key := new.id::text;
@@ -207,7 +213,10 @@ begin
         'research_validation',
         'research_finding',
         'research_run_result',
-        'research_run_artifact'
+        'research_run_artifact',
+        'dataset_version',
+        'audit_event',
+        'retention_deletion_operation'
     ]
     loop
         execute format('drop trigger if exists prevent_tombstoned_insert on public.%I', table_name);
