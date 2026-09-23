@@ -46,7 +46,7 @@ class ResearchInput:
             research_id=str(data["research_id"]),
             question=str(data["question"]),
             methodology_version=str(data["methodology_version"]),
-            dataset=ValidatedDatasetRef.from_dict(dict(data["dataset"])),
+            dataset=ValidatedDatasetRef.from_dict(cast(dict[str, object], data["dataset"])),
         )
 
 
