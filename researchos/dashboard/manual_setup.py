@@ -30,5 +30,5 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
 
 @router.get("/", response_class=HTMLResponse)
-async def manual_setup_page():
+async def manual_setup_page() -> str:
     return DASHBOARD_HTML
