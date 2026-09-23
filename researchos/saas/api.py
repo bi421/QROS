@@ -82,7 +82,12 @@ def _error_payload(
     }
     if details is not None:
         error["details"] = details
-    return {"detail": detail, "error": error}
+    return {
+        "detail": detail,
+        "code": code,
+        "request_id": getattr(request.state, "request_id", None),
+        "error": error,
+    }
 
 
 def _validate_dataset_name(name: str) -> str:
