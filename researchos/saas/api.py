@@ -429,15 +429,30 @@ def create_app(
         require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.RESEARCHER)
         dataset = Dataset(id=uuid4(), workspace_id=tenant.workspace_id, name=name.strip(), created_by=tenant.user_id)
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
+        persisted_dataset = None
         try:
-            digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
+            _, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
             persisted_dataset = datasets.create_dataset(tenant.workspace_id, dataset)
             version = persist_version(dataset_id=dataset.id, tenant=tenant, file=file)
         except ValueError as exc:
+            if persisted_dataset is not None:
+                datasets.delete_dataset(tenant.workspace_id, dataset.id)
             raise HTTPException(status_code=413, detail=str(exc)) from exc
+        except HTTPException:
+            if persisted_dataset is not None:
+                try:
+                    datasets.delete_dataset(tenant.workspace_id, dataset.id)
+                except Exception:
+                    pass
+            raise
         except Exception as exc:
+            if persisted_dataset is not None:
+                try:
+                    datasets.delete_dataset(tenant.workspace_id, dataset.id)
+                except Exception:
+                    pass
             raise HTTPException(status_code=500, detail="dataset persistence failed") from exc
 
         return DatasetResponse(
