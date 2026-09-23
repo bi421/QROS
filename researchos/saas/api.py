@@ -301,7 +301,13 @@ def create_app(
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
-            storage_path = storage_path_for(tenant.workspace_id, dataset_id, digest)
+            existing = datasets.find_version_by_content(tenant.workspace_id, dataset_id, digest)
+            if existing is not None:
+                if not storage.verify_sha256(existing.storage_path, existing.content_sha256):
+                    raise HTTPException(status_code=503, detail="dataset object integrity check failed")
+                return existing
+            version_no = datasets.next_version_no(tenant.workspace_id, dataset_id)
+            storage_path = storage_path_for(tenant.workspace_id, digest, version_no)
             storage.put(storage_path, file.file)
             try:
                 version = datasets.create_version(
@@ -309,7 +315,7 @@ def create_app(
                     DatasetVersion(
                         id=uuid4(),
                         dataset_id=dataset_id,
-                        version_no=len(datasets.list_versions(tenant.workspace_id, dataset_id)) + 1,
+                        version_no=version_no,
                         content_sha256=digest,
                         storage_path=storage_path,
                         byte_size=size,
@@ -427,28 +433,8 @@ def create_app(
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
-            storage_path = storage_path_for(tenant.workspace_id, dataset.id, digest)
-            storage.put(storage_path, file.file)
-            try:
-                persisted_dataset = datasets.create_dataset(tenant.workspace_id, dataset)
-                version = datasets.create_version(
-                    tenant.workspace_id,
-                    DatasetVersion(
-                        id=uuid4(),
-                        dataset_id=dataset.id,
-                        version_no=1,
-                        content_sha256=digest,
-                        storage_path=storage_path,
-                        byte_size=size,
-                        created_by=tenant.user_id,
-                    )
-                )
-            except Exception:
-                try:
-                    datasets.delete_dataset(tenant.workspace_id, dataset.id)
-                finally:
-                    storage.remove(storage_path)
-                raise
+            persisted_dataset = datasets.create_dataset(tenant.workspace_id, dataset)
+            version = persist_version(dataset_id=dataset.id, tenant=tenant, file=file)
         except ValueError as exc:
             raise HTTPException(status_code=413, detail=str(exc)) from exc
         except Exception as exc:
@@ -474,6 +460,37 @@ def create_app(
             raise HTTPException(status_code=404, detail="dataset not found")
         return persist_version(dataset_id=dataset_id, tenant=tenant, file=file)
 
+    @app.delete("/v1/datasets/{dataset_id}", status_code=204, tags=["datasets"])
+    @require_permission("dataset", "delete")
+    def delete_dataset(
+        dataset_id: UUID,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> Response:
+        def has_active_finding() -> bool:
+            if finding_store is None:
+                return False
+            offset = 0
+            while True:
+                jobs, total = store.list(tenant.workspace_id, limit=100, offset=offset)
+                for job in jobs:
+                    if datasets.get_version(tenant.workspace_id, job.dataset_version_id) is None:
+                        continue
+                    version = datasets.get_version(tenant.workspace_id, job.dataset_version_id)
+                    if version is not None and version.dataset_id == dataset_id and finding_store.get(tenant.workspace_id, job.id) is not None:
+                        return True
+                offset += len(jobs)
+                if offset >= total or not jobs:
+                    return False
+        if datasets.get_dataset(tenant.workspace_id, dataset_id) is None:
+            raise HTTPException(status_code=404, detail="dataset not found")
+        if has_active_finding():
+            raise HTTPException(status_code=409, detail="DATASET_REFERENCED")
+        try:
+            datasets.delete_dataset(tenant.workspace_id, dataset_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return Response(status_code=204)
+
     @app.get("/v1/datasets/{dataset_id}/versions", response_model=list[DatasetVersion], tags=["datasets"])
     @require_permission("dataset", "list")
     def list_dataset_versions(
@@ -494,6 +511,8 @@ def create_app(
         if version is None or version.dataset_id != dataset_id:
             raise HTTPException(status_code=404, detail="dataset version not found")
         try:
+            if not storage.verify_sha256(version.storage_path, version.content_sha256):
+                raise HTTPException(status_code=503, detail="dataset object integrity check failed")
             url = storage.create_signed_download_url(version.storage_path, 300)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="dataset object not found") from exc
