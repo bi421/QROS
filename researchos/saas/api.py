@@ -724,6 +724,48 @@ def create_app(
         validation_store=effective_validation_store,
     )
 
+    def _custom_openapi() -> dict[str, object]:
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = app.openapi()
+        components = schema.setdefault("components", {})
+        schemas = components.setdefault("schemas", {})
+        schemas["ErrorResponse"] = {
+            "type": "object",
+            "required": ["code", "message", "request_id", "correlation_id"],
+            "properties": {
+                "code": {"type": "string", "example": "not_found"},
+                "message": {"type": "string", "example": "research run not found"},
+                "request_id": {"type": "string", "example": "01JQROSREQUEST123"},
+                "correlation_id": {"type": "string", "example": "01JQROSREQUEST123"},
+            },
+        }
+        for path_item in schema.get("paths", {}).values():
+            for operation in path_item.values():
+                if not isinstance(operation, dict):
+                    continue
+                responses = operation.setdefault("responses", {})
+                for code in ("400", "401", "403", "404", "409", "413", "422", "429", "500", "503"):
+                    response = responses.setdefault(code, {"description": "Structured API error"})
+                    response.setdefault("content", {})["application/json"] = {
+                        "schema": {"$ref": "#/components/schemas/ErrorResponse"},
+                        "example": {
+                            "code": _error_code(int(code)),
+                            "message": "request failed",
+                            "request_id": "01JQROSREQUEST123",
+                            "correlation_id": "01JQROSREQUEST123",
+                        },
+                    }
+                headers = operation.setdefault("responses", {}).setdefault("200", {}).setdefault("headers", {})
+                headers["X-Request-ID"] = {
+                    "description": "Bounded request/correlation identifier.",
+                    "schema": {"type": "string", "maxLength": MAX_REQUEST_ID_LENGTH},
+                    "example": "01JQROSREQUEST123",
+                }
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = _custom_openapi
     return app
 
 
