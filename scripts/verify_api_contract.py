@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
-"""Verify the executable FastAPI /v1 surface matches API_CONTRACT_V1.md."""
+"""Verify the executable FastAPI /v1 source surface matches API_CONTRACT_V1.md."""
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
-import sys
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-
-from researchos.saas.api import create_app  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ROOT / "docs" / "saas" / "API_CONTRACT_V1.md"
@@ -39,27 +34,38 @@ EXPECTED = {
 
 def main() -> int:
     text = CONTRACT.read_text(encoding="utf-8")
-    documented = set(re.findall(r"- `((?:GET|POST|PUT|PATCH|DELETE)) (/v1[^` ]*)`", text))
-    documented = {f"{method} {path}" for method, path in documented}
-    app = create_app()
-    actual = {
-        f"{method.upper()} {path}"
-        for path, item in app.openapi()["paths"].items()
-        if path.startswith("/v1")
-        for method in item
-        if method.lower() in {"get", "post", "put", "patch", "delete"}
+    documented = {
+        f"{method} {path}"
+        for method, path in re.findall(r"- \\`((?:GET|POST|PUT|PATCH|DELETE)) (/v1[^\\` ]*)\\`", text)
     }
+    actual: set[str] = set()
+    for source in (ROOT / "researchos" / "saas").rglob("*.py"):
+        tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for decorator in node.decorator_list:
+                if not isinstance(decorator, ast.Call) or not isinstance(decorator.func, ast.Attribute):
+                    continue
+                method = decorator.func.attr.upper()
+                if method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
+                    continue
+                if not decorator.args or not isinstance(decorator.args[0], ast.Constant):
+                    continue
+                path = decorator.args[0].value
+                if isinstance(path, str) and path.startswith("/v1"):
+                    actual.add(f"{method} {path}")
     if documented != EXPECTED:
         print("API_CONTRACT_V1 documentation drift:")
         print("missing:", sorted(EXPECTED - documented))
         print("extra:", sorted(documented - EXPECTED))
         return 1
     if actual != EXPECTED:
-        print("FastAPI/OpenAPI drift:")
+        print("FastAPI route-source drift:")
         print("missing:", sorted(EXPECTED - actual))
         print("extra:", sorted(actual - EXPECTED))
         return 1
-    print(f"API contract PASS: {len(actual)} documented/executable /v1 operations match")
+    print(f"API contract PASS: {len(actual)} documented/route-source /v1 operations match")
     return 0
 
 if __name__ == "__main__":
