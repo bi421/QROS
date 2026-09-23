@@ -13,12 +13,14 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import json
 import logging
+import os
 import threading
 import time
 from typing import Iterator, Mapping
 from uuid import UUID
 
 from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
 
 _LOGGER = logging.getLogger("qros.saas")
 _TRACER = trace.get_tracer("qros.saas")
@@ -33,6 +35,15 @@ _SENSITIVE_KEYS = frozenset({
     "billing-signature", "metrics-token",
 })
 _LATENCY_BUCKETS_MS = (5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000)
+
+
+def configure_tracing() -> None:
+    """Install a recording SDK provider when the application owns tracing setup."""
+    if os.getenv("OTEL_SDK_DISABLED", "").lower() == "true":
+        return
+    provider = trace.get_tracer_provider()
+    if provider.__class__.__name__ == "ProxyTracerProvider":
+        trace.set_tracer_provider(TracerProvider())
 
 
 def _id(value: UUID | str | None) -> str | None:
