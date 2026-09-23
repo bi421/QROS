@@ -147,7 +147,8 @@ def test_rate_limiter_failure_fails_closed_with_503() -> None:
         json={"dataset_version_id": str(uuid4())},
     )
     assert response.status_code == 503
-    assert response.json()["detail"] == "rate limiting service unavailable"
+    assert response.json()["code"] == "service_unavailable"
+    assert response.json()["message"] == "rate limiting service unavailable"
 
 
 def test_health_bypasses_rate_limiter() -> None:
@@ -636,7 +637,8 @@ def test_cross_tenant_workspace_header_cannot_select_another_workspace() -> None
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "workspace access denied"
+    assert response.json()["code"] == "forbidden"
+    assert response.json()["message"] == "workspace access denied"
 
 
 def test_governed_research_run_requires_locked_claim_plan_and_persists_binding() -> None:
