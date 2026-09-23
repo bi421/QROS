@@ -22,7 +22,7 @@ def static_check() -> None:
     for table in sorted(TENANT_TABLES):
         if not re.search(rf"create table if not exists public\.{table}\s*\(",sql,re.I):
             raise SystemExit(f"missing table definition: {table}")
-        if table not in {"workspace_member","subscription"} and not re.search(rf"workspace_id\s+uuid",sql,re.I):
+        if table not in {"workspace_member","subscription","dataset_version"} and not re.search(rf"create table if not exists public\.{table}.*?workspace_id\s+uuid",sql,re.I|re.S):
             raise SystemExit(f"missing workspace_id definition: {table}")
         if not re.search(rf"alter table public\.{table} enable row level security",sql,re.I):
             raise SystemExit(f"RLS not enabled in migration history: {table}")
