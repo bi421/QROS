@@ -28,6 +28,10 @@ class DatasetVersion:
     feeds: tuple[str, ...] = ()
 
 
+class DatasetReferencedError(RuntimeError):
+    """Raised when retention policy prevents dataset deletion."""
+
+
 class DatasetStore(Protocol):
     def list_datasets(self, workspace_id: UUID, *, limit: int = 50, offset: int = 0, name_filter: str | None = None) -> tuple[list[Dataset], int]: ...
     def create_dataset(self, workspace_id: UUID, dataset: Dataset) -> Dataset: ...
@@ -78,6 +82,8 @@ class InMemoryDatasetStore:
         del self._datasets[dataset_id]
 
     def create_version(self, workspace_id: UUID, version: DatasetVersion) -> DatasetVersion:
+        if version.storage_path != storage_path_for(workspace_id, version.content_sha256, version.version_no):
+            raise ValueError("dataset storage path does not match canonical content-addressed path")
         if version.id in self._versions:
             raise ValueError("dataset version already exists")
         if self.get_dataset(workspace_id, version.dataset_id) is None:
@@ -199,9 +205,16 @@ class SupabaseDatasetStore:
         return [self._dataset(row) for row in (result.data or [])], int(result.count or 0)
 
     def delete_dataset(self, workspace_id: UUID, dataset_id: UUID) -> None:
-        self._client.table("dataset").delete().eq("id", str(dataset_id)).eq("workspace_id", str(workspace_id)).execute()
+        try:
+            self._client.table("dataset").delete().eq("id", str(dataset_id)).eq("workspace_id", str(workspace_id)).execute()
+        except Exception as exc:
+            if "DATASET_REFERENCED" in str(exc):
+                raise DatasetReferencedError("DATASET_REFERENCED") from exc
+            raise
 
     def create_version(self, workspace_id: UUID, version: DatasetVersion) -> DatasetVersion:
+        if version.storage_path != storage_path_for(workspace_id, version.content_sha256, version.version_no):
+            raise ValueError("dataset storage path does not match canonical content-addressed path")
         if self.get_dataset(workspace_id, version.dataset_id) is None:
             raise KeyError("dataset not found for workspace")
         result = self._client.table("dataset_version").insert({
@@ -319,7 +332,7 @@ def stream_sha256(file: BinaryIO, max_bytes: int) -> tuple[str, int]:
 
 
 def storage_path_for(workspace_id: UUID, digest: str, version_no: int = 1) -> str:
-    if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest.lower()):
+    if len(digest) != 64 or digest != digest.lower() or any(ch not in "0123456789abcdef" for ch in digest):
         raise ValueError("content_sha256 must be a 64-character SHA-256 digest")
     if version_no < 1:
         raise ValueError("version_no must be positive")
@@ -327,7 +340,7 @@ def storage_path_for(workspace_id: UUID, digest: str, version_no: int = 1) -> st
 
 
 __all__ = [
-    "Dataset", "DatasetStorage", "DatasetStore", "DatasetVersion",
+    "Dataset", "DatasetReferencedError", "DatasetStorage", "DatasetStore", "DatasetVersion",
     "InMemoryDatasetStorage", "InMemoryDatasetStore", "SupabaseDatasetStorage",
     "SupabaseDatasetStore", "storage_path_for", "stream_sha256",
 ]
