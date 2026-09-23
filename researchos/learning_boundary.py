@@ -245,4 +245,3 @@ def proposals_from_learning(learning: LearningInput) -> tuple[KnowledgeProposal,
         add("lesson", index, recommendation, (learning.validation_id, learning.evidence_collection_id))
 
     return tuple(proposals)
-"
