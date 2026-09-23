@@ -393,14 +393,17 @@ def create_app(
     @app.get("/v1/datasets/{dataset_id}/versions", tags=["datasets"])
     def list_dataset_versions(
         dataset_id: UUID,
-        page: int = Query(default=1, ge=1),
-        page_size: int = Query(default=20, ge=1, le=100),
+        page: int = Query(default=1),
+        page_size: int = Query(default=20),
         sort_by: str = Query(default="version_no"),
         sort_order: str = Query(default="desc"),
         filter_status: str | None = Query(default=None, alias="filter[status]"),
         filter_tenant_id: UUID | None = Query(default=None, alias="filter[tenant_id]"),
         tenant: TenantContext = Depends(current_tenant),
+        request: Request = None,
     ) -> dict[str, object]:
+        if page < 1 or page_size < 1 or page_size > 100:
+            raise HTTPException(status_code=400, detail="INVALID_PAGINATION")
         validate_filter_tenant_id(filter_tenant_id, tenant.workspace_id)
         if filter_status is not None:
             raise HTTPException(status_code=400, detail="INVALID_FILTER")
@@ -410,7 +413,12 @@ def create_app(
         if sort_by not in {"version_no", "content_sha256", "byte_size"}:
             raise HTTPException(status_code=400, detail="INVALID_SORT")
         return paginate(
-            items, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order
+            items,
+            page=page,
+            page_size=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            request_id=getattr(request.state, "request_id", None),
         )
 
     @app.post(
