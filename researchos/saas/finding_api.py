@@ -75,7 +75,6 @@ def register_research_finding_routes(
 ) -> None:
     @app.post("/v1/research-runs/{job_id}/finding", status_code=status.HTTP_201_CREATED, tags=["research"])
     @require_permission("finding", "create")
-    @require_permission("finding", "create")
     def create_finding(
         job_id: UUID,
         request: ResearchFindingRequest,
@@ -158,7 +157,6 @@ def register_research_finding_routes(
         )
 
     @app.get("/v1/research-runs/{job_id}/finding", tags=["research"])
-    @require_permission("finding", "read")
     @require_permission("finding", "read")
     def get_finding(job_id: UUID, tenant=Depends(tenant_dependency)) -> dict[str, object]:
         if finding_store is None:
