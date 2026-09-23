@@ -328,6 +328,11 @@ def create_app(
                 )
             except Exception:
                 storage.remove(storage_path)
+                existing = datasets.find_version_by_content(tenant.workspace_id, dataset_id, digest)
+                if existing is not None:
+                    if not storage.verify_sha256(existing.storage_path, existing.content_sha256):
+                        raise HTTPException(status_code=503, detail="dataset object integrity check failed")
+                    return existing
                 raise
             return version
         except ValueError as exc:
