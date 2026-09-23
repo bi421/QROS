@@ -73,13 +73,20 @@ def _error_code(status_code: int) -> str:
 
 
 def _error_payload(request: Request, status_code: int, detail: object) -> dict[str, object]:
-    message = detail if isinstance(detail, str) else "request failed"
-    request_id = getattr(request.state, "request_id", None)
+    detail_code = detail.get("code") if isinstance(detail, dict) else None
+    detail_message = detail.get("message") if isinstance(detail, dict) else None
+    message = (
+        str(detail_message)
+        if detail_message is not None
+        else detail
+        if isinstance(detail, str)
+        else "request failed"
+    )
     return {
-        "code": _error_code(status_code),
+        "code": str(detail_code) if detail_code else _error_code(status_code),
         "message": message,
-        "request_id": request_id,
-        "correlation_id": request_id,
+        "request_id": getattr(request.state, "request_id", None),
+        "correlation_id": getattr(request.state, "request_id", None),
     }
 
 
