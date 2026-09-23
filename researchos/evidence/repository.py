@@ -223,15 +223,15 @@ class EvidenceRepository:
         conn = self._repo._get_conn()
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM evidence")
-        return cursor.fetchone()[0]
+        return int(cursor.fetchone()[0])
 
     def count_edges(self) -> int:
         conn = self._repo._get_conn()
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM lineage")
-        return cursor.fetchone()[0]
+        return int(cursor.fetchone()[0])
 
-    def _insert_edge(self, cursor, parent_hash: str, child_hash: str, relation: str) -> None:
+    def _insert_edge(self, cursor: Any, parent_hash: str, child_hash: str, relation: str) -> None:
         """Insert one typed relation for a parent/child pair.
 
         Repeating the exact typed edge is idempotent. Distinct relations for
@@ -259,7 +259,7 @@ class EvidenceRepository:
         )
 
 
-def _insert_evidence_mirror(cursor, envelope: EvidenceEnvelope) -> None:
+def _insert_evidence_mirror(cursor: Any, envelope: EvidenceEnvelope) -> None:
     """Persist the generic mirror without allowing overwrite or cross-type collision."""
     data = envelope.to_dict()
     data["object_type"] = "EvidenceEnvelope"
@@ -308,7 +308,7 @@ class _EnvelopeObject:
 
     @property
     def id(self) -> str:
-        return self._data["artifact_hash"]
+        return str(self._data["artifact_hash"])
 
     def to_dict(self) -> dict[str, Any]:
         return dict(self._data)
