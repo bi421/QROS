@@ -30,9 +30,9 @@ insert into public.dataset_version
   (id, dataset_id, version_no, content_sha256, storage_path, byte_size, created_by)
 values
   ('aaaaaaaa-1000-0000-0000-aaaaaaaaaaaa', 'aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa', 1,
-   repeat('a', 64), 'qros/a.csv', 1, '11111111-1111-1111-1111-111111111111'),
+   repeat('a', 64), 'tenant/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/datasets/' || repeat('a', 64) || '/1', 1, '11111111-1111-1111-1111-111111111111'),
   ('bbbbbbbb-1000-0000-0000-bbbbbbbbbbbb', 'bbbbbbbb-0000-0000-0000-bbbbbbbbbbbb', 1,
-   repeat('b', 64), 'qros/b.csv', 1, '22222222-2222-2222-2222-222222222222');
+   repeat('b', 64), 'tenant/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/datasets/' || repeat('b', 64) || '/1', 1, '22222222-2222-2222-2222-222222222222');
 
 insert into public.research_run
   (id, workspace_id, dataset_version_id, workflow_id, status, created_by, source_dataset_sha256)
@@ -109,7 +109,7 @@ select throws_ok(
       (id, dataset_id, version_no, content_sha256, storage_path, byte_size, created_by)
     values ('aaaaaaaa-1001-0000-0000-aaaaaaaaaaaa',
             'bbbbbbbb-0000-0000-0000-bbbbbbbbbbbb', 2,
-            repeat('c', 64), 'qros/c.csv', 1,
+            repeat('c', 64), 'tenant/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/datasets/' || repeat('c', 64) || '/2', 1,
             '11111111-1111-1111-1111-111111111111')$$,
   '42501',
   null,
@@ -173,7 +173,7 @@ select throws_ok(
     values ('bbbbbbbb-3000-0000-0000-bbbbbbbbbbbb',
             'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
             'aaaaaaaa-2000-0000-0000-aaaaaaaaaaaa',
-            'report', repeat('c', 64), 'qros/c', 1)$$,
+            'report', repeat('c', 64), 'tenant/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/datasets/' || repeat('c', 64) || '/1', 1)$$,
   'P0001',
   'research child workspace mismatch',
   'trusted writer cannot cross-bind an artifact to another tenant'
