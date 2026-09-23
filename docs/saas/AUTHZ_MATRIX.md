@@ -31,7 +31,7 @@ Legend: **✓** allowed, **—** forbidden.
 ### researcher
 | Resource | create | read | list | update | delete |
 |---|---:|---:|---:|---:|---:|
-| dataset | ✓ | ✓ | ✓ | — | — |
+| dataset | ✓ | ✓ | ✓ | ✓ | — |
 | job | ✓ | ✓ | ✓ | — | — |
 | evidence | — | ✓ | ✓ | — | — |
 | finding | ✓ | ✓ | ✓ | — | — |
