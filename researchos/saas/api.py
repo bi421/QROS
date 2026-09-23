@@ -23,6 +23,7 @@ from researchos.saas.datasets import (
     DatasetStorage,
     DatasetStore,
     DatasetVersion,
+    DatasetReferencedError,
     InMemoryDatasetStorage,
     InMemoryDatasetStore,
     storage_path_for,
@@ -645,6 +646,27 @@ def create_app(
                 request_id=request.state.request_id if request is not None else "",
             )
         )
+
+    @app.delete("/v1/datasets/{dataset_id}/versions/{version_id}", status_code=204, tags=["datasets"])
+    @require_permission("dataset", "delete")
+    def delete_dataset_version(
+        dataset_id: UUID,
+        version_id: UUID,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> Response:
+        require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.ADMIN)
+        version = datasets.get_version(tenant.workspace_id, version_id)
+        if version is None or version.dataset_id != dataset_id:
+            raise HTTPException(status_code=404, detail="dataset version not found")
+        try:
+            datasets.delete_version(tenant.workspace_id, dataset_id, version_id)
+        except DatasetReferencedError as exc:
+            raise HTTPException(status_code=409, detail={"code": "DATASET_REFERENCED", "message": "dataset version is referenced by research evidence or findings"}) from exc
+        try:
+            storage.remove(version.storage_path)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="dataset object deletion failed") from exc
+        return Response(status_code=204)
 
     @app.get("/v1/datasets/{dataset_id}/versions/{version_id}/download", response_model=dict[str, str], tags=["datasets"])
     @require_permission("dataset", "read")
