@@ -18,6 +18,8 @@ for action in Action:
 _POLICY[WorkspaceRole.ADMIN].update({(Resource.BILLING,Action.READ),(Resource.BILLING,Action.LIST),(Resource.BILLING,Action.UPDATE)})
 for resource in (Resource.DATASET,Resource.DATASET_VERSION,Resource.JOB,Resource.CLAIM,Resource.PLAN,Resource.EVIDENCE,Resource.FINDING):
     _POLICY[WorkspaceRole.RESEARCHER].update({(resource,Action.READ),(resource,Action.LIST),(resource,Action.CREATE),(resource,Action.UPDATE)})
+for action in Action:
+    _POLICY[WorkspaceRole.BILLING_ADMIN].update({(Resource.BILLING, action)})
 for resource in Resource:
     _POLICY[WorkspaceRole.VIEWER].update({(resource,Action.READ),(resource,Action.LIST)})
 
