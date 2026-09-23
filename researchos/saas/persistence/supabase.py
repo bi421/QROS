@@ -43,6 +43,17 @@ class SupabaseTenantPersistence:
     def __init__(self, supabase_client: Any) -> None:
         self._client = supabase_client
 
+    def is_workspace_deleted(self, workspace_id: UUID) -> bool:
+        result = (
+            self._client.table("workspace")
+            .select("deleted_at")
+            .eq("id", str(workspace_id))
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        return bool(rows and rows[0].get("deleted_at"))
+
     def soft_delete_workspace(
         self,
         workspace_id: UUID,
@@ -85,11 +96,21 @@ class SupabaseTenantPersistence:
 
     def export_workspace(self, workspace_id: UUID) -> bytes:
         try:
+            workspace_result = (
+                self._client.table("workspace")
+                .select("*")
+                .eq("id", str(workspace_id))
+                .limit(1)
+                .execute()
+            )
             rows = {
                 table: self._rows(table, workspace_id)
                 for table in self._EXPORT_TABLES
-                if table not in {"workspace_member", "subscription"}
+                if table not in {"workspace", "workspace_member", "subscription"}
             }
+            rows["workspace"] = [dict(row) for row in (workspace_result.data or [])]
+            for table in ("workspace_member", "subscription"):
+                rows[table] = self._rows(table, workspace_id)
             dataset_ids = [str(row["id"]) for row in rows["dataset"]]
             if dataset_ids:
                 versions = (
