@@ -466,7 +466,6 @@ def create_app(
         sort_order: str = "desc",
         name: str | None = None,
         tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
-        request: Request = None,
         tenant: TenantContext = Depends(current_tenant),
     ) -> PageResponse:
         try:
