@@ -92,7 +92,7 @@ def test_allowed_capability_executes(role: WorkspaceRole) -> None:
         return context(role)
 
     @app.get("/v1/test")
-    @require_permission(Resource.DATASET, Action.READ)
+    @require_permission("dataset", "read")
     def read_dataset(
         tenant: TenantContext = Depends(role_context),
     ) -> dict[str, str]:
