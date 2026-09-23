@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from researchos.saas.contracts import TenantContext
@@ -128,7 +128,7 @@ def register_research_evidence_routes(
     )
     def list_research_run_evidence(
         research_run_id: UUID,
-        request: Any,
+        request: Request,
         context: TenantContext = Depends(tenant_dependency),
     ) -> dict[str, object]:
         if evidence_store is None:
