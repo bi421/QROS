@@ -154,7 +154,7 @@ def main() -> int:
             run(["createdb", "--maintenance-db", args.target_admin_url, target_db])
 
             # The target schema is rebuilt exclusively from repository migrations.
-            run(["supabase", "migration", "up", "--db-url", target_url, "--include-all"])
+            run(["supabase", "db", "push", "--db-url", target_url, "--include-all"])
             run([str(ROOT / "scripts" / "verify_migrations.py")], env={**os.environ, "QROS_VERIFY_DATABASE_URL": target_url})
 
             # Restore source tenant data only after the exact migration set is applied.
@@ -172,17 +172,7 @@ def main() -> int:
             )
 
             verify_dataset_hashes(args.source_url, target_url)
-
-            run(
-                [
-                    "psql",
-                    target_url,
-                    "-v",
-                    "ON_ERROR_STOP=1",
-                    "-f",
-                    str(TENANT_TEST),
-                ]
-            )
+            run(["supabase", "test", "db", str(TENANT_TEST), "--db-url", target_url])
             verify_object_replication(args.object_root_before, args.object_root_after)
 
             report = {
