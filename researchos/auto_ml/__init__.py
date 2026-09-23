@@ -1,4 +1,5 @@
-import numpy as np\nimport pandas as pd
+import numpy as np
+import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 
