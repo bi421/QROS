@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import os
 
-from supabase import create_client
+import supabase
+from fastapi import FastAPI
 
 from researchos.saas.api import create_app
 from researchos.saas.supabase_auth import SupabaseJwtAuthProvider
@@ -21,10 +22,10 @@ from researchos.saas.billing import SupabaseBillingEventStore
 from researchos.saas.rate_limit import SupabaseRateLimiter
 
 
-def build_production_app():
+def build_production_app() -> FastAPI:
     url = os.environ["SUPABASE_URL"]
     key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-    client = create_client(url, key)
+    client = getattr(supabase, "create_client")(url, key)
     membership = SupabaseWorkspaceMembershipResolver(client)
     session_validator = SupabaseSessionValidator(client)
     auth = SupabaseJwtAuthProvider(
