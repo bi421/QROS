@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 import hashlib
 import hmac
 import json
+import logging
 import time
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
@@ -14,6 +15,10 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
+
+logger = logging.getLogger(__name__)
+
+
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, PageRequest, ResearchJob, ResearchJobStatus, TenantContext, WorkspaceRole
@@ -249,6 +254,14 @@ def create_app(
             content=_error_payload(request, 422, exc.errors()),
         )
 
+    @app.exception_handler(Exception)
+    async def internal_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        request_id = getattr(request.state, "request_id", None)
+        logger.exception("unhandled request exception request_id=%s", request_id)
+        return JSONResponse(
+            status_code=500,
+            content=_error_payload(request, 500, "Internal error"),
+        )
     def current_tenant(
         authorization: str | None = Header(default=None),
         workspace_header: str | None = Header(default=None, alias=WORKSPACE_HEADER),
@@ -367,6 +380,12 @@ def create_app(
     def me(tenant: TenantContext = Depends(current_tenant)) -> dict[str, str]:
         return {"user_id": str(tenant.user_id), "workspace_id": str(tenant.workspace_id), "plan": tenant.plan.value}
 
+    def _validate_dataset_name(name: str) -> str:
+        """Reject path-like dataset names before they cross any storage boundary."""
+        normalized = name.strip()
+        if not normalized or "/" in normalized or "\\" in normalized or ".." in normalized:
+            raise HTTPException(status_code=400, detail="INVALID_PATH")
+        return normalized
     @app.post("/v1/datasets", response_model=DatasetResponse, status_code=201, tags=["datasets"])
     def upload_dataset(
         name: str = Form(..., min_length=1, max_length=256),
@@ -374,7 +393,7 @@ def create_app(
         tenant: TenantContext = Depends(current_tenant),
     ) -> DatasetResponse:
         require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.RESEARCHER)
-        dataset = Dataset(id=uuid4(), workspace_id=tenant.workspace_id, name=name.strip(), created_by=tenant.user_id)
+        dataset = Dataset(id=uuid4(), workspace_id=tenant.workspace_id, name=_validate_dataset_name(name), created_by=tenant.user_id)
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         try:
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
