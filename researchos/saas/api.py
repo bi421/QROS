@@ -23,7 +23,7 @@ from fastapi import (
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
 from starlette.responses import JSONResponse, Response
-from researchos.saas.api.middleware import RequestContextMiddleware
+from researchos.saas.api_middleware import RequestContextMiddleware
 from researchos.saas.observability import configure_logging, metrics_text
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
@@ -91,14 +91,15 @@ def _error_payload(request: Request, status_code: int, detail: object) -> dict[s
         else _error_code(status_code)
     )
     payload: dict[str, object] = {
-        "code": code,
-        "message": message,
-        "request_id": getattr(request.state, "request_id", None),
-        "correlation_id": request.headers.get("X-Correlation-ID")
-        or getattr(request.state, "request_id", None),
+        "detail": detail,
+        "error": {
+            "code": code,
+            "message": message,
+            "request_id": getattr(request.state, "request_id", None),
+            "correlation_id": request.headers.get("X-Correlation-ID")
+            or getattr(request.state, "request_id", None),
+        },
     }
-    if not isinstance(detail, str):
-        payload["details"] = detail
     return payload
 
 

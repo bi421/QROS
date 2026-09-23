@@ -123,6 +123,7 @@ def test_error_leak_is_blocked() -> None:
         "code": "internal_error",
         "message": "Internal error",
         "request_id": request_id,
+        "correlation_id": request_id,
     }
     body = response.text
     assert "traceback" not in body.lower()
