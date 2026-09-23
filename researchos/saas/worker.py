@@ -50,6 +50,8 @@ class ResearchWorker:
         self,
         workspace_id: UUID,
         job_id: UUID,
+        *,
+        request_id: str | None = None,
     ) -> ResearchResult:
         request_id = request_id or current_request_id()
         started = time.perf_counter()
@@ -58,7 +60,7 @@ class ResearchWorker:
             tenant_id=str(workspace_id),
             job_id=str(job_id),
         )
-        log.info("job_started")
+        log.info("job_started", timestamp=time.time())
         with job_span(request_id, str(job_id)):
             return self._run_once_traced(workspace_id, job_id, started, log)
     
@@ -112,6 +114,13 @@ class ResearchWorker:
                 pass
             raise
         self._store.finish(workspace_id, job_id, lease.token, target)
+        log.info(
+            "job_completed",
+            timestamp=time.time(),
+            level="info" if target == ResearchJobStatus.SUCCEEDED else "error",
+            duration_ms=round((time.perf_counter() - started) * 1000.0, 3),
+            message="job execution completed",
+        )
         return result
 
 
