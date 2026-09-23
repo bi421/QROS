@@ -42,6 +42,13 @@ class DeletionReceipt:
 
 
 class TenantPersistence(Protocol):
+    def is_workspace_deleted(self, workspace_id: UUID) -> bool:
+        ...
+
+    def is_workspace_deleted(self, workspace_id: UUID) -> bool:
+        receipt = self._receipts.get(workspace_id)
+        return receipt is not None
+
     def soft_delete_workspace(
         self,
         workspace_id: UUID,
