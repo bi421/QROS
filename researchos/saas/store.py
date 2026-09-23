@@ -214,8 +214,15 @@ class InMemoryResearchJobStore(ResearchJobStore):
             )
 
     def count_monthly(self, workspace_id: UUID) -> int:
+        now = self._clock()
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         with self._lock:
-            return sum(job.workspace_id == workspace_id for job in self._jobs.values())
+            return sum(
+                job.workspace_id == workspace_id
+                and job.created_at >= month_start
+                and job.created_at < now
+                for job in self._jobs.values()
+            )
 
     def claim(
         self,
