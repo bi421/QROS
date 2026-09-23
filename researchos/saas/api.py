@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol, Sequence
+from typing import Protocol
 from uuid import UUID, uuid4
 import hashlib
 import hmac
@@ -12,16 +12,17 @@ import time
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response, StreamingResponse
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
-from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, PageRequest, ResearchJob, ResearchJobStatus, TenantContext, WorkspaceRole
+from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, ResearchJob, ResearchJobStatus, TenantContext, WorkspaceRole
+from researchos.saas.storage.signed_urls import DEFAULT_EXPIRY_SECONDS, SignedUrlError, bind_signed_url
 from researchos.saas.datasets import (
     Dataset,
     DatasetStorage,
     DatasetStore,
     DatasetVersion,
+    DatasetReferencedError,
     InMemoryDatasetStorage,
     InMemoryDatasetStore,
     storage_path_for,
@@ -38,9 +39,10 @@ from researchos.saas.claim_api import ResearchClaimStore, register_research_clai
 from researchos.saas.evidence_api import ResearchEvidenceStore, register_research_evidence_routes
 from researchos.saas.validation_api import InMemoryResearchValidationStore, ResearchValidationStore, register_research_validation_routes
 from researchos.saas.finding_api import InMemoryResearchFindingStore, register_research_finding_routes
-from researchos.saas.pagination import PaginationParameterError, pagination_envelope, parse_list_query
+from researchos.saas.pagination import PaginationParameterError, pagination_envelope, parse_list_query, validate_filter_keys
 from researchos.saas.research_report import build_research_report
-from researchos.saas.observability import StructuredRequestObserver, observe_request
+from researchos.saas.observability import StructuredRequestObserver, metrics_registry
+from researchos.saas.api.middleware import RequestContextMiddleware
 from researchos.saas.auth.authorization import require_permission
 from researchos.saas.persistence import (
     DEFAULT_RETENTION_DAYS,
@@ -87,14 +89,19 @@ def _error_payload(request: Request, status_code: int, detail: object) -> dict[s
         if detail_message is not None
         else detail
         if isinstance(detail, str)
-        else "request failed"
+        else "Internal error"
     )
-    return {
+    payload: dict[str, object] = {
         "code": str(detail_code) if detail_code else _error_code(status_code),
         "message": message,
         "request_id": getattr(request.state, "request_id", None),
-        "correlation_id": getattr(request.state, "request_id", None),
+        "correlation_id": getattr(request.state, "correlation_id", getattr(request.state, "request_id", None)),
     }
+    if isinstance(detail, dict) and "details" in detail:
+        payload["details"] = detail["details"]
+    elif isinstance(detail, list):
+        payload["details"] = detail
+    return payload
 
 
 class RequestCorrelationMiddleware(BaseHTTPMiddleware):
@@ -106,6 +113,7 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
         request_id = "".join(char if ord(char) >= 32 and ord(char) != 127 else "-" for char in request_id)
         request.state.request_id = request_id
         request.state.correlation_id = request_id
+        request_id_token = set_request_id(request_id)
         started_at = time.perf_counter()
         try:
             response = await call_next(request)
@@ -136,6 +144,7 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
                 status_code=response.status_code,
                 started_at=started_at,
             )
+        reset_request_id(request_id_token)
         return response
 
 
@@ -181,6 +190,7 @@ class PaginationResponse(BaseModel):
 class PageResponse(BaseModel):
     data: list[object]
     pagination: PaginationResponse
+    request_id: str
 
 class DeletionReceiptResponse(BaseModel):
     workspace_id: UUID
@@ -256,7 +266,7 @@ def create_app(
         version="1.0.0",
         description="Multi-tenant delivery API for auditable financial research.",
     )
-    app.add_middleware(RequestCorrelationMiddleware)
+    app.add_middleware(RequestContextMiddleware)
     app.state.observability = StructuredRequestObserver()
 
     @app.exception_handler(HTTPException)
@@ -279,7 +289,12 @@ def create_app(
         del exc
         return JSONResponse(
             status_code=500,
-            content=_error_payload(request, 500, "internal server error"),
+            content={
+                "code": "internal_error",
+                "message": "Internal error",
+                "request_id": getattr(request.state, "request_id", None),
+                "correlation_id": getattr(request.state, "correlation_id", getattr(request.state, "request_id", None)),
+            },
         )
 
     def current_tenant(
@@ -326,15 +341,20 @@ def create_app(
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
-            storage_path = storage_path_for(tenant.workspace_id, dataset_id, digest)
+            existing = datasets.find_version_by_hash(tenant.workspace_id, dataset_id, digest)
+            if existing is not None:
+                return existing
+            version_no = len(datasets.list_versions(tenant.workspace_id, dataset_id)) + 1
+            storage_path = storage_path_for(tenant.workspace_id, dataset_id, digest, version_no)
             storage.put(storage_path, file.file)
+            storage.download_verified(storage_path, digest)
             try:
                 version = datasets.create_version(
                     tenant.workspace_id,
                     DatasetVersion(
                         id=uuid4(),
                         dataset_id=dataset_id,
-                        version_no=len(datasets.list_versions(tenant.workspace_id, dataset_id)) + 1,
+                        version_no=version_no,
                         content_sha256=digest,
                         storage_path=storage_path,
                         byte_size=size,
@@ -452,33 +472,44 @@ def create_app(
     @app.get("/v1/datasets", response_model=PageResponse, tags=["datasets"])
     @require_permission("dataset", "list")
     def list_datasets(
+        request: Request,
         page: str = "1",
         page_size: str = "20",
         sort_by: str = "created_at",
         sort_order: str = "desc",
         name: str | None = None,
+        tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
         tenant: TenantContext = Depends(current_tenant),
     ) -> PageResponse:
         try:
+            if request is not None:
+                validate_filter_keys(
+                    {key.removeprefix("filter[").removesuffix("]"): value for key, value in request.query_params.items() if key.startswith("filter[")},
+                    allowed=frozenset({"tenant_id"}),
+                )
             query = parse_list_query(
                 page=page,
                 page_size=page_size,
                 sort_by=sort_by,
                 sort_order=sort_order,
+                tenant_id=tenant_filter,
                 allowed_sort_fields=frozenset({"created_at", "name"}),
             )
             if name is not None and not 1 <= len(name.strip()) <= 256:
                 raise PaginationParameterError(
                     "name filter must be between 1 and 256 characters"
                 )
-            rows, total = datasets.list_datasets(
-                tenant.workspace_id,
-                limit=query.page_size,
-                offset=query.offset,
-                name_filter=name,
-                sort_by=query.sort_by,
-                sort_order=query.sort_order,
-            )
+            if tenant_filter is not None and tenant_filter != str(tenant.workspace_id):
+                rows, total = [], 0
+            else:
+                rows, total = datasets.list_datasets(
+                    tenant.workspace_id,
+                    limit=query.page_size,
+                    offset=query.offset,
+                    name_filter=name,
+                    sort_by=query.sort_by,
+                    sort_order=query.sort_order,
+                )
         except PaginationParameterError as exc:
             raise HTTPException(
                 status_code=400,
@@ -501,6 +532,7 @@ def create_app(
                 page=query.page,
                 page_size=query.page_size,
                 total=total,
+                request_id=request.state.request_id if request is not None else "",
             )
         )
 
@@ -518,7 +550,7 @@ def create_app(
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
-            storage_path = storage_path_for(tenant.workspace_id, dataset.id, digest)
+            storage_path = storage_path_for(tenant.workspace_id, dataset.id, digest, 1)
             storage.put(storage_path, file.file)
             try:
                 persisted_dataset = datasets.create_dataset(tenant.workspace_id, dataset)
@@ -565,13 +597,82 @@ def create_app(
             raise HTTPException(status_code=404, detail="dataset not found")
         return persist_version(dataset_id=dataset_id, tenant=tenant, file=file)
 
-    @app.get("/v1/datasets/{dataset_id}/versions", response_model=list[DatasetVersion], tags=["datasets"])
+    @app.get("/v1/datasets/{dataset_id}/versions", response_model=PageResponse, tags=["datasets"])
     @require_permission("dataset", "list")
     def list_dataset_versions(
         dataset_id: UUID,
+        page: str = "1",
+        page_size: str = "20",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
+        request: Request = None,
         tenant: TenantContext = Depends(current_tenant),
-    ) -> list[DatasetVersion]:
-        return datasets.list_versions(tenant.workspace_id, dataset_id)
+    ) -> PageResponse:
+        try:
+            if request is not None:
+                validate_filter_keys(
+                    {key.removeprefix("filter[").removesuffix("]"): value for key, value in request.query_params.items() if key.startswith("filter[")},
+                    allowed=frozenset({"tenant_id"}),
+                )
+            query = parse_list_query(
+                page=page,
+                page_size=page_size,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                tenant_id=tenant_filter,
+                allowed_sort_fields=frozenset({"created_at"}),
+            )
+        except PaginationParameterError as exc:
+            raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)}) from exc
+        if tenant_filter is not None and tenant_filter != str(tenant.workspace_id):
+            versions: list[DatasetVersion] = []
+        else:
+            versions = datasets.list_versions(tenant.workspace_id, dataset_id)
+        total = len(versions)
+        rows = versions[query.offset:query.offset + query.page_size]
+        data = [
+            {
+                "id": str(version.id),
+                "dataset_id": str(version.dataset_id),
+                "version_no": version.version_no,
+                "content_sha256": version.content_sha256,
+                "storage_path": version.storage_path,
+                "byte_size": version.byte_size,
+                "created_by": str(version.created_by),
+            }
+            for version in rows
+        ]
+        return PageResponse.model_validate(
+            pagination_envelope(
+                data=data,
+                page=query.page,
+                page_size=query.page_size,
+                total=total,
+                request_id=request.state.request_id if request is not None else "",
+            )
+        )
+
+    @app.delete("/v1/datasets/{dataset_id}/versions/{version_id}", status_code=204, tags=["datasets"])
+    @require_permission("dataset", "delete")
+    def delete_dataset_version(
+        dataset_id: UUID,
+        version_id: UUID,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> Response:
+        require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.ADMIN)
+        version = datasets.get_version(tenant.workspace_id, version_id)
+        if version is None or version.dataset_id != dataset_id:
+            raise HTTPException(status_code=404, detail="dataset version not found")
+        try:
+            datasets.delete_version(tenant.workspace_id, dataset_id, version_id)
+        except DatasetReferencedError as exc:
+            raise HTTPException(status_code=409, detail={"code": "DATASET_REFERENCED", "message": "dataset version is referenced by research evidence or findings"}) from exc
+        try:
+            storage.remove(version.storage_path)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="dataset object deletion failed") from exc
+        return Response(status_code=204)
 
     @app.get("/v1/datasets/{dataset_id}/versions/{version_id}/download", response_model=dict[str, str], tags=["datasets"])
     @require_permission("dataset", "read")
@@ -585,14 +686,15 @@ def create_app(
         if version is None or version.dataset_id != dataset_id:
             raise HTTPException(status_code=404, detail="dataset version not found")
         try:
-            url = storage.create_signed_download_url(version.storage_path, 300)
+            provider_url = storage.create_signed_download_url(version.storage_path, DEFAULT_EXPIRY_SECONDS)
+            url = bind_signed_url(provider_url, tenant.workspace_id, version.storage_path, expires_in=DEFAULT_EXPIRY_SECONDS)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="dataset object not found") from exc
-        except ValueError as exc:
+        except (ValueError, SignedUrlError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
             raise HTTPException(status_code=503, detail="dataset download service unavailable") from exc
-        return {"url": url, "expires_in": "300"}
+        return {"url": url, "expires_in": str(DEFAULT_EXPIRY_SECONDS)}
 
     @app.post("/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"])
     @require_permission("job", "create")
@@ -661,6 +763,7 @@ def create_app(
             raise
         if replayed:
             return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
+        metrics_registry().job_created()
         try:
             queue.enqueue(tenant.workspace_id, created.id)
         except Exception as exc:
@@ -685,15 +788,23 @@ def create_app(
         sort_order: str = "desc",
         status_filter: str | None = Query(default=None, alias="filter[status]"),
         workflow_id: str | None = None,
+        tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
+        request: Request = None,
         tenant: TenantContext = Depends(current_tenant),
     ) -> PageResponse:
         try:
+            if request is not None:
+                validate_filter_keys(
+                    {key.removeprefix("filter[").removesuffix("]"): value for key, value in request.query_params.items() if key.startswith("filter[")},
+                    allowed=frozenset({"status", "tenant_id"}),
+                )
             query = parse_list_query(
                 page=page,
                 page_size=page_size,
                 sort_by=sort_by,
                 sort_order=sort_order,
                 status=status_filter,
+                tenant_id=tenant_filter,
                 allowed_sort_fields=frozenset({"created_at", "status", "workflow_id"}),
             )
             normalized_status = (
@@ -712,15 +823,18 @@ def create_app(
             ) from exc
         if workflow_id is not None and not 1 <= len(workflow_id) <= 128:
             raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "message": "workflow_id must be between 1 and 128 characters"})
-        jobs, total = store.list(
-            tenant.workspace_id,
-            limit=query.page_size,
-            offset=query.offset,
-            status=status_value,
-            workflow_id=workflow_id,
-            sort_by=query.sort_by,
-            sort_order=query.sort_order,
-        )
+        if tenant_filter is not None and tenant_filter != str(tenant.workspace_id):
+            jobs, total = [], 0
+        else:
+            jobs, total = store.list(
+                tenant.workspace_id,
+                limit=query.page_size,
+                offset=query.offset,
+                status=status_value,
+                workflow_id=workflow_id,
+                sort_by=query.sort_by,
+                sort_order=query.sort_order,
+            )
         items = [_research_job_response(job).model_dump(mode="json") for job in jobs]
         return PageResponse.model_validate(
             pagination_envelope(
@@ -728,18 +842,86 @@ def create_app(
                 page=query.page,
                 page_size=query.page_size,
                 total=total,
+                request_id=request.state.request_id if request is not None else "",
             )
         )
 
-    @app.get("/v1/research-runs/{job_id}/logs", response_model=list[dict[str, object]], tags=["research"])
+    def _list_job_logs(
+        job_id: UUID,
+        *,
+        page: str,
+        page_size: str,
+        sort_by: str,
+        sort_order: str,
+        tenant_filter: str | None,
+        request: Request,
+        tenant: TenantContext,
+    ) -> PageResponse:
+        try:
+            validate_filter_keys(
+                {key.removeprefix("filter[").removesuffix("]"): value for key, value in request.query_params.items() if key.startswith("filter[")},
+                allowed=frozenset({"tenant_id"}),
+            )
+            query = parse_list_query(
+                page=page,
+                page_size=page_size,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                tenant_id=tenant_filter,
+                allowed_sort_fields=frozenset({"created_at"}),
+            )
+        except PaginationParameterError as exc:
+            raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)}) from exc
+        if tenant_filter is not None and tenant_filter != str(tenant.workspace_id):
+            logs: list[dict[str, object]] = []
+        else:
+            if store.get(tenant.workspace_id, job_id) is None:
+                raise HTTPException(status_code=404, detail="research run not found")
+            logs = store.logs(tenant.workspace_id, job_id)
+        total = len(logs)
+        return PageResponse.model_validate(
+            pagination_envelope(
+                data=logs[query.offset:query.offset + query.page_size],
+                page=query.page,
+                page_size=query.page_size,
+                total=total,
+                request_id=request.state.request_id,
+            )
+        )
+
+    @app.get("/v1/research-runs/{job_id}/logs", response_model=PageResponse, tags=["research"])
     @require_permission("job", "read")
     def get_research_run_logs(
         job_id: UUID,
+        page: str = "1",
+        page_size: str = "20",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
+        request: Request = None,
         tenant: TenantContext = Depends(current_tenant),
-    ) -> list[dict[str, object]]:
-        if store.get(tenant.workspace_id, job_id) is None:
-            raise HTTPException(status_code=404, detail="research run not found")
-        return store.logs(tenant.workspace_id, job_id)
+    ) -> PageResponse:
+        return _list_job_logs(
+            job_id, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order,
+            tenant_filter=tenant_filter, request=request, tenant=tenant,
+        )
+
+    @app.get("/v1/jobs/{job_id}/logs", response_model=PageResponse, tags=["research"])
+    @require_permission("job", "read")
+    def get_job_logs(
+        job_id: UUID,
+        page: str = "1",
+        page_size: str = "20",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
+        request: Request = None,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> PageResponse:
+        return _list_job_logs(
+            job_id, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order,
+            tenant_filter=tenant_filter, request=request, tenant=tenant,
+        )
 
     @app.get("/v1/research-runs/{job_id}/result", tags=["research"])
     @require_permission("job", "read")

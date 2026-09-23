@@ -1,94 +1,52 @@
 # QROS SaaS Authorization Matrix
 
-**Executable source of truth:** `researchos/saas/auth/authorization.py`  
-**Route gate:** every `/v1/*` route must carry `@require_permission(resource, action)`.  
+**Executable source of truth:** `researchos/saas/auth/permissions.py`  
+**Route gate:** every `/v1/*` route must carry exactly one `@require_permission(resource, action)`.  
 **Role source:** server-resolved `TenantContext.role`.
 
-## Matrix
+Legend: **✓** allowed, **—** denied. Columns are **create / read / list / update / delete**.
 
-Legend: **✓** allowed, **—** forbidden.
+| Resource | owner | admin | researcher | viewer | billing_admin |
+|---|---|---|---|---|---|
+| workspace | ✓/✓/✓/✓/✓ | —/✓/✓/✓/— | —/✓/✓/—/— | —/✓/✓/—/— | —/✓/✓/—/— |
+| dataset | ✓/✓/✓/✓/✓ | ✓/✓/✓/✓/✓ | ✓/✓/✓/✓/— | —/✓/✓/—/— | —/✓/✓/—/— |
+| dataset_version | ✓/✓/✓/✓/✓ | ✓/✓/✓/✓/✓ | ✓/✓/✓/✓/— | —/✓/✓/—/— | —/✓/✓/—/— |
+| job | ✓/✓/✓/✓/✓ | ✓/✓/✓/✓/✓ | ✓/✓/✓/✓/— | —/✓/✓/—/— | —/✓/✓/—/— |
+| claim | ✓/✓/✓/✓/✓ | ✓/✓/✓/✓/— | ✓/✓/✓/✓/— | —/✓/✓/—/— | —/✓/✓/—/— |
+| plan | ✓/✓/✓/✓/✓ | ✓/✓/✓/✓/— | ✓/✓/✓/✓/— | —/✓/✓/—/— | —/✓/✓/—/— |
+| evidence | ✓/✓/✓/✓/✓ | —/✓/✓/—/— | —/✓/✓/—/— | —/✓/✓/—/— | —/✓/✓/—/— |
+| finding | ✓/✓/✓/✓/✓ | ✓/✓/✓/✓/— | ✓/✓/✓/✓/— | —/✓/✓/—/— | —/✓/✓/—/— |
+| billing | ✓/✓/✓/✓/✓ | —/✓/✓/✓/— | —/—/—/—/— | —/—/—/—/— | ✓/✓/✓/✓/— |
 
-### owner
-| Resource | create | read | list | update | delete |
-|---|---:|---:|---:|---:|---:|
-| dataset | ✓ | ✓ | ✓ | ✓ | ✓ |
-| job | ✓ | ✓ | ✓ | ✓ | ✓ |
-| evidence | ✓ | ✓ | ✓ | ✓ | ✓ |
-| finding | ✓ | ✓ | ✓ | ✓ | ✓ |
-| billing | ✓ | ✓ | ✓ | ✓ | ✓ |
-| workspace | ✓ | ✓ | ✓ | ✓ | ✓ |
+## Current v1 route bindings
 
-### admin
-| Resource | create | read | list | update | delete |
-|---|---:|---:|---:|---:|---:|
-| dataset | ✓ | ✓ | ✓ | ✓ | ✓ |
-| job | ✓ | ✓ | ✓ | ✓ | ✓ |
-| evidence | — | ✓ | ✓ | — | — |
-| finding | ✓ | ✓ | ✓ | — | — |
-| billing | — | ✓ | ✓ | ✓ | — |
-| workspace | — | ✓ | ✓ | ✓ | — |
-
-### researcher
-| Resource | create | read | list | update | delete |
-|---|---:|---:|---:|---:|---:|
-| dataset | ✓ | ✓ | ✓ | ✓ | — |
-| job | ✓ | ✓ | ✓ | ✓ | — |
-| evidence | — | ✓ | ✓ | — | — |
-| finding | ✓ | ✓ | ✓ | — | — |
-| billing | — | — | — | — | — |
-| workspace | — | ✓ | ✓ | — | — |
-
-### viewer
-| Resource | create | read | list | update | delete |
-|---|---:|---:|---:|---:|---:|
-| dataset | — | ✓ | ✓ | — | — |
-| job | — | ✓ | ✓ | — | — |
-| evidence | — | ✓ | ✓ | — | — |
-| finding | — | ✓ | ✓ | — | — |
-| billing | — | ✓ | ✓ | — | — |
-| workspace | — | ✓ | ✓ | — | — |
-
-### billing
-| Resource | create | read | list | update | delete |
-|---|---:|---:|---:|---:|---:|
-| dataset | — | ✓ | ✓ | — | — |
-| job | — | ✓ | ✓ | — | — |
-| evidence | — | ✓ | ✓ | — | — |
-| finding | — | ✓ | ✓ | — | — |
-| billing | ✓ | ✓ | ✓ | ✓ | — |
-| workspace | — | ✓ | ✓ | — | — |
-
-## Route mapping
-
-| Route | Capability |
+| Route family | Capability |
 |---|---|
-| GET /v1/me | workspace/read |
-| POST /v1/datasets | dataset/create |
-| POST /v1/datasets/<dataset_id>/versions | dataset/update |
-| GET /v1/datasets/<dataset_id>/versions | dataset/list |
-| GET /v1/datasets/<dataset_id>/versions/<version_id>/download | dataset/read |
-| POST /v1/research-runs | job/create |
-| GET /v1/research-runs | job/list |
-| GET /v1/research-runs/<job_id> | job/read |
-| GET /v1/research-runs/<job_id>/result | job/read |
-| GET /v1/research-runs/<job_id>/report | job/read |
-| GET /v1/research-runs/<job_id>/evidence | evidence/list |
-| POST /v1/research-runs/<job_id>/validation | job/update |
-| GET /v1/research-runs/<job_id>/validation | job/read |
-| POST /v1/research-runs/<job_id>/finding | finding/create |
-| GET /v1/research-runs/<job_id>/finding | finding/read |
-| POST /v1/research-claims | job/create |
-| GET /v1/research-claims | job/list |
-| GET /v1/research-claims/<claim_id> | job/read |
-| POST /v1/research-claims/<claim_id>/plan-lock | job/update |
-| POST /v1/billing/webhook | billing/create, service principal |
+| `/v1/me` | workspace/read |
+| `/v1/workspaces/{workspace_id}` | workspace/delete/read |
+| `/v1/datasets` | dataset/create/list |
+| `/v1/datasets/{dataset_id}/versions` | dataset/update/list/read |
+| `/v1/research-runs` | job/create/list/read |
+| `/v1/research-runs/{job_id}/validation` | job/update/read |
+| `/v1/research-runs/{job_id}/evidence` | evidence/list |
+| `/v1/research-runs/{job_id}/finding` | finding/create/read |
+| `/v1/findings` | finding/list |
+| `/v1/research-claims` | claim/create/list/read |
+| `/v1/research-claims/{claim_id}/plan-lock` | plan/update |
+| `/v1/billing/webhook` | billing/create, service principal |
 
-The billing webhook is a provider-signed server callback rather than a user JWT route. It is still explicitly decorated; `service_principal=True` means HMAC/provider authentication is the authorization mechanism.
+The billing webhook is provider-authenticated and explicitly decorated with `service_principal=True`; it is not a user-role route.
 
 ## Enforcement
 
-`require_permission()` requires a `TenantContext` for user routes and returns HTTP 403 for a denied capability. Missing authorization context is HTTP 500, making a missing dependency a fail-closed programming error.
+`require_permission()` reads the server-resolved `TenantContext.role`. Request payloads and workspace headers cannot override it. A denied request returns HTTP 403 with `code=FORBIDDEN` and the request ID.
 
-CI statically scans every `/v1` FastAPI route and fails if the route has no `@require_permission`. Authorization tests exercise all 5 roles × 6 resources × 5 actions and verify representative HTTP behavior.
+CI runs:
 
-Resource aliases `research-run` and `research-claim` resolve to the `job` capability family.
+```text
+python scripts/check_authz_coverage.py
+```
+
+and fails unless every `/v1/*` route has exactly one authorization decorator.
+
+The viewer role is denied `job:create`, therefore **POST /v1/research-runs** returns 403 before the handler performs job creation.

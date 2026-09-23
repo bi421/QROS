@@ -4,7 +4,6 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main, develop]
 
 permissions:
   contents: read
@@ -27,6 +26,7 @@ jobs:
       - run: python -m compileall -q researchos scripts
       - run: python scripts/check_migrations.py
       - run: python scripts/verify_authz_routes.py
+      - run: python scripts/check_authz_coverage.py
       - run: python scripts/verify_api_contract.py
 
   type-check:
@@ -177,9 +177,33 @@ jobs:
       - if: always()
         run: supabase stop
 
+  schema-security:
+    name: Fresh Migration and Tenant RLS Contract
+    needs: [integrity]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: supabase/setup-cli@v2
+        with:
+          version: latest
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Verify fresh migration replay and tenant RLS
+        run: python scripts/verify_migrations.py
+      - name: Show schema diff artifact
+        if: always()
+        run: |
+          test ! -f .migration-audit/schema_diff.sql || cat .migration-audit/schema_diff.sql
+
   ci-complete:
     name: CI Pipeline Complete
-    needs: [test-python, type-check, build-engine, build-container, test-database, backup-restore-dr]
+    needs: [test-python, type-check, build-engine, build-container, test-database, backup-restore-dr, schema-security]
     if: success()
     runs-on: ubuntu-24.04
     steps:

@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
+import logging
 
 from researchos.research_core.contracts import ResearchArtifact, ResearchResult
 from researchos.saas.contracts import ResearchJob, ResearchJobStatus
@@ -232,3 +233,14 @@ def test_recovered_worker_reuses_idempotent_result_after_lease_loss():
     assert store.get_result(workspace_id, job.id) == first_record
     assert store.get(workspace_id, job.id).status == ResearchJobStatus.SUCCEEDED
     assert store.get(workspace_id, job.id).attempt_count == 2
+
+
+def test_worker_log_propagates_request_id(caplog) -> None:
+    workspace_id = uuid4()
+    store = InMemoryResearchJobStore()
+    job = store.create(workspace_id, _job(workspace_id))
+    executor = StubExecutor(_result())
+    worker = ResearchWorker(store, executor)
+    caplog.set_level(logging.INFO, logger="qros.worker")
+    worker.run_once(workspace_id, job.id, request_id="api-request-123")
+    assert any("api-request-123" in record.message for record in caplog.records)
