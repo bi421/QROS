@@ -549,6 +549,11 @@ def create_app(
             raise
         if replayed:
             return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
+        app.state.observability.metrics.record_job_created()
+        app.state.job_logs.setdefault(created.id, []).append({
+            "timestamp": time.time(), "request_id": getattr(tenant, "request_id", None) or "",
+            "tenant_id": str(tenant.workspace_id), "job_id": str(created.id), "message": "job_created",
+        })
         try:
             queue.enqueue(tenant.workspace_id, created.id)
         except Exception as exc:
@@ -561,6 +566,7 @@ def create_app(
                 )
             except Exception:
                 pass
+            app.state.observability.metrics.record_job_failed()
             raise HTTPException(status_code=503, detail="research job queue unavailable") from exc
         return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
 
