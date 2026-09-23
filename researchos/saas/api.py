@@ -19,6 +19,7 @@ from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, PageRequest, ResearchJob, ResearchJobStatus, TenantContext, WorkspaceRole
 from researchos.saas.datasets import (
     Dataset,
+    DatasetReferencedError,
     DatasetStorage,
     DatasetStore,
     DatasetVersion,
@@ -309,6 +310,9 @@ def create_app(
             version_no = datasets.next_version_no(tenant.workspace_id, dataset_id)
             storage_path = storage_path_for(tenant.workspace_id, digest, version_no)
             storage.put(storage_path, file.file)
+            if not storage.verify_sha256(storage_path, digest):
+                storage.remove(storage_path)
+                raise HTTPException(status_code=503, detail="dataset upload integrity verification failed")
             try:
                 version = datasets.create_version(
                     tenant.workspace_id,
@@ -502,6 +506,8 @@ def create_app(
             raise HTTPException(status_code=409, detail="DATASET_REFERENCED")
         try:
             datasets.delete_dataset(tenant.workspace_id, dataset_id)
+        except DatasetReferencedError as exc:
+            raise HTTPException(status_code=409, detail="DATASET_REFERENCED") from exc
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return Response(status_code=204)
