@@ -39,9 +39,9 @@ decisions and performs no execution.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from researchos.evidence.envelope import EvidenceEnvelope
 from researchos.evidence.repository import EvidenceRepository
@@ -160,7 +160,7 @@ class FullChain:
         }
 
 
-def _sorted_hashes(hashes: Sequence[str]) -> list[str]:
+def _sorted_hashes(hashes: Iterable[str]) -> list[str]:
     """Return a deterministically sorted list of hashes."""
     return sorted(list(hashes))
 
