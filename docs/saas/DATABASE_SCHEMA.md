@@ -114,6 +114,18 @@ usage_event
   research_run_id uuid FK research_run
   created_at timestamptz
 
+research_finding
+  id uuid PK
+  workspace_id uuid FK workspace
+  research_run_id uuid FK research_run
+  validation_id uuid FK research_validation
+  finding_sha256 text
+  status text
+  payload jsonb
+  contract_version text
+  created_at timestamptz
+  deleted_at timestamptz nullable
+
 audit_log
   id uuid PK
   workspace_id uuid FK workspace
@@ -123,7 +135,6 @@ audit_log
   resource_id uuid
   metadata jsonb
   created_at timestamptz
-  deleted_at timestamptz nullable
 
 dataset_version_feed
   dataset_version_id uuid FK dataset_version
