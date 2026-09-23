@@ -122,7 +122,11 @@ def _resource(value: Resource | str) -> Resource:
         raise ValueError(f"unknown authorization resource: {value}") from exc
 
 
-def canonical_resource(value: Resource | str) -> str:\n    return _resource(value).value\n\n\ndef _action(value: Action | str) -> Action:
+def canonical_resource(value: Resource | str) -> str:
+    return _resource(value).value
+
+
+def _action(value: Action | str) -> Action:
     raw = value.value if isinstance(value, Action) else value.strip().lower()
     try:
         return Action(raw)
@@ -241,7 +245,8 @@ __all__ = [
     "POLICY",
     "Resource",
     "Role",
-    "canonical_resource",\n    "current_request_id",
+    "canonical_resource",
+    "current_request_id",
     "is_allowed",
     "require_permission",
     "reset_request_id",
