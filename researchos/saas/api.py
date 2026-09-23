@@ -210,7 +210,7 @@ class BillingGateMiddleware(BaseHTTPMiddleware):
                 headers={"Retry-After": str(retry_after)},
                 content=_error_payload(request, 429, {"code": "RATE_LIMITED", "message": "workspace rate limit exceeded", "details": {"retry_after": retry_after}}),
             )
-        if request.method == "POST":
+        if request.method == "POST" and request.url.path in {"/v1/research-runs", "/v1/datasets"}:
             try:
                 entitlement = self.entitlement_store.get(tenant.workspace_id, tenant.plan)
                 usage = self.usage_provider(tenant.workspace_id, request.url.path)
