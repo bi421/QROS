@@ -568,6 +568,7 @@ def create_app(
         )
 
     @app.get("/v1/research-runs/{job_id}/result", tags=["research"])
+    @require_permission("job", "read")
     def get_research_run_result(
         job_id: UUID,
         tenant: TenantContext = Depends(current_tenant),
@@ -595,6 +596,7 @@ def create_app(
         }
 
     @app.get("/v1/research-runs/{job_id}/report", tags=["research"])
+    @require_permission("job", "read")
     def get_research_run_report(
         job_id: UUID,
         tenant: TenantContext = Depends(current_tenant),
