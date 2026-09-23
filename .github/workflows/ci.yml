@@ -34,6 +34,8 @@ jobs:
           python -m pip install -e ".[dev,test,saas]"
       - name: Verify migration security invariants
         run: python scripts/verify_migrations.py
+      - name: Verify SaaS authorization coverage
+        run: python scripts/check_authz_coverage.py
       - name: Run ruff
         run: ruff check .
       - name: Run pytest
