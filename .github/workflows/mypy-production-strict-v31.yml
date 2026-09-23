@@ -1,7 +1,10 @@
 name: Mypy Production Strict Diagnostic v31
 
 on:
-  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'researchos/**'
+      - '.github/workflows/mypy-production-strict-v31.yml'
 
 jobs:
   mypy-strict:
