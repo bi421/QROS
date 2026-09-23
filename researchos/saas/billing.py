@@ -157,6 +157,25 @@ class SupabaseBillingEventStore:
         return True
 
 
+def verify_stripe_signature(payload: bytes, signature: str, secret: str, *, tolerance_seconds: int = 300, now: int | None = None) -> None:
+    parts: dict[str, list[str]] = {}
+    for item in signature.split(","):
+        key, sep, value = item.strip().partition("=")
+        if sep:
+            parts.setdefault(key, []).append(value)
+    try:
+        timestamp = int(parts["t"][0])
+        provided = parts["v1"]
+    except (KeyError, ValueError, IndexError) as exc:
+        raise BillingSignatureError("invalid Stripe webhook signature") from exc
+    current = int(datetime.now(timezone.utc).timestamp()) if now is None else now
+    if abs(current - timestamp) > tolerance_seconds:
+        raise BillingSignatureError("Stripe webhook signature timestamp outside tolerance")
+    expected = hmac.new(secret.encode(), f"{timestamp}.".encode() + payload, hashlib.sha256).hexdigest()
+    if not any(hmac.compare_digest(expected, candidate) for candidate in provided):
+        raise BillingSignatureError("invalid Stripe webhook signature")
+
+
 def verify_hmac_signature(payload: bytes, signature: str, secret: str) -> None:
     expected = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, signature.strip()):
