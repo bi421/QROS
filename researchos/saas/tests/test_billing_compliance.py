@@ -74,9 +74,7 @@ def test_workspace_export_is_signed_and_contains_tenant_data() -> None:
     persistence.add("research_finding", "finding-1", workspace_id, {"status": "validated"})
     storage = InMemoryDatasetStorage()
     context = TenantContext(uuid4(), workspace_id, Plan.PRO, WorkspaceRole.OWNER)
-    client = _client(context=context, persistence=persistence)
-    client.app.dependency_overrides = {}
-    # Rebuild with injected storage so the returned signed path is downloadable from the test store.
+    # Inject storage so the returned signed path is downloadable from the test store.
     client = TestClient(create_app(
         auth_provider=StaticAuth(context),
         tenant_persistence=persistence,
