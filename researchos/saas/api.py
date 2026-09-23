@@ -41,7 +41,7 @@ from researchos.saas.validation_api import InMemoryResearchValidationStore, Rese
 from researchos.saas.finding_api import InMemoryResearchFindingStore, register_research_finding_routes
 from researchos.saas.pagination import PaginationParameterError, pagination_envelope, parse_list_query, validate_filter_keys
 from researchos.saas.research_report import build_research_report
-from researchos.saas.observability import StructuredRequestObserver
+from researchos.saas.observability import StructuredRequestObserver, metrics_registry
 from researchos.saas.api.middleware import RequestContextMiddleware
 from researchos.saas.auth.authorization import require_permission
 from researchos.saas.persistence import (
@@ -758,6 +758,7 @@ def create_app(
             raise
         if replayed:
             return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
+        metrics_registry().job_created()
         try:
             queue.enqueue(tenant.workspace_id, created.id)
         except Exception as exc:
