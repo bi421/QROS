@@ -46,6 +46,8 @@ class DatasetStore(Protocol):
     def get_dataset(self, workspace_id: UUID, dataset_id: UUID) -> Dataset | None: ...
     def get_version(self, workspace_id: UUID, version_id: UUID) -> DatasetVersion | None: ...
     def list_versions(self, workspace_id: UUID, dataset_id: UUID) -> list[DatasetVersion]: ...
+    def count_datasets(self, workspace_id: UUID) -> int: ...
+    def storage_bytes(self, workspace_id: UUID) -> int: ...
 
 
 class DatasetStorage(Protocol):
@@ -136,6 +138,12 @@ class InMemoryDatasetStore:
             return []
         return sorted((v for v in self._versions.values() if v.dataset_id == dataset_id), key=lambda v: v.version_no)
 
+
+    def count_datasets(self, workspace_id: UUID) -> int:
+        return sum(dataset.workspace_id == workspace_id for dataset in self._datasets.values())
+
+    def storage_bytes(self, workspace_id: UUID) -> int:
+        return sum(version.byte_size for version in self._versions.values() if self.get_dataset(workspace_id, version.dataset_id) is not None)
 
 class InMemoryDatasetStorage:
     def __init__(self) -> None:
@@ -295,6 +303,20 @@ class SupabaseDatasetStore:
         ).eq("dataset_id", str(dataset_id)).order("version_no").execute()
         return [self._version(row) for row in (result.data or [])]
 
+
+    def count_datasets(self, workspace_id: UUID) -> int:
+        _, total = self.list_datasets(workspace_id, limit=1, offset=0)
+        return total
+
+    def storage_bytes(self, workspace_id: UUID) -> int:
+        result = self._client.table("dataset_version").select("byte_size", count="exact").execute()
+        rows = result.data or []
+        total = 0
+        for row in rows:
+            version = self._version(row)
+            if self.get_dataset(workspace_id, version.dataset_id) is not None:
+                total += version.byte_size
+        return total
 
 class SupabaseDatasetStorage:
     """Tenant-scoped Supabase Storage adapter.
