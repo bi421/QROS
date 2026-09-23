@@ -9,7 +9,8 @@ from __future__ import annotations
 import hashlib
 import os
 from dataclasses import dataclass
-from typing import Generator\nfrom uuid import UUID, uuid4
+from typing import Generator
+from uuid import UUID, uuid4
 
 import pytest
 
