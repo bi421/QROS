@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.api import create_app
 from researchos.claims.claim import ResearchClaim
-from researchos.saas.billing import InMemoryBillingEventStore
+from researchos.saas.billing import InMemoryBillingEventStore, InMemoryEntitlementStore
 from researchos.saas.contracts import Plan, TenantContext, WorkspaceRole
 from researchos.saas.datasets import InMemoryDatasetStorage, InMemoryDatasetStore
 from researchos.saas.store import InMemoryResearchJobStore
@@ -722,3 +722,40 @@ def test_result_endpoint_exposes_governed_claim_lineage():
     assert response.status_code == 200
     assert response.json()["claim_id"] == str(claim.id)
     assert response.json()["plan_hash"] == plan.json()["plan_hash"]
+
+
+def test_free_tenant_101st_job_is_entitlement_exceeded() -> None:
+    client, context, dataset_store, _ = _client(plan=Plan.FREE)
+    uploaded = _upload(client, "free-entitlement", b"x")
+    version_id = UUID(uploaded.json()["version"]["id"])
+    store = client.app.state if hasattr(client, "app") else None
+    del store
+    job_store = InMemoryResearchJobStore()
+    for _ in range(100):
+        job_store.create(
+            context.workspace_id,
+            ResearchJob(
+                id=uuid4(),
+                workspace_id=context.workspace_id,
+                dataset_version_id=version_id,
+                workflow_id=FROZEN_XAUUSD_M1_WORKFLOW,
+                status=ResearchJobStatus.SUCCEEDED,
+                source_dataset_sha256=uploaded.json()["version"]["content_sha256"],
+                created_by=context.user_id,
+            ),
+        )
+    entitlement_client = TestClient(create_app(
+        auth_provider=StaticAuth(context),
+        job_store=job_store,
+        dataset_store=dataset_store,
+        dataset_storage=InMemoryDatasetStorage(),
+        entitlement_store=InMemoryEntitlementStore(),
+    ))
+    response = entitlement_client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "free-101"},
+        json={"dataset_version_id": str(version_id)},
+    )
+    assert response.status_code == 402
+    assert response.json()["code"] == "ENTITLEMENT_EXCEEDED"
+    assert response.json()["upgrade_url"] == "https://qros.ai/upgrade"
