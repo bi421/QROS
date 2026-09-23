@@ -1,11 +1,13 @@
 import numpy as np
+import pandas as pd
+from typing import Any
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 
 from researchos.quant_engine.vectorized_backtest import vectorized_backtest
 
 
-def make_features(df, selected, target_horizon=1):
+def make_features(df: pd.DataFrame, selected: list[str], target_horizon: int = 1) -> pd.DataFrame:
     df = df.copy()
     close = df["close"]
     df["ret1"] = close.pct_change()
@@ -47,11 +49,11 @@ def make_features(df, selected, target_horizon=1):
 
 
 class AutoMLObjective:
-    def __init__(self, train_df, val_df):
+    def __init__(self, train_df: pd.DataFrame, val_df: pd.DataFrame) -> None:
         self.train_df = train_df
         self.val_df = val_df
 
-    def __call__(self, trial):
+    def __call__(self, trial: Any) -> float:
         n_estimators = trial.suggest_int("n_estimators", 50, 300, step=50)
         max_depth = trial.suggest_int("max_depth", 3, 12)
         trial.suggest_float("learning_rate", 0.01, 0.3, log=True)
