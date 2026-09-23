@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import cast
 
 from researchos.data_engine.contracts import DatasetStatus, ValidationReport
 from researchos.data_engine.dataset import HistoricalDataset
@@ -69,10 +71,17 @@ class ValidatedDatasetRef:
             symbol=str(data["symbol"]),
             timeframe=str(data["timeframe"]),
             data_type=str(data["data_type"]),
-            record_count=int(data["record_count"]),
-            validation_quality_score=float(data["validation_quality_score"]),
-            validation_errors=tuple(str(x) for x in data.get("validation_errors", [])),
-            validation_warnings=tuple(str(x) for x in data.get("validation_warnings", [])),
+            record_count=int(cast(int, data["record_count"])),
+            validation_quality_score=float(
+                cast(float, data["validation_quality_score"])
+            ),
+            validation_errors=tuple(
+                str(x) for x in cast(Iterable[object], data.get("validation_errors", []))
+            ),
+            validation_warnings=tuple(
+                str(x)
+                for x in cast(Iterable[object], data.get("validation_warnings", []))
+            ),
         )
 
 
