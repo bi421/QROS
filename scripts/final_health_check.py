@@ -133,7 +133,7 @@ def main() -> int:
     checks["rls_check"] = rls_check(args.database_url)
     checks["tenant_isolation_check"] = run_check(
         "tenant_isolation",
-        ["psql", args.database_url, "-v", "ON_ERROR_STOP=1", "-f", str(TENANT_TEST)],
+        ["supabase", "test", "db", str(TENANT_TEST), "--db-url", args.database_url],
     )
     checks["backup_verify"] = run_check(
         "backup_verify",
