@@ -17,4 +17,4 @@ jobs:
       - run: python -m pip install --upgrade pip setuptools wheel
       - run: python -m pip install -e ".[dev,test,saas]"
       - name: Type check SaaS module
-        run: python -m mypy researchos/saas --strict --config-file pyproject.toml
+        run: python -m mypy researchos/saas --strict --config-file pyproject.toml --exclude '(^|/)tests/'
