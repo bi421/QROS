@@ -107,6 +107,9 @@ jobs:
         env:
           GITHUB_SHA: ${{ inputs.commit_sha }}
           PYTHONPATH: researchos/engines/quant/python
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           set -euo pipefail
           python scripts/final_health_check.py --commit "$GITHUB_SHA"
