@@ -106,9 +106,11 @@ def test_worker_log_preserves_request_id_for_same_job(caplog) -> None:
     ))
     caplog.set_level(logging.INFO, logger="qros.saas")
 
-    ResearchWorker(store, Executor(), observability=observer).run_once(
-        workspace_id, job_id, request_id=request_id
-    )
+    ResearchWorker(store, Executor(), observability=observer).run_queued_message({
+        "workspace_id": str(workspace_id),
+        "research_run_id": str(job_id),
+        "request_id": request_id,
+    })
 
     records = [
         json.loads(record.message)
