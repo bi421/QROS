@@ -35,6 +35,10 @@ class DatasetVersion:
     created_by: UUID
 
 
+class DatasetReferencedError(RuntimeError):
+    """Raised when an immutable dataset version is still part of research lineage."""
+
+
 class DatasetStore(Protocol):
     def list_datasets(self, workspace_id: UUID, *, limit: int = 50, offset: int = 0, name_filter: str | None = None, sort_by: str = "created_at", sort_order: str = "desc") -> tuple[list[Dataset], int]:
         ...
@@ -58,6 +62,9 @@ class DatasetStore(Protocol):
         ...
 
     def find_version_by_hash(self, workspace_id: UUID, dataset_id: UUID, content_sha256: str) -> DatasetVersion | None:
+        ...
+
+    def delete_version(self, workspace_id: UUID, dataset_id: UUID, version_id: UUID) -> None:
         ...
 
 
@@ -126,6 +133,12 @@ class InMemoryDatasetStore:
 
     def find_version_by_hash(self, workspace_id: UUID, dataset_id: UUID, content_sha256: str) -> DatasetVersion | None:
         return next((v for v in self.list_versions(workspace_id, dataset_id) if v.content_sha256 == content_sha256), None)
+
+    def delete_version(self, workspace_id: UUID, dataset_id: UUID, version_id: UUID) -> None:
+        version = self.get_version(workspace_id, version_id)
+        if version is None or version.dataset_id != dataset_id:
+            return
+        self._versions.pop(version_id, None)
 
 
 class InMemoryDatasetStorage:
@@ -295,6 +308,15 @@ class SupabaseDatasetStore:
             return None
         return self._version(rows[0])
 
+    def delete_version(self, workspace_id: UUID, dataset_id: UUID, version_id: UUID) -> None:
+        version = self.get_version(workspace_id, version_id)
+        if version is None or version.dataset_id != dataset_id:
+            return
+        refs = (self._client.table("research_run").select("id", count="exact").eq("workspace_id", str(workspace_id)).eq("dataset_version_id", str(version_id)).limit(1).execute())
+        if int(refs.count or 0) > 0 or bool(refs.data):
+            raise DatasetReferencedError("DATASET_REFERENCED")
+        self._client.table("dataset_version").delete().eq("id", str(version_id)).eq("dataset_id", str(dataset_id)).execute()
+
 
 class SupabaseDatasetStorage:
     """Server-side Supabase Storage adapter for private dataset objects."""
@@ -353,6 +375,7 @@ def storage_path_for(workspace_id: UUID, dataset_id: UUID, digest: str, version_
 
 
 __all__ = [
+    "DatasetReferencedError",
     "Dataset",
     "DatasetStorage",
     "DatasetStore",
