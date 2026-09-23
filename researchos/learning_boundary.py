@@ -12,7 +12,8 @@ becoming accepted knowledge without an explicit derivation record.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from collections.abc import Iterable
+from typing import Literal, cast
 
 LEARNING_BOUNDARY_SCHEMA_VERSION = "learning-boundary.v1"
 KnowledgeKind = Literal["knowledge", "pattern", "lesson"]
@@ -92,11 +93,11 @@ class LearningInput:
             evidence_collection_id=str(data["evidence_collection_id"]),
             evidence_hash=str(data["evidence_hash"]),
             learning_record_id=str(data["learning_record_id"]),
-            learning_outcome=str(data["learning_outcome"]),
-            confidence=float(data["confidence"]),
-            findings=tuple(str(x) for x in data.get("findings", [])),
-            patterns_observed=tuple(str(x) for x in data.get("patterns_observed", [])),
-            recommendations=tuple(str(x) for x in data.get("recommendations", [])),
+            learning_outcome=cast(LearningOutcome, str(data["learning_outcome"])),
+            confidence=float(cast(float, data["confidence"])),
+            findings=tuple(str(x) for x in cast(Iterable[object], data.get("findings", []))),
+            patterns_observed=tuple(str(x) for x in cast(Iterable[object], data.get("patterns_observed", []))),
+            recommendations=tuple(str(x) for x in cast(Iterable[object], data.get("recommendations", []))),
         )
 
 
@@ -156,14 +157,14 @@ class KnowledgeProposal:
         return cls(
             schema_version=str(data["schema_version"]),
             proposal_id=str(data["proposal_id"]),
-            kind=str(data["kind"]),
+            kind=cast(KnowledgeKind, str(data["kind"])),
             research_id=str(data["research_id"]),
             evidence_collection_id=str(data["evidence_collection_id"]),
             evidence_hash=str(data["evidence_hash"]),
             learning_record_id=str(data["learning_record_id"]),
             statement=str(data["statement"]),
             confidence=float(data["confidence"]),
-            supporting_ids=tuple(str(x) for x in data.get("supporting_ids", [])),
+            supporting_ids=tuple(str(x) for x in cast(Iterable[object], data.get("supporting_ids", []))),
         )
 
 
