@@ -267,6 +267,10 @@ def register_research_claim_routes(
         context: TenantContext = Depends(tenant_dependency),
     ) -> ResearchClaimPageResponse:
         try:
+            validate_filter_keys(
+                {key.removeprefix("filter[").removesuffix("]"): value for key, value in request.query_params.items() if key.startswith("filter[")},
+                allowed=frozenset({"status", "tenant_id"}),
+            )
             query = parse_list_query(
                 page=page,
                 page_size=page_size,
@@ -281,10 +285,6 @@ def register_research_claim_routes(
                 status_code=400,
                 detail={"code": exc.code, "message": str(exc)},
             ) from exc
-        validate_filter_keys(
-            {key.removeprefix("filter[").removesuffix("]"): value for key, value in request.query_params.items() if key.startswith("filter[")},
-            allowed=frozenset({"status", "tenant_id"}),
-        )
         store = require_store()
         if tenant_filter is not None and tenant_filter != str(context.workspace_id):
             claims, total = [], 0
