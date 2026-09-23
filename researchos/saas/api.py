@@ -89,12 +89,17 @@ def _error_payload(request: Request, status_code: int, detail: object) -> dict[s
         if isinstance(detail, str)
         else "request failed"
     )
-    return {
+    payload: dict[str, object] = {
         "code": str(detail_code) if detail_code else _error_code(status_code),
         "message": message,
         "request_id": getattr(request.state, "request_id", None),
-        "correlation_id": getattr(request.state, "request_id", None),
+        "correlation_id": getattr(request.state, "correlation_id", getattr(request.state, "request_id", None)),
     }
+    if isinstance(detail, dict) and "details" in detail:
+        payload["details"] = detail["details"]
+    elif isinstance(detail, list):
+        payload["details"] = detail
+    return payload
 
 
 class RequestCorrelationMiddleware(BaseHTTPMiddleware):
