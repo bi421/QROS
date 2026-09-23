@@ -8,6 +8,8 @@ import os
 import time
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import UUID
+import posixpath
+import re
 
 DEFAULT_EXPIRY_SECONDS = 3600
 
@@ -29,7 +31,15 @@ def _signature(tenant_id: UUID, storage_path: str, expires_at: int) -> str:
     return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
 
 
+def _validate_storage_path(storage_path: str, tenant_id: UUID) -> None:
+    expected = re.compile(rf"^tenant/{re.escape(str(tenant_id))}/datasets/[0-9a-f]{{64}}/[1-9][0-9]*$")
+    normalized = posixpath.normpath(storage_path)
+    if normalized != storage_path or ".." in storage_path.split("/") or not expected.fullmatch(storage_path):
+        raise SignedUrlError("INVALID_PATH")
+
+
 def bind_signed_url(provider_url: str, tenant_id: UUID, storage_path: str, *, expires_in: int = DEFAULT_EXPIRY_SECONDS, now: int | None = None) -> str:
+    _validate_storage_path(storage_path, tenant_id)
     if expires_in != DEFAULT_EXPIRY_SECONDS:
         raise SignedUrlError("storage signed URL expiry must be exactly 3600 seconds")
     issued = int(time.time()) if now is None else now
@@ -41,6 +51,7 @@ def bind_signed_url(provider_url: str, tenant_id: UUID, storage_path: str, *, ex
 
 
 def verify_signed_url(url: str, tenant_id: UUID, storage_path: str, *, now: int | None = None) -> bool:
+    _validate_storage_path(storage_path, tenant_id)
     parts = urlsplit(url)
     params = dict(parse_qsl(parts.query, keep_blank_values=True))
     try:
