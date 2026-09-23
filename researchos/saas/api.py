@@ -38,7 +38,7 @@ from researchos.saas.claim_api import ResearchClaimStore, register_research_clai
 from researchos.saas.evidence_api import ResearchEvidenceStore, register_research_evidence_routes
 from researchos.saas.validation_api import InMemoryResearchValidationStore, ResearchValidationStore, register_research_validation_routes
 from researchos.saas.finding_api import InMemoryResearchFindingStore, register_research_finding_routes
-from researchos.saas.pagination import PaginationParameterError, pagination_envelope, parse_list_query
+from researchos.saas.pagination import PaginationParameterError, pagination_envelope, parse_list_query, validate_filter_keys
 from researchos.saas.research_report import build_research_report
 from researchos.saas.observability import StructuredRequestObserver, observe_request
 from researchos.saas.auth.authorization import require_permission\nfrom researchos.saas.auth.permissions import reset_request_id, set_request_id
@@ -183,6 +183,7 @@ class PaginationResponse(BaseModel):
 class PageResponse(BaseModel):
     data: list[object]
     pagination: PaginationResponse
+    request_id: str
 
 class DeletionReceiptResponse(BaseModel):
     workspace_id: UUID
