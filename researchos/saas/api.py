@@ -100,6 +100,8 @@ def _error_payload(request: Request, status_code: int, detail: object) -> dict[s
         "request_id": getattr(request.state, "request_id", None),
         "correlation_id": getattr(request.state, "correlation_id", getattr(request.state, "request_id", None)),
     }
+    if isinstance(detail, dict) and "upgrade_url" in detail:
+        payload["upgrade_url"] = detail["upgrade_url"]
     if isinstance(detail, dict) and "details" in detail:
         payload["details"] = detail["details"]
     elif isinstance(detail, list):
@@ -223,7 +225,7 @@ class BillingGateMiddleware(BaseHTTPMiddleware):
                     content=_error_payload(
                         request,
                         402,
-                        {"code": "ENTITLEMENT_EXCEEDED", "message": f"plan entitlement exceeded: {exceeded_field}", "details": {"upgrade_url": "/billing/upgrade", "entitlement": exceeded_field}},
+                        {"code": "ENTITLEMENT_EXCEEDED", "message": f"plan entitlement exceeded: {exceeded_field}", "upgrade_url": "/billing/upgrade", "details": {"upgrade_url": "/billing/upgrade", "entitlement": exceeded_field}},
                     ),
                 )
         return await call_next(request)
