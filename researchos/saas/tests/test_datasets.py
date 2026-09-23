@@ -87,3 +87,26 @@ def test_in_memory_signed_download_url_requires_existing_object_and_bounded_expi
     for expires_in in (0, 901):
         with pytest.raises(ValueError, match="signed URL expiry"):
             storage.create_signed_download_url("tenant/object", expires_in)
+
+
+def test_duplicate_content_returns_existing_version() -> None:
+    store = InMemoryDatasetStore()
+    workspace_id = uuid4()
+    dataset = Dataset(uuid4(), workspace_id, "sample", uuid4())
+    store.create_dataset(workspace_id, dataset)
+    first = DatasetVersion(uuid4(), dataset.id, 1, "c" * 64, f"tenant/{workspace_id}/datasets/{'c' * 64}/1", 3, dataset.created_by)
+    store.create_version(workspace_id, first)
+    assert store.find_version_by_hash(workspace_id, dataset.id, "c" * 64) is first
+
+
+def test_new_content_creates_immutable_new_version_path() -> None:
+    store = InMemoryDatasetStore()
+    workspace_id = uuid4()
+    dataset = Dataset(uuid4(), workspace_id, "sample", uuid4())
+    store.create_dataset(workspace_id, dataset)
+    first = DatasetVersion(uuid4(), dataset.id, 1, "d" * 64, f"tenant/{workspace_id}/datasets/{'d' * 64}/1", 3, dataset.created_by)
+    second = DatasetVersion(uuid4(), dataset.id, 2, "e" * 64, f"tenant/{workspace_id}/datasets/{'e' * 64}/2", 3, dataset.created_by)
+    store.create_version(workspace_id, first)
+    store.create_version(workspace_id, second)
+    assert store.get_version(workspace_id, first.id) == first
+    assert store.get_version(workspace_id, second.id) == second
