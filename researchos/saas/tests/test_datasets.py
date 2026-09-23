@@ -156,5 +156,4 @@ def test_storage_sha256_verification_detects_tampering() -> None:
     path = "tenant/example/datasets/" + "a" * 64 + "/1/"
     storage.put(path, BytesIO(b"original"))
 
-    assert storage.verify_sha256(path, "0689b6b9c5f8b0c4e1f7f9b4f0d9d8f7e3f4f8c4f5d4f6e8e8d6f7f8f8f9f8f7") is False
-    assert storage.verify_sha256(path, "0689b6b9c5f8b0c4e1f7f9b4f0d9d8f7e3f4f8c4f5d4f6e8e8d6f7f8f8f9f8f7") is False
+    assert storage.verify_sha256(path, "0" * 64) is False
