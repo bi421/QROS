@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import os
 from dataclasses import dataclass
-from uuid import UUID, uuid4
+from typing import Generator\nfrom uuid import UUID, uuid4
 
 import pytest
 
@@ -82,7 +82,7 @@ def _sha(seed: str) -> str:
 
 
 @pytest.fixture(scope="session")
-def fixtures(real_db: bool) -> Fixtures:
+def fixtures(real_db: bool) -> Generator[Fixtures, None, None]:
     del real_db
     url = os.getenv("SUPABASE_REAL_DB_URL", os.getenv("SUPABASE_URL"))
     service_key = os.getenv("SUPABASE_REAL_DB_SERVICE_ROLE_KEY", os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
