@@ -301,8 +301,8 @@ def create_app(
     def me(tenant: TenantContext = Depends(current_tenant)) -> dict[str, str]:
         return {"user_id": str(tenant.user_id), "workspace_id": str(tenant.workspace_id), "plan": tenant.plan.value}
 
-    @require_permission(Resource.DATASET, Action.CREATE)
     @app.post("/v1/datasets", response_model=DatasetResponse, status_code=201, tags=["datasets"])
+    @require_permission(Resource.DATASET, Action.CREATE)
     def upload_dataset(
         name: str = Form(..., min_length=1, max_length=256),
         file: UploadFile = File(...),
@@ -353,8 +353,8 @@ def create_app(
             version=version,
         )
 
-    @require_permission(Resource.DATASET_VERSION, Action.CREATE)
     @app.post("/v1/datasets/{dataset_id}/versions", response_model=DatasetVersion, status_code=201, tags=["datasets"])
+    @require_permission(Resource.DATASET_VERSION, Action.CREATE)
     def upload_dataset_version(
         dataset_id: UUID,
         file: UploadFile = File(...),
@@ -364,8 +364,8 @@ def create_app(
             raise HTTPException(status_code=404, detail="dataset not found")
         return persist_version(dataset_id=dataset_id, tenant=tenant, file=file)
 
-    @require_permission(Resource.DATASET_VERSION, Action.LIST)
     @app.get("/v1/datasets/{dataset_id}/versions", tags=["datasets"])
+    @require_permission(Resource.DATASET_VERSION, Action.LIST)
     def list_dataset_versions(
         dataset_id: UUID,
         page: int = Query(default=1),
@@ -389,8 +389,8 @@ def create_app(
             raise HTTPException(status_code=400, detail="INVALID_SORT")
         return paginate(items, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, request_id=getattr(request.state, "request_id", None))
 
-    @require_permission(Resource.JOB, Action.CREATE)
     @app.post("/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"])
+    @require_permission(Resource.JOB, Action.CREATE)
     def create_research_run(
         request: ResearchCreateRequest,
         tenant: TenantContext = Depends(current_tenant),
@@ -458,8 +458,8 @@ def create_app(
             raise RuntimeError("research job queue unavailable") from exc
         return JSONResponse(status_code=202, content=body)
 
-    @require_permission(Resource.JOB, Action.READ)
     @app.get("/v1/research-runs/{job_id}", response_model=ResearchJobResponse, tags=["research"])
+    @require_permission(Resource.JOB, Action.READ)
     def get_research_run(job_id: UUID, tenant: TenantContext = Depends(current_tenant)) -> ResearchJobResponse:
         job = store.get(tenant.workspace_id, job_id)
         if job is None:
