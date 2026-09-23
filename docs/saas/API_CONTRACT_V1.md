@@ -76,6 +76,10 @@ Dataset bytes are streamed through a bounded SHA-256 calculation before persiste
 - `GET /v1/research-claims/{claim_id}/evidence-graph` — retrieve tenant-scoped evidence lineage associated with the claim.
 - `GET /v1/research-claims` — list Research Claims with bounded tenant-scoped pagination.
 
+### Findings
+
+- `GET /v1/findings` — list tenant-scoped governed findings with bounded pagination, status filtering, and deterministic sorting.
+
 The initial MVP accepts only the frozen XAUUSD M1 workflow.
 
 ## 5. Research Claim API semantics
