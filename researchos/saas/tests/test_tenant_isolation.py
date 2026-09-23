@@ -186,8 +186,8 @@ def fixtures(real_db: bool) -> Generator[Fixtures, None, None]:
                 )
             )
 
-        return Fixtures(a, b, dataset, version, job.id, evidence_id, finding, key)
-    except Exception:
+        yield Fixtures(a, b, dataset, version, job.id, evidence_id, finding, key)
+    finally:
         for workspace_id in workspace_ids:
             service.table("workspace").delete().eq("id", str(workspace_id)).execute()
         for user_id in user_ids:
@@ -195,7 +195,7 @@ def fixtures(real_db: bool) -> Generator[Fixtures, None, None]:
                 service.auth.admin.delete_user(str(user_id))
             except Exception:
                 pass
-        raise
+
 
 
 def test_direct_rls_blocks_every_tenant_a_resource_for_tenant_b(fixtures: Fixtures) -> None:
