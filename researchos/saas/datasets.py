@@ -309,14 +309,13 @@ class SupabaseDatasetStore:
         return total
 
     def storage_bytes(self, workspace_id: UUID) -> int:
-        result = self._client.table("dataset_version").select("byte_size", count="exact").execute()
+        result = self._client.table("dataset_version").select("dataset_id,byte_size").execute()
         rows = result.data or []
-        total = 0
-        for row in rows:
-            version = self._version(row)
-            if self.get_dataset(workspace_id, version.dataset_id) is not None:
-                total += version.byte_size
-        return total
+        return sum(
+            int(row["byte_size"])
+            for row in rows
+            if self.get_dataset(workspace_id, UUID(str(row["dataset_id"]))) is not None
+        )
 
 class SupabaseDatasetStorage:
     """Tenant-scoped Supabase Storage adapter.
