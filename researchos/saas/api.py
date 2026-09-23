@@ -328,6 +328,8 @@ def create_app(
                 if not storage.verify_sha256(existing.storage_path, existing.content_sha256, tenant_id=tenant.workspace_id, access_token=tenant.access_token):
                     raise HTTPException(status_code=503, detail="dataset object integrity check failed")
                 return existing
+            if entitlement.max_storage_mb > 0 and datasets.storage_bytes(tenant.workspace_id) + size > entitlement.max_storage_mb * 1_000_000:
+                raise ValueError("storage entitlement exceeded")
             version_no = datasets.next_version_no(tenant.workspace_id, dataset_id)
             storage_path = storage_path_for(tenant.workspace_id, digest, version_no)
             storage.put(storage_path, file.file, tenant_id=tenant.workspace_id, access_token=tenant.access_token)
@@ -466,6 +468,15 @@ def create_app(
     ) -> DatasetResponse:
         require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.RESEARCHER)
         dataset = Dataset(id=uuid4(), workspace_id=tenant.workspace_id, name=name.strip(), created_by=tenant.user_id)
+        try:
+            entitlement = entitlements.get(tenant.workspace_id, tenant.plan.value)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="entitlement service unavailable") from exc
+        if entitlement.max_datasets > 0 and datasets.count_datasets(tenant.workspace_id) >= entitlement.max_datasets:
+            raise HTTPException(
+                status_code=402,
+                detail={"code": "ENTITLEMENT_EXCEEDED", "message": "dataset entitlement exceeded", "upgrade_url": "https://qros.ai/upgrade"},
+            )
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         persisted_dataset = None
         try:
