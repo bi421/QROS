@@ -212,6 +212,7 @@ def register_research_evidence_routes(
     )
     @require_permission("evidence", "list")
     def list_research_run_evidence(
+        request: Request,
         research_run_id: UUID,
         page: str = "1",
         page_size: str = "20",
@@ -221,6 +222,7 @@ def register_research_evidence_routes(
         tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
         context: TenantContext = Depends(tenant_dependency),
     ) -> dict[str, object]:
+        _validate_evidence_query(page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, status_filter=status_filter, tenant_filter=tenant_filter, request=request)
         _validate_evidence_query(page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, status_filter=status_filter, tenant_filter=tenant_filter, request=request)
         if evidence_store is None:
             raise HTTPException(status_code=503, detail="research evidence persistence is not configured")
@@ -237,6 +239,7 @@ def register_research_evidence_routes(
     )
     @require_permission("evidence", "read")
     def get_claim_evidence_graph(
+        request: Request,
         claim_id: str,
         page: str = "1",
         page_size: str = "20",
@@ -244,7 +247,6 @@ def register_research_evidence_routes(
         sort_order: str = "desc",
         status_filter: str | None = Query(default=None, alias="filter[status]"),
         tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
-        request: Request = None,
         context: TenantContext = Depends(tenant_dependency),
     ) -> dict[str, object]:
         if not claim_id.strip() or len(claim_id) > 256:
@@ -264,6 +266,7 @@ def register_research_evidence_routes(
     )
     @require_permission("evidence", "read")
     def get_claim_evidence_graph_compat(
+        request: Request,
         claim_id: str,
         page: str = "1",
         page_size: str = "20",
