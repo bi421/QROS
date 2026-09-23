@@ -23,8 +23,8 @@ class RetentionConfig:
     retention_days: int = DEFAULT_RETENTION_DAYS
 
     def __post_init__(self) -> None:
-        if self.retention_days < 1:
-            raise ValueError("retention_days must be positive")
+        if not 1 <= self.retention_days <= 3650:
+            raise ValueError("retention_days must be between 1 and 3650 days")
 
     def purge_at(self, deleted_at: datetime) -> datetime:
         if deleted_at.tzinfo is None or deleted_at.utcoffset() is None:
