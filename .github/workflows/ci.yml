@@ -147,9 +147,39 @@ jobs:
       - if: always()
         run: supabase stop
 
+  backup-restore-dr:
+    name: Backup Restore and DR Verification
+    needs: [integrity]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: supabase/setup-cli@v2
+        with:
+          version: latest
+      - name: Install PostgreSQL client tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Start isolated Supabase database
+        run: |
+          supabase init
+          supabase start
+      - name: Prepare object replication fixture
+        run: |
+          set -euo pipefail
+          mkdir -p .dr-objects/before/datasets .dr-objects/after/datasets
+          printf '%s' 'qros-dr-fixture-dataset' > .dr-objects/before/datasets/sample.csv
+          cp .dr-objects/before/datasets/sample.csv .dr-objects/after/datasets/sample.csv
+      - name: Verify backup restore, migrations, tenant isolation and object hashes
+        run: |
+          python scripts/backup_verify.py             --source-url 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'             --target-admin-url 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'             --object-root-before .dr-objects/before             --object-root-after .dr-objects/after
+      - if: always()
+        run: supabase stop
+
   ci-complete:
     name: CI Pipeline Complete
-    needs: [test-python, type-check, build-engine, build-container, test-database]
+    needs: [test-python, type-check, build-engine, build-container, test-database, backup-restore-dr]
     if: success()
     runs-on: ubuntu-24.04
     steps:
