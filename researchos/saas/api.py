@@ -320,6 +320,10 @@ def create_app(
     def persist_version(*, dataset_id: UUID, tenant: TenantContext, file: UploadFile) -> DatasetVersion:
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         try:
+            entitlement = entitlements.get(tenant.workspace_id, tenant.plan.value)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="entitlement service unavailable") from exc
+        try:
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
