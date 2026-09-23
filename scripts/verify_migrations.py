@@ -38,6 +38,7 @@ TENANT_TABLES = (
     "retention_deletion_operation",
     "workspace_retention_policy",
     "tenant_deletion_tombstone",
+    "entitlements",
 )
 
 EXPECTED_POLICIES = {
