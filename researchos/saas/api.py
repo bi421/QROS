@@ -41,7 +41,7 @@ from researchos.saas.finding_api import InMemoryResearchFindingStore, register_r
 from researchos.saas.pagination import PaginationParameterError, pagination_envelope, parse_list_query
 from researchos.saas.research_report import build_research_report
 from researchos.saas.observability import StructuredRequestObserver, observe_request
-from researchos.saas.auth.authorization import require_permission
+from researchos.saas.auth.authorization import require_permission\nfrom researchos.saas.auth.permissions import reset_request_id, set_request_id
 from researchos.saas.persistence import (
     DEFAULT_RETENTION_DAYS,
     InMemoryTenantPersistence,
@@ -106,6 +106,7 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
         request_id = "".join(char if ord(char) >= 32 and ord(char) != 127 else "-" for char in request_id)
         request.state.request_id = request_id
         request.state.correlation_id = request_id
+        request_id_token = set_request_id(request_id)
         started_at = time.perf_counter()
         try:
             response = await call_next(request)
@@ -136,6 +137,7 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
                 status_code=response.status_code,
                 started_at=started_at,
             )
+        reset_request_id(request_id_token)
         return response
 
 
