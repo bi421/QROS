@@ -29,6 +29,7 @@ class DatasetVersion:
     storage_path: str
     byte_size: int
     created_by: UUID
+    feeds: tuple[str, ...] = ()
 
 
 class DatasetStore(Protocol):
@@ -44,6 +45,76 @@ class DatasetStore(Protocol):
 
     def create_version(self, workspace_id: UUID, version: DatasetVersion) -> DatasetVersion:
         ...
+
+    def find_version_by_content(self, workspace_id: UUID, dataset_id: UUID, content_sha256: str) -> DatasetVersion | None:
+        ...
+
+    def next_version_no(self, workspace_id: UUID, dataset_id: UUID) -> int:
+        ...
+
+    def link_experiment(self, workspace_id: UUID, version_id: UUID, experiment_id: str) -> DatasetVersion:
+        ...
+
+    def has_active_finding_reference(self, workspace_id: UUID, dataset_id: UUID) -> bool:
+        ...
+
+    def find_version_by_content(self, workspace_id: UUID, dataset_id: UUID, content_sha256: str) -> DatasetVersion | None:
+        if self.get_dataset(workspace_id, dataset_id) is None:
+            return None
+        return next((v for v in self._versions.values() if v.dataset_id == dataset_id and v.content_sha256 == content_sha256), None)
+
+    def next_version_no(self, workspace_id: UUID, dataset_id: UUID) -> int:
+        if self.get_dataset(workspace_id, dataset_id) is None:
+            raise KeyError("dataset not found for workspace")
+        return max((v.version_no for v in self._versions.values() if v.dataset_id == dataset_id), default=0) + 1
+
+    def link_experiment(self, workspace_id: UUID, version_id: UUID, experiment_id: str) -> DatasetVersion:
+        version = self.get_version(workspace_id, version_id)
+        if version is None:
+            raise KeyError("dataset version not found for workspace")
+        feeds = tuple(sorted(set(version.feeds) | {experiment_id}))
+        updated = DatasetVersion(version.id, version.dataset_id, version.version_no, version.content_sha256, version.storage_path, version.byte_size, version.created_by, feeds)
+        self._versions[version_id] = updated
+        return updated
+
+    def has_active_finding_reference(self, workspace_id: UUID, dataset_id: UUID) -> bool:
+        return False
+
+    def find_version_by_content(self, workspace_id: UUID, dataset_id: UUID, content_sha256: str) -> DatasetVersion | None:
+        result = (
+            self._client.table("dataset_version")
+            .select("id,dataset_id,version_no,content_sha256,storage_path,byte_size,created_by")
+            .eq("dataset_id", str(dataset_id))
+            .eq("content_sha256", content_sha256)
+            .limit(1).execute()
+        )
+        rows = result.data or []
+        if not rows:
+            return None
+        return self._version(rows[0])
+
+    def next_version_no(self, workspace_id: UUID, dataset_id: UUID) -> int:
+        versions = self.list_versions(workspace_id, dataset_id)
+        if self.get_dataset(workspace_id, dataset_id) is None:
+            raise KeyError("dataset not found for workspace")
+        return max((v.version_no for v in versions), default=0) + 1
+
+    def link_experiment(self, workspace_id: UUID, version_id: UUID, experiment_id: str) -> DatasetVersion:
+        version = self.get_version(workspace_id, version_id)
+        if version is None:
+            raise KeyError("dataset version not found for workspace")
+        self._client.table("dataset_version_feed").upsert({"dataset_version_id": str(version_id), "experiment_id": experiment_id}).execute()
+        return version
+
+    def has_active_finding_reference(self, workspace_id: UUID, dataset_id: UUID) -> bool:
+        result = (
+            self._client.table("research_finding")
+            .select("id", count="exact")
+            .eq("workspace_id", str(workspace_id))
+            .is_("deleted_at", "null")
+            .execute()
+        )
+        return bool(result.count)
 
     def get_dataset(self, workspace_id: UUID, dataset_id: UUID) -> Dataset | None:
         ...
@@ -64,6 +135,9 @@ class DatasetStorage(Protocol):
 
     def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
         """Create a short-lived URL for an already-authorized private object."""
+        ...
+
+    def verify_sha256(self, storage_path: str, expected_sha256: str) -> bool:
         ...
 
 
@@ -140,7 +214,8 @@ class InMemoryDatasetStorage:
 
     def put(self, storage_path: str, file: BinaryIO) -> None:
         if storage_path in self._objects:
-            raise ValueError("storage object already exists")
+            return
+
         self._objects[storage_path] = file.read()
 
     def remove(self, storage_path: str) -> None:
@@ -148,6 +223,10 @@ class InMemoryDatasetStorage:
 
     def get(self, storage_path: str) -> bytes | None:
         return self._objects.get(storage_path)
+
+    def verify_sha256(self, storage_path: str, expected_sha256: str) -> bool:
+        payload = self._objects.get(storage_path)
+        return payload is not None and sha256(payload).hexdigest() == expected_sha256.lower()
 
     def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
         if storage_path not in self._objects:
@@ -182,6 +261,7 @@ class SupabaseDatasetStore:
             storage_path=str(row["storage_path"]),
             byte_size=int(row["byte_size"]),
             created_by=UUID(str(row["created_by"])),
+            feeds=tuple(str(value) for value in (row.get("feeds") or [])),
         )
 
     def create_dataset(self, workspace_id: UUID, dataset: Dataset) -> Dataset:
@@ -300,6 +380,11 @@ class SupabaseDatasetStorage:
     def remove(self, storage_path: str) -> None:
         self._client.storage.from_(self._bucket).remove([storage_path])
 
+    def verify_sha256(self, storage_path: str, expected_sha256: str) -> bool:
+        response = self._client.storage.from_(self._bucket).download(storage_path)
+        payload = response if isinstance(response, bytes) else bytes(response)
+        return sha256(payload).hexdigest() == expected_sha256.lower()
+
     def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
         if not 1 <= expires_in <= 900:
             raise ValueError("signed URL expiry must be between 1 and 900 seconds")
@@ -332,9 +417,13 @@ def stream_sha256(file: BinaryIO, max_bytes: int) -> tuple[str, int]:
     return digest.hexdigest(), size
 
 
-def storage_path_for(workspace_id: UUID, dataset_id: UUID, digest: str) -> str:
-    """Return a tenant-scoped content-addressed object path."""
-    return f"{workspace_id}/datasets/{dataset_id}/sha256/{digest}"
+def storage_path_for(workspace_id: UUID, dataset_id: UUID, digest: str, version_no: int = 1) -> str:
+    """Return an immutable tenant/content/version object path."""
+    if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest.lower()):
+        raise ValueError("content_sha256 must be a 64-character SHA-256 digest")
+    if version_no < 1:
+        raise ValueError("version_no must be positive")
+    return f"tenant/{workspace_id}/datasets/{digest.lower()}/{version_no}/"
 
 
 __all__ = [
