@@ -28,6 +28,7 @@ class WorkspaceRole(str, Enum):
     ADMIN = "admin"
     RESEARCHER = "researcher"
     VIEWER = "viewer"
+    BILLING = "billing"
 
 
 @dataclass(frozen=True)

@@ -14,7 +14,7 @@ workspace
 workspace_member
   workspace_id uuid FK workspace
   user_id uuid FK auth.users
-  role text CHECK (owner|admin|researcher|viewer)
+  role text CHECK (owner|admin|researcher|viewer|billing)
   created_at timestamptz
   PK (workspace_id, user_id)
 
@@ -48,6 +48,7 @@ dataset_version
   created_at timestamptz
   UNIQUE (dataset_id, version_no)
   UNIQUE (dataset_id, content_sha256)
+  CHECK storage_path follows tenant/{tenant_id}/datasets/{sha256(content)}/{version}/
 
 research_run
   id uuid PK
@@ -113,6 +114,18 @@ usage_event
   research_run_id uuid FK research_run
   created_at timestamptz
 
+research_finding
+  id uuid PK
+  workspace_id uuid FK workspace
+  research_run_id uuid FK research_run
+  validation_id uuid FK research_validation
+  finding_sha256 text
+  status text
+  payload jsonb
+  contract_version text
+  created_at timestamptz
+  deleted_at timestamptz nullable
+
 audit_log
   id uuid PK
   workspace_id uuid FK workspace
@@ -122,6 +135,12 @@ audit_log
   resource_id uuid
   metadata jsonb
   created_at timestamptz
+
+dataset_version_feed
+  dataset_version_id uuid FK dataset_version
+  experiment_id text
+  created_at timestamptz
+  PK (dataset_version_id, experiment_id)
 ```
 
 ## Tenant isolation contract
@@ -147,13 +166,19 @@ Content is identified by lowercase SHA-256 and duplicate content is rejected per
 
 The `qros-datasets` bucket is private. Server-side code uses the privileged Supabase client; browser code never receives service-role/secret credentials.
 
-Current object path contract:
+Canonical object path contract:
 
 ```text
-{workspace_id}/datasets/{dataset_id}/sha256/{sha256}
+tenant/{tenant_id}/datasets/{sha256(content)}/{version}/
 ```
 
-The API computes SHA-256 and byte size before persistence and removes an uploaded object if metadata persistence fails. Supabase recommends resumable/TUS upload flows for large files; those will replace the current server-side multipart path before large-plan production rollout.
+The path is immutable and content-addressed. `tenant_id` is the authenticated workspace/tenant identifier. Upload computes SHA-256 and byte size before persistence; duplicate content reuses the existing object/version rather than overwriting it. Download verifies the stored object SHA-256 against `dataset_version.content_sha256` before issuing a signed URL.
+
+Dataset versions are append-only. Creating a new version allocates the next `version_no`; existing versions and their storage objects are never overwritten.
+
+`dataset_version_feed` records the immutable lineage edge from a dataset version to an Experiment identifier. Finding retention is enforced by a database trigger: a dataset cannot be deleted while a non-deleted `research_finding` references a research run backed by one of its versions; the API maps this condition to `409 DATASET_REFERENCED`.
+
+Supabase recommends resumable/TUS upload flows for large files; those will replace the current server-side multipart path before large-plan production rollout.
 
 ## Queue contract
 

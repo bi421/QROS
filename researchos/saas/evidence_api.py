@@ -10,6 +10,7 @@ from fastapi import Depends, HTTPException, status
 from pydantic import BaseModel
 
 from researchos.saas.contracts import TenantContext
+from researchos.saas.auth.authorization import require_permission
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,9 @@ class ResearchEvidenceRecord:
 
 
 class ResearchEvidenceStore(Protocol):
+    def list_for_claim(self, workspace_id: UUID, claim_id: str) -> list[ResearchEvidenceRecord]:
+        ...
+
     def list_for_run(self, workspace_id: UUID, research_run_id: UUID) -> list[ResearchEvidenceRecord]:
         ...
 
@@ -39,6 +43,12 @@ class InMemoryResearchEvidenceStore:
             raise ValueError("evidence workspace is required")
         self._rows[record.id] = record
         return record
+
+    def list_for_claim(self, workspace_id: UUID, claim_id: str) -> list[ResearchEvidenceRecord]:
+        return sorted(
+            (row for row in self._rows.values() if row.workspace_id == workspace_id and str(row.claim_id) == claim_id),
+            key=lambda row: str(row.id),
+        )
 
     def list_for_run(self, workspace_id: UUID, research_run_id: UUID) -> list[ResearchEvidenceRecord]:
         return sorted(
@@ -74,6 +84,31 @@ class SupabaseResearchEvidenceStore:
             status=str(row["status"]),
             provenance=dict(provenance),
         )
+
+    def list_for_claim(self, workspace_id: UUID, claim_id: str) -> list[ResearchEvidenceRecord]:
+        runs = (
+            self._client.table("research_run")
+            .select("id,claim_id,plan_hash")
+            .eq("workspace_id", str(workspace_id))
+            .eq("claim_id", claim_id)
+            .execute()
+        )
+        records: list[ResearchEvidenceRecord] = []
+        for run in (runs.data or []):
+            run_id = UUID(str(run["id"]))
+            result = (
+                self._client.table("evidence")
+                .select("id,workspace_id,research_run_id,artifact_id,claim,status,provenance")
+                .eq("workspace_id", str(workspace_id))
+                .eq("research_run_id", str(run_id))
+                .order("id")
+                .execute()
+            )
+            for row in (result.data or []):
+                row["claim_id"] = run.get("claim_id")
+                row["plan_hash"] = run.get("plan_hash")
+                records.append(self._record(row))
+        return sorted(records, key=lambda row: str(row.id))
 
     def list_for_run(self, workspace_id: UUID, research_run_id: UUID) -> list[ResearchEvidenceRecord]:
         run = (
@@ -114,6 +149,14 @@ class ResearchEvidenceResponse(BaseModel):
     provenance: dict[str, object]
 
 
+def _evidence_response(row: ResearchEvidenceRecord) -> ResearchEvidenceResponse:
+    return ResearchEvidenceResponse(
+        id=str(row.id), workspace_id=str(row.workspace_id), research_run_id=str(row.research_run_id),
+        claim_id=str(row.claim_id) if row.claim_id else None, plan_hash=row.plan_hash,
+        artifact_id=str(row.artifact_id) if row.artifact_id else None, claim=row.claim,
+        status=row.status, provenance=row.provenance,
+    )
+
 def register_research_evidence_routes(
     router: Any,
     *,
@@ -121,12 +164,13 @@ def register_research_evidence_routes(
     evidence_store: ResearchEvidenceStore | None,
 ) -> None:
     @router.get(
-        "/v1/research-runs/{research_run_id}/evidence",
+        "/v1/research-runs/{job_id}/evidence",
         response_model=list[ResearchEvidenceResponse],
         tags=["evidence"],
     )
+    @require_permission("evidence", "list")
     def list_research_run_evidence(
-        research_run_id: UUID,
+        job_id: UUID,
         context: TenantContext = Depends(tenant_dependency),
     ) -> list[ResearchEvidenceResponse]:
         if evidence_store is None:
@@ -135,7 +179,7 @@ def register_research_evidence_routes(
                 detail="research evidence persistence is not configured",
             )
         try:
-            rows = evidence_store.list_for_run(context.workspace_id, research_run_id)
+            rows = evidence_store.list_for_run(context.workspace_id, job_id)
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -155,6 +199,27 @@ def register_research_evidence_routes(
             )
             for row in rows
         ]
+    @router.get(
+        "/v1/research-claims/{claim_id}/evidence-graph",
+        response_model=list[ResearchEvidenceResponse],
+        tags=["evidence"],
+        responses={404: {"description": "Claim not visible in workspace"}},
+    )
+    @require_permission("evidence", "read")
+    def get_claim_evidence_graph(
+        claim_id: str,
+        context: TenantContext = Depends(tenant_dependency),
+    ) -> list[ResearchEvidenceResponse]:
+        if not claim_id.strip() or len(claim_id) > 256:
+            raise HTTPException(status_code=422, detail="invalid claim id")
+        if evidence_store is None:
+            raise HTTPException(status_code=503, detail="research evidence persistence is not configured")
+        try:
+            rows = evidence_store.list_for_claim(context.workspace_id, claim_id)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="research evidence persistence unavailable") from exc
+        return [_evidence_response(row) for row in rows]
+
 
 
 __all__ = [

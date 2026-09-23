@@ -9,6 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
 
 from researchos.saas.validation import ResearchValidationRecord
+from researchos.saas.auth.authorization import require_permission
 
 
 class ResearchValidationStore(Protocol):
@@ -49,6 +50,7 @@ def register_research_validation_routes(
     job_store,
 ) -> None:
     @app.post("/v1/research-runs/{job_id}/validation", status_code=status.HTTP_201_CREATED, tags=["research"])
+    @require_permission("job", "update")
     def create_validation(
         job_id: UUID,
         request: ResearchValidationRequest,
@@ -99,6 +101,7 @@ def register_research_validation_routes(
         }
 
     @app.get("/v1/research-runs/{job_id}/validation", tags=["research"])
+    @require_permission("job", "read")
     def get_validation(job_id: UUID, tenant=Depends(tenant_dependency)) -> dict[str, object]:
         if validation_store is None:
             raise HTTPException(status_code=503, detail="research validation persistence is not configured")
