@@ -8,36 +8,15 @@ import hashlib
 import json
 import logging
 
-from fastapi import (
-    Depends,
-    FastAPI,
-    File,
-    Form,
-    Header,
-    HTTPException,
-    Query,
-    Request,
-    UploadFile,
-    status,
-)
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
 from starlette.responses import JSONResponse, Response
 from researchos.saas.api_middleware import RequestContextMiddleware
-from researchos.saas.observability import (
-    configure_logging,
-    jobs_created_total,
-    jobs_failed_total,
-    metrics_text,
-)
+from researchos.saas.observability import configure_logging, jobs_created_total, jobs_failed_total, metrics_text
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
-from researchos.saas.contracts import (
-    DEFAULT_USAGE_POLICIES,
-    ResearchJob,
-    ResearchJobStatus,
-    TenantContext,
-)
+from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, ResearchJob, ResearchJobStatus, TenantContext
 from researchos.saas.datasets import (
     Dataset,
     DatasetStorage,
@@ -92,24 +71,17 @@ def _error_payload(
     request: Request, status_code: int, detail: object, details: object | None = None
 ) -> dict[str, object]:
     message = detail if isinstance(detail, str) else "request failed"
-    code = (
-        detail
-        if isinstance(detail, str) and detail.startswith("INVALID_")
-        else _error_code(status_code)
-    )
-    payload: dict[str, object] = {
-        "detail": detail,
-        "error": {
-            "code": code,
-            "message": message,
-            "request_id": getattr(request.state, "request_id", None),
-            "correlation_id": request.headers.get("X-Correlation-ID")
-            or getattr(request.state, "request_id", None),
-        },
+    code = detail if isinstance(detail, str) and detail.startswith("INVALID_") else _error_code(status_code)
+    error: dict[str, object] = {
+        "code": code,
+        "message": message,
+        "request_id": getattr(request.state, "request_id", None),
+        "correlation_id": request.headers.get("X-Correlation-ID")
+        or getattr(request.state, "request_id", None),
     }
     if details is not None:
-        payload["error"]["details"] = details
-    return payload
+        error["details"] = details
+    return {"detail": detail, "error": error}
 
 
 def _validate_dataset_name(name: str) -> str:
@@ -123,7 +95,8 @@ def _validate_dataset_name(name: str) -> str:
 class AuthProvider(Protocol):
     """Authenticate a request and resolve its authorized workspace."""
 
-    def authenticate(self, authorization: str | None) -> TenantContext: ...
+    def authenticate(self, authorization: str | None) -> TenantContext:
+        ...
 
 
 class UnconfiguredAuthProvider:
@@ -205,9 +178,7 @@ def create_app(
         )
 
     @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(
-        request: Request, exc: RequestValidationError
-    ) -> JSONResponse:
+    async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
         return JSONResponse(
             status_code=400,
             content=_error_payload(request, 400, "INVALID_REQUEST", details=exc.errors()),
@@ -226,7 +197,9 @@ def create_app(
         return auth.authenticate(authorization)
 
     def require_rate_limit(tenant: TenantContext) -> None:
-        principal = hashlib.sha256(f"workspace:{tenant.workspace_id}".encode()).hexdigest()
+        principal = hashlib.sha256(
+            f"workspace:{tenant.workspace_id}".encode()
+        ).hexdigest()
         try:
             allowed = limiter.allow(principal)
         except Exception as exc:
@@ -241,9 +214,7 @@ def create_app(
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
         return hashlib.sha256(encoded).hexdigest()
 
-    def persist_version(
-        *, dataset_id: UUID, tenant: TenantContext, file: UploadFile
-    ) -> DatasetVersion:
+    def persist_version(*, dataset_id: UUID, tenant: TenantContext, file: UploadFile) -> DatasetVersion:
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         try:
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
@@ -270,7 +241,7 @@ def create_app(
                         storage_path=storage_path,
                         byte_size=size,
                         created_by=tenant.user_id,
-                    ),
+                    )
                 )
             except Exception:
                 if object_created:
@@ -307,17 +278,13 @@ def create_app(
         if billing is None or not billing_webhook_secret:
             raise HTTPException(status_code=503, detail="billing webhook is not configured")
         if not x_billing_signature or not x_billing_provider:
-            raise HTTPException(
-                status_code=400, detail="billing signature and provider are required"
-            )
+            raise HTTPException(status_code=400, detail="billing signature and provider are required")
         payload = await request.body()
         try:
             verify_hmac_signature(payload, x_billing_signature, billing_webhook_secret)
             event = parse_billing_event(payload)
         except BillingSignatureError as exc:
-            raise HTTPException(
-                status_code=401, detail="invalid billing webhook signature"
-            ) from exc
+            raise HTTPException(status_code=401, detail="invalid billing webhook signature") from exc
         except (TypeError, ValueError, json.JSONDecodeError) as exc:
             raise HTTPException(status_code=400, detail="invalid billing event") from exc
         payload_sha256 = hashlib.sha256(payload).hexdigest()
@@ -331,11 +298,7 @@ def create_app(
 
     @app.get("/v1/me", response_model=dict[str, str], tags=["identity"])
     def me(tenant: TenantContext = Depends(current_tenant)) -> dict[str, str]:
-        return {
-            "user_id": str(tenant.user_id),
-            "workspace_id": str(tenant.workspace_id),
-            "plan": tenant.plan.value,
-        }
+        return {"user_id": str(tenant.user_id), "workspace_id": str(tenant.workspace_id), "plan": tenant.plan.value}
 
     @app.post("/v1/datasets", response_model=DatasetResponse, status_code=201, tags=["datasets"])
     def upload_dataset(
@@ -343,12 +306,7 @@ def create_app(
         file: UploadFile = File(...),
         tenant: TenantContext = Depends(current_tenant),
     ) -> DatasetResponse:
-        dataset = Dataset(
-            id=uuid4(),
-            workspace_id=tenant.workspace_id,
-            name=_validate_dataset_name(name),
-            created_by=tenant.user_id,
-        )
+        dataset = Dataset(id=uuid4(), workspace_id=tenant.workspace_id, name=_validate_dataset_name(name), created_by=tenant.user_id)
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         try:
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
@@ -371,7 +329,7 @@ def create_app(
                         storage_path=storage_path,
                         byte_size=size,
                         created_by=tenant.user_id,
-                    ),
+                    )
                 )
             except Exception:
                 try:
@@ -393,12 +351,7 @@ def create_app(
             version=version,
         )
 
-    @app.post(
-        "/v1/datasets/{dataset_id}/versions",
-        response_model=DatasetVersion,
-        status_code=201,
-        tags=["datasets"],
-    )
+    @app.post("/v1/datasets/{dataset_id}/versions", response_model=DatasetVersion, status_code=201, tags=["datasets"])
     def upload_dataset_version(
         dataset_id: UUID,
         file: UploadFile = File(...),
@@ -430,18 +383,9 @@ def create_app(
         items = datasets.list_versions(tenant.workspace_id, dataset_id)
         if sort_by not in {"version_no", "content_sha256", "byte_size"}:
             raise HTTPException(status_code=400, detail="INVALID_SORT")
-        return paginate(
-            items,
-            page=page,
-            page_size=page_size,
-            sort_by=sort_by,
-            sort_order=sort_order,
-            request_id=getattr(request.state, "request_id", None),
-        )
+        return paginate(items, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, request_id=getattr(request.state, "request_id", None))
 
-    @app.post(
-        "/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"]
-    )
+    @app.post("/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"])
     def create_research_run(
         request: ResearchCreateRequest,
         tenant: TenantContext = Depends(current_tenant),
@@ -455,12 +399,10 @@ def create_app(
         idempotency_key = idempotency_key.strip()
         if not idempotency_key or len(idempotency_key) > MAX_IDEMPOTENCY_KEY_LENGTH:
             raise HTTPException(status_code=400, detail="invalid Idempotency-Key")
-        fingerprint = request_fingerprint(
-            {
-                "dataset_version_id": str(request.dataset_version_id),
-                "workflow_id": request.workflow_id,
-            }
-        )
+        fingerprint = request_fingerprint({
+            "dataset_version_id": str(request.dataset_version_id),
+            "workflow_id": request.workflow_id,
+        })
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         if not policy.allows_monthly_runs(store.count_monthly(tenant.workspace_id)):
             raise HTTPException(status_code=402, detail="research run limit reached")
@@ -493,9 +435,7 @@ def create_app(
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
             raise
         if replayed:
-            return JSONResponse(
-                status_code=202, content=_research_job_response(created).model_dump(mode="json")
-            )
+            return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
         jobs_created_total.inc()
         try:
             queue.enqueue(tenant.workspace_id, created.id)
@@ -514,9 +454,7 @@ def create_app(
         return JSONResponse(status_code=202, content=body)
 
     @app.get("/v1/research-runs/{job_id}", response_model=ResearchJobResponse, tags=["research"])
-    def get_research_run(
-        job_id: UUID, tenant: TenantContext = Depends(current_tenant)
-    ) -> ResearchJobResponse:
+    def get_research_run(job_id: UUID, tenant: TenantContext = Depends(current_tenant)) -> ResearchJobResponse:
         job = store.get(tenant.workspace_id, job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="research run not found")
