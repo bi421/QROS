@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 import hashlib
 import hmac
 import json
+import logging
 import time
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
@@ -624,19 +625,46 @@ def create_app(
             raise
         if replayed:
             return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
-        try:
-            queue.enqueue(tenant.workspace_id, created.id)
-        except Exception as exc:
+        request.state.job_id = str(created.id)
+        with span(
+            "qros.job",
+            request_id=getattr(request.state, "request_id", None),
+            tenant_id=tenant.workspace_id,
+            job_id=created.id,
+        ):
             try:
-                store.transition(
+                queue.enqueue(
                     tenant.workspace_id,
                     created.id,
-                    ResearchJobStatus.QUEUED,
-                    ResearchJobStatus.FAILED,
+                    request_id=getattr(request.state, "request_id", None),
                 )
-            except Exception:
-                pass
-            raise HTTPException(status_code=503, detail="research job queue unavailable") from exc
+            except Exception as exc:
+                try:
+                    store.transition(
+                        tenant.workspace_id,
+                        created.id,
+                        ResearchJobStatus.QUEUED,
+                        ResearchJobStatus.FAILED,
+                    )
+                except Exception:
+                    pass
+                app.state.observability.metrics.inc_job_failed()
+                emit_log(
+                    level=logging.ERROR,
+                    message="research job enqueue failed",
+                    request_id=getattr(request.state, "request_id", None),
+                    tenant_id=tenant.workspace_id,
+                    job_id=created.id,
+                )
+                raise HTTPException(status_code=503, detail="research job queue unavailable") from exc
+        app.state.observability.metrics.inc_job_created()
+        emit_log(
+            level=logging.INFO,
+            message="research job created",
+            request_id=getattr(request.state, "request_id", None),
+            tenant_id=tenant.workspace_id,
+            job_id=created.id,
+        )
         return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
 
     @app.get("/v1/research-runs", response_model=PageResponse, tags=["research"])
