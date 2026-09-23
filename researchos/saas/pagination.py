@@ -85,6 +85,7 @@ def parse_list_query(
         sort_by=normalized_sort,
         sort_order=normalized_order,
         status=normalized_status or None,
+        tenant_id=normalized_tenant_id or None,
     )
 
 
