@@ -34,9 +34,9 @@ def test_storage_path_is_tenant_scoped_and_content_addressed() -> None:
     dataset_id = uuid4()
     digest = "a" * 64
 
-    path = storage_path_for(workspace_id, dataset_id, digest)
+    path = storage_path_for(workspace_id, digest, 1)
 
-    assert path == f"{workspace_id}/datasets/{dataset_id}/sha256/{digest}"
+    assert path == f"tenant/{workspace_id}/datasets/{digest}/1/"
     assert "versions" not in path
 
 
