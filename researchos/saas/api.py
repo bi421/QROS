@@ -343,6 +343,7 @@ def create_app(
             version_no = len(datasets.list_versions(tenant.workspace_id, dataset_id)) + 1
             storage_path = storage_path_for(tenant.workspace_id, dataset_id, digest, version_no)
             storage.put(storage_path, file.file)
+            storage.download_verified(storage_path, digest)
             try:
                 version = datasets.create_version(
                     tenant.workspace_id,
