@@ -6,11 +6,12 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 
 from researchos.saas.contracts import TenantContext
 from researchos.saas.auth.authorization import require_permission
+from researchos.saas.pagination import PaginationParameterError, pagination_envelope, parse_list_query, validate_filter_keys
 
 
 @dataclass(frozen=True)
@@ -165,53 +166,69 @@ def register_research_evidence_routes(
     tenant_dependency: Any,
     evidence_store: ResearchEvidenceStore | None,
 ) -> None:
+    def _evidence_page(rows: list[ResearchEvidenceRecord], *, page: str, page_size: str, sort_by: str, sort_order: str, status_filter: str | None, tenant_filter: str | None, request: Request, context: TenantContext) -> dict[str, object]:
+        try:
+            validate_filter_keys(
+                {key.removeprefix("filter[").removesuffix("]"): value for key, value in request.query_params.items() if key.startswith("filter[")},
+                allowed=frozenset({"status", "tenant_id"}),
+            )
+            query = parse_list_query(page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, tenant_id=tenant_filter, allowed_sort_fields=frozenset({"created_at", "status"}), status=status_filter)
+        except PaginationParameterError as exc:
+            raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)}) from exc
+        if tenant_filter is not None and tenant_filter != str(context.workspace_id):
+            rows = []
+        if query.status is not None:
+            rows = [row for row in rows if row.status == query.status]
+        if query.sort_by == "status":
+            rows = sorted(rows, key=lambda row: row.status, reverse=query.sort_order == "desc")
+        else:
+            rows = sorted(rows, key=lambda row: str(row.id), reverse=query.sort_order == "desc")
+        total = len(rows)
+        data = [_evidence_response(row).model_dump(mode="json") for row in rows[query.offset:query.offset + query.page_size]]
+        return pagination_envelope(data=data, page=query.page, page_size=query.page_size, total=total, request_id=request.state.request_id)
+
     @router.get(
         "/v1/research-runs/{research_run_id}/evidence",
-        response_model=list[ResearchEvidenceResponse],
+        response_model=dict[str, object],
         tags=["evidence"],
     )
     @require_permission("evidence", "list")
     def list_research_run_evidence(
         research_run_id: UUID,
+        page: str = "1",
+        page_size: str = "20",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        status_filter: str | None = Query(default=None, alias="filter[status]"),
+        tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
+        request: Request = None,
         context: TenantContext = Depends(tenant_dependency),
-    ) -> list[ResearchEvidenceResponse]:
+    ) -> dict[str, object]:
         if evidence_store is None:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="research evidence persistence is not configured",
-            )
+            raise HTTPException(status_code=503, detail="research evidence persistence is not configured")
         try:
             rows = evidence_store.list_for_run(context.workspace_id, research_run_id)
         except Exception as exc:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="research evidence persistence unavailable",
-            ) from exc
-        return [
-            ResearchEvidenceResponse(
-                id=str(row.id),
-                workspace_id=str(row.workspace_id),
-                research_run_id=str(row.research_run_id),
-                claim_id=str(row.claim_id) if row.claim_id else None,
-                plan_hash=row.plan_hash,
-                artifact_id=str(row.artifact_id) if row.artifact_id else None,
-                claim=row.claim,
-                status=row.status,
-                provenance=row.provenance,
-            )
-            for row in rows
-        ]
+            raise HTTPException(status_code=503, detail="research evidence persistence unavailable") from exc
+        return _evidence_page(rows, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, status_filter=status_filter, tenant_filter=tenant_filter, request=request, context=context)
     @router.get(
         "/v1/research-claims/{claim_id}/evidence-graph",
-        response_model=list[ResearchEvidenceResponse],
+        response_model=dict[str, object],
         tags=["evidence"],
         responses={404: {"description": "Claim not visible in workspace"}},
     )
     @require_permission("evidence", "read")
     def get_claim_evidence_graph(
         claim_id: str,
+        page: str = "1",
+        page_size: str = "20",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        status_filter: str | None = Query(default=None, alias="filter[status]"),
+        tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
+        request: Request = None,
         context: TenantContext = Depends(tenant_dependency),
-    ) -> list[ResearchEvidenceResponse]:
+    ) -> dict[str, object]:
         if not claim_id.strip() or len(claim_id) > 256:
             raise HTTPException(status_code=422, detail="invalid claim id")
         if evidence_store is None:
@@ -220,7 +237,31 @@ def register_research_evidence_routes(
             rows = evidence_store.list_for_claim(context.workspace_id, claim_id)
         except Exception as exc:
             raise HTTPException(status_code=503, detail="research evidence persistence unavailable") from exc
-        return [_evidence_response(row) for row in rows]
+        return _evidence_page(rows, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, status_filter=status_filter, tenant_filter=tenant_filter, request=request, context=context)
+
+    @router.get(
+        "/v1/claims/{claim_id}/evidence_graph",
+        response_model=dict[str, object],
+        tags=["evidence"],
+    )
+    @require_permission("evidence", "read")
+    def get_claim_evidence_graph_compat(
+        claim_id: str,
+        page: str = "1",
+        page_size: str = "20",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        status_filter: str | None = Query(default=None, alias="filter[status]"),
+        tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
+        request: Request = None,
+        context: TenantContext = Depends(tenant_dependency),
+    ) -> dict[str, object]:
+        if not claim_id.strip() or len(claim_id) > 256:
+            raise HTTPException(status_code=422, detail="invalid claim id")
+        if evidence_store is None:
+            raise HTTPException(status_code=503, detail="research evidence persistence is not configured")
+        rows = evidence_store.list_for_claim(context.workspace_id, claim_id)
+        return _evidence_page(rows, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, tenant_filter=tenant_filter, request=request, context=context)
 
 
 
