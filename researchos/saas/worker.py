@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 
 from researchos.research_core.contracts import ResearchResult
 from researchos.saas.contracts import ResearchJobStatus
-from researchos.saas.observability import StructuredRequestObserver, emit_log, span
+from researchos.saas.observability import StructuredRequestObserver, configure_tracing, emit_log, span
 from researchos.saas.store import ResearchJobStore
 
 
@@ -29,6 +29,7 @@ class ResearchWorker:
     ) -> None:
         if lease_seconds < 1:
             raise ValueError("lease_seconds must be positive")
+        configure_tracing()
         self._store = store
         self._executor = executor
         self._lease_seconds = lease_seconds
