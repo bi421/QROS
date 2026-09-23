@@ -137,5 +137,5 @@ def test_standard_filter_syntax_is_accepted_for_jobs(client: TestClient) -> None
         "/v1/research-runs?page=1&page_size=20&sort_by=created_at&sort_order=desc&filter%5Bstatus%5D=completed",
         headers={"Authorization": "Bearer test"},
     )
-    assert response.status_code == 400
-    assert response.json()["code"] == "INVALID_FILTER"
+    assert response.status_code == 200
+    assert response.json()["pagination"]["page_size"] == 20
