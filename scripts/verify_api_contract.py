@@ -13,6 +13,7 @@ EXPECTED = {
     "GET /v1/me",
     "POST /v1/billing/webhook",
     "POST /v1/datasets",
+    "DELETE /v1/datasets/{dataset_id}",
     "GET /v1/datasets",
     "POST /v1/datasets/{dataset_id}/versions",
     "GET /v1/datasets/{dataset_id}/versions",
