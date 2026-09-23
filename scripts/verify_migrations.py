@@ -179,6 +179,10 @@ def main() -> int:
 
         for table in TENANT_TABLES:
             policies = by_table.get(table, {})
+            if set(policies) != set(EXPECTED_POLICIES):
+                policy_gaps.append(
+                    f"{table}:policy_set={sorted(policies)} expected={sorted(EXPECTED_POLICIES)}"
+                )
             for policy_name, (cmd, _) in EXPECTED_POLICIES.items():
                 policy = policies.get(policy_name)
                 if policy is None:
