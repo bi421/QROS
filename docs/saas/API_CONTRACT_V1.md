@@ -70,6 +70,10 @@ Dataset bytes are streamed through a bounded SHA-256 calculation before persiste
 - `GET /v1/research-runs/{job_id}/result` — retrieve the immutable governed result projection.
 - `GET /v1/research-runs/{job_id}/evidence` — retrieve tenant-scoped stored evidence lineage.
 - `GET /v1/research-runs/{job_id}/report` — retrieve a deterministic human-readable report projection.
+- `POST /v1/research-runs/{job_id}/validation` — persist the governed validation record for a completed run.
+- `GET /v1/research-runs/{job_id}/validation` — retrieve the governed validation record.
+- `POST /v1/research-runs/{job_id}/finding` — persist the governed finding for a validated run.
+- `GET /v1/research-runs/{job_id}/finding` — retrieve the governed finding.
 - `POST /v1/research-claims` — create a tenant-scoped Research Claim.
 - `GET /v1/research-claims/{claim_id}` — retrieve a workspace-scoped Research Claim.
 - `POST /v1/research-claims/{claim_id}/plan-lock` — lock the immutable research plan for a claim.
