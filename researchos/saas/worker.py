@@ -6,7 +6,7 @@ from typing import Protocol
 from uuid import UUID, uuid4
 
 from researchos.research_core.contracts import ResearchResult
-from researchos.saas.contracts import ResearchJobStatus
+from researchos.saas.contracts import ResearchJobStatus, TenantContext
 from researchos.saas.store import ResearchJobStore
 
 
@@ -59,7 +59,7 @@ class ResearchWorker:
         )
         heartbeat.start()
         try:
-            result = self._executor.execute(job_id)
+            result = execute()
         except Exception:
             self._store.finish(
                 workspace_id,
@@ -97,4 +97,4 @@ class ResearchWorker:
         return result
 
 
-__all__ = ["ResearchExecutor", "ResearchWorker"]
+__all__ = ["ResearchExecutor", "ResearchWorker", "assume_tenant_role"]
