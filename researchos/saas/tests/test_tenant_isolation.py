@@ -218,6 +218,19 @@ def test_direct_rls_blocks_every_tenant_a_resource_for_tenant_b(fixtures: Fixtur
     _assert_rls_denied_or_empty(lambda: query.limit(1).execute())
 
 
+def test_tenant_b_cannot_list_tenant_a_rows_via_rls(fixtures: Fixtures) -> None:
+    b = fixtures.b.client
+    for table in ("dataset", "research_run", "evidence", "research_validation", "research_finding", "research_run_result"):
+        query = b.table(table).select("*").eq("workspace_id", str(fixtures.a.workspace_id))
+        _assert_rls_denied_or_empty(lambda query=query: query.execute())
+    for table, column, value in (
+        ("dataset_version", "dataset_id", fixtures.dataset.id),
+        ("research_run_artifact", "research_run_id", fixtures.job_id),
+    ):
+        query = b.table(table).select("*").eq(column, str(value))
+        _assert_rls_denied_or_empty(lambda query=query: query.execute())
+
+
 def test_tenant_b_cannot_mutate_or_delete_tenant_a_rows_via_rls(fixtures: Fixtures) -> None:
     b = fixtures.b.client
     for table, resource_id in (
