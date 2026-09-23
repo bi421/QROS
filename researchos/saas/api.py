@@ -35,7 +35,7 @@ from researchos.saas.idempotency import (
     IdempotencyStore,
     MAX_IDEMPOTENCY_KEY_LENGTH,
 )
-from researchos.saas.rate_limit import FixedWindowRateLimiter, RateLimiter
+from researchos.saas.rate_limit import FixedWindowRateLimiter, PlanRateLimiter, RateLimiter
 from researchos.saas.claim_api import ResearchClaimStore, register_research_claim_routes
 from researchos.saas.evidence_api import ResearchEvidenceStore, register_research_evidence_routes
 from researchos.saas.validation_api import InMemoryResearchValidationStore, ResearchValidationStore, register_research_validation_routes
@@ -52,6 +52,7 @@ from researchos.saas.persistence import (
     TenantPersistence,
     TenantPersistenceError,
 )
+from researchos.saas.entitlements import EntitlementStore, InMemoryEntitlementStore, UsageSnapshot, exceeded
 from researchos.saas.billing import (
     BillingEventConflict,
     BillingEventStore,
@@ -174,6 +175,59 @@ class UnconfiguredAuthProvider:
         )
 
 
+class BillingGateMiddleware(BaseHTTPMiddleware):
+    """Authenticate tenant-scoped API requests, enforce plan rate limits and creation entitlements."""
+
+    def __init__(self, app, *, auth: AuthProvider, entitlement_store: EntitlementStore, rate_limiter: PlanRateLimiter, usage_provider) -> None:
+        super().__init__(app)
+        self.auth = auth
+        self.entitlement_store = entitlement_store
+        self.rate_limiter = rate_limiter
+        self.usage_provider = usage_provider
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        if not request.url.path.startswith("/v1/") or request.url.path == "/v1/billing/webhook":
+            return await call_next(request)
+        try:
+            requested_workspace_id = None
+            raw_workspace = request.headers.get(WORKSPACE_HEADER)
+            if raw_workspace:
+                requested_workspace_id = UUID(raw_workspace.strip())
+            tenant = self.auth.authenticate(request.headers.get("Authorization"), requested_workspace_id)
+        except HTTPException as exc:
+            return JSONResponse(status_code=exc.status_code, headers=exc.headers, content=_error_payload(request, exc.status_code, exc.detail))
+        except Exception:
+            return JSONResponse(status_code=503, content=_error_payload(request, 503, "SaaS authentication provider is not configured"))
+        try:
+            allowed = self.rate_limiter.allow(str(tenant.workspace_id), tenant.plan)
+        except Exception:
+            return JSONResponse(status_code=503, content=_error_payload(request, 503, "rate limiting service unavailable"))
+        if not allowed:
+            retry_after = self.rate_limiter.retry_after(str(tenant.workspace_id), tenant.plan)
+            return JSONResponse(
+                status_code=429,
+                headers={"Retry-After": str(retry_after)},
+                content=_error_payload(request, 429, {"code": "RATE_LIMITED", "message": "workspace rate limit exceeded", "details": {"retry_after": retry_after}}),
+            )
+        if request.method == "POST":
+            try:
+                entitlement = self.entitlement_store.get(tenant.workspace_id, tenant.plan)
+                usage = self.usage_provider(tenant.workspace_id, request.url.path)
+                exceeded_field = exceeded(entitlement, usage)
+            except Exception:
+                return JSONResponse(status_code=503, content=_error_payload(request, 503, "entitlement service unavailable"))
+            if exceeded_field is not None:
+                return JSONResponse(
+                    status_code=402,
+                    content=_error_payload(
+                        request,
+                        402,
+                        {"code": "ENTITLEMENT_EXCEEDED", "message": f"plan entitlement exceeded: {exceeded_field}", "details": {"upgrade_url": "/billing/upgrade", "entitlement": exceeded_field}},
+                    ),
+                )
+        return await call_next(request)
+
+
 class ResearchCreateRequest(BaseModel):
     dataset_version_id: UUID
     workflow_id: str = Field(default=FROZEN_XAUUSD_M1_WORKFLOW, min_length=1, max_length=128)
@@ -249,6 +303,8 @@ def create_app(
     validation_store: ResearchValidationStore | None = None,
     finding_store=None,
     tenant_persistence: TenantPersistence | None = None,
+    entitlement_store: EntitlementStore | None = None,
+    plan_rate_limiter: PlanRateLimiter | None = None,
     retention_days: int = DEFAULT_RETENTION_DAYS,
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
@@ -262,10 +318,29 @@ def create_app(
     billing = billing_store
     persistence = tenant_persistence or InMemoryTenantPersistence()
     retention = RetentionConfig(retention_days)
+    entitlements = entitlement_store or InMemoryEntitlementStore()
+    plan_limiter = plan_rate_limiter or PlanRateLimiter()
     app = FastAPI(
         title="QROS SaaS API",
         version="1.0.0",
         description="Multi-tenant delivery API for auditable financial research.",
+    )
+    def entitlement_usage(workspace_id: UUID, path: str) -> UsageSnapshot:
+        datasets_used = 0
+        jobs_used = store.count_monthly(workspace_id)
+        if path == "/v1/datasets":
+            try:
+                _, datasets_used = datasets.list_datasets(workspace_id, limit=1, offset=0)
+            except Exception:
+                datasets_used = 0
+        return UsageSnapshot(datasets=datasets_used, jobs_this_month=jobs_used)
+
+    app.add_middleware(
+        BillingGateMiddleware,
+        auth=auth,
+        entitlement_store=entitlements,
+        rate_limiter=plan_limiter,
+        usage_provider=entitlement_usage,
     )
     app.add_middleware(RequestCorrelationMiddleware)
     app.state.observability = StructuredRequestObserver()
