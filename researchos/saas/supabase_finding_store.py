@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from researchos.core.timestamp import utc_now
+
 from researchos.saas.finding import ResearchFindingRecord
 from researchos.saas.finding_api import ResearchFindingStore
 
@@ -31,7 +33,11 @@ class SupabaseResearchFindingStore(ResearchFindingStore):
             status=str(row["status"]),
             payload=payload,
             contract_version=str(row.get("contract_version", "1.0.0")),
-            created_at=datetime.fromisoformat(str(row["created_at"]).replace("Z", "+00:00")),
+            created_at=(
+                datetime.fromisoformat(str(row["created_at"]).replace("Z", "+00:00"))
+                if row.get("created_at")
+                else utc_now()
+            ),
         )
 
     def create(self, record: ResearchFindingRecord) -> ResearchFindingRecord:
