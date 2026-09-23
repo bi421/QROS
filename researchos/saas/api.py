@@ -12,7 +12,6 @@ import time
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response, StreamingResponse
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
@@ -42,9 +41,9 @@ from researchos.saas.validation_api import InMemoryResearchValidationStore, Rese
 from researchos.saas.finding_api import InMemoryResearchFindingStore, register_research_finding_routes
 from researchos.saas.pagination import PaginationParameterError, pagination_envelope, parse_list_query, validate_filter_keys
 from researchos.saas.research_report import build_research_report
-from researchos.saas.observability import StructuredRequestObserver, observe_request
+from researchos.saas.observability import StructuredRequestObserver
+from researchos.saas.api.middleware import RequestContextMiddleware
 from researchos.saas.auth.authorization import require_permission
-from researchos.saas.auth.permissions import reset_request_id, set_request_id
 from researchos.saas.persistence import (
     DEFAULT_RETENTION_DAYS,
     InMemoryTenantPersistence,
@@ -267,7 +266,7 @@ def create_app(
         version="1.0.0",
         description="Multi-tenant delivery API for auditable financial research.",
     )
-    app.add_middleware(RequestCorrelationMiddleware)
+    app.add_middleware(RequestContextMiddleware)
     app.state.observability = StructuredRequestObserver()
 
     @app.exception_handler(HTTPException)
