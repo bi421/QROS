@@ -34,7 +34,7 @@ def test_free_tenant_101st_job_is_entitlement_exceeded():
 
 def test_workspace_rate_limit_returns_retry_after():
     workspace_id=uuid4(); context=TenantContext(uuid4(),workspace_id,Plan.FREE,WorkspaceRole.OWNER); client=_client(context=context)
-    for _ in range(100): assert client.get("/v1/research-claims",headers={"Authorization":"Bearer test"}).status_code==200
+    for _ in range(100): assert client.get("/v1/datasets",headers={"Authorization":"Bearer test"}).status_code==200
     response=client.get("/v1/research-claims",headers={"Authorization":"Bearer test"})
     assert response.status_code==429 and int(response.headers["Retry-After"])>=1
 
