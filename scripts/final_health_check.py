@@ -144,7 +144,13 @@ def main() -> int:
 
     checks["authz_matrix"] = command_result(
         "authz_matrix",
-        [sys.executable, "scripts/verify_authz_routes.py"],
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "researchos/saas/tests/test_authz_matrix.py",
+            "-q",
+        ],
     )
     if BACKUP_RESULT.exists():
         try:
