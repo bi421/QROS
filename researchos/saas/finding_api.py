@@ -118,7 +118,6 @@ def register_research_finding_routes(
         sort_order: str = "desc",
         status_filter: str | None = Query(default=None, alias="filter[status]"),
         tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
-        request: Request = None,
         tenant=Depends(tenant_dependency),
     ) -> dict[str, object]:
         if finding_store is None:
