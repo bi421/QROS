@@ -42,7 +42,8 @@ from researchos.saas.finding_api import InMemoryResearchFindingStore, register_r
 from researchos.saas.pagination import PaginationParameterError, pagination_envelope, parse_list_query, validate_filter_keys
 from researchos.saas.research_report import build_research_report
 from researchos.saas.observability import StructuredRequestObserver, observe_request
-from researchos.saas.auth.authorization import require_permission\nfrom researchos.saas.auth.permissions import reset_request_id, set_request_id
+from researchos.saas.auth.authorization import require_permission
+from researchos.saas.auth.permissions import reset_request_id, set_request_id
 from researchos.saas.persistence import (
     DEFAULT_RETENTION_DAYS,
     InMemoryTenantPersistence,
