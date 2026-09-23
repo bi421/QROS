@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from researchos.saas.finding import ResearchFindingRecord, VALIDATED_STATUS
 from researchos.saas.pagination import PaginationParameterError, pagination_envelope, parse_list_query
 from researchos.saas.auth.authorization import require_permission
+from researchos.saas.auth.authorization import require_permission
 
 
 class ResearchFindingStore(Protocol):
@@ -74,6 +75,7 @@ def register_research_finding_routes(
 ) -> None:
     @app.post("/v1/research-runs/{job_id}/finding", status_code=status.HTTP_201_CREATED, tags=["research"])
     @require_permission("finding", "create")
+    @require_permission("finding", "create")
     def create_finding(
         job_id: UUID,
         request: ResearchFindingRequest,
@@ -110,6 +112,7 @@ def register_research_finding_routes(
         return _response(persisted)
 
     @app.get("/v1/findings", tags=["research"])
+    @require_permission("finding", "list")
     def list_findings(
         page: str = "1",
         page_size: str = "20",
@@ -155,6 +158,7 @@ def register_research_finding_routes(
         )
 
     @app.get("/v1/research-runs/{job_id}/finding", tags=["research"])
+    @require_permission("finding", "read")
     @require_permission("finding", "read")
     def get_finding(job_id: UUID, tenant=Depends(tenant_dependency)) -> dict[str, object]:
         if finding_store is None:
