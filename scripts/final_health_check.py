@@ -148,6 +148,11 @@ def main() -> int:
     else:
         coverage = {"status": "FAIL", "source": ".health/coverage.json"}
 
+    checks["observability"] = run_check(
+        "observability",
+        [sys.executable, "-m", "pytest", "researchos/saas/tests/test_observability.py", "researchos/saas/tests/test_worker.py", "-q"],
+    )
+
     checks["authz_matrix"] = run_check(
         "authz_matrix", [sys.executable, "scripts/verify_authz_routes.py"]
     )
