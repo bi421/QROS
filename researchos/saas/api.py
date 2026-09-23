@@ -753,15 +753,23 @@ def create_app(
         sort_order: str = "desc",
         status_filter: str | None = Query(default=None, alias="filter[status]"),
         workflow_id: str | None = None,
+        tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
+        request: Request = None,
         tenant: TenantContext = Depends(current_tenant),
     ) -> PageResponse:
         try:
+            if request is not None:
+                validate_filter_keys(
+                    {key.removeprefix("filter[").removesuffix("]"): value for key, value in request.query_params.items() if key.startswith("filter[")},
+                    allowed=frozenset({"status", "tenant_id"}),
+                )
             query = parse_list_query(
                 page=page,
                 page_size=page_size,
                 sort_by=sort_by,
                 sort_order=sort_order,
                 status=status_filter,
+                tenant_id=tenant_filter,
                 allowed_sort_fields=frozenset({"created_at", "status", "workflow_id"}),
             )
             normalized_status = (
@@ -780,15 +788,18 @@ def create_app(
             ) from exc
         if workflow_id is not None and not 1 <= len(workflow_id) <= 128:
             raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "message": "workflow_id must be between 1 and 128 characters"})
-        jobs, total = store.list(
-            tenant.workspace_id,
-            limit=query.page_size,
-            offset=query.offset,
-            status=status_value,
-            workflow_id=workflow_id,
-            sort_by=query.sort_by,
-            sort_order=query.sort_order,
-        )
+        if tenant_filter is not None and tenant_filter != str(tenant.workspace_id):
+            jobs, total = [], 0
+        else:
+            jobs, total = store.list(
+                tenant.workspace_id,
+                limit=query.page_size,
+                offset=query.offset,
+                status=status_value,
+                workflow_id=workflow_id,
+                sort_by=query.sort_by,
+                sort_order=query.sort_order,
+            )
         items = [_research_job_response(job).model_dump(mode="json") for job in jobs]
         return PageResponse.model_validate(
             pagination_envelope(
@@ -796,6 +807,7 @@ def create_app(
                 page=query.page,
                 page_size=query.page_size,
                 total=total,
+                request_id=request.state.request_id if request is not None else "",
             )
         )
 
