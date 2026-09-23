@@ -21,9 +21,14 @@ class StaticAuth:
     def __init__(self, context: TenantContext) -> None:
         self.context = context
 
-    def authenticate(self, authorization: str | None, requested_workspace_id: UUID | None = None) -> TenantContext:
+    def authenticate(
+        self, authorization: str | None, requested_workspace_id: UUID | None = None
+    ) -> TenantContext:
         assert authorization == "Bearer test"
-        if requested_workspace_id is not None and requested_workspace_id != self.context.workspace_id:
+        if (
+            requested_workspace_id is not None
+            and requested_workspace_id != self.context.workspace_id
+        ):
             raise HTTPException(status_code=403, detail="workspace access denied")
         return self.context
 
@@ -41,7 +46,16 @@ class StaticRateLimiter:
         return self.allowed
 
 
-def _client(workspace_id: UUID | None = None, *, plan: Plan = Plan.PRO, role: WorkspaceRole = WorkspaceRole.RESEARCHER, billing_store=None, billing_secret=None, rate_limiter=None, claim_store=None):
+def _client(
+    workspace_id: UUID | None = None,
+    *,
+    plan: Plan = Plan.PRO,
+    role: WorkspaceRole = WorkspaceRole.RESEARCHER,
+    billing_store=None,
+    billing_secret=None,
+    rate_limiter=None,
+    claim_store=None,
+):
     context = TenantContext(
         user_id=uuid4(),
         workspace_id=workspace_id or uuid4(),
@@ -65,7 +79,6 @@ def _client(workspace_id: UUID | None = None, *, plan: Plan = Plan.PRO, role: Wo
     return client, context, dataset_store, dataset_storage
 
 
-
 class InMemoryClaimStore:
     def __init__(self) -> None:
         self.rows: dict[tuple[UUID, str], ResearchClaim] = {}
@@ -82,7 +95,8 @@ class InMemoryClaimStore:
     def list(self, workspace_id: UUID, *, limit: int = 100, offset: int = 0):
         values = [claim for (ws, _), claim in self.rows.items() if ws == workspace_id]
         values.sort(key=lambda claim: claim.id)
-        return values[offset:offset + limit], len(values)
+        return values[offset : offset + limit], len(values)
+
 
 def _upload(client: TestClient, name: str, body: bytes):
     return client.post(
@@ -136,7 +150,9 @@ def test_rate_limit_is_workspace_scoped_and_enforced() -> None:
         json={"dataset_version_id": str(uuid4())},
     )
     assert response.status_code == 429
-    assert limiter.keys == [hashlib.sha256(f"workspace:{context.workspace_id}".encode()).hexdigest()]
+    assert limiter.keys == [
+        hashlib.sha256(f"workspace:{context.workspace_id}".encode()).hexdigest()
+    ]
 
 
 def test_rate_limiter_failure_fails_closed_with_503() -> None:
@@ -174,8 +190,9 @@ def test_dataset_upload_creates_immutable_version_and_stores_bytes() -> None:
         headers={"Authorization": "Bearer test"},
     )
     assert versions.status_code == 200
-    assert len(versions.json()) == 1
-    version = versions.json()[0]
+    payload_versions = versions.json()
+    assert payload_versions["pagination"]["total"] == 1
+    version = payload_versions["data"][0]
     assert version["id"] == payload["version"]["id"]
     assert storage.get(version["storage_path"]) == body
     assert store.get_dataset(context.workspace_id, UUID(payload["id"])) is not None
@@ -200,7 +217,7 @@ def test_dataset_versions_are_append_only() -> None:
         headers={"Authorization": "Bearer test"},
     )
     assert versions.status_code == 200
-    assert [item["version_no"] for item in versions.json()] == [1, 2]
+    assert [item["version_no"] for item in versions.json()["data"]] == [2, 1]
 
 
 def test_create_research_job_requires_existing_tenant_dataset_version() -> None:
@@ -231,6 +248,7 @@ def test_research_run_idempotency_replays_without_creating_or_enqueueing_twice()
     assert first.status_code == 202
     assert second.status_code == 202
     assert first.json()["id"] == second.json()["id"]
+
 
 def test_research_run_idempotency_is_atomic_under_concurrent_requests() -> None:
     client, _, _, _ = _client()
@@ -383,33 +401,44 @@ def test_cross_tenant_dataset_and_version_access_returns_not_found() -> None:
     other = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
     store = InMemoryDatasetStore()
     storage = InMemoryDatasetStorage()
-    owner_client = TestClient(create_app(
-        auth_provider=StaticAuth(owner),
-        dataset_store=store,
-        dataset_storage=storage,
-        job_store=InMemoryResearchJobStore(),
-    ))
-    other_client = TestClient(create_app(
-        auth_provider=StaticAuth(other),
-        dataset_store=store,
-        dataset_storage=storage,
-        job_store=InMemoryResearchJobStore(),
-    ))
+    owner_client = TestClient(
+        create_app(
+            auth_provider=StaticAuth(owner),
+            dataset_store=store,
+            dataset_storage=storage,
+            job_store=InMemoryResearchJobStore(),
+        )
+    )
+    other_client = TestClient(
+        create_app(
+            auth_provider=StaticAuth(other),
+            dataset_store=store,
+            dataset_storage=storage,
+            job_store=InMemoryResearchJobStore(),
+        )
+    )
 
     created = _upload(owner_client, "tenant-owned", b"x")
     assert created.status_code == 201
     dataset_id = created.json()["id"]
     version_id = created.json()["version"]["id"]
 
-    assert other_client.get(
+    cross_tenant_versions = other_client.get(
         f"/v1/datasets/{dataset_id}/versions",
         headers={"Authorization": "Bearer test"},
-    ).json() == []
-    assert other_client.post(
-        f"/v1/datasets/{dataset_id}/versions",
-        headers={"Authorization": "Bearer test"},
-        files={"file": ("cross-tenant.csv", BytesIO(b"y"), "text/csv")},
-    ).status_code == 404
+    )
+    assert cross_tenant_versions.status_code == 200
+    cross_tenant_payload = cross_tenant_versions.json()
+    assert cross_tenant_payload["data"] == []
+    assert cross_tenant_payload["pagination"]["total"] == 0
+    assert (
+        other_client.post(
+            f"/v1/datasets/{dataset_id}/versions",
+            headers={"Authorization": "Bearer test"},
+            files={"file": ("cross-tenant.csv", BytesIO(b"y"), "text/csv")},
+        ).status_code
+        == 404
+    )
 
     run = other_client.post(
         "/v1/research-runs",
@@ -417,10 +446,13 @@ def test_cross_tenant_dataset_and_version_access_returns_not_found() -> None:
         json={"dataset_version_id": version_id},
     )
     assert run.status_code == 404
-    assert other_client.get(
-        f"/v1/datasets/{dataset_id}/versions/{version_id}/download",
-        headers={"Authorization": "Bearer test"},
-    ).status_code == 404
+    assert (
+        other_client.get(
+            f"/v1/datasets/{dataset_id}/versions/{version_id}/download",
+            headers={"Authorization": "Bearer test"},
+        ).status_code
+        == 404
+    )
 
 
 def test_dataset_download_url_is_authorized_and_short_lived() -> None:
@@ -455,12 +487,14 @@ def test_dataset_download_rejects_dataset_version_mismatch() -> None:
 def test_billing_webhook_processes_and_replays_identical_event() -> None:
     billing = InMemoryBillingEventStore()
     client, _, _, _ = _client(billing_store=billing, billing_secret="secret")
-    payload = json.dumps({
-        "event_id": "evt_1",
-        "workspace_id": str(uuid4()),
-        "plan": "pro",
-        "status": "active",
-    }).encode()
+    payload = json.dumps(
+        {
+            "event_id": "evt_1",
+            "workspace_id": str(uuid4()),
+            "plan": "pro",
+            "status": "active",
+        }
+    ).encode()
     signature = hmac.new(b"secret", payload, hashlib.sha256).hexdigest()
     headers = {
         "X-Billing-Signature": signature,
@@ -487,10 +521,11 @@ def test_billing_webhook_rejects_invalid_signature() -> None:
     assert response.status_code == 401
 
 
-
 def test_http_errors_include_structured_error_metadata() -> None:
     client = TestClient(create_app())
-    response = client.get("/v1/me", headers={"Authorization": "Bearer anything", "X-Request-ID": "req-structured"})
+    response = client.get(
+        "/v1/me", headers={"Authorization": "Bearer anything", "X-Request-ID": "req-structured"}
+    )
     assert response.status_code == 503
     payload = response.json()
     assert payload["detail"] == "SaaS authentication provider is not configured"
@@ -517,7 +552,9 @@ def test_validation_errors_include_structured_error_metadata() -> None:
 
 def test_invalid_workspace_header_is_rejected() -> None:
     client, _, _, _ = _client()
-    response = client.get("/v1/me", headers={"Authorization": "Bearer test", "X-Workspace-ID": "not-a-uuid"})
+    response = client.get(
+        "/v1/me", headers={"Authorization": "Bearer test", "X-Workspace-ID": "not-a-uuid"}
+    )
     assert response.status_code == 422
 
 
@@ -567,18 +604,22 @@ def test_cross_tenant_research_run_list_and_idempotency_key_are_isolated() -> No
     dataset_store = InMemoryDatasetStore()
     dataset_storage = InMemoryDatasetStorage()
 
-    owner_client = TestClient(create_app(
-        auth_provider=StaticAuth(owner),
-        job_store=store,
-        dataset_store=dataset_store,
-        dataset_storage=dataset_storage,
-    ))
-    other_client = TestClient(create_app(
-        auth_provider=StaticAuth(other),
-        job_store=store,
-        dataset_store=dataset_store,
-        dataset_storage=dataset_storage,
-    ))
+    owner_client = TestClient(
+        create_app(
+            auth_provider=StaticAuth(owner),
+            job_store=store,
+            dataset_store=dataset_store,
+            dataset_storage=dataset_storage,
+        )
+    )
+    other_client = TestClient(
+        create_app(
+            auth_provider=StaticAuth(other),
+            job_store=store,
+            dataset_store=dataset_store,
+            dataset_storage=dataset_storage,
+        )
+    )
 
     owner_dataset = _upload(owner_client, "owner-dataset", b"owner")
     other_dataset = _upload(other_client, "other-dataset", b"other")
@@ -662,17 +703,21 @@ def test_governed_research_run_requires_locked_claim_plan_and_persists_binding()
     plan = {
         "hypothesis": "DXY shocks are associated with XAUUSD returns.",
         "sample_definition": "XAUUSD M1 2021-2025",
-        "features": ["return_1"], "labels": ["return_60m"],
+        "features": ["return_1"],
+        "labels": ["return_60m"],
         "train_validation_test": "time ordered 60/20/20",
-        "exclusions": [], "costs_slippage": "explicit",
-        "statistical_tests": ["paired bootstrap"], "metrics": ["mean_return"],
+        "exclusions": [],
+        "costs_slippage": "explicit",
+        "statistical_tests": ["paired bootstrap"],
+        "metrics": ["mean_return"],
         "stopping_rules": ["no early stopping"],
         "multiple_testing_policy": "pre-registered",
         "replication_policy": "independent holdout",
     }
     locked = client.post(
         f"/v1/research-claims/{claim_id}/plan-lock",
-        headers={"Authorization": "Bearer test"}, json=plan,
+        headers={"Authorization": "Bearer test"},
+        json=plan,
     )
     assert locked.status_code == 200
     plan_hash = locked.json()["plan_hash"]
@@ -688,35 +733,89 @@ def test_governed_research_run_requires_locked_claim_plan_and_persists_binding()
     assert body["plan_hash"] == plan_hash
 
 
-
 def test_result_endpoint_exposes_governed_claim_lineage():
     from researchos.research_core.contracts import ResearchArtifact, ResearchResult
+
     client, context, _, _ = _client()
     uploaded = _upload(client, "lineage-result", b"x")
     version_id = uploaded.json()["version"]["id"]
     claim_store = InMemoryClaimStore()
-    claim = ResearchClaim(statement="h", workspace_id=str(context.workspace_id), creator=str(context.user_id))
+    claim = ResearchClaim(
+        statement="h", workspace_id=str(context.workspace_id), creator=str(context.user_id)
+    )
     claim_store.save(context.workspace_id, claim)
     job_store = InMemoryResearchJobStore()
-    client = TestClient(create_app(
-        auth_provider=StaticAuth(context), job_store=job_store,
-        dataset_store=InMemoryDatasetStore(), dataset_storage=InMemoryDatasetStorage(), claim_store=claim_store,
-    ))
+    client = TestClient(
+        create_app(
+            auth_provider=StaticAuth(context),
+            job_store=job_store,
+            dataset_store=InMemoryDatasetStore(),
+            dataset_storage=InMemoryDatasetStorage(),
+            claim_store=claim_store,
+        )
+    )
     uploaded = _upload(client, "lineage-result-2", b"x")
     version_id = uploaded.json()["version"]["id"]
-    plan = client.post(f"/v1/research-claims/{claim.id}/plan-lock", headers={"Authorization":"Bearer test"}, json={
-        "hypothesis":"h","sample_definition":"s","features":["x"],"labels":["y"],
-        "train_validation_test":"tv","exclusions":["e"],"costs_slippage":"c","statistical_tests":["t"],
-        "metrics":["m"],"stopping_rules":["stop"],"multiple_testing_policy":"none","replication_policy":"r"})
+    plan = client.post(
+        f"/v1/research-claims/{claim.id}/plan-lock",
+        headers={"Authorization": "Bearer test"},
+        json={
+            "hypothesis": "h",
+            "sample_definition": "s",
+            "features": ["x"],
+            "labels": ["y"],
+            "train_validation_test": "tv",
+            "exclusions": ["e"],
+            "costs_slippage": "c",
+            "statistical_tests": ["t"],
+            "metrics": ["m"],
+            "stopping_rules": ["stop"],
+            "multiple_testing_policy": "none",
+            "replication_policy": "r",
+        },
+    )
     assert plan.status_code == 200
-    run = client.post("/v1/research-runs", headers={"Authorization":"Bearer test","Idempotency-Key":"lineage-run"}, json={"dataset_version_id":version_id,"claim_id":str(claim.id),"plan_hash":plan.json()["plan_hash"]})
+    run = client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "lineage-run"},
+        json={
+            "dataset_version_id": version_id,
+            "claim_id": str(claim.id),
+            "plan_hash": plan.json()["plan_hash"],
+        },
+    )
     assert run.status_code == 202
-    job_id=run.json()["id"]
+    job_id = run.json()["id"]
     store = job_store
-    lease=store.claim(context.workspace_id, UUID(job_id), "test", 60)
-    result=ResearchResult(status="SUCCEEDED", source_dataset_sha256=hashlib.sha256(b"x").hexdigest(), artifacts=(ResearchArtifact("a","result","1"*64),))
+    lease = store.claim(context.workspace_id, UUID(job_id), "test", 60)
+    result = ResearchResult(
+        status="SUCCEEDED",
+        source_dataset_sha256=hashlib.sha256(b"x").hexdigest(),
+        artifacts=(ResearchArtifact("a", "result", "1" * 64),),
+    )
     store.record_result(context.workspace_id, UUID(job_id), lease.token, result)
-    response=client.get(f"/v1/research-runs/{job_id}/result", headers={"Authorization":"Bearer test"})
+    response = client.get(
+        f"/v1/research-runs/{job_id}/result", headers={"Authorization": "Bearer test"}
+    )
     assert response.status_code == 200
     assert response.json()["claim_id"] == str(claim.id)
     assert response.json()["plan_hash"] == plan.json()["plan_hash"]
+
+
+def test_dataset_versions_reject_invalid_sort_and_filter() -> None:
+    client, _, _, _ = _client()
+    created = _upload(client, "sort-filter", b"x")
+    dataset_id = created.json()["id"]
+    bad_sort = client.get(
+        f"/v1/datasets/{dataset_id}/versions?sort_by=not_a_field",
+        headers={"Authorization": "Bearer test"},
+    )
+    assert bad_sort.status_code == 400
+    assert bad_sort.json()["code"] == "INVALID_SORT"
+    assert bad_sort.json()["request_id"] == bad_sort.headers["X-Request-ID"]
+    bad_filter = client.get(
+        f"/v1/datasets/{dataset_id}/versions?filter[status]=completed",
+        headers={"Authorization": "Bearer test"},
+    )
+    assert bad_filter.status_code == 400
+    assert bad_filter.json()["code"] == "INVALID_FILTER"

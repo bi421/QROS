@@ -1,4 +1,4 @@
-﻿"""Secure HTTP boundary for the QROS SaaS MVP."""
+"""Secure HTTP boundary for the QROS SaaS MVP."""
 
 from __future__ import annotations
 
@@ -10,18 +10,33 @@ import json
 import logging
 import time
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, status
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
-logger = logging.getLogger(__name__)
-
-
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
-from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, PageRequest, ResearchJob, ResearchJobStatus, TenantContext, WorkspaceRole
+from researchos.saas.contracts import (
+    DEFAULT_USAGE_POLICIES,
+    PageRequest,
+    ResearchJob,
+    ResearchJobStatus,
+    TenantContext,
+    WorkspaceRole,
+)
 from researchos.saas.datasets import (
     Dataset,
     DatasetStorage,
@@ -41,8 +56,15 @@ from researchos.saas.idempotency import (
 from researchos.saas.rate_limit import FixedWindowRateLimiter, RateLimiter
 from researchos.saas.claim_api import ResearchClaimStore, register_research_claim_routes
 from researchos.saas.evidence_api import ResearchEvidenceStore, register_research_evidence_routes
-from researchos.saas.validation_api import InMemoryResearchValidationStore, ResearchValidationStore, register_research_validation_routes
-from researchos.saas.finding_api import InMemoryResearchFindingStore, register_research_finding_routes
+from researchos.saas.validation_api import (
+    InMemoryResearchValidationStore,
+    ResearchValidationStore,
+    register_research_validation_routes,
+)
+from researchos.saas.finding_api import (
+    InMemoryResearchFindingStore,
+    register_research_finding_routes,
+)
 from researchos.saas.research_report import build_research_report
 from researchos.saas.observability import StructuredRequestObserver, observe_request
 from researchos.saas.pagination import paginate, validate_filter_tenant_id
@@ -53,6 +75,8 @@ from researchos.saas.billing import (
     parse_billing_event,
     verify_hmac_signature,
 )
+
+logger = logging.getLogger(__name__)
 
 REQUEST_ID_HEADER = "X-Request-ID"
 WORKSPACE_HEADER = "X-Workspace-ID"
@@ -77,16 +101,30 @@ def _error_code(status_code: int) -> str:
 
 
 def _error_payload(request: Request, status_code: int, detail: object) -> dict[str, object]:
+    request_id = getattr(request.state, "request_id", None)
     message = detail if isinstance(detail, str) else "request failed"
-    code = detail if isinstance(detail, str) and detail.startswith("INVALID_") else _error_code(status_code)
+    code = (
+        detail
+        if isinstance(detail, str) and detail.startswith("INVALID_")
+        else _error_code(status_code)
+    )
+
     payload: dict[str, object] = {
+        "detail": detail,
         "code": code,
         "message": message,
-        "request_id": getattr(request.state, "request_id", None),
-        "correlation_id": request.headers.get("X-Correlation-ID") or getattr(request.state, "request_id", None),
+        "request_id": request_id,
+        "correlation_id": request.headers.get("X-Correlation-ID") or request_id,
+        "error": {
+            "code": code,
+            "message": message,
+            "request_id": request_id,
+        },
     }
+
     if not isinstance(detail, str):
         payload["details"] = detail
+
     return payload
 
 
@@ -96,7 +134,9 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         supplied = request.headers.get(REQUEST_ID_HEADER, "").strip()
         request_id = supplied[:MAX_REQUEST_ID_LENGTH] if supplied else str(uuid4())
-        request_id = "".join(char if ord(char) >= 32 and ord(char) != 127 else "-" for char in request_id)
+        request_id = "".join(
+            char if ord(char) >= 32 and ord(char) != 127 else "-" for char in request_id
+        )
         request.state.request_id = request_id
         started_at = time.perf_counter()
         try:
@@ -140,8 +180,7 @@ class AuthProvider(Protocol):
         self,
         authorization: str | None,
         requested_workspace_id: UUID | None = None,
-    ) -> TenantContext:
-        ...
+    ) -> TenantContext: ...
 
 
 class UnconfiguredAuthProvider:
@@ -249,7 +288,9 @@ def create_app(
         )
 
     @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    async def validation_exception_handler(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
         request_id = getattr(request.state, "request_id", None) or str(uuid4())
         return JSONResponse(
             status_code=422,
@@ -265,6 +306,7 @@ def create_app(
             status_code=500,
             content=_error_payload(request, 500, "Internal error"),
         )
+
     def current_tenant(
         authorization: str | None = Header(default=None),
         workspace_header: str | None = Header(default=None, alias=WORKSPACE_HEADER),
@@ -280,12 +322,12 @@ def create_app(
     def require_role(tenant: TenantContext, *allowed: WorkspaceRole) -> None:
         """Enforce server-resolved membership roles; never trust request data."""
         if tenant.role not in allowed:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="workspace role is not authorized")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="workspace role is not authorized"
+            )
 
     def require_rate_limit(tenant: TenantContext) -> None:
-        principal = hashlib.sha256(
-            f"workspace:{tenant.workspace_id}".encode()
-        ).hexdigest()
+        principal = hashlib.sha256(f"workspace:{tenant.workspace_id}".encode()).hexdigest()
         try:
             allowed = limiter.allow(principal)
         except Exception as exc:
@@ -300,7 +342,9 @@ def create_app(
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
         return hashlib.sha256(encoded).hexdigest()
 
-    def persist_version(*, dataset_id: UUID, tenant: TenantContext, file: UploadFile) -> DatasetVersion:
+    def persist_version(
+        *, dataset_id: UUID, tenant: TenantContext, file: UploadFile
+    ) -> DatasetVersion:
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         try:
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
@@ -319,7 +363,7 @@ def create_app(
                         storage_path=storage_path,
                         byte_size=size,
                         created_by=tenant.user_id,
-                    )
+                    ),
                 )
             except Exception:
                 storage.remove(storage_path)
@@ -333,14 +377,18 @@ def create_app(
             raise RuntimeError("dataset version persistence failed") from exc
 
     @app.get("/metrics", tags=["system"])
-    def metrics(metrics_header: str | None = Header(default=None, alias="X-Metrics-Token")) -> Response:
+    def metrics(
+        metrics_header: str | None = Header(default=None, alias="X-Metrics-Token"),
+    ) -> Response:
         """Expose process metrics only when an explicit scrape credential is configured."""
         if not metrics_token:
             raise HTTPException(status_code=503, detail="metrics endpoint is not configured")
         if not metrics_header or not hmac.compare_digest(metrics_header, metrics_token):
             raise HTTPException(status_code=404, detail="metrics endpoint not found")
         observer = app.state.observability
-        return Response(content=observer.metrics.prometheus_text(), media_type="text/plain; version=0.0.4")
+        return Response(
+            content=observer.metrics.prometheus_text(), media_type="text/plain; version=0.0.4"
+        )
 
     @app.get("/healthz", tags=["system"])
     def healthz() -> dict[str, str]:
@@ -361,13 +409,17 @@ def create_app(
         if billing is None or not billing_webhook_secret:
             raise HTTPException(status_code=503, detail="billing webhook is not configured")
         if not x_billing_signature or not x_billing_provider:
-            raise HTTPException(status_code=400, detail="billing signature and provider are required")
+            raise HTTPException(
+                status_code=400, detail="billing signature and provider are required"
+            )
         payload = await request.body()
         try:
             verify_hmac_signature(payload, x_billing_signature, billing_webhook_secret)
             event = parse_billing_event(payload)
         except BillingSignatureError as exc:
-            raise HTTPException(status_code=401, detail="invalid billing webhook signature") from exc
+            raise HTTPException(
+                status_code=401, detail="invalid billing webhook signature"
+            ) from exc
         except (TypeError, ValueError, json.JSONDecodeError) as exc:
             raise HTTPException(status_code=400, detail="invalid billing event") from exc
         payload_sha256 = hashlib.sha256(payload).hexdigest()
@@ -381,7 +433,11 @@ def create_app(
 
     @app.get("/v1/me", response_model=dict[str, str], tags=["identity"])
     def me(tenant: TenantContext = Depends(current_tenant)) -> dict[str, str]:
-        return {"user_id": str(tenant.user_id), "workspace_id": str(tenant.workspace_id), "plan": tenant.plan.value}
+        return {
+            "user_id": str(tenant.user_id),
+            "workspace_id": str(tenant.workspace_id),
+            "plan": tenant.plan.value,
+        }
 
     def _validate_dataset_name(name: str) -> str:
         """Reject path-like dataset names before they cross any storage boundary."""
@@ -389,6 +445,7 @@ def create_app(
         if not normalized or "/" in normalized or "\\" in normalized or ".." in normalized:
             raise HTTPException(status_code=400, detail="INVALID_PATH")
         return normalized
+
     @app.post("/v1/datasets", response_model=DatasetResponse, status_code=201, tags=["datasets"])
     def upload_dataset(
         name: str = Form(..., min_length=1, max_length=256),
@@ -396,7 +453,12 @@ def create_app(
         tenant: TenantContext = Depends(current_tenant),
     ) -> DatasetResponse:
         require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.RESEARCHER)
-        dataset = Dataset(id=uuid4(), workspace_id=tenant.workspace_id, name=_validate_dataset_name(name), created_by=tenant.user_id)
+        dataset = Dataset(
+            id=uuid4(),
+            workspace_id=tenant.workspace_id,
+            name=_validate_dataset_name(name),
+            created_by=tenant.user_id,
+        )
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         try:
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
@@ -416,7 +478,7 @@ def create_app(
                         storage_path=storage_path,
                         byte_size=size,
                         created_by=tenant.user_id,
-                    )
+                    ),
                 )
             except Exception:
                 try:
@@ -437,7 +499,12 @@ def create_app(
             version=version,
         )
 
-    @app.post("/v1/datasets/{dataset_id}/versions", response_model=DatasetVersion, status_code=201, tags=["datasets"])
+    @app.post(
+        "/v1/datasets/{dataset_id}/versions",
+        response_model=DatasetVersion,
+        status_code=201,
+        tags=["datasets"],
+    )
     def upload_dataset_version(
         dataset_id: UUID,
         file: UploadFile = File(...),
@@ -467,9 +534,15 @@ def create_app(
         items = datasets.list_versions(tenant.workspace_id, dataset_id)
         if sort_by not in {"version_no", "content_sha256", "byte_size"}:
             raise HTTPException(status_code=400, detail="INVALID_SORT")
-        return paginate(items, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order)
+        return paginate(
+            items, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order
+        )
 
-    @app.get("/v1/datasets/{dataset_id}/versions/{version_id}/download", response_model=dict[str, str], tags=["datasets"])
+    @app.get(
+        "/v1/datasets/{dataset_id}/versions/{version_id}/download",
+        response_model=dict[str, str],
+        tags=["datasets"],
+    )
     def create_dataset_download_url(
         dataset_id: UUID,
         version_id: UUID,
@@ -486,10 +559,14 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
-            raise HTTPException(status_code=503, detail="dataset download service unavailable") from exc
+            raise HTTPException(
+                status_code=503, detail="dataset download service unavailable"
+            ) from exc
         return {"url": url, "expires_in": "300"}
 
-    @app.post("/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"])
+    @app.post(
+        "/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"]
+    )
     def create_research_run(
         request: ResearchCreateRequest,
         tenant: TenantContext = Depends(current_tenant),
@@ -504,12 +581,14 @@ def create_app(
         idempotency_key = idempotency_key.strip()
         if not idempotency_key or len(idempotency_key) > MAX_IDEMPOTENCY_KEY_LENGTH:
             raise HTTPException(status_code=400, detail="invalid Idempotency-Key")
-        fingerprint = request_fingerprint({
-            "dataset_version_id": str(request.dataset_version_id),
-            "workflow_id": request.workflow_id,
-            "claim_id": request.claim_id,
-            "plan_hash": request.plan_hash,
-        })
+        fingerprint = request_fingerprint(
+            {
+                "dataset_version_id": str(request.dataset_version_id),
+                "workflow_id": request.workflow_id,
+                "claim_id": request.claim_id,
+                "plan_hash": request.plan_hash,
+            }
+        )
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         if not policy.allows_monthly_runs(store.count_monthly(tenant.workspace_id)):
             raise HTTPException(status_code=402, detail="research run limit reached")
@@ -519,15 +598,22 @@ def create_app(
         if version is None:
             raise HTTPException(status_code=404, detail="dataset version not found")
         if (request.claim_id is None) != (request.plan_hash is None):
-            raise HTTPException(status_code=422, detail="claim_id and plan_hash are required together")
+            raise HTTPException(
+                status_code=422, detail="claim_id and plan_hash are required together"
+            )
         if request.claim_id is not None:
             if claim_store is None:
-                raise HTTPException(status_code=503, detail="research claim persistence is not configured")
+                raise HTTPException(
+                    status_code=503, detail="research claim persistence is not configured"
+                )
             claim = claim_store.get(tenant.workspace_id, request.claim_id)
             if claim is None:
                 raise HTTPException(status_code=404, detail="research claim not found")
             if not claim.is_plan_locked or claim.plan_hash != request.plan_hash:
-                raise HTTPException(status_code=409, detail="research claim plan is not locked or plan_hash does not match")
+                raise HTTPException(
+                    status_code=409,
+                    detail="research claim plan is not locked or plan_hash does not match",
+                )
 
         job = ResearchJob(
             id=uuid4(),
@@ -554,7 +640,9 @@ def create_app(
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
             raise
         if replayed:
-            return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
+            return JSONResponse(
+                status_code=202, content=_research_job_response(created).model_dump(mode="json")
+            )
         try:
             queue.enqueue(tenant.workspace_id, created.id)
         except Exception as exc:
@@ -568,7 +656,9 @@ def create_app(
             except Exception:
                 pass
             raise RuntimeError("research job queue unavailable") from exc
-        return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
+        return JSONResponse(
+            status_code=202, content=_research_job_response(created).model_dump(mode="json")
+        )
 
     @app.get("/v1/research-runs", response_model=PageResponse, tags=["research"])
     def list_research_runs(
@@ -583,7 +673,9 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         if workflow_id is not None and not 1 <= len(workflow_id) <= 128:
-            raise HTTPException(status_code=422, detail="workflow_id must be between 1 and 128 characters")
+            raise HTTPException(
+                status_code=422, detail="workflow_id must be between 1 and 128 characters"
+            )
         jobs, total = store.list(
             tenant.workspace_id,
             limit=page.limit,
@@ -647,7 +739,9 @@ def create_app(
                 status_code=503,
                 detail="research evidence persistence unavailable",
             ) from exc
-        finding = finding_store.get(tenant.workspace_id, job_id) if finding_store is not None else None
+        finding = (
+            finding_store.get(tenant.workspace_id, job_id) if finding_store is not None else None
+        )
         report = build_research_report(record, evidence, finding)
         return {
             "schema": report.schema,
@@ -662,7 +756,9 @@ def create_app(
         }
 
     @app.get("/v1/research-runs/{job_id}", response_model=ResearchJobResponse, tags=["research"])
-    def get_research_run(job_id: UUID, tenant: TenantContext = Depends(current_tenant)) -> ResearchJobResponse:
+    def get_research_run(
+        job_id: UUID, tenant: TenantContext = Depends(current_tenant)
+    ) -> ResearchJobResponse:
         job = store.get(tenant.workspace_id, job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="research run not found")
