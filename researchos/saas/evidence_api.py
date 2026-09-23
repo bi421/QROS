@@ -10,6 +10,7 @@ from fastapi import Depends, HTTPException, status
 from pydantic import BaseModel
 
 from researchos.saas.contracts import TenantContext
+from researchos.saas.api.pagination import envelope, parse_list_query, sort_items
 
 
 @dataclass(frozen=True)
@@ -122,13 +123,14 @@ def register_research_evidence_routes(
 ) -> None:
     @router.get(
         "/v1/research-runs/{research_run_id}/evidence",
-        response_model=list[ResearchEvidenceResponse],
+        response_model=None,
         tags=["evidence"],
     )
     def list_research_run_evidence(
         research_run_id: UUID,
+        request: Any,
         context: TenantContext = Depends(tenant_dependency),
-    ) -> list[ResearchEvidenceResponse]:
+    ) -> dict[str, object]:
         if evidence_store is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -141,20 +143,22 @@ def register_research_evidence_routes(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="research evidence persistence unavailable",
             ) from exc
-        return [
-            ResearchEvidenceResponse(
-                id=str(row.id),
-                workspace_id=str(row.workspace_id),
-                research_run_id=str(row.research_run_id),
-                claim_id=str(row.claim_id) if row.claim_id else None,
-                plan_hash=row.plan_hash,
-                artifact_id=str(row.artifact_id) if row.artifact_id else None,
-                claim=row.claim,
-                status=row.status,
-                provenance=row.provenance,
-            )
-            for row in rows
-        ]
+        query = parse_list_query(request, allowed_sort_by={"id", "status"}, allowed_filters={"tenant_id", "status"})
+        if query.filters.get("tenant_id") not in (None, str(context.workspace_id)):
+            raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "message": "tenant_id filter must match authenticated tenant"})
+        status_filter = query.filters.get("status")
+        if status_filter is not None:
+            rows = [row for row in rows if row.status == status_filter]
+        rows = sort_items(rows, sort_by=query.sort_by, sort_order=query.sort_order)
+        total = len(rows)
+        page = rows[query.offset:query.offset + query.page_size]
+        items = [ResearchEvidenceResponse(
+            id=str(row.id), workspace_id=str(row.workspace_id), research_run_id=str(row.research_run_id),
+            claim_id=str(row.claim_id) if row.claim_id else None, plan_hash=row.plan_hash,
+            artifact_id=str(row.artifact_id) if row.artifact_id else None, claim=row.claim,
+            status=row.status, provenance=row.provenance,
+        ).model_dump(mode="json") for row in page]
+        return envelope(items, total, query, getattr(request.state, "request_id", None))
 
 
 __all__ = [
