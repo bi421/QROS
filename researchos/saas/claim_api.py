@@ -270,6 +270,24 @@ def register_research_claim_routes(
         items = [_response(claim).model_dump(mode="json") for claim in sort_items(claims, sort_by=query.sort_by, sort_order=query.sort_order)]
         return envelope(items, total, query, getattr(request.state, "request_id", None))
 
+    @router.get("/v1/claims/{claim_id}/evidence_graph", tags=["research-claims"])
+    def get_claim_evidence_graph(
+        request,
+        claim_id: str,
+        context: TenantContext = Depends(tenant_dependency),
+    ) -> dict[str, object]:
+        if not claim_id.strip() or len(claim_id) > 256:
+            raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "message": "invalid claim id"})
+        store = require_store()
+        claim = store.get(context.workspace_id, claim_id)
+        if claim is None:
+            raise HTTPException(status_code=404, detail="research claim not found")
+        node = _response(claim).model_dump(mode="json")
+        return {
+            "data": {"nodes": [{"id": claim.id, "type": "claim", "data": node}], "edges": []},
+            "pagination": {"page": 1, "page_size": 1, "total": 1, "total_pages": 1},
+            "request_id": getattr(request.state, "request_id", None),
+        }
 
 __all__ = [
     "ResearchClaimCreateRequest",
