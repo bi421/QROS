@@ -66,6 +66,7 @@ class BillingClient:
                 "billing_event", rows=billing_rows, insert_error=insert_error
             ),
             "subscription": TableQuery("subscription"),
+            "entitlement": TableQuery("entitlement"),
         }
 
     def table(self, name):
