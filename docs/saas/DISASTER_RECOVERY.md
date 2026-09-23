@@ -10,7 +10,7 @@
 | Tenant isolation | Required before recovery is accepted | Restored database must pass `supabase/tests/tenant_isolation_test.sql` |
 | Dataset object integrity | 100% hash match for restored objects | SHA-256 comparison in `backup_verify.py` |
 
-The RPO/RTO values are QROS operational targets, not a guarantee of the underlying managed platform. Supabase daily backups can leave up to a day's worth of changes at risk; PITR provides finer-grained recovery points and should be enabled when the 12-hour target cannot be met by the selected backup schedule. citeturn0search0turn0search10
+The RPO/RTO values are QROS operational targets, not a guarantee of the underlying managed platform. Supabase daily backups can leave up to a day's worth of changes at risk; PITR provides finer-grained recovery points and should be enabled when the 12-hour target cannot be met by the selected backup schedule.
 
 ## What is backed up
 
@@ -19,7 +19,7 @@ QROS has two independent recovery domains:
 1. **PostgreSQL** — tenant/workspace metadata, datasets, dataset versions, research jobs/runs, evidence and lineage metadata, claims/findings/validation records, retention/deletion audit state, and supported Supabase metadata.
 2. **Object storage** — dataset files and other content addressed by `storage_path`.
 
-The database backup does not contain Supabase Storage object bytes; object storage must therefore be replicated/backed up independently. Supabase Storage supports S3-compatible access for this purpose. citeturn0search0turn1search0turn1search4
+The database backup does not contain Supabase Storage object bytes; object storage must therefore be replicated/backed up independently. Supabase Storage supports S3-compatible access for this purpose.
 
 ## Backup verification procedure
 
@@ -42,7 +42,7 @@ The verifier:
 7. requires before/after object paths and hashes to match;
 8. removes the temporary restore database unless `--keep-target` is supplied.
 
-`pg_restore` is designed to restore PostgreSQL archives created by `pg_dump`, including custom-format archives. citeturn0search6
+`pg_restore` is designed to restore PostgreSQL archives created by `pg_dump`, including custom-format archives.
 
 ## Required pass conditions
 
@@ -64,13 +64,13 @@ Record incident start time, desired recovery point, last known good backup/PITR 
 
 Restore the selected backup/PITR point into a new database/project where practical. Do not overwrite production until verification succeeds.
 
-Supabase supports restoring backups and PITR recovery points; actual restoration duration depends on database size and WAL activity, so the <4h RTO must be measured in QROS restore drills rather than assumed. citeturn0search0turn0search4
+Supabase supports restoring backups and PITR recovery points; actual restoration duration depends on database size and WAL activity, so the <4h RTO must be measured in QROS restore drills rather than assumed.
 
 ### 3. Recover object storage
 
 Restore the independently replicated object set. For every dataset version/object, locate `storage_path`, calculate SHA-256 over the restored bytes, compare with the source/recorded `content_sha256`, and reject recovery if any hash differs.
 
-Supabase documents that restoring a database backup does not restore Storage object bytes; those files must be restored separately. citeturn1search9
+Supabase documents that restoring a database backup does not restore Storage object bytes; those files must be restored separately.
 
 ### 4. Verify security and lineage
 
@@ -86,7 +86,7 @@ Only after all verification gates pass: switch application/database configuratio
 
 To maintain RPO <24h, production must have a successful backup point at least once per 24-hour interval, with operational margin. The recommended target is 12 hours or better.
 
-If the required recovery point cannot be guaranteed by scheduled backups, enable PITR. Supabase documents PITR as providing much finer recovery granularity than daily backups. citeturn0search0turn0search10
+If the required recovery point cannot be guaranteed by scheduled backups, enable PITR. Supabase documents PITR as providing much finer recovery granularity than daily backups.
 
 A failed backup verification is a production reliability incident. The next scheduled run is not considered sufficient until the failed path is diagnosed and a successful restore verification completes.
 
