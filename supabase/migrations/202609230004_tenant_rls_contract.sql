@@ -186,6 +186,7 @@ do $$
 declare
   table_name text;
   policy_name text;
+  existing_policy record;
 begin
   foreach table_name in array array[
     'workspace','workspace_member','subscription','dataset','dataset_version',
@@ -196,10 +197,17 @@ begin
   ] loop
     execute format('alter table public.%I enable row level security', table_name);
 
-    foreach policy_name in array array[
-      'tenant_select','tenant_insert','tenant_update','tenant_delete'
-    ] loop
-      execute format('drop policy if exists %I on public.%I', policy_name, table_name);
+    for existing_policy in
+      select policyname
+      from pg_policies
+      where schemaname = 'public'
+        and tablename = table_name
+    loop
+      execute format(
+        'drop policy if exists %I on public.%I',
+        existing_policy.policyname,
+        table_name
+      );
     end loop;
 
     execute format(
