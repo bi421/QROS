@@ -169,6 +169,8 @@ def certify_runtime(
         raise TypeError("repository must be an EvidenceRepository")
     if dataset is None and not dataset_hash:
         raise ValueError("runtime evidence certification requires a Dataset evidence parent")
+    dataset_envelope: EvidenceEnvelope
+
     if dataset is not None:
         _assert_evidence_eligible(experiment, dataset)
     elif _is_synthetic_experiment(experiment):
