@@ -76,6 +76,7 @@ class ResearchClaimResponse(BaseModel):
 class ResearchClaimPageResponse(BaseModel):
     data: list[ResearchClaimResponse]
     pagination: dict[str, int]
+    request_id: str
 
 
 def _response(claim: ResearchClaim) -> ResearchClaimResponse:
@@ -262,7 +263,7 @@ def register_research_claim_routes(
         sort_order: str = "desc",
         status_filter: str | None = Query(default=None, alias="filter[status]"),
         tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
-        request: Request,
+        request: Request = None,
         context: TenantContext = Depends(tenant_dependency),
     ) -> ResearchClaimPageResponse:
         try:
@@ -286,24 +287,21 @@ def register_research_claim_routes(
         )
         store = require_store()
         try:
-            claims, total = store.list(
+            if tenant_filter is not None and tenant_filter != str(context.workspace_id):
+                claims, total = [], 0
+            else:
+                claims, total = store.list(
                 context.workspace_id,
                 limit=query.page_size,
                 offset=query.offset,
                 sort_by=query.sort_by,
                 sort_order=query.sort_order,
                 status=query.status,
-            )
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=400,
-                detail={"code": "INVALID_SORT" if "sort" in str(exc) else "INVALID_FILTER", "message": str(exc)},
-            ) from exc
-        except Exception as exc:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="research claim persistence unavailable",
-            ) from exc
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail={"code": "INVALID_SORT" if "sort" in str(exc) else "INVALID_FILTER", "message": str(exc)}) from exc
+            except Exception as exc:
+                raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="research claim persistence unavailable") from exc
         items = [_response(claim) for claim in claims]
         return ResearchClaimPageResponse.model_validate(
             pagination_envelope(
