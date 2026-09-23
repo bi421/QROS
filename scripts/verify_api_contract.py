@@ -24,6 +24,10 @@ EXPECTED = {
     "GET /v1/jobs/{job_id}/logs",
     "GET /v1/research-runs/{job_id}/result",
     "GET /v1/research-runs/{job_id}/evidence",
+    "POST /v1/research-runs/{job_id}/validation",
+    "GET /v1/research-runs/{job_id}/validation",
+    "POST /v1/research-runs/{job_id}/finding",
+    "GET /v1/research-runs/{job_id}/finding",
     "GET /v1/research-runs/{job_id}/report",
     "POST /v1/research-claims",
     "GET /v1/research-claims",
@@ -47,6 +51,8 @@ def main() -> int:
                 documented.add(value)
     actual: set[str] = set()
     for source in (ROOT / "researchos" / "saas").rglob("*.py"):
+        if "tests" in source.parts:
+            continue
         tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
