@@ -110,21 +110,21 @@ returns trigger
 language plpgsql
 security invoker
 set search_path = public
-as $
+as $$
 begin
   if new.workspace_id is not null then
     new.tenant_id := new.workspace_id;
   end if;
   return new;
 end;
-$;
+$$;
 
 create or replace function public.set_qros_tenant_from_dataset()
 returns trigger
 language plpgsql
 security invoker
 set search_path = public
-as $
+as $$
 begin
   select d.workspace_id
     into new.tenant_id
@@ -132,19 +132,19 @@ begin
    where d.id = new.dataset_id;
   return new;
 end;
-$;
+$$;
 
 create or replace function public.set_qros_workspace_tenant()
 returns trigger
 language plpgsql
 security invoker
 set search_path = public
-as $
+as $$
 begin
   new.tenant_id := new.id;
   return new;
 end;
-$;
+$$;
 
 drop trigger if exists set_qros_tenant_id on public.workspace;
 create trigger set_qros_tenant_id
@@ -156,7 +156,7 @@ create trigger set_qros_tenant_id
 before insert or update on public.dataset_version
 for each row execute function public.set_qros_tenant_from_dataset();
 
-do $
+do $$
 declare
   table_name text;
 begin
@@ -175,7 +175,7 @@ begin
       table_name
     );
   end loop;
-end $;
+end $$;
 
 create index if not exists idx_workspace_tenant_id on public.workspace(tenant_id);
 create index if not exists idx_dataset_tenant_id on public.dataset(tenant_id);
