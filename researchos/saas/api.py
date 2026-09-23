@@ -40,6 +40,7 @@ from researchos.saas.validation_api import InMemoryResearchValidationStore, Rese
 from researchos.saas.finding_api import InMemoryResearchFindingStore, register_research_finding_routes
 from researchos.saas.research_report import build_research_report
 from researchos.saas.observability import StructuredRequestObserver, observe_request
+from researchos.saas.api.pagination import envelope, parse_list_query, sort_items
 from researchos.saas.billing import (
     BillingEventConflict,
     BillingEventStore,
@@ -71,15 +72,24 @@ def _error_code(status_code: int) -> str:
 
 
 def _error_payload(request: Request, status_code: int, detail: object) -> dict[str, object]:
-    message = detail if isinstance(detail, str) else "request failed"
-    return {
-        "detail": detail,
-        "error": {
-            "code": _error_code(status_code),
-            "message": message,
-            "request_id": getattr(request.state, "request_id", None),
-        },
+    request_id = getattr(request.state, "request_id", None)
+    if isinstance(detail, dict) and "code" in detail:
+        code = str(detail["code"])
+        message = str(detail.get("message", "request failed"))
+        details = detail.get("details")
+    else:
+        code = _error_code(status_code).upper()
+        message = detail if isinstance(detail, str) else "request failed"
+        details = detail if not isinstance(detail, str) else None
+    payload: dict[str, object] = {
+        "code": code,
+        "message": message,
+        "request_id": request_id,
+        "correlation_id": request_id,
     }
+    if details is not None:
+        payload["details"] = details
+    return payload
 
 
 class RequestCorrelationMiddleware(BaseHTTPMiddleware):
@@ -239,9 +249,14 @@ def create_app(
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
         return JSONResponse(
-            status_code=422,
-            content=_error_payload(request, 422, exc.errors()),
+            status_code=400,
+            content=_error_payload(request, 400, {"code": "INVALID_FILTER", "message": "invalid request parameters", "details": exc.errors()}),
         )
+
+    @app.exception_handler(Exception)
+    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        del exc
+        return JSONResponse(status_code=500, content=_error_payload(request, 500, "internal server error"))
 
     def current_tenant(
         authorization: str | None = Header(default=None),
@@ -420,12 +435,21 @@ def create_app(
             raise HTTPException(status_code=404, detail="dataset not found")
         return persist_version(dataset_id=dataset_id, tenant=tenant, file=file)
 
-    @app.get("/v1/datasets/{dataset_id}/versions", response_model=list[DatasetVersion], tags=["datasets"])
+    @app.get("/v1/datasets/{dataset_id}/versions", tags=["datasets"])
     def list_dataset_versions(
+        request: Request,
         dataset_id: UUID,
         tenant: TenantContext = Depends(current_tenant),
-    ) -> list[DatasetVersion]:
-        return datasets.list_versions(tenant.workspace_id, dataset_id)
+    ) -> dict[str, object]:
+        query = parse_list_query(request, allowed_sort_by={"created_at", "version_no", "byte_size"}, allowed_filters={"tenant_id"})
+        tenant_filter = query.filters.get("tenant_id")
+        if tenant_filter is not None and tenant_filter != str(tenant.workspace_id):
+            raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "message": "tenant_id filter must match authenticated tenant"})
+        versions = datasets.list_versions(tenant.workspace_id, dataset_id)
+        versions = sort_items(versions, sort_by=query.sort_by, sort_order=query.sort_order)
+        total = len(versions)
+        page = versions[query.offset:query.offset + query.page_size]
+        return envelope([v.__dict__ for v in page], total, query, getattr(request.state, "request_id", None))
 
     @app.get("/v1/datasets/{dataset_id}/versions/{version_id}/download", response_model=dict[str, str], tags=["datasets"])
     def create_dataset_download_url(
@@ -625,6 +649,16 @@ def create_app(
         if job is None:
             raise HTTPException(status_code=404, detail="research run not found")
         return _research_job_response(job)
+
+    app.state.job_logs = {}
+
+    @app.get("/v1/jobs/{job_id}/logs", tags=["research"])
+    def get_job_logs(request: Request, job_id: UUID, tenant: TenantContext = Depends(current_tenant)) -> dict[str, object]:
+        job = store.get(tenant.workspace_id, job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="research run not found")
+        logs = list(app.state.job_logs.get(job_id, []))
+        return envelope(logs, len(logs), parse_list_query(request, allowed_sort_by={"timestamp"}, allowed_filters={"tenant_id"}), getattr(request.state, "request_id", None))
 
     register_research_claim_routes(
         app,
