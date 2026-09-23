@@ -58,3 +58,40 @@ def test_hard_purge_removes_expired_rows():
     persistence.soft_delete_workspace(workspace_id,retention=RetentionConfig(30),deleted_at=deleted_at)
     assert persistence.hard_purge_expired(now=datetime.now(timezone.utc))==1
     assert b"dataset-1" not in persistence.export_workspace(workspace_id)
+
+
+def test_workspace_export_is_signed_and_contains_tenant_data() -> None:
+    from io import BytesIO
+    from urllib.parse import urlsplit
+    from zipfile import ZipFile
+    from researchos.saas.datasets import InMemoryDatasetStorage
+
+    workspace_id = uuid4()
+    persistence = InMemoryTenantPersistence()
+    persistence.add("dataset", "dataset-1", workspace_id, {"name": "dataset"})
+    persistence.add("research_run", "job-1", workspace_id, {"status": "succeeded"})
+    persistence.add("evidence", "evidence-1", workspace_id, {"content_sha256": "c" * 64})
+    persistence.add("research_finding", "finding-1", workspace_id, {"status": "validated"})
+    storage = InMemoryDatasetStorage()
+    context = TenantContext(uuid4(), workspace_id, Plan.PRO, WorkspaceRole.OWNER)
+    client = _client(context=context, persistence=persistence)
+    client.app.dependency_overrides = {}
+    # Rebuild with injected storage so the returned signed path is downloadable from the test store.
+    client = TestClient(create_app(
+        auth_provider=StaticAuth(context),
+        tenant_persistence=persistence,
+        dataset_storage=storage,
+        plan_rate_limiter=PlanRateLimiter(),
+    ))
+    response = client.get(f"/v1/workspaces/{workspace_id}/export", headers={"Authorization": "Bearer test"})
+    assert response.status_code == 200
+    url = response.json()["url"]
+    assert "tenant_id=" + str(workspace_id) in url
+    path = urlsplit(url).path.lstrip("/")
+    payload = storage.get(path)
+    assert payload is not None
+    with ZipFile(BytesIO(payload)) as archive:
+        assert "datasets.json" in archive.namelist()
+        assert "jobs.json" in archive.namelist()
+        assert "evidence_envelopes.json" in archive.namelist()
+        assert "research_findings.json" in archive.namelist()
