@@ -261,7 +261,7 @@ def register_research_evidence_routes(
         if evidence_store is None:
             raise HTTPException(status_code=503, detail="research evidence persistence is not configured")
         rows = evidence_store.list_for_claim(context.workspace_id, claim_id)
-        return _evidence_page(rows, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, tenant_filter=tenant_filter, request=request, context=context)
+        return _evidence_page(rows, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, status_filter=status_filter, tenant_filter=tenant_filter, request=request, context=context)
 
 
 
