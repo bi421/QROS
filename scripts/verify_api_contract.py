@@ -42,6 +42,8 @@ def main() -> int:
                 documented.add(value)
     actual: set[str] = set()
     for source in (ROOT / "researchos" / "saas").rglob("*.py"):
+        if "tests" in source.parts:
+            continue
         tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
