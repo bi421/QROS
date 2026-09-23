@@ -745,7 +745,8 @@ def create_app(
             "claim_id": request.claim_id,
             "plan_hash": request.plan_hash,
         })
-        policy = DEFAULT_USAGE_POLICIES[tenant.plan]\n        if not policy.allows_concurrency(store.count_active(tenant.workspace_id)):
+        policy = DEFAULT_USAGE_POLICIES[tenant.plan]
+        if not policy.allows_concurrency(store.count_active(tenant.workspace_id)):
             raise HTTPException(status_code=429, detail="concurrent research run limit reached")
         version = datasets.get_version(tenant.workspace_id, request.dataset_version_id)
         if version is None:
