@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 import hashlib
 import hmac
 import json
+import logging
 import time
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
@@ -40,7 +41,7 @@ from researchos.saas.evidence_api import ResearchEvidenceStore, register_researc
 from researchos.saas.validation_api import InMemoryResearchValidationStore, ResearchValidationStore, register_research_validation_routes
 from researchos.saas.finding_api import InMemoryResearchFindingStore, register_research_finding_routes
 from researchos.saas.research_report import build_research_report
-from researchos.saas.observability import StructuredRequestObserver, observe_request
+from researchos.saas.observability import StructuredRequestObserver, configure_tracing, emit_log, observe_request, span
 from researchos.saas.auth.authorization import require_permission
 from researchos.saas.billing import (
     BillingEventConflict,
@@ -94,7 +95,8 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
         request.state.correlation_id = request_id
         started_at = time.perf_counter()
         try:
-            response = await call_next(request)
+            with span("qros.api", request_id=request_id, http_method=request.method, http_path=request.url.path):
+                response = await call_next(request)
         except Exception:
             observer = getattr(request.app.state, "observability", None)
             if isinstance(observer, StructuredRequestObserver):
@@ -107,6 +109,8 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
                     path=path,
                     status_code=500,
                     started_at=started_at,
+                    tenant_id=getattr(request.state, "tenant_id", None),
+                    job_id=getattr(request.state, "job_id", None),
                 )
             raise
         response.headers[REQUEST_ID_HEADER] = request_id
@@ -121,6 +125,8 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
                 path=path,
                 status_code=response.status_code,
                 started_at=started_at,
+                tenant_id=getattr(request.state, "tenant_id", None),
+                job_id=getattr(request.state, "job_id", None),
             )
         return response
 
@@ -223,6 +229,7 @@ def create_app(
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
+    configure_tracing()
     auth = auth_provider or UnconfiguredAuthProvider()
     store = job_store or InMemoryResearchJobStore()
     datasets = dataset_store or InMemoryDatasetStore()
@@ -262,6 +269,7 @@ def create_app(
         )
 
     def current_tenant(
+        request: Request,
         authorization: str | None = Header(default=None),
         workspace_header: str | None = Header(default=None, alias=WORKSPACE_HEADER),
     ) -> TenantContext:
@@ -271,7 +279,10 @@ def create_app(
                 requested_workspace_id = UUID(workspace_header.strip())
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail="invalid X-Workspace-ID") from exc
-        return auth.authenticate(authorization, requested_workspace_id)
+        with span("qros.api.auth", request_id=getattr(request.state, "request_id", None)):
+            tenant = auth.authenticate(authorization, requested_workspace_id)
+        request.state.tenant_id = str(tenant.workspace_id)
+        return tenant
 
     def require_role(tenant: TenantContext, *allowed: WorkspaceRole) -> None:
         """Enforce server-resolved membership roles; never trust request data."""
@@ -327,14 +338,17 @@ def create_app(
                     )
                 )
             except Exception:
-                storage.remove(storage_path)
+                storage.remove(storage_path, tenant_id=tenant.workspace_id, access_token=tenant.access_token)
                 existing = datasets.find_version_by_content(tenant.workspace_id, dataset_id, digest)
                 if existing is not None:
-                    if not storage.verify_sha256(existing.storage_path, existing.content_sha256):
+                    if not storage.verify_sha256(existing.storage_path, existing.content_sha256, tenant_id=tenant.workspace_id, access_token=tenant.access_token):
                         raise HTTPException(status_code=503, detail="dataset object integrity check failed")
                     return existing
                 raise
             return version
+        except PermissionError as exc:
+            app.state.observability.metrics.inc_tenant_isolation_violation()
+            raise HTTPException(status_code=403, detail="tenant storage authorization failed") from exc
         except ValueError as exc:
             raise HTTPException(status_code=413, detail=str(exc)) from exc
         except HTTPException:
@@ -546,7 +560,7 @@ def create_app(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
             raise HTTPException(status_code=503, detail="dataset download service unavailable") from exc
-        return {"url": url, "expires_in": "300"}
+        return {"url": url, "expires_in": "3600"}
 
     @app.post("/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"])
     @require_permission("job", "create")
@@ -615,19 +629,46 @@ def create_app(
             raise
         if replayed:
             return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
-        try:
-            queue.enqueue(tenant.workspace_id, created.id)
-        except Exception as exc:
+        request.state.job_id = str(created.id)
+        with span(
+            "qros.job",
+            request_id=getattr(request.state, "request_id", None),
+            tenant_id=tenant.workspace_id,
+            job_id=created.id,
+        ):
             try:
-                store.transition(
+                queue.enqueue(
                     tenant.workspace_id,
                     created.id,
-                    ResearchJobStatus.QUEUED,
-                    ResearchJobStatus.FAILED,
+                    request_id=getattr(request.state, "request_id", None),
                 )
-            except Exception:
-                pass
-            raise HTTPException(status_code=503, detail="research job queue unavailable") from exc
+            except Exception as exc:
+                try:
+                    store.transition(
+                        tenant.workspace_id,
+                        created.id,
+                        ResearchJobStatus.QUEUED,
+                        ResearchJobStatus.FAILED,
+                    )
+                except Exception:
+                    pass
+                app.state.observability.metrics.inc_job_failed()
+                emit_log(
+                    level=logging.ERROR,
+                    message="research job enqueue failed",
+                    request_id=getattr(request.state, "request_id", None),
+                    tenant_id=tenant.workspace_id,
+                    job_id=created.id,
+                )
+                raise HTTPException(status_code=503, detail="research job queue unavailable") from exc
+        app.state.observability.metrics.inc_job_created()
+        emit_log(
+            level=logging.INFO,
+            message="research job created",
+            request_id=getattr(request.state, "request_id", None),
+            tenant_id=tenant.workspace_id,
+            job_id=created.id,
+        )
         return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
 
     @app.get("/v1/research-runs", response_model=PageResponse, tags=["research"])
