@@ -201,7 +201,6 @@ def register_research_evidence_routes(
         sort_order: str = "desc",
         status_filter: str | None = Query(default=None, alias="filter[status]"),
         tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
-        request: Request = None,
         context: TenantContext = Depends(tenant_dependency),
     ) -> dict[str, object]:
         if evidence_store is None:
