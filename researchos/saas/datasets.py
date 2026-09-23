@@ -192,7 +192,6 @@ class SupabaseDatasetStore:
             storage_path=str(row["storage_path"]),
             byte_size=int(row["byte_size"]),
             created_by=UUID(str(row["created_by"])),
-            created_at=datetime.fromisoformat(str(row["created_at"]).replace("Z", "+00:00")),
         )
 
     def create_dataset(self, workspace_id: UUID, dataset: Dataset) -> Dataset:
@@ -208,7 +207,7 @@ class SupabaseDatasetStore:
                     "created_by": str(dataset.created_by),
                 }
             )
-            .select("id,workspace_id,name,created_by,created_at"
+            .select("id,workspace_id,name,created_by,created_at")
             .execute()
         )
         rows = result.data or []
@@ -219,7 +218,7 @@ class SupabaseDatasetStore:
     def list_datasets(self, workspace_id: UUID, *, limit: int = 50, offset: int = 0, name_filter: str | None = None, sort_by: str = "created_at", sort_order: str = "desc") -> tuple[list[Dataset], int]:
         if not 1 <= limit <= 100 or offset < 0:
             raise ValueError("invalid pagination")
-        query = self._client.table("dataset").select("id,workspace_id,name,created_by", count="exact").eq("workspace_id", str(workspace_id))
+        query = self._client.table("dataset").select("id,workspace_id,name,created_by,created_at", count="exact").eq("workspace_id", str(workspace_id))
         if name_filter:
             query = query.ilike("name", f"%{name_filter.strip()}%")
         result = query.order(sort_by, desc=sort_order == "desc").range(offset, offset + limit - 1).execute()
@@ -258,7 +257,7 @@ class SupabaseDatasetStore:
     def get_dataset(self, workspace_id: UUID, dataset_id: UUID) -> Dataset | None:
         result = (
             self._client.table("dataset")
-            .select("id,workspace_id,name,created_by,created_at"
+            .select("id,workspace_id,name,created_by,created_at")
             .eq("id", str(dataset_id))
             .eq("workspace_id", str(workspace_id))
             .limit(1)
