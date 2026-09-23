@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from starlette.responses import JSONResponse, Response
 from researchos.saas.api_middleware import RequestContextMiddleware
 from researchos.saas.observability import configure_logging, jobs_created_total, jobs_failed_total, metrics_text
+from researchos.saas.auth.permissions import Action, Resource, require_permission
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, ResearchJob, ResearchJobStatus, TenantContext
@@ -300,6 +301,7 @@ def create_app(
     def me(tenant: TenantContext = Depends(current_tenant)) -> dict[str, str]:
         return {"user_id": str(tenant.user_id), "workspace_id": str(tenant.workspace_id), "plan": tenant.plan.value}
 
+    @require_permission(Resource.DATASET, Action.CREATE)
     @app.post("/v1/datasets", response_model=DatasetResponse, status_code=201, tags=["datasets"])
     def upload_dataset(
         name: str = Form(..., min_length=1, max_length=256),
@@ -351,6 +353,7 @@ def create_app(
             version=version,
         )
 
+    @require_permission(Resource.DATASET_VERSION, Action.CREATE)
     @app.post("/v1/datasets/{dataset_id}/versions", response_model=DatasetVersion, status_code=201, tags=["datasets"])
     def upload_dataset_version(
         dataset_id: UUID,
@@ -361,6 +364,7 @@ def create_app(
             raise HTTPException(status_code=404, detail="dataset not found")
         return persist_version(dataset_id=dataset_id, tenant=tenant, file=file)
 
+    @require_permission(Resource.DATASET_VERSION, Action.LIST)
     @app.get("/v1/datasets/{dataset_id}/versions", tags=["datasets"])
     def list_dataset_versions(
         dataset_id: UUID,
@@ -385,6 +389,7 @@ def create_app(
             raise HTTPException(status_code=400, detail="INVALID_SORT")
         return paginate(items, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, request_id=getattr(request.state, "request_id", None))
 
+    @require_permission(Resource.JOB, Action.CREATE)
     @app.post("/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"])
     def create_research_run(
         request: ResearchCreateRequest,
@@ -453,6 +458,7 @@ def create_app(
             raise RuntimeError("research job queue unavailable") from exc
         return JSONResponse(status_code=202, content=body)
 
+    @require_permission(Resource.JOB, Action.READ)
     @app.get("/v1/research-runs/{job_id}", response_model=ResearchJobResponse, tags=["research"])
     def get_research_run(job_id: UUID, tenant: TenantContext = Depends(current_tenant)) -> ResearchJobResponse:
         job = store.get(tenant.workspace_id, job_id)
