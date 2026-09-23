@@ -14,9 +14,12 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
+from opentelemetry import trace
+
+_TRACER = trace.get_tracer("qros.saas")
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
-from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, PageRequest, ResearchJob, ResearchJobStatus, TenantContext, WorkspaceRole
+from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, ResearchJob, ResearchJobStatus, TenantContext, WorkspaceRole
 from researchos.saas.datasets import (
     Dataset,
     DatasetStorage,
@@ -40,6 +43,9 @@ from researchos.saas.validation_api import InMemoryResearchValidationStore, Rese
 from researchos.saas.finding_api import InMemoryResearchFindingStore, register_research_finding_routes
 from researchos.saas.research_report import build_research_report
 from researchos.saas.observability import StructuredRequestObserver, observe_request
+from researchos.saas.api.pagination import envelope, parse_list_query, sort_items
+from researchos.saas.api.middleware import RequestContextMiddleware
+from researchos.saas.request_context import reset_request_id, set_request_id
 from researchos.saas.billing import (
     BillingEventConflict,
     BillingEventStore,
@@ -71,15 +77,24 @@ def _error_code(status_code: int) -> str:
 
 
 def _error_payload(request: Request, status_code: int, detail: object) -> dict[str, object]:
-    message = detail if isinstance(detail, str) else "request failed"
-    return {
-        "detail": detail,
-        "error": {
-            "code": _error_code(status_code),
-            "message": message,
-            "request_id": getattr(request.state, "request_id", None),
-        },
+    request_id = getattr(request.state, "request_id", None)
+    if isinstance(detail, dict) and "code" in detail:
+        code = str(detail["code"])
+        message = str(detail.get("message", "request failed"))
+        details = detail.get("details")
+    else:
+        code = _error_code(status_code).upper()
+        message = detail if isinstance(detail, str) else "request failed"
+        details = detail if not isinstance(detail, str) else None
+    payload: dict[str, object] = {
+        "code": code,
+        "message": message,
+        "request_id": request_id,
+        "correlation_id": request_id,
     }
+    if details is not None:
+        payload["details"] = details
+    return payload
 
 
 class RequestCorrelationMiddleware(BaseHTTPMiddleware):
@@ -90,36 +105,27 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
         request_id = supplied[:MAX_REQUEST_ID_LENGTH] if supplied else str(uuid4())
         request_id = "".join(char if ord(char) >= 32 and ord(char) != 127 else "-" for char in request_id)
         request.state.request_id = request_id
+        token = set_request_id(request_id)
         started_at = time.perf_counter()
-        try:
-            response = await call_next(request)
-        except Exception:
-            observer = getattr(request.app.state, "observability", None)
-            if isinstance(observer, StructuredRequestObserver):
-                route = request.scope.get("route")
-                path = getattr(route, "path", request.url.path)
-                observe_request(
-                    observer,
-                    request_id=request_id,
-                    method=request.method,
-                    path=path,
-                    status_code=500,
-                    started_at=started_at,
-                )
-            raise
+        with _TRACER.start_as_current_span(f"{request.method} {request.url.path}") as span:
+            span.set_attribute("http.method", request.method)
+            span.set_attribute("http.route", request.url.path)
+            try:
+                response = await call_next(request)
+            except Exception as exc:
+                observer = getattr(request.app.state, "observability", None)
+                if isinstance(observer, StructuredRequestObserver):
+                    observe_request(observer, request_id=request_id, method=request.method, path=request.url.path, status_code=500, started_at=started_at)
+                span.record_exception(exc)
+                reset_request_id(token)
+                raise
         response.headers[REQUEST_ID_HEADER] = request_id
+        reset_request_id(token)
         observer = getattr(request.app.state, "observability", None)
         if isinstance(observer, StructuredRequestObserver):
             route = request.scope.get("route")
             path = getattr(route, "path", request.url.path)
-            observe_request(
-                observer,
-                request_id=request_id,
-                method=request.method,
-                path=path,
-                status_code=response.status_code,
-                started_at=started_at,
-            )
+            observe_request(observer, request_id=request_id, method=request.method, path=path, status_code=response.status_code, started_at=started_at)
         return response
 
 
@@ -225,7 +231,7 @@ def create_app(
         version="1.0.0",
         description="Multi-tenant delivery API for auditable financial research.",
     )
-    app.add_middleware(RequestCorrelationMiddleware)
+    app.add_middleware(RequestContextMiddleware)
     app.state.observability = StructuredRequestObserver()
 
     @app.exception_handler(HTTPException)
@@ -239,9 +245,14 @@ def create_app(
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
         return JSONResponse(
-            status_code=422,
-            content=_error_payload(request, 422, exc.errors()),
+            status_code=400,
+            content=_error_payload(request, 400, {"code": "INVALID_FILTER", "message": "invalid request parameters", "details": exc.errors()}),
         )
+
+    @app.exception_handler(Exception)
+    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        del exc
+        return JSONResponse(status_code=500, content=_error_payload(request, 500, "internal server error"))
 
     def current_tenant(
         authorization: str | None = Header(default=None),
@@ -253,7 +264,9 @@ def create_app(
                 requested_workspace_id = UUID(workspace_header.strip())
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail="invalid X-Workspace-ID") from exc
-        return auth.authenticate(authorization, requested_workspace_id)
+        context = auth.authenticate(authorization, requested_workspace_id)
+        request.state.tenant = context
+        return context
 
     def require_role(tenant: TenantContext, *allowed: WorkspaceRole) -> None:
         """Enforce server-resolved membership roles; never trust request data."""
@@ -284,15 +297,23 @@ def create_app(
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
-            storage_path = storage_path_for(tenant.workspace_id, dataset_id, digest)
-            storage.put(storage_path, file.file)
+            existing = datasets.find_version_by_hash(tenant.workspace_id, dataset_id, digest)
+            if existing is not None:
+                return existing
+            version_no = len(datasets.list_versions(tenant.workspace_id, dataset_id)) + 1
+            storage_path = storage_path_for(tenant.workspace_id, digest, version_no)
+            try:
+                storage.put(storage_path, file.file)
+            except ValueError:
+                # Content-addressed objects may already exist for another dataset/version.
+                pass
             try:
                 version = datasets.create_version(
                     tenant.workspace_id,
                     DatasetVersion(
                         id=uuid4(),
                         dataset_id=dataset_id,
-                        version_no=len(datasets.list_versions(tenant.workspace_id, dataset_id)) + 1,
+                        version_no=version_no,
                         content_sha256=digest,
                         storage_path=storage_path,
                         byte_size=size,
@@ -300,7 +321,6 @@ def create_app(
                     )
                 )
             except Exception:
-                storage.remove(storage_path)
                 raise
             return version
         except ValueError as exc:
@@ -374,11 +394,16 @@ def create_app(
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
-            storage_path = storage_path_for(tenant.workspace_id, dataset.id, digest)
-            storage.put(storage_path, file.file)
+            storage_path = storage_path_for(tenant.workspace_id, digest, 1)
+            try:
+                storage.put(storage_path, file.file)
+            except ValueError:
+                # Same tenant/content/version path already exists; reuse it.
+                pass
             try:
                 persisted_dataset = datasets.create_dataset(tenant.workspace_id, dataset)
-                version = datasets.create_version(
+                existing = datasets.find_version_by_hash(tenant.workspace_id, dataset.id, digest)
+                version = existing or datasets.create_version(
                     tenant.workspace_id,
                     DatasetVersion(
                         id=uuid4(),
@@ -420,12 +445,21 @@ def create_app(
             raise HTTPException(status_code=404, detail="dataset not found")
         return persist_version(dataset_id=dataset_id, tenant=tenant, file=file)
 
-    @app.get("/v1/datasets/{dataset_id}/versions", response_model=list[DatasetVersion], tags=["datasets"])
+    @app.get("/v1/datasets/{dataset_id}/versions", tags=["datasets"])
     def list_dataset_versions(
+        request: Request,
         dataset_id: UUID,
         tenant: TenantContext = Depends(current_tenant),
-    ) -> list[DatasetVersion]:
-        return datasets.list_versions(tenant.workspace_id, dataset_id)
+    ) -> dict[str, object]:
+        query = parse_list_query(request, allowed_sort_by={"created_at", "version_no", "byte_size"}, allowed_filters={"tenant_id"})
+        tenant_filter = query.filters.get("tenant_id")
+        if tenant_filter is not None and tenant_filter != str(tenant.workspace_id):
+            raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "message": "tenant_id filter must match authenticated tenant"})
+        versions = datasets.list_versions(tenant.workspace_id, dataset_id)
+        versions = sort_items(versions, sort_by=query.sort_by, sort_order=query.sort_order)
+        total = len(versions)
+        page = versions[query.offset:query.offset + query.page_size]
+        return envelope([v.__dict__ for v in page], total, query, getattr(request.state, "request_id", None))
 
     @app.get("/v1/datasets/{dataset_id}/versions/{version_id}/download", response_model=dict[str, str], tags=["datasets"])
     def create_dataset_download_url(
@@ -438,14 +472,14 @@ def create_app(
         if version is None or version.dataset_id != dataset_id:
             raise HTTPException(status_code=404, detail="dataset version not found")
         try:
-            url = storage.create_signed_download_url(version.storage_path, 300)
+            url = storage.create_signed_download_url(version.storage_path, 3600)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="dataset object not found") from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
             raise HTTPException(status_code=503, detail="dataset download service unavailable") from exc
-        return {"url": url, "expires_in": "300"}
+        return {"url": url, "expires_in": "3600"}
 
     @app.post("/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"])
     def create_research_run(
@@ -513,6 +547,11 @@ def create_app(
             raise
         if replayed:
             return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
+        app.state.observability.metrics.record_job_created()
+        app.state.job_logs.setdefault(created.id, []).append({
+            "timestamp": time.time(), "request_id": getattr(tenant, "request_id", None) or "",
+            "tenant_id": str(tenant.workspace_id), "job_id": str(created.id), "message": "job_created",
+        })
         try:
             queue.enqueue(tenant.workspace_id, created.id)
         except Exception as exc:
@@ -525,6 +564,7 @@ def create_app(
                 )
             except Exception:
                 pass
+            app.state.observability.metrics.record_job_failed()
             raise HTTPException(status_code=503, detail="research job queue unavailable") from exc
         return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
 
@@ -625,6 +665,16 @@ def create_app(
         if job is None:
             raise HTTPException(status_code=404, detail="research run not found")
         return _research_job_response(job)
+
+    app.state.job_logs = {}
+
+    @app.get("/v1/jobs/{job_id}/logs", tags=["research"])
+    def get_job_logs(request: Request, job_id: UUID, tenant: TenantContext = Depends(current_tenant)) -> dict[str, object]:
+        job = store.get(tenant.workspace_id, job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="research run not found")
+        logs = list(app.state.job_logs.get(job_id, []))
+        return envelope(logs, len(logs), parse_list_query(request, allowed_sort_by={"timestamp"}, allowed_filters={"tenant_id"}), getattr(request.state, "request_id", None))
 
     register_research_claim_routes(
         app,

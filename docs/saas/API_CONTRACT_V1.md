@@ -55,6 +55,7 @@ The authenticated context contains:
 - `POST /v1/datasets` — create a dataset and immutable version from an upload.
 - `POST /v1/datasets/{dataset_id}/versions` — append an immutable dataset version.
 - `GET /v1/datasets/{dataset_id}/versions` — list versions visible to the authenticated workspace.
+- `GET /v1/jobs/{job_id}/logs` — list tenant-scoped execution logs for a research job.
 
 Dataset bytes are streamed through a bounded SHA-256 calculation before persistence. Storage paths are tenant-scoped and content-addressed.
 
@@ -68,6 +69,7 @@ Dataset bytes are streamed through a bounded SHA-256 calculation before persiste
 - `POST /v1/research-claims` — create a tenant-scoped Research Claim.
 - `GET /v1/research-claims/{claim_id}` — retrieve a workspace-scoped Research Claim.
 - `GET /v1/research-claims` — list Research Claims with bounded tenant-scoped pagination.
+- `GET /v1/claims/{claim_id}/evidence_graph` — retrieve the governed evidence graph projection for a claim.
 
 The initial MVP accepts only the frozen XAUUSD M1 workflow.
 
@@ -107,9 +109,23 @@ Production semantics must reserve the key atomically with the mutation so concur
 
 Every response receives `X-Request-ID`. A supplied value is bounded to 128 characters; otherwise the server generates one.
 
+## 8.1 List response contract
+
+Every list endpoint returns exactly:
+
+```json
+{
+  "data": [],
+  "pagination": {"page": 1, "page_size": 20, "total": 0, "total_pages": 0},
+  "request_id": "..."
+}
+```
+
+Supported query controls are `page`, `page_size` (default 20, maximum 100), `sort_by`, `sort_order`, and bracket filters such as `filter[status]` and `filter[tenant_id]`. Unsupported sort fields return HTTP 400 with `INVALID_SORT`; unsupported filters and invalid pagination return HTTP 400 with `INVALID_FILTER`. A supplied tenant filter must equal the authenticated workspace and is never used to select a different tenant.
+
 ## 9. Error contract
 
-Errors use the framework HTTP error envelope and stable human-readable `detail` values.
+Errors use the stable envelope `{code,message,request_id,correlation_id,details?}`. Internal exception details and secrets are never returned.
 
 Important statuses:
 

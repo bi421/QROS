@@ -1,22 +1,24 @@
-"""HTTP request middleware and context propagation for SaaS observability."""
+"""Canonical HTTP request context middleware for the SaaS API."""
 from __future__ import annotations
 
 import time
 from uuid import uuid4
 
 from fastapi import Request
+from opentelemetry import trace
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
-from researchos.saas.auth.permissions import reset_request_id, set_request_id
-from researchos.saas.observability import observe_request
+from researchos.saas.observability import StructuredRequestObserver, observe_request
+from researchos.saas.request_context import reset_request_id, set_request_id
 
 REQUEST_ID_HEADER = "X-Request-ID"
 MAX_REQUEST_ID_LENGTH = 128
+_TRACER = trace.get_tracer("qros.saas")
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
-    """Create/propagate request context and emit one structured completion event."""
+    """Generate/propagate request IDs, tracing context, and structured request events."""
 
     async def dispatch(self, request: Request, call_next) -> Response:
         supplied = request.headers.get(REQUEST_ID_HEADER, "").strip()
@@ -28,33 +30,37 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         request.state.correlation_id = request_id
         token = set_request_id(request_id)
         started = time.perf_counter()
-        try:
-            response = await call_next(request)
-        except Exception:
-            duration_ms = (time.perf_counter() - started) * 1000.0
+        observer = getattr(request.app.state, "observability", None)
+        with _TRACER.start_as_current_span(f"{request.method} {request.url.path}") as span:
+            span.set_attribute("http.method", request.method)
+            span.set_attribute("http.route", request.url.path)
+            try:
+                response = await call_next(request)
+            except Exception as exc:
+                if isinstance(observer, StructuredRequestObserver):
+                    observe_request(
+                        observer,
+                        request_id=request_id,
+                        method=request.method,
+                        path=request.url.path,
+                        status_code=500,
+                        started_at=started,
+                    )
+                span.record_exception(exc)
+                reset_request_id(token)
+                raise
+        response.headers[REQUEST_ID_HEADER] = request_id
+        if isinstance(observer, StructuredRequestObserver):
             observe_request(
+                observer,
                 request_id=request_id,
                 method=request.method,
                 path=request.url.path,
-                status_code=500,
-                duration_ms=duration_ms,
-                tenant_id=getattr(getattr(request.state, "tenant", None), "workspace_id", None),
+                status_code=response.status_code,
+                started_at=started,
             )
-            raise
-        finally:
-            reset_request_id(token)
-
-        response.headers[REQUEST_ID_HEADER] = request_id
-        observe_request(
-            request_id=request_id,
-            method=request.method,
-            path=request.url.path,
-            status_code=response.status_code,
-            duration_ms=(time.perf_counter() - started) * 1000.0,
-            tenant_id=getattr(getattr(request.state, "tenant", None), "workspace_id", None),
-            job_id=getattr(request.state, "job_id", None),
-        )
+        reset_request_id(token)
         return response
 
 
-__all__ = ["REQUEST_ID_HEADER", "RequestContextMiddleware"]
+__all__ = ["MAX_REQUEST_ID_LENGTH", "REQUEST_ID_HEADER", "RequestContextMiddleware"]

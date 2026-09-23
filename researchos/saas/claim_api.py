@@ -6,11 +6,12 @@ import hashlib
 from typing import Any, Protocol
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from researchos.claims.claim import ResearchClaim, ResearchClaimType, ResearchPlan
 from researchos.saas.contracts import TenantContext, WorkspaceRole
+from researchos.saas.api.pagination import envelope, parse_list_query, sort_items
 
 
 class ResearchClaimStore(Protocol):
@@ -247,41 +248,46 @@ def register_research_claim_routes(
             raise HTTPException(status_code=404, detail="research claim not found")
         return _response(claim)
 
-    @router.get(
-        "/v1/research-claims",
-        response_model=ResearchClaimPageResponse,
-        tags=["research-claims"],
-    )
+    @router.get("/v1/research-claims", tags=["research-claims"])
     def list_research_claims(
-        limit: int = 50,
-        offset: int = 0,
+        request: Request,
         context: TenantContext = Depends(tenant_dependency),
-    ) -> ResearchClaimPageResponse:
-        if not 1 <= limit <= 100 or offset < 0:
-            raise HTTPException(status_code=422, detail="invalid pagination")
+    ) -> dict[str, object]:
+        query = parse_list_query(request, allowed_sort_by={"created_at", "id", "version"}, allowed_filters={"tenant_id", "claim_type", "evidence_state"})
+        if query.filters.get("tenant_id") not in (None, str(context.workspace_id)):
+            raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "message": "tenant_id filter must match authenticated tenant"})
         store = require_store()
         try:
-            claims, total = store.list(
-                context.workspace_id,
-                limit=limit,
-                offset=offset,
-            )
+            claims, total = store.list(context.workspace_id, limit=query.page_size, offset=query.offset)
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "message": str(exc)}) from exc
         except Exception as exc:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="research claim persistence unavailable",
-            ) from exc
-        items = [_response(claim) for claim in claims]
-        return ResearchClaimPageResponse(
-            items=items,
-            total=total,
-            limit=limit,
-            offset=offset,
-            has_more=offset + len(items) < total,
-        )
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="research claim persistence unavailable") from exc
+        for name in ("claim_type", "evidence_state"):
+            value = query.filters.get(name)
+            if value is not None:
+                claims = [claim for claim in claims if getattr(claim, name).value == value]
+        items = [_response(claim).model_dump(mode="json") for claim in sort_items(claims, sort_by=query.sort_by, sort_order=query.sort_order)]
+        return envelope(items, total, query, getattr(request.state, "request_id", None))
 
+    @router.get("/v1/claims/{claim_id}/evidence_graph", tags=["research-claims"])
+    def get_claim_evidence_graph(
+        request: Request,
+        claim_id: str,
+        context: TenantContext = Depends(tenant_dependency),
+    ) -> dict[str, object]:
+        if not claim_id.strip() or len(claim_id) > 256:
+            raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "message": "invalid claim id"})
+        store = require_store()
+        claim = store.get(context.workspace_id, claim_id)
+        if claim is None:
+            raise HTTPException(status_code=404, detail="research claim not found")
+        node = _response(claim).model_dump(mode="json")
+        return {
+            "data": {"nodes": [{"id": claim.id, "type": "claim", "data": node}], "edges": []},
+            "pagination": {"page": 1, "page_size": 1, "total": 1, "total_pages": 1},
+            "request_id": getattr(request.state, "request_id", None),
+        }
 
 __all__ = [
     "ResearchClaimCreateRequest",

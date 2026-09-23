@@ -48,6 +48,9 @@ class DatasetStore(Protocol):
     def get_version(self, workspace_id: UUID, version_id: UUID) -> DatasetVersion | None:
         ...
 
+    def find_version_by_hash(self, workspace_id: UUID, dataset_id: UUID, content_sha256: str) -> DatasetVersion | None:
+        ...
+
     def list_versions(self, workspace_id: UUID, dataset_id: UUID) -> list[DatasetVersion]:
         ...
 
@@ -112,6 +115,11 @@ class InMemoryDatasetStore:
             return None
         return version if self.get_dataset(workspace_id, version.dataset_id) is not None else None
 
+    def find_version_by_hash(self, workspace_id: UUID, dataset_id: UUID, content_sha256: str) -> DatasetVersion | None:
+        if self.get_dataset(workspace_id, dataset_id) is None:
+            return None
+        return next((v for v in self._versions.values() if v.dataset_id == dataset_id and v.content_sha256 == content_sha256), None)
+
     def list_versions(self, workspace_id: UUID, dataset_id: UUID) -> list[DatasetVersion]:
         if self.get_dataset(workspace_id, dataset_id) is None:
             return []
@@ -141,7 +149,7 @@ class InMemoryDatasetStorage:
     def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
         if storage_path not in self._objects:
             raise FileNotFoundError(storage_path)
-        if not 1 <= expires_in <= 900:
+        if not 1 <= expires_in <= 3600:
             raise ValueError("signed URL expiry must be between 1 and 900 seconds")
         return f"memory://{storage_path}?expires_in={expires_in}"
 
@@ -249,6 +257,20 @@ class SupabaseDatasetStore:
         version = self._version(rows[0])
         return version if self.get_dataset(workspace_id, version.dataset_id) is not None else None
 
+    def find_version_by_hash(self, workspace_id: UUID, dataset_id: UUID, content_sha256: str) -> DatasetVersion | None:
+        if self.get_dataset(workspace_id, dataset_id) is None:
+            return None
+        result = (
+            self._client.table("dataset_version")
+            .select("id,dataset_id,version_no,content_sha256,storage_path,byte_size,created_by")
+            .eq("dataset_id", str(dataset_id))
+            .eq("content_sha256", content_sha256)
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        return self._version(rows[0]) if rows else None
+
     def list_versions(self, workspace_id: UUID, dataset_id: UUID) -> list[DatasetVersion]:
         if self.get_dataset(workspace_id, dataset_id) is None:
             return []
@@ -311,9 +333,10 @@ def stream_sha256(file: BinaryIO, max_bytes: int) -> tuple[str, int]:
     return digest.hexdigest(), size
 
 
-def storage_path_for(workspace_id: UUID, dataset_id: UUID, digest: str) -> str:
-    """Return a tenant-scoped content-addressed object path."""
-    return f"{workspace_id}/datasets/{dataset_id}/sha256/{digest}"
+def storage_path_for(workspace_id: UUID, digest: str, version_no: int) -> str:
+    """Return the canonical tenant/content/version object path."""
+    from researchos.saas.storage.signed_urls import dataset_object_path
+    return dataset_object_path(str(workspace_id), digest, version_no)
 
 
 __all__ = [

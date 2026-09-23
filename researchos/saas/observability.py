@@ -11,13 +11,16 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
-import json
-import logging
 import threading
 import time
 from typing import Mapping
 
-_LOGGER = logging.getLogger("qros.saas")
+import structlog
+
+structlog.configure(
+    processors=[structlog.processors.TimeStamper(fmt="iso"), structlog.processors.add_log_level, structlog.processors.JSONRenderer()],
+)
+_LOGGER = structlog.get_logger("qros.saas")
 
 _SENSITIVE_KEYS = frozenset(
     {
@@ -63,6 +66,11 @@ class RequestMetrics:
     status_counts: Counter[int] = field(default_factory=Counter)
     latency_buckets: Counter[int] = field(default_factory=Counter)
     latency_sum_ms: float = 0.0
+    jobs_created_total: int = 0
+    jobs_failed_total: int = 0
+    jobs_duration_seconds: float = 0.0
+    tenant_isolation_violations_total: int = 0
+    rls_violations_total: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def observe(self, status_code: int, duration_ms: float) -> None:
@@ -77,6 +85,27 @@ class RequestMetrics:
             self.latency_buckets[0] += 1
             self.latency_sum_ms += duration_ms
 
+    def record_job_created(self) -> None:
+        with self._lock:
+            self.jobs_created_total += 1
+
+    def record_job_failed(self, duration_seconds: float = 0.0) -> None:
+        with self._lock:
+            self.jobs_failed_total += 1
+            self.jobs_duration_seconds += max(0.0, duration_seconds)
+
+    def record_job_duration(self, duration_seconds: float) -> None:
+        with self._lock:
+            self.jobs_duration_seconds += max(0.0, duration_seconds)
+
+    def record_tenant_isolation_violation(self) -> None:
+        with self._lock:
+            self.tenant_isolation_violations_total += 1
+
+    def record_rls_violation(self) -> None:
+        with self._lock:
+            self.rls_violations_total += 1
+
     def snapshot(self) -> dict[str, object]:
         with self._lock:
             return {
@@ -85,11 +114,31 @@ class RequestMetrics:
                 "status_counts": dict(self.status_counts),
                 "latency_buckets": dict(self.latency_buckets),
                 "latency_sum_ms": self.latency_sum_ms,
+                "jobs_created_total": self.jobs_created_total,
+                "jobs_failed_total": self.jobs_failed_total,
+                "jobs_duration_seconds": self.jobs_duration_seconds,
+                "tenant_isolation_violations_total": self.tenant_isolation_violations_total,
+                "rls_violations_total": self.rls_violations_total,
             }
 
     def prometheus_text(self) -> str:
         snapshot = self.snapshot()
         lines = [
+            "# HELP jobs_created_total Jobs created.",
+            "# TYPE jobs_created_total counter",
+            f"jobs_created_total {snapshot['jobs_created_total']}",
+            "# HELP jobs_failed_total Jobs failed.",
+            "# TYPE jobs_failed_total counter",
+            f"jobs_failed_total {snapshot['jobs_failed_total']}",
+            "# HELP jobs_duration_seconds Total observed job duration.",
+            "# TYPE jobs_duration_seconds counter",
+            f"jobs_duration_seconds {snapshot['jobs_duration_seconds']:.6f}",
+            "# HELP tenant_isolation_violations_total Tenant isolation violations.",
+            "# TYPE tenant_isolation_violations_total counter",
+            f"tenant_isolation_violations_total {snapshot['tenant_isolation_violations_total']}",
+            "# HELP rls_violations_total RLS violations.",
+            "# TYPE rls_violations_total counter",
+            f"rls_violations_total {snapshot['rls_violations_total']}",
             "# HELP qros_http_requests_total Total HTTP requests observed.",
             "# TYPE qros_http_requests_total counter",
             f"qros_http_requests_total {snapshot['requests_total']}",
@@ -145,7 +194,7 @@ class StructuredRequestObserver:
                 "duration_ms": round(duration_ms, 3),
             }
         )
-        _LOGGER.info(json.dumps(event, sort_keys=True, separators=(",", ":")))
+        _LOGGER.info("http_request_completed", **event)
         if status_code >= 500:
             error_event = {
                 "event": "http_request_error",
@@ -154,7 +203,7 @@ class StructuredRequestObserver:
                 "path": path,
                 "status_code": status_code,
             }
-            _LOGGER.error(json.dumps(error_event, sort_keys=True, separators=(",", ":")))
+            _LOGGER.error("http_request_error", **error_event)
 
 
 def observe_request(

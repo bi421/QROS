@@ -174,8 +174,8 @@ def test_dataset_upload_creates_immutable_version_and_stores_bytes() -> None:
         headers={"Authorization": "Bearer test"},
     )
     assert versions.status_code == 200
-    assert len(versions.json()) == 1
-    version = versions.json()[0]
+    assert versions.json()["pagination"]["total"] == 1
+    version = versions.json()["data"][0]
     assert version["id"] == payload["version"]["id"]
     assert storage.get(version["storage_path"]) == body
     assert store.get_dataset(context.workspace_id, UUID(payload["id"])) is not None
@@ -200,7 +200,7 @@ def test_dataset_versions_are_append_only() -> None:
         headers={"Authorization": "Bearer test"},
     )
     assert versions.status_code == 200
-    assert [item["version_no"] for item in versions.json()] == [1, 2]
+    assert [item["version_no"] for item in versions.json()["data"]] == [1, 2]
 
 
 def test_create_research_job_requires_existing_tenant_dataset_version() -> None:
@@ -276,25 +276,24 @@ def test_research_run_list_supports_tenant_scoped_pagination_and_filters() -> No
         assert response.status_code == 202
 
     page = client.get(
-        "/v1/research-runs?limit=2&offset=1&status_filter=queued",
+        "/v1/research-runs?page=2&page_size=2&filter[status]=queued",
         headers={"Authorization": "Bearer test"},
     )
     assert page.status_code == 200
     payload = page.json()
     assert payload["total"] == 3
-    assert payload["limit"] == 2
-    assert payload["offset"] == 1
-    assert len(payload["items"]) == 2
-    assert payload["has_more"] is False
-    assert all(item["workspace_id"] == str(context.workspace_id) for item in payload["items"])
+    assert payload["pagination"]["page_size"] == 2
+    assert payload["pagination"]["page"] == 2
+    assert len(payload["data"]) == 1
+    assert all(item["workspace_id"] == str(context.workspace_id) for item in payload["data"])
 
     empty = client.get(
-        "/v1/research-runs?limit=100&offset=0&workflow_id=not-this-workflow",
+        "/v1/research-runs?page=1&page_size=100&filter[workflow_id]=not-this-workflow",
         headers={"Authorization": "Bearer test"},
     )
     assert empty.status_code == 200
     assert empty.json()["total"] == 0
-    assert empty.json()["items"] == []
+    assert empty.json()["data"] == []
 
 
 def test_research_run_list_rejects_unbounded_pagination() -> None:
@@ -303,7 +302,7 @@ def test_research_run_list_rejects_unbounded_pagination() -> None:
         "/v1/research-runs?limit=101",
         headers={"Authorization": "Bearer test"},
     )
-    assert response.status_code == 422
+    assert response.status_code == 400
 
 
 def test_create_and_get_research_job_are_tenant_scoped() -> None:
@@ -435,7 +434,7 @@ def test_dataset_download_url_is_authorized_and_short_lived() -> None:
     )
 
     assert response.status_code == 200
-    assert response.json()["expires_in"] == "300"
+    assert response.json()["expires_in"] == "3600"
     assert response.json()["url"].startswith("memory://")
 
 
@@ -493,12 +492,10 @@ def test_http_errors_include_structured_error_metadata() -> None:
     response = client.get("/v1/me", headers={"Authorization": "Bearer anything", "X-Request-ID": "req-structured"})
     assert response.status_code == 503
     payload = response.json()
-    assert payload["detail"] == "SaaS authentication provider is not configured"
-    assert payload["error"] == {
-        "code": "service_unavailable",
-        "message": "SaaS authentication provider is not configured",
-        "request_id": "req-structured",
-    }
+    assert payload["code"] == "SERVICE_UNAVAILABLE"
+    assert payload["message"] == "SaaS authentication provider is not configured"
+    assert payload["request_id"] == "req-structured"
+    assert payload["correlation_id"] == "req-structured"
 
 
 def test_validation_errors_include_structured_error_metadata() -> None:
@@ -508,11 +505,11 @@ def test_validation_errors_include_structured_error_metadata() -> None:
         headers={"Authorization": "Bearer test", "Idempotency-Key": "validation"},
         json={"dataset_version_id": "not-a-uuid"},
     )
-    assert response.status_code == 422
+    assert response.status_code == 400
     payload = response.json()
-    assert payload["error"]["code"] == "validation_error"
-    assert payload["error"]["request_id"]
-    assert isinstance(payload["detail"], list)
+    assert payload["code"] == "INVALID_FILTER"
+    assert payload["request_id"]
+    assert payload["correlation_id"]
 
 
 def test_invalid_workspace_header_is_rejected() -> None:
@@ -606,7 +603,7 @@ def test_cross_tenant_research_run_list_and_idempotency_key_are_isolated() -> No
     assert other_run.json()["workspace_id"] == str(other.workspace_id)
 
     owner_list = owner_client.get(
-        "/v1/research-runs?limit=100&offset=0",
+        "/v1/research-runs?page=1&page_size=100",
         headers={"Authorization": "Bearer test"},
     )
     other_list = other_client.get(
@@ -618,8 +615,8 @@ def test_cross_tenant_research_run_list_and_idempotency_key_are_isolated() -> No
     assert other_list.status_code == 200
     assert owner_list.json()["total"] == 1
     assert other_list.json()["total"] == 1
-    assert {item["id"] for item in owner_list.json()["items"]} == {owner_run.json()["id"]}
-    assert {item["id"] for item in other_list.json()["items"]} == {other_run.json()["id"]}
+    assert {item["id"] for item in owner_list.json()["data"]} == {owner_run.json()["id"]}
+    assert {item["id"] for item in other_list.json()["data"]} == {other_run.json()["id"]}
 
 
 def test_cross_tenant_workspace_header_cannot_select_another_workspace() -> None:

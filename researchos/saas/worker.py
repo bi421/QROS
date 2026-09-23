@@ -4,10 +4,13 @@ from __future__ import annotations
 from threading import Event, Thread
 from typing import Protocol
 from uuid import UUID, uuid4
+import time
+import structlog
 
 from researchos.research_core.contracts import ResearchResult
 from researchos.saas.contracts import ResearchJobStatus
 from researchos.saas.store import ResearchJobStore
+from researchos.saas.request_context import get_request_id
 
 
 class ResearchExecutor(Protocol):
@@ -45,6 +48,12 @@ class ResearchWorker:
         workspace_id: UUID,
         job_id: UUID,
     ) -> ResearchResult:
+        started = time.perf_counter()
+        request_id = get_request_id()
+        log = structlog.get_logger("qros.worker").bind(
+            request_id=request_id or "", tenant_id=str(workspace_id), job_id=str(job_id)
+        )
+        log.info("job_started")
         lease = self._store.claim(
             workspace_id,
             job_id,
@@ -61,6 +70,7 @@ class ResearchWorker:
         try:
             result = self._executor.execute(job_id)
         except Exception:
+            log.error("job_failed", duration_ms=round((time.perf_counter() - started) * 1000.0, 3))
             self._store.finish(
                 workspace_id,
                 job_id,
@@ -93,6 +103,11 @@ class ResearchWorker:
             except Exception:
                 pass
             raise
+        duration = time.perf_counter() - started
+        if target == ResearchJobStatus.FAILED:
+            log.error("job_failed", duration_ms=round(duration * 1000.0, 3))
+        else:
+            log.info("job_succeeded", duration_ms=round(duration * 1000.0, 3))
         self._store.finish(workspace_id, job_id, lease.token, target)
         return result
 

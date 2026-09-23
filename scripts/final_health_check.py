@@ -40,6 +40,8 @@ def git_value(args: list[str]) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-cpp", action="store_true", help="Skip C++ configure/build")
+    parser.add_argument("--logs-file", type=Path, default=None, help="Validate newline-delimited JSON observability logs")
+    parser.add_argument("--request-id", default=None, help="Require this request_id in every validated log record")
     args = parser.parse_args()
     os.chdir(ROOT)
 
@@ -84,6 +86,25 @@ def main() -> int:
             "build": build,
         }
 
+    if args.logs_file is not None:
+        log_path = args.logs_file if args.logs_file.is_absolute() else ROOT / args.logs_file
+        try:
+            records = []
+            for line_no, line in enumerate(log_path.read_text(encoding="utf-8").splitlines(), start=1):
+                if not line.strip():
+                    continue
+                record = json.loads(line)
+                if not isinstance(record, dict):
+                    raise ValueError(f"line {line_no}: log record is not an object")
+                for field in ("timestamp", "level", "request_id", "message"):
+                    if field not in record:
+                        raise ValueError(f"line {line_no}: missing {field}")
+                if args.request_id is not None and record["request_id"] != args.request_id:
+                    raise ValueError(f"line {line_no}: request_id mismatch")
+                records.append(record)
+            checks["logs_json"] = {"label": "logs_json", "status": "PASS", "record_count": len(records), "path": str(log_path)}
+        except Exception as exc:
+            checks["logs_json"] = {"label": "logs_json", "status": "FAIL", "record_count": 0, "path": str(log_path), "stderr": str(exc)}
     git_status = command_result("git_status", ["git", "status", "--short", "--branch"])
     checks["git_status"] = git_status
 
