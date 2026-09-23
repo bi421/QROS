@@ -134,6 +134,33 @@ The membership helper is `private.is_workspace_member(...)`, a `SECURITY DEFINER
 
 Cross-resource policies additionally require research runs to reference a dataset version belonging to the same workspace, artifacts to reference runs in the same workspace, and evidence to reference matching runs/artifacts.
 
+
+## Migration compatibility and RLS audit
+
+QROS uses a **forward-only** migration chain under `supabase/migrations/`. There are no down, rollback, or revert migration files. A deployed schema is never repaired by editing an applied migration; the correction is always a new timestamped forward migration.
+
+The tenant boundary uses `workspace_id` rather than a client-supplied `tenant_id`. Authorization is derived from `auth.uid()` through `private.is_workspace_member(workspace_id)`. This deliberately avoids trusting mutable JWT metadata or request-body tenant identifiers.
+
+The current tenant-table RLS audit covers:
+
+- `workspace`, `workspace_member`, `subscription`
+- `dataset`, `dataset_version`
+- `research_run`, `research_run_result`, `research_run_artifact`
+- `artifact`, `evidence`, `usage_event`, `audit_log`
+- `api_idempotency`, `api_rate_limit`
+- `billing_event`, `audit_event`, `retention_deletion_operation`
+- `research_claim`, `research_validation`, `research_finding`
+
+All listed tenant tables are RLS-enabled and forced. Customer-readable tables have membership-scoped SELECT policies plus explicit fail-closed INSERT/UPDATE/DELETE policies. Server-owned projections and coordination state have explicit fail-closed SELECT/INSERT/UPDATE/DELETE policies. The trusted server/service-role path remains outside the browser RLS boundary.
+
+Run the reproducibility gate with:
+
+```bash
+python scripts/verify_migrations.py
+```
+
+The verifier validates strict migration ordering and UTF-8 integrity, rejects down/rollback/revert migrations, resets a fresh local Supabase database so the full chain is replayed in order, checks that every tenant table has RLS enabled, checks the expected CRUD policy shape, and writes `artifacts/migration_schema_diff.sql`. The gate fails if fresh replay leaves schema drift.
+
 ## Dataset immutability
 
 `dataset_version` is append-only. PostgreSQL enforces two invariants:

@@ -43,6 +43,9 @@ jobs:
       - name: Start local Supabase
         run: supabase start
 
+      - name: Verify migration replay and RLS contract
+        run: python scripts/verify_migrations.py
+
       - name: Run database security tests
         run: supabase test db supabase/tests/tenant_isolation_test.sql
 
