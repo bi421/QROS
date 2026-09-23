@@ -12,7 +12,7 @@ from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.api import create_app
 from researchos.claims.claim import ResearchClaim
 from researchos.saas.billing import InMemoryBillingEventStore, InMemoryEntitlementStore
-from researchos.saas.contracts import Plan, TenantContext, WorkspaceRole
+from researchos.saas.contracts import Plan, ResearchJob, ResearchJobStatus, TenantContext, WorkspaceRole
 from researchos.saas.datasets import InMemoryDatasetStorage, InMemoryDatasetStore
 from researchos.saas.store import InMemoryResearchJobStore
 
@@ -728,8 +728,6 @@ def test_free_tenant_101st_job_is_entitlement_exceeded() -> None:
     client, context, dataset_store, _ = _client(plan=Plan.FREE)
     uploaded = _upload(client, "free-entitlement", b"x")
     version_id = UUID(uploaded.json()["version"]["id"])
-    store = client.app.state if hasattr(client, "app") else None
-    del store
     job_store = InMemoryResearchJobStore()
     for _ in range(100):
         job_store.create(
