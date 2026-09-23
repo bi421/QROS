@@ -15,8 +15,9 @@ permissions:
   contents: read
 
 concurrency:
+  # Preserve the complete PR validation run while repairing CI gates.
   group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/feat/') }}
+  cancel-in-progress: false
 
 jobs:
   integrity:
