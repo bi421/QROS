@@ -94,11 +94,8 @@ def test_tenant_signed_url_cannot_cross_tenant() -> None:
 
 
 def test_metrics_expose_required_security_counters() -> None:
-    api, _ = client()
-    api = TestClient(create_app(
-        auth_provider=api.app.state.auth if hasattr(api.app.state, "auth") else Auth(TenantContext(uuid4(), uuid4(), Plan.TEAM, WorkspaceRole.RESEARCHER)),
-        metrics_token="metrics-secret",
-    ))
+    tenant = TenantContext(uuid4(), uuid4(), Plan.TEAM, WorkspaceRole.RESEARCHER)
+    api = TestClient(create_app(auth_provider=Auth(tenant), metrics_token="metrics-secret"))
     response = api.get("/metrics", headers={"X-Metrics-Token": "metrics-secret"})
     assert response.status_code == 200
     text = response.text
