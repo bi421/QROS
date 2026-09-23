@@ -485,7 +485,7 @@ def create_app(
             export_id = uuid4()
             storage_path = f"tenant/{workspace_id}/exports/{export_id}.zip"
             storage.put(storage_path, io.BytesIO(payload))
-            provider_url = storage.create_signed_download_url(storage_path, min(DEFAULT_EXPIRY_SECONDS, 900))
+            provider_url = storage.create_signed_download_url(storage_path, DEFAULT_EXPIRY_SECONDS)
             url = bind_signed_url(
                 provider_url,
                 workspace_id,
