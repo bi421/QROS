@@ -15,7 +15,6 @@ RUN apt-get update \
 
 COPY pyproject.toml README.md ./
 COPY researchos ./researchos
-COPY financial_research_lab ./financial_research_lab
 COPY scripts ./scripts
 COPY docs ./docs
 
