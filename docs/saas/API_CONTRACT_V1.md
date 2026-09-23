@@ -58,6 +58,7 @@ The authenticated context contains:
 - `GET /v1/datasets` — list datasets visible to the authenticated workspace; optional `name`, `limit`, and `offset` filters.
 - `GET /v1/datasets/{dataset_id}/versions` — list versions visible to the authenticated workspace with the standard pagination envelope.
 - `GET /v1/datasets/{dataset_id}/versions/{version_id}/download` — issue a short-lived private download URL after tenant authorization.
+- `DELETE /v1/datasets/{dataset_id}/versions/{version_id}` — delete an authorized dataset version.
 
 ## 4.1 List response contract
 
