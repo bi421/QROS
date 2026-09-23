@@ -181,23 +181,23 @@ def _execute_compute_plan(
             "qros.execution.method",
             attributes={"research.method_id": method_id},
         ):
-        binding = registry.get(method_id)
-        if method_id not in inputs_by_method:
-            raise ValueError(f"missing execution inputs for planned method: {method_id}")
-        result = router.execute_planned(
-            operation=binding.operation,
-            inputs=inputs_by_method[method_id],
-            required_backend=binding.backend,
-            required_version=binding.backend_version,
-            expected=expected.get(method_id),
-        )
-        if result.metadata.backend != binding.backend or result.metadata.version != binding.backend_version:
-            raise RuntimeError(
-                f"planned execution route changed for {method_id}: "
-                f"expected {binding.backend}@{binding.backend_version}, "
-                f"got {result.metadata.backend}@{result.metadata.version}"
+            binding = registry.get(method_id)
+            if method_id not in inputs_by_method:
+                raise ValueError(f"missing execution inputs for planned method: {method_id}")
+            result = router.execute_planned(
+                operation=binding.operation,
+                inputs=inputs_by_method[method_id],
+                required_backend=binding.backend,
+                required_version=binding.backend_version,
+                expected=expected.get(method_id),
             )
-        results.append(result)
+            if result.metadata.backend != binding.backend or result.metadata.version != binding.backend_version:
+                raise RuntimeError(
+                    f"planned execution route changed for {method_id}: "
+                    f"expected {binding.backend}@{binding.backend_version}, "
+                    f"got {result.metadata.backend}@{result.metadata.version}"
+                )
+            results.append(result)
     return tuple(results)
 
 __all__ = [
