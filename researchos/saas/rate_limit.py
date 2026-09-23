@@ -75,6 +75,10 @@ class SupabaseRateLimiter:
         ).execute()
         return bool(result.data)
 
+    def retry_after(self, key: str) -> int:
+        del key
+        return self.window_seconds
+
 
 class SupabasePlanRateLimiter:
     """Shared workspace-scoped limiter using the server-only Supabase RPC."""
