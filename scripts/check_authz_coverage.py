@@ -1,58 +1,44 @@
 #!/usr/bin/env python3
-"""Check that workspace/tenant-bearing public tables have RLS and policies."""
+"""Fail CI when a protected SaaS route is missing explicit authorization."""
+
 from __future__ import annotations
 
-import argparse
-import subprocess
-import sys
+import ast
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+API = ROOT / "researchos" / "saas" / "api.py"
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--db-url", required=True)
-    args = parser.parse_args()
-    sql = """
-SELECT c.relname,
-       c.relrowsecurity,
-       COALESCE((
-         SELECT count(*) FROM pg_policies p
-         WHERE p.schemaname = 'public' AND p.tablename = c.relname
-       ), 0)
-FROM pg_class c
-JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname = 'public'
-  AND c.relkind = 'r'
-  AND EXISTS (
-      SELECT 1
-      FROM information_schema.columns col
-      WHERE col.table_schema = 'public'
-        AND col.table_name = c.relname
-        AND col.column_name IN ('workspace_id', 'tenant_id')
-  )
-ORDER BY c.relname;
-"""
-    p = subprocess.run(
-        ["psql", args.db_url, "-At", "-F", "\t", "-c", sql],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if p.returncode:
-        print(p.stderr.strip(), file=sys.stderr)
-        return p.returncode
+    tree = ast.parse(API.read_text(encoding="utf-8"))
+    route_count = 0
+    missing: list[str] = []
+    public_prefixes = ("/healthz", "/readyz", "/metrics", "/v1/me", "/v1/billing/webhook")
 
-    rows = [line.split("\t") for line in p.stdout.splitlines() if line.strip()]
-    failures = [
-        row
-        for row in rows
-        if len(row) != 3 or row[1] != "t" or int(row[2]) < 1
-    ]
-    print(f"workspace/tenant-bearing tables checked: {len(rows)}")
-    if failures:
-        for row in failures:
-            print("AUTHZ FAILURE:", "\t".join(row), file=sys.stderr)
-        return 1
-    print("AUTHZ COVERAGE PASS")
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        route_paths: list[str] = []
+        has_permission = False
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == "app":
+                if target.attr in {"get", "post", "put", "patch", "delete"} and isinstance(decorator, ast.Call):
+                    if decorator.args and isinstance(decorator.args[0], ast.Constant) and isinstance(decorator.args[0].value, str):
+                        route_paths.append(decorator.args[0].value)
+            if isinstance(target, ast.Name) and target.id == "require_permission":
+                has_permission = True
+        for route in route_paths:
+            route_count += 1
+            if route.startswith(public_prefixes):
+                continue
+            if not has_permission:
+                missing.append(f"{node.name}: {route}")
+
+    if missing:
+        raise SystemExit("protected routes missing require_permission: " + "; ".join(sorted(missing)))
+    print(f"authorization coverage OK: {route_count} registered routes")
     return 0
 
 
