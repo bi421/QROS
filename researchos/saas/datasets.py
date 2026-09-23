@@ -172,8 +172,8 @@ class InMemoryDatasetStorage:
     def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
         if storage_path not in self._objects:
             raise FileNotFoundError(storage_path)
-        if not 1 <= expires_in <= 900:
-            raise ValueError("signed URL expiry must be between 1 and 900 seconds")
+        if not 1 <= expires_in <= 3600:
+            raise ValueError("signed URL expiry must be between 1 and 3600 seconds")
         return f"memory://{storage_path}?expires_in={expires_in}"
 
 
