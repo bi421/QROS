@@ -116,6 +116,7 @@ class SupabaseResearchEvidenceStore:
             .select("id,claim_id,plan_hash")
             .eq("id", str(research_run_id))
             .eq("workspace_id", str(workspace_id))
+            .is_("deleted_at", "null")
             .limit(1)
             .execute()
         )
