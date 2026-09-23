@@ -93,7 +93,11 @@ Dataset bytes are streamed through a bounded SHA-256 calculation before persiste
 - `GET /v1/research-runs/{job_id}/logs` — retrieve the tenant-scoped deterministic lifecycle log projection with the standard pagination envelope.
 - `GET /v1/jobs/{job_id}/logs` — compatibility alias for the research-run lifecycle log projection.
 - `GET /v1/research-runs/{job_id}/result` — retrieve the immutable governed result projection.
-- `GET /v1/research-runs/{job_id}/evidence` — retrieve tenant-scoped stored evidence lineage.
+- `GET /v1/research-runs/{job_id}/evidence` — retrieve tenant-scoped stored evidence lineage with the standard pagination envelope.
+- `POST /v1/research-runs/{job_id}/validation` — persist a governed validation projection for an available research result.
+- `GET /v1/research-runs/{job_id}/validation` — retrieve the governed validation projection.
+- `POST /v1/research-runs/{job_id}/finding` — persist a finding only from a validated research result.
+- `GET /v1/research-runs/{job_id}/finding` — retrieve the governed finding projection.
 - `GET /v1/research-runs/{job_id}/report` — retrieve a deterministic human-readable report projection.
 - `POST /v1/research-claims` — create a tenant-scoped Research Claim.
 - `GET /v1/research-claims/{claim_id}` — retrieve a workspace-scoped Research Claim.
