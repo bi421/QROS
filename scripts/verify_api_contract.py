@@ -17,6 +17,7 @@ EXPECTED = {
     "POST /v1/datasets/{dataset_id}/versions",
     "GET /v1/datasets/{dataset_id}/versions",
     "GET /v1/datasets/{dataset_id}/versions/{version_id}/download",
+    "DELETE /v1/datasets/{dataset_id}/versions/{version_id}",
     "POST /v1/research-runs",
     "GET /v1/research-runs",
     "GET /v1/research-runs/{job_id}",
