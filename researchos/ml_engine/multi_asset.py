@@ -2,8 +2,12 @@ import pandas as pd
 import yfinance as yf
 
 
-def fetch_multi_asset(symbols, start="2021-01-01", end="2026-08-20"):
-    data = {}
+def fetch_multi_asset(
+    symbols: list[str],
+    start: str = "2021-01-01",
+    end: str = "2026-08-20",
+) -> pd.DataFrame:
+    data: dict[str, pd.Series] = {}
     for sym in symbols:
         df = yf.download(sym, start=start, end=end, progress=False)
         data[sym] = df["Close"]
