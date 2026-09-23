@@ -38,9 +38,9 @@ def test_supabase_queue_calls_protected_enqueue_rpc() -> None:
     workspace_id = uuid4()
     job_id = uuid4()
 
-    assert queue.enqueue(workspace_id, job_id) == 42
+    assert queue.enqueue(workspace_id, job_id, request_id="req-42") == 42
     assert client.params == {
         "p_research_run_id": str(job_id),
         "p_workspace_id": str(workspace_id),
-        "p_request_id": None,
+        "p_request_id": "req-42",
     }
