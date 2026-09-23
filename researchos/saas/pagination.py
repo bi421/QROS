@@ -24,6 +24,7 @@ def paginate(
     page_size: int,
     sort_by: str,
     sort_order: str,
+    request_id: str | None = None,
 ) -> dict[str, object]:
     if page < 1 or page_size < 1 or page_size > MAX_PAGE_SIZE:
         raise HTTPException(status_code=400, detail="INVALID_PAGINATION")
@@ -47,6 +48,7 @@ def paginate(
             "total": total,
             "total_pages": total_pages,
         },
+        "request_id": request_id,
     }
 
 
