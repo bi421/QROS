@@ -56,7 +56,10 @@ def verify_signed_url(
         _payload(tenant_id, path, expires_at),
         hashlib.sha256,
     ).digest()
-    supplied = base64.urlsafe_b64decode(signature + "=" * (-len(signature) % 4))
+    try:
+        supplied = base64.urlsafe_b64decode(signature + "=" * (-len(signature) % 4), validate=False)
+    except (ValueError, TypeError):
+        return False
     return hmac.compare_digest(expected, supplied)
 
 
