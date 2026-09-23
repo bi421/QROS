@@ -174,6 +174,13 @@ class ResearchJobResponse(BaseModel):
     plan_hash: str | None = None
 
 
+class DatasetResponse(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    name: str
+    created_by: UUID
+    version: DatasetVersion | None
+
 class DatasetPageResponse(BaseModel):
     items: list[DatasetResponse]
     total: int
@@ -181,13 +188,6 @@ class DatasetPageResponse(BaseModel):
     offset: int
     has_more: bool
 
-
-class DatasetResponse(BaseModel):
-    id: UUID
-    workspace_id: UUID
-    name: str
-    created_by: UUID
-    version: DatasetVersion | None
 
 
 def _research_job_response(job: ResearchJob) -> ResearchJobResponse:
