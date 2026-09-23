@@ -39,6 +39,7 @@ class SupabaseTenantPersistence:
         "research_run_result",
         "research_run_artifact",
         "audit_event",
+        "retention_deletion_operation",
     )
 
     def __init__(self, supabase_client: Any) -> None:
