@@ -40,7 +40,7 @@ from researchos.saas.evidence_api import ResearchEvidenceStore, register_researc
 from researchos.saas.validation_api import InMemoryResearchValidationStore, ResearchValidationStore, register_research_validation_routes
 from researchos.saas.finding_api import InMemoryResearchFindingStore, register_research_finding_routes
 from researchos.saas.research_report import build_research_report
-from researchos.saas.observability import StructuredRequestObserver, observe_request
+from researchos.saas.observability import StructuredRequestObserver, emit_log, observe_request, span
 from researchos.saas.auth.authorization import require_permission
 from researchos.saas.billing import (
     BillingEventConflict,
@@ -94,7 +94,8 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
         request.state.correlation_id = request_id
         started_at = time.perf_counter()
         try:
-            response = await call_next(request)
+            with span("qros.api", request_id=request_id, http_method=request.method, http_path=request.url.path):
+                response = await call_next(request)
         except Exception:
             observer = getattr(request.app.state, "observability", None)
             if isinstance(observer, StructuredRequestObserver):
@@ -107,6 +108,8 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
                     path=path,
                     status_code=500,
                     started_at=started_at,
+                    tenant_id=getattr(request.state, "tenant_id", None),
+                    job_id=getattr(request.state, "job_id", None),
                 )
             raise
         response.headers[REQUEST_ID_HEADER] = request_id
@@ -121,6 +124,8 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
                 path=path,
                 status_code=response.status_code,
                 started_at=started_at,
+                tenant_id=getattr(request.state, "tenant_id", None),
+                job_id=getattr(request.state, "job_id", None),
             )
         return response
 
@@ -262,6 +267,7 @@ def create_app(
         )
 
     def current_tenant(
+        request: Request,
         authorization: str | None = Header(default=None),
         workspace_header: str | None = Header(default=None, alias=WORKSPACE_HEADER),
     ) -> TenantContext:
@@ -271,7 +277,10 @@ def create_app(
                 requested_workspace_id = UUID(workspace_header.strip())
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail="invalid X-Workspace-ID") from exc
-        return auth.authenticate(authorization, requested_workspace_id)
+        with span("qros.api.auth", request_id=getattr(request.state, "request_id", None)):
+            tenant = auth.authenticate(authorization, requested_workspace_id)
+        request.state.tenant_id = str(tenant.workspace_id)
+        return tenant
 
     def require_role(tenant: TenantContext, *allowed: WorkspaceRole) -> None:
         """Enforce server-resolved membership roles; never trust request data."""
@@ -546,7 +555,7 @@ def create_app(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
             raise HTTPException(status_code=503, detail="dataset download service unavailable") from exc
-        return {"url": url, "expires_in": "300"}
+        return {"url": url, "expires_in": "3600"}
 
     @app.post("/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"])
     @require_permission("job", "create")
