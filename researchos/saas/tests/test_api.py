@@ -395,6 +395,7 @@ def test_http_errors_include_structured_error_metadata() -> None:
         "code": "service_unavailable",
         "message": "SaaS authentication provider is not configured",
         "request_id": "req-structured",
+        "correlation_id": "req-structured",
     }
 
 
