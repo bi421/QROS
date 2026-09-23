@@ -2,9 +2,9 @@
 Conditional Analysis — deterministic conditional probability and statistics.
 
 Given a set of market events, computes:
-  - P(outcome | condition)
-  - Conditional mean, std, confidence intervals
-  - Multiple-testing audit trail
+    - P(outcome | condition)
+    - Conditional mean, std, confidence intervals
+    - Multiple-testing audit trail
 
 All analyses are deterministic and record the exact conditions tested.
 """
@@ -23,11 +23,9 @@ from researchos.market_memory.event_schema import (
     MarketEvent,
 )
 
-
 # =============================================================================
 # Condition Evaluation
 # =============================================================================
-
 
 def evaluate_condition(event: MarketEvent, spec: ConditionSpec) -> bool:
     """Evaluate whether a single event matches every condition in ``spec``."""
@@ -37,22 +35,22 @@ def evaluate_condition(event: MarketEvent, spec: ConditionSpec) -> bool:
     ctx = event.context
     for key, value in spec.conditions.items():
         if key == "direction":
-            if event.direction != value:
+            if event.direction!= value:
                 return False
         elif key == "market_regime":
-            if ctx.market_regime != value:
+            if ctx.market_regime!= value:
                 return False
         elif key == "volatility_state":
-            if ctx.volatility_state != value:
+            if ctx.volatility_state!= value:
                 return False
         elif key == "session":
-            if ctx.session != value:
+            if ctx.session!= value:
                 return False
         elif key == "day_of_week":
-            if ctx.day_of_week != value:
+            if ctx.day_of_week!= value:
                 return False
         elif key == "sma_fast_above_slow":
-            if bool(ctx.sma_fast > ctx.sma_slow) != value:
+            if bool(ctx.sma_fast > ctx.sma_slow)!= value:
                 return False
         elif key == "atr_percentile":
             # Not implemented in V1: fail closed rather than silently ignoring it.
@@ -62,29 +60,24 @@ def evaluate_condition(event: MarketEvent, spec: ConditionSpec) -> bool:
             return False
     return True
 
-
 def filter_events(events: list[MarketEvent], spec: ConditionSpec) -> list[MarketEvent]:
     """Filter events that match a condition specification."""
     return [event for event in events if evaluate_condition(event, spec)]
 
-
 # =============================================================================
 # Conditional Statistics
 # =============================================================================
-
 
 def _mean(values: list[float]) -> float:
     if not values:
         return 0.0
     return sum(values) / len(values)
 
-
 def _std(values: list[float]) -> float:
     if len(values) < 2:
         return 0.0
     m = _mean(values)
     return math.sqrt(sum((v - m) ** 2 for v in values) / len(values))
-
 
 def _percentile(values: list[float], p: float) -> float:
     if not values:
@@ -96,7 +89,6 @@ def _percentile(values: list[float], p: float) -> float:
     if f == c:
         return s[int(k)]
     return s[f] * (c - k) + s[c] * (k - f)
-
 
 def compute_conditional_statistics(
     events: list[MarketEvent],
@@ -153,7 +145,8 @@ def compute_conditional_statistics(
 
     if n < 5:
         status = EvidenceStatus.EXPLORATORY.value
-        notes = f"Small sample (n={n}); uncertainty_method={ci_result.method if n >= 2 else 'none'}"
+        # FIXED: method -> ci_result.method, hardcode 2 -> effective_block_size
+        notes = f"Small sample (n={n}); uncertainty_method={ci_result.method}; dependence_block_size={effective_block_size}"
     else:
         status = EvidenceStatus.UNVALIDATED.value
         dependence_note = f"; dependence_block_size={effective_block_size}" if effective_block_size > 1 else "; iid_bootstrap_only_when_no_overlap"
@@ -172,7 +165,6 @@ def compute_conditional_statistics(
         status=status,
         notes=notes,
     )
-
 
 def _bootstrap_mean_ci(
     values: list[float],
@@ -202,11 +194,9 @@ def _bootstrap_mean_ci(
         _percentile(resample_means, 1.0 - alpha / 2.0),
     )
 
-
 # =============================================================================
 # Multiple Testing Audit
 # =============================================================================
-
 
 @dataclass
 class MultipleTestingAudit:

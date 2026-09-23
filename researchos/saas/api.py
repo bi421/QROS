@@ -97,16 +97,18 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
             observer = getattr(request.app.state, "observability", None)
             if isinstance(observer, StructuredRequestObserver):
                 route = request.scope.get("route")
-                path = getattr(route, "path", request.url.path)
-                observe_request(
-                    observer,
-                    request_id=request_id,
-                    method=request.method,
-                    path=path,
-                    status_code=500,
-                    started_at=started_at,
-                )
-            raise
+            path = getattr(route, "path", request.url.path)
+            response = JSONResponse(
+                {
+                    "detail": "Internal server error",
+                    "error": {
+                        "code": "internal_error",
+                        "message": "request failed",
+                        "request_id": request_id,
+                    },
+                },
+                status_code=500,
+            )
         response.headers[REQUEST_ID_HEADER] = request_id
         observer = getattr(request.app.state, "observability", None)
         if isinstance(observer, StructuredRequestObserver):
@@ -230,16 +232,20 @@ def create_app(
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+        request_id = getattr(request.state, "request_id", None) or str(uuid4())
+        headers = {**(exc.headers or {}), REQUEST_ID_HEADER: request_id[:MAX_REQUEST_ID_LENGTH]}
         return JSONResponse(
             status_code=exc.status_code,
-            headers=exc.headers,
+            headers=headers,
             content=_error_payload(request, exc.status_code, exc.detail),
         )
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+        request_id = getattr(request.state, "request_id", None) or str(uuid4())
         return JSONResponse(
             status_code=422,
+            headers={REQUEST_ID_HEADER: request_id[:MAX_REQUEST_ID_LENGTH]},
             content=_error_payload(request, 422, exc.errors()),
         )
 
