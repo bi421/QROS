@@ -8,7 +8,7 @@ import hashlib
 import json
 import logging
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -33,6 +33,7 @@ from researchos.saas.idempotency import (
     MAX_IDEMPOTENCY_KEY_LENGTH,
 )
 from researchos.saas.rate_limit import FixedWindowRateLimiter, RateLimiter
+from researchos.saas.pagination import paginate, validate_filter_tenant_id
 from researchos.saas.billing import (
     BillingEventConflict,
     BillingEventStore,
@@ -348,12 +349,26 @@ def create_app(
             raise HTTPException(status_code=404, detail="dataset not found")
         return persist_version(dataset_id=dataset_id, tenant=tenant, file=file)
 
-    @app.get("/v1/datasets/{dataset_id}/versions", response_model=list[DatasetVersion], tags=["datasets"])
+    @app.get("/v1/datasets/{dataset_id}/versions", tags=["datasets"])
     def list_dataset_versions(
         dataset_id: UUID,
+        page: int = Query(default=1, ge=1),
+        page_size: int = Query(default=20, ge=1, le=100),
+        sort_by: str = Query(default="version_no"),
+        sort_order: str = Query(default="desc"),
+        filter_status: str | None = Query(default=None, alias="filter[status]"),
+        filter_tenant_id: UUID | None = Query(default=None, alias="filter[tenant_id]"),
         tenant: TenantContext = Depends(current_tenant),
-    ) -> list[DatasetVersion]:
-        return datasets.list_versions(tenant.workspace_id, dataset_id)
+    ) -> dict[str, object]:
+        validate_filter_tenant_id(filter_tenant_id, tenant.workspace_id)
+        if filter_status is not None:
+            raise HTTPException(status_code=400, detail="INVALID_FILTER")
+        if sort_order not in {"asc", "desc"}:
+            raise HTTPException(status_code=400, detail="INVALID_SORT")
+        items = datasets.list_versions(tenant.workspace_id, dataset_id)
+        if sort_by not in {"version_no", "content_sha256", "byte_size"}:
+            raise HTTPException(status_code=400, detail="INVALID_SORT")
+        return paginate(items, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order)
 
     @app.post("/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"])
     def create_research_run(
