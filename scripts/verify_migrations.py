@@ -228,9 +228,8 @@ def main() -> int:
             or diff.returncode != 0
         )
         return 1 if failed else 0
-    finally:
-        if not external_database:
-            run(["supabase", "stop"], check=False)
+    if not external_database:
+        run(["supabase", "stop"], check=False)
 
 
 if __name__ == "__main__":
