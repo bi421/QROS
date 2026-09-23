@@ -68,7 +68,6 @@ cmake.build-type = "Release"
 wheel.packages = [
     "researchos",
     "researchos/engines/quant/python/cpp_quant_engine",
-    "financial_research_lab/src/financial_research_lab",
 ]
 
 [tool.scikit-build.cmake.define]
@@ -90,7 +89,6 @@ testpaths = [
     "researchos/engines/quant/tests",
     "researchos/memory/tests",
     "researchos/saas/tests",
-    "financial_research_lab/tests",
 ]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
@@ -160,7 +158,6 @@ ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/**" = ["E402"]
-"src/**" = ["E402"]
 "researchos/tests/**" = ["E402"]
 "researchos/**/tests/**" = ["E402"]
 
