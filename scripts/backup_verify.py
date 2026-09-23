@@ -143,6 +143,7 @@ def main() -> int:
                     "--format=custom",
                     "--data-only",
                     "--schema=public",
+                    "--table=auth.users",
                     "--no-owner",
                     "--no-acl",
                     "--file",
@@ -155,7 +156,7 @@ def main() -> int:
 
             # The target schema is rebuilt exclusively from repository migrations.
             run(["supabase", "db", "push", "--db-url", target_url, "--include-all"])
-            run([str(ROOT / "scripts" / "verify_migrations.py")], env={**os.environ, "QROS_VERIFY_DATABASE_URL": target_url})
+            run(\n                [str(ROOT / "scripts" / "verify_migrations.py")],\n                env={**os.environ, "QROS_VERIFY_DATABASE_URL": target_url},\n            )
 
             # Restore source tenant data only after the exact migration set is applied.
             run(
