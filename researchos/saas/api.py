@@ -333,7 +333,7 @@ def create_app(
                     raise HTTPException(status_code=503, detail="dataset object integrity check failed")
                 return existing
             if entitlement.max_storage_mb > 0 and datasets.storage_bytes(tenant.workspace_id) + size > entitlement.max_storage_mb * 1_000_000:
-                raise ValueError("storage entitlement exceeded")
+                raise HTTPException(status_code=402, detail={"code": "ENTITLEMENT_EXCEEDED", "message": "storage entitlement exceeded", "upgrade_url": "https://qros.ai/upgrade"})
             version_no = datasets.next_version_no(tenant.workspace_id, dataset_id)
             storage_path = storage_path_for(tenant.workspace_id, digest, version_no)
             storage.put(storage_path, file.file, tenant_id=tenant.workspace_id, access_token=tenant.access_token)
