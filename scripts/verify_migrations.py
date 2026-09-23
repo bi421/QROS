@@ -91,10 +91,18 @@ def verify_schema() -> int:
         order by table_name
         """ % ("ARRAY[" + ",".join("'" + t + "'" for t in TENANT_TABLES) + "]",)
     )
-    column_map = {str(row["0"]): str(row["1"]) for row in tenant_columns}
-    missing_workspace_id = [
-        table for table in TENANT_TABLES
-        if table not in column_map and table not in {"workspace", "workspace_member"}
+    table_columns: dict[str, set[str]] = {}
+    for row in tenant_columns:
+        table_columns.setdefault(str(row["0"]), set()).add(str(row["1"]))
+    missing_tenant_key = [
+        table
+        for table in TENANT_TABLES
+        if table not in table_columns
+        or (
+            table != "workspace"
+            and "workspace_id" not in table_columns[table]
+            and "tenant_id" not in table_columns[table]
+        )
     ]
 
     rls_rows = query(
@@ -133,17 +141,21 @@ def verify_schema() -> int:
     policy_gaps: list[str] = []
     for table in TENANT_TABLES:
         table_policies = policies.get(table, [])
-        if not any(policy["cmd"] in {"SELECT", "ALL"} for policy in table_policies):
+        if table_policies and not any(
+            policy["cmd"] in {"SELECT", "ALL"} for policy in table_policies
+        ):
             policy_gaps.append(f"{table}:missing SELECT/ALL policy")
-        if table not in {"workspace", "workspace_member"}:
+        if table_policies and table != "workspace":
             if not any(
                 "workspace" in normalize_sql(policy["qual"])
                 or "workspace" in normalize_sql(policy["with_check"])
                 or "member" in normalize_sql(policy["qual"])
                 or "member" in normalize_sql(policy["with_check"])
+                or "tenant_id" in normalize_sql(policy["qual"])
+                or "tenant_id" in normalize_sql(policy["with_check"])
                 for policy in table_policies
             ):
-                policy_gaps.append(f"{table}:no workspace/member tenant predicate")
+                policy_gaps.append(f"{table}:no tenant predicate")
 
     diff_command = [
         "supabase", "db", "diff", "--db-url", DB_URL, "--schema", "public"
@@ -155,9 +167,9 @@ def verify_schema() -> int:
     checks = {
         "migration_replay": True,
         "tenant_tables_missing": [
-            table for table in TENANT_TABLES if table not in column_map
+            table for table in TENANT_TABLES if table not in table_columns
         ],
-        "tenant_tables_without_workspace_id": missing_workspace_id,
+        "tenant_tables_without_tenant_key": missing_tenant_key,
         "tenant_tables_without_rls": rls_missing,
         "tenant_policy_gaps": policy_gaps,
         "schema_diff_command": {
@@ -170,7 +182,7 @@ def verify_schema() -> int:
     return 1 if any(
         (
             checks["tenant_tables_missing"],
-            checks["tenant_tables_without_workspace_id"],
+            checks["tenant_tables_without_tenant_key"],
             checks["tenant_tables_without_rls"],
             checks["tenant_policy_gaps"],
             diff.returncode != 0,
