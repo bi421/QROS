@@ -41,7 +41,7 @@ from researchos.saas.evidence_api import ResearchEvidenceStore, register_researc
 from researchos.saas.validation_api import InMemoryResearchValidationStore, ResearchValidationStore, register_research_validation_routes
 from researchos.saas.finding_api import InMemoryResearchFindingStore, register_research_finding_routes
 from researchos.saas.research_report import build_research_report
-from researchos.saas.observability import StructuredRequestObserver, emit_log, observe_request, span
+from researchos.saas.observability import StructuredRequestObserver, configure_tracing, emit_log, observe_request, span
 from researchos.saas.auth.authorization import require_permission
 from researchos.saas.billing import (
     BillingEventConflict,
@@ -229,6 +229,7 @@ def create_app(
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
+    configure_tracing()
     auth = auth_provider or UnconfiguredAuthProvider()
     store = job_store or InMemoryResearchJobStore()
     datasets = dataset_store or InMemoryDatasetStore()
