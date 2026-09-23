@@ -1,21 +1,32 @@
 """Production-safe observability primitives for the QROS SaaS boundary.
 
-The module deliberately has no third-party dependency.  It provides:
-- structured JSON request events;
-- bounded, process-local request counters and latency buckets;
-- Prometheus text exposition for an internal scrape surface;
-- strict field sanitization so credentials and request payloads are never emitted.
+The module provides:
+- sanitized structured JSON request events;
+- context-local request, tenant, and job correlation;
+- bounded process-local HTTP request metrics;
+- Prometheus exposition;
+- OpenTelemetry tracing;
+- structlog-based application logging;
+- job and security observability counters.
 """
 
 from __future__ import annotations
 
+import contextvars
 from collections import Counter
 from dataclasses import dataclass, field
 import json
 import logging
 import threading
 import time
-from typing import Mapping
+from datetime import datetime, timezone
+from typing import Any, Mapping
+
+import structlog
+from opentelemetry import trace
+from prometheus_client import Counter as PrometheusCounter
+from prometheus_client import Histogram
+from prometheus_client import generate_latest
 
 _LOGGER = logging.getLogger("qros.saas")
 
@@ -33,16 +44,53 @@ _SENSITIVE_KEYS = frozenset(
         "secret",
         "signature",
         "billing-signature",
-    "metrics-token",
+        "metrics-token",
     }
 )
 
 _LATENCY_BUCKETS_MS = (5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000)
 
+request_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "request_id",
+    default=None,
+)
+tenant_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "tenant_id",
+    default=None,
+)
+job_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "job_id",
+    default=None,
+)
+
+jobs_created_total = PrometheusCounter(
+    "jobs_created_total",
+    "Research jobs created",
+)
+jobs_failed_total = PrometheusCounter(
+    "jobs_failed_total",
+    "Research jobs failed",
+)
+jobs_duration_seconds = Histogram(
+    "jobs_duration_seconds",
+    "Research job duration",
+)
+tenant_isolation_violations_total = PrometheusCounter(
+    "tenant_isolation_violations_total",
+    "Tenant isolation violations",
+)
+rls_violations_total = PrometheusCounter(
+    "rls_violations_total",
+    "RLS violations",
+)
+
+tracer = trace.get_tracer("qros.saas")
+
 
 def sanitize_log_fields(fields: Mapping[str, object]) -> dict[str, object]:
     """Return a shallow, allow-by-name sanitized mapping for structured logs."""
     sanitized: dict[str, object] = {}
+
     for key, value in fields.items():
         normalized = key.lower().replace("_", "-")
         if normalized in _SENSITIVE_KEYS or any(
@@ -51,6 +99,7 @@ def sanitize_log_fields(fields: Mapping[str, object]) -> dict[str, object]:
             sanitized[key] = "[REDACTED]"
         else:
             sanitized[key] = value
+
     return sanitized
 
 
@@ -68,12 +117,16 @@ class RequestMetrics:
     def observe(self, status_code: int, duration_ms: float) -> None:
         with self._lock:
             self.requests_total += 1
+
             if status_code >= 500:
                 self.errors_total += 1
+
             self.status_counts[status_code] += 1
+
             for bucket in _LATENCY_BUCKETS_MS:
                 if duration_ms <= bucket:
                     self.latency_buckets[bucket] += 1
+
             self.latency_buckets[0] += 1
             self.latency_sum_ms += duration_ms
 
@@ -89,24 +142,25 @@ class RequestMetrics:
 
     def prometheus_text(self) -> str:
         snapshot = self.snapshot()
+
         lines = [
             "# HELP qros_http_requests_total Total HTTP requests observed.",
             "# TYPE qros_http_requests_total counter",
             f"qros_http_requests_total {snapshot['requests_total']}",
-            "# HELP qros_http_errors_total Total HTTP 5xx responses observed.",
+            "# HELP qros_http_errors_total Total 5xx responses observed.",
             "# TYPE qros_http_errors_total counter",
             f"qros_http_errors_total {snapshot['errors_total']}",
             "# HELP qros_http_request_duration_ms HTTP request duration in milliseconds.",
             "# TYPE qros_http_request_duration_ms histogram",
         ]
-        cumulative = 0
+
         buckets = snapshot["latency_buckets"]
         assert isinstance(buckets, dict)
+
         for bucket in _LATENCY_BUCKETS_MS:
             cumulative = int(buckets.get(bucket, 0))
-            lines.append(
-                f'qros_http_request_duration_ms_bucket{{le="{bucket}"}} {cumulative}'
-            )
+            lines.append(f'qros_http_request_duration_ms_bucket{{le="{bucket}"}} {cumulative}')
+
         total = int(snapshot["requests_total"])
         lines.extend(
             [
@@ -116,6 +170,7 @@ class RequestMetrics:
                 "",
             ]
         )
+
         return "\n".join(lines)
 
 
@@ -135,6 +190,7 @@ class StructuredRequestObserver:
         duration_ms: float,
     ) -> None:
         self.metrics.observe(status_code, duration_ms)
+
         event = sanitize_log_fields(
             {
                 "event": "http_request_completed",
@@ -145,16 +201,32 @@ class StructuredRequestObserver:
                 "duration_ms": round(duration_ms, 3),
             }
         )
-        _LOGGER.info(json.dumps(event, sort_keys=True, separators=(",", ":")))
+
+        _LOGGER.info(
+            json.dumps(
+                event,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        )
+
         if status_code >= 500:
-            error_event = {
-                "event": "http_request_error",
-                "request_id": request_id,
-                "method": method,
-                "path": path,
-                "status_code": status_code,
-            }
-            _LOGGER.error(json.dumps(error_event, sort_keys=True, separators=(",", ":")))
+            error_event = sanitize_log_fields(
+                {
+                    "event": "http_request_error",
+                    "request_id": request_id,
+                    "method": method,
+                    "path": path,
+                    "status_code": status_code,
+                }
+            )
+            _LOGGER.error(
+                json.dumps(
+                    error_event,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            )
 
 
 def observe_request(
@@ -166,10 +238,68 @@ def observe_request(
     status_code: int,
     started_at: float,
 ) -> None:
+    """Observe a request using a monotonic start timestamp."""
     observer.observe(
         request_id=request_id,
         method=method,
         path=path,
         status_code=status_code,
-        duration_ms=max(0.0, (time.perf_counter() - started_at) * 1000.0),
+        duration_ms=max(
+            0.0,
+            (time.perf_counter() - started_at) * 1000.0,
+        ),
     )
+
+
+def configure_logging() -> None:
+    """Configure structured JSON logging for the SaaS boundary."""
+    structlog.configure(
+        processors=[
+            structlog.contextvars.merge_contextvars,
+            structlog.processors.TimeStamper(fmt="iso", utc=True),
+            structlog.processors.JSONRenderer(),
+        ],
+        wrapper_class=structlog.make_filtering_bound_logger(20),
+    )
+
+
+def get_logger() -> Any:
+    """Return the QROS SaaS structured logger."""
+    return structlog.get_logger("qros.saas")
+
+
+def log_request(
+    *,
+    level: str,
+    message: str,
+    duration_ms: float,
+    **fields: Any,
+) -> None:
+    """Emit a sanitized structured request/application event."""
+    payload = sanitize_log_fields(
+        {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "level": level,
+            "request_id": request_id_var.get(),
+            "tenant_id": tenant_id_var.get(),
+            "job_id": job_id_var.get(),
+            "message": message,
+            "duration_ms": duration_ms,
+            **fields,
+        }
+    )
+
+    get_logger().info(
+        message,
+        **{key: value for key, value in payload.items() if key != "message"},
+    )
+
+
+def metrics_text() -> str:
+    """Return the process-wide Prometheus exposition payload."""
+    return generate_latest().decode("utf-8")
+
+
+def parse_json_log(line: str) -> dict[str, Any]:
+    """Parse a JSON log line into a dictionary."""
+    return json.loads(line)
