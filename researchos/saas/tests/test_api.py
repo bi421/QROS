@@ -149,8 +149,9 @@ def test_dataset_upload_creates_immutable_version_and_stores_bytes() -> None:
         headers={"Authorization": "Bearer test"},
     )
     assert versions.status_code == 200
-    assert len(versions.json()) == 1
-    version = versions.json()[0]
+    payload_versions = versions.json()
+    assert payload_versions["pagination"]["total"] == 1
+    version = payload_versions["data"][0]
     assert version["id"] == payload["version"]["id"]
     assert storage.get(version["storage_path"]) == body
     assert store.get_dataset(context.workspace_id, UUID(payload["id"])) is not None
@@ -175,7 +176,7 @@ def test_dataset_versions_are_append_only() -> None:
         headers={"Authorization": "Bearer test"},
     )
     assert versions.status_code == 200
-    assert [item["version_no"] for item in versions.json()] == [1, 2]
+    assert [item["version_no"] for item in versions.json()["data"]] == [2, 1]
 
 
 def test_create_research_job_requires_existing_tenant_dataset_version() -> None:
@@ -409,3 +410,16 @@ def test_validation_errors_include_structured_error_metadata() -> None:
     assert payload["error"]["code"] == "validation_error"
     assert payload["error"]["request_id"]
     assert isinstance(payload["detail"], list)
+
+
+def test_dataset_versions_reject_invalid_sort_and_filter() -> None:
+    client, _, _, _ = _client()
+    created = _upload(client, "sort-filter", b"x")
+    dataset_id = created.json()["id"]
+    bad_sort = client.get(f"/v1/datasets/{dataset_id}/versions?sort_by=not_a_field", headers={"Authorization": "Bearer test"})
+    assert bad_sort.status_code == 400
+    assert bad_sort.json()["code"] == "INVALID_SORT"
+    assert bad_sort.json()["request_id"] == bad_sort.headers["X-Request-ID"]
+    bad_filter = client.get(f"/v1/datasets/{dataset_id}/versions?filter[status]=completed", headers={"Authorization": "Bearer test"})
+    assert bad_filter.status_code == 400
+    assert bad_filter.json()["code"] == "INVALID_FILTER"
