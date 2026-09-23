@@ -45,6 +45,13 @@ def main() -> int:
             raise SystemExit(f"migration ordering is not strictly increasing: {path}")
         previous = prefix
 
+        lowered = path.name.lower()
+        if any(token in lowered for token in ("_down", "down_", "rollback", "revert")):
+            raise SystemExit(f"down/rollback migration is forbidden: {path}")
+        text = path.read_text(encoding="utf-8")
+        if re.search(r"^\\s*--\\s*(down migration|rollback)\\b", text, re.I | re.M):
+            raise SystemExit(f"down/rollback marker is forbidden: {path}")
+
         data = path.read_bytes()
         if data.startswith(b"\xef\xbb\xbf"):
             raise SystemExit(f"migration contains UTF-8 BOM: {path}")
