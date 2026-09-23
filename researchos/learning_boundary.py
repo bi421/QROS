@@ -94,7 +94,7 @@ class LearningInput:
             evidence_hash=str(data["evidence_hash"]),
             learning_record_id=str(data["learning_record_id"]),
             learning_outcome=cast(LearningOutcome, str(data["learning_outcome"])),
-            confidence=float(data["confidence"]),
+            confidence=float(cast(float, data["confidence"])),
             findings=tuple(str(x) for x in cast(Iterable[object], data.get("findings", []))),
             patterns_observed=tuple(str(x) for x in cast(Iterable[object], data.get("patterns_observed", []))),
             recommendations=tuple(str(x) for x in cast(Iterable[object], data.get("recommendations", []))),
