@@ -6,7 +6,7 @@ import hashlib
 from typing import Any, Protocol
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from researchos.claims.claim import ResearchClaim, ResearchClaimType, ResearchPlan
@@ -250,7 +250,7 @@ def register_research_claim_routes(
 
     @router.get("/v1/research-claims", tags=["research-claims"])
     def list_research_claims(
-        request,
+        request: Request,
         context: TenantContext = Depends(tenant_dependency),
     ) -> dict[str, object]:
         query = parse_list_query(request, allowed_sort_by={"created_at", "id", "version"}, allowed_filters={"tenant_id", "claim_type", "evidence_state"})
@@ -272,7 +272,7 @@ def register_research_claim_routes(
 
     @router.get("/v1/claims/{claim_id}/evidence_graph", tags=["research-claims"])
     def get_claim_evidence_graph(
-        request,
+        request: Request,
         claim_id: str,
         context: TenantContext = Depends(tenant_dependency),
     ) -> dict[str, object]:
