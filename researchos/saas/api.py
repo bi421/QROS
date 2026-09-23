@@ -368,13 +368,13 @@ def create_app(
     @require_permission(Resource.DATASET_VERSION, Action.LIST)
     def list_dataset_versions(
         dataset_id: UUID,
+        request: Request,
         page: int = Query(default=1),
         page_size: int = Query(default=20),
         sort_by: str = Query(default="version_no"),
         sort_order: str = Query(default="desc"),
         filter_status: str | None = Query(default=None, alias="filter[status]"),
         filter_tenant_id: UUID | None = Query(default=None, alias="filter[tenant_id]"),
-        request: Request,
         tenant: TenantContext = Depends(current_tenant),
     ) -> dict[str, object]:
         if page < 1 or page_size < 1 or page_size > 100:
