@@ -1,0 +1,33 @@
+name: Mypy Production Strict Diagnostic v31
+
+on:
+  workflow_dispatch:
+
+jobs:
+  mypy-strict:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install mypy
+        run: python -m pip install mypy
+      - name: Run strict production diagnostic
+        run: |
+          cat > /tmp/mypy-production-strict-v31.ini <<'EOF'
+          [mypy]
+          python_version = 3.12
+          ignore_missing_imports = true
+          warn_return_any = true
+          warn_unused_ignores = true
+          warn_no_return = true
+          no_implicit_optional = true
+          disallow_untyped_defs = true
+          disallow_incomplete_defs = true
+          check_untyped_defs = true
+          disallow_untyped_decorators = false
+          strict_equality = true
+          exclude = (^|/)(tests|archive|build-nanobind|\.venv|venv)/
+          EOF
+          python -m mypy researchos --config-file /tmp/mypy-production-strict-v31.ini --exclude '(^|/)tests/'
