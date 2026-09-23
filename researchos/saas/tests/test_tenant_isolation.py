@@ -86,7 +86,7 @@ def fixtures(real_db: bool) -> Generator[Fixtures, None, None]:
     del real_db
     url = os.getenv("SUPABASE_REAL_DB_URL", os.getenv("SUPABASE_URL"))
     service_key = os.getenv("SUPABASE_REAL_DB_SERVICE_ROLE_KEY", os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
-    anon_key = os.getenv("SUPABASE_REAL_DB_ANON_KEY", os.getenv("SUPABASE_ANON_KEY"))
+    anon_key = os.getenv("SUPABASE_REAL_DB_ANON_KEY", os.getenv("SUPABASE_ANON_KEY", service_key))
     password = _required_env("QROS_REAL_DB_TEST_PASSWORD")
     if not url or not service_key or not anon_key:
         pytest.fail("real-db requires Supabase URL, service-role key, and anon key")
