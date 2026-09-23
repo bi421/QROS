@@ -14,6 +14,9 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
+from opentelemetry import trace
+
+_TRACER = trace.get_tracer("qros.saas")
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, PageRequest, ResearchJob, ResearchJobStatus, TenantContext, WorkspaceRole
@@ -103,10 +106,13 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
         request.state.request_id = request_id
         token = set_request_id(request_id)
         started_at = time.perf_counter()
-        try:
-            response = await call_next(request)
-        except Exception:
-            observer = getattr(request.app.state, "observability", None)
+        with _TRACER.start_as_current_span(f"{request.method} {request.url.path}") as span:
+            span.set_attribute("http.method", request.method)
+            span.set_attribute("http.route", request.url.path)
+            try:
+                response = await call_next(request)
+            except Exception:
+                observer = getattr(request.app.state, "observability", None)
             if isinstance(observer, StructuredRequestObserver):
                 route = request.scope.get("route")
                 path = getattr(route, "path", request.url.path)
@@ -118,7 +124,8 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
                     status_code=500,
                     started_at=started_at,
                 )
-            raise
+                span.record_exception(Exception("http request failed"))
+                raise
         response.headers[REQUEST_ID_HEADER] = request_id
         reset_request_id(token)
         observer = getattr(request.app.state, "observability", None)
