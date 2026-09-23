@@ -24,7 +24,12 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
 from starlette.responses import JSONResponse, Response
 from researchos.saas.api_middleware import RequestContextMiddleware
-from researchos.saas.observability import configure_logging, metrics_text
+from researchos.saas.observability import (
+    configure_logging,
+    jobs_created_total,
+    jobs_failed_total,
+    metrics_text,
+)
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.contracts import (
@@ -487,6 +492,7 @@ def create_app(
             return JSONResponse(
                 status_code=202, content=_research_job_response(created).model_dump(mode="json")
             )
+        jobs_created_total.inc()
         try:
             queue.enqueue(tenant.workspace_id, created.id)
         except Exception as exc:
@@ -499,6 +505,7 @@ def create_app(
                 )
             except Exception:
                 pass
+            jobs_failed_total.inc()
             raise RuntimeError("research job queue unavailable") from exc
         return JSONResponse(status_code=202, content=body)
 
