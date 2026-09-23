@@ -120,6 +120,7 @@ def register_research_finding_routes(
         status_filter: str | None = Query(default=None, alias="filter[status]"),
         tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
         tenant=Depends(tenant_dependency),
+        request: Request,
     ) -> dict[str, object]:
         try:
             validate_filter_keys(
