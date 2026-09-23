@@ -237,7 +237,6 @@ def test_recovered_worker_reuses_idempotent_result_after_lease_loss():
 
 def test_worker_log_propagates_request_id(caplog) -> None:
     workspace_id = uuid4()
-    job_id = uuid4()
     store = InMemoryResearchJobStore()
     job = store.create(workspace_id, _job(workspace_id))
     executor = StubExecutor(_result())
