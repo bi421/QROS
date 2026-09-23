@@ -111,20 +111,12 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
             span.set_attribute("http.route", request.url.path)
             try:
                 response = await call_next(request)
-            except Exception:
+            except Exception as exc:
                 observer = getattr(request.app.state, "observability", None)
-            if isinstance(observer, StructuredRequestObserver):
-                route = request.scope.get("route")
-                path = getattr(route, "path", request.url.path)
-                observe_request(
-                    observer,
-                    request_id=request_id,
-                    method=request.method,
-                    path=path,
-                    status_code=500,
-                    started_at=started_at,
-                )
-                span.record_exception(Exception("http request failed"))
+                if isinstance(observer, StructuredRequestObserver):
+                    observe_request(observer, request_id=request_id, method=request.method, path=request.url.path, status_code=500, started_at=started_at)
+                span.record_exception(exc)
+                reset_request_id(token)
                 raise
         response.headers[REQUEST_ID_HEADER] = request_id
         reset_request_id(token)
@@ -132,14 +124,7 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
         if isinstance(observer, StructuredRequestObserver):
             route = request.scope.get("route")
             path = getattr(route, "path", request.url.path)
-            observe_request(
-                observer,
-                request_id=request_id,
-                method=request.method,
-                path=path,
-                status_code=response.status_code,
-                started_at=started_at,
-            )
+            observe_request(observer, request_id=request_id, method=request.method, path=path, status_code=response.status_code, started_at=started_at)
         return response
 
 
