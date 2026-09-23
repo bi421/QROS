@@ -130,7 +130,7 @@ def _install_fred_scalar_adapter() -> None:
             return observations
         return original(self, text, symbol, timeframe, timezone)
 
-    load_candles_auto_from_text_phase52._phase52_fred_scalar_adapter = True
+    setattr(load_candles_auto_from_text_phase52, "_phase52_fred_scalar_adapter", True)
     setattr(CsvLoader, "load_candles_auto_from_text", load_candles_auto_from_text_phase52)
 
 
