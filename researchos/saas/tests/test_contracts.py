@@ -27,3 +27,10 @@ def test_tenant_context_is_immutable() -> None:
     context = TenantContext(uuid4(), uuid4(), Plan.PRO)
     with pytest.raises(Exception):
         context.plan = Plan.ENTERPRISE  # type: ignore[misc]
+
+
+def test_free_plan_allows_exactly_100_monthly_runs() -> None:
+    policy = DEFAULT_USAGE_POLICIES[Plan.FREE]
+    assert policy.monthly_research_runs == 100
+    assert policy.allows_monthly_runs(99)
+    assert not policy.allows_monthly_runs(100)
