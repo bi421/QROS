@@ -10,6 +10,7 @@ from fastapi import Depends, HTTPException, status
 from pydantic import BaseModel
 
 from researchos.saas.contracts import TenantContext
+from researchos.saas.auth.authorization import require_permission
 
 
 @dataclass(frozen=True)
@@ -125,6 +126,7 @@ def register_research_evidence_routes(
         response_model=list[ResearchEvidenceResponse],
         tags=["evidence"],
     )
+    @require_permission("evidence", "list")
     def list_research_run_evidence(
         research_run_id: UUID,
         context: TenantContext = Depends(tenant_dependency),
