@@ -223,7 +223,6 @@ def register_research_evidence_routes(
         context: TenantContext = Depends(tenant_dependency),
     ) -> dict[str, object]:
         _validate_evidence_query(page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, status_filter=status_filter, tenant_filter=tenant_filter, request=request)
-        _validate_evidence_query(page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, status_filter=status_filter, tenant_filter=tenant_filter, request=request)
         if evidence_store is None:
             raise HTTPException(status_code=503, detail="research evidence persistence is not configured")
         try:
@@ -231,6 +230,7 @@ def register_research_evidence_routes(
         except Exception as exc:
             raise HTTPException(status_code=503, detail="research evidence persistence unavailable") from exc
         return _evidence_page(rows, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, status_filter=status_filter, tenant_filter=tenant_filter, request=request, context=context)
+
     @router.get(
         "/v1/research-claims/{claim_id}/evidence-graph",
         response_model=dict[str, object],
@@ -251,6 +251,7 @@ def register_research_evidence_routes(
     ) -> dict[str, object]:
         if not claim_id.strip() or len(claim_id) > 256:
             raise HTTPException(status_code=422, detail="invalid claim id")
+        _validate_evidence_query(page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, status_filter=status_filter, tenant_filter=tenant_filter, request=request)
         if evidence_store is None:
             raise HTTPException(status_code=503, detail="research evidence persistence is not configured")
         try:
@@ -274,14 +275,17 @@ def register_research_evidence_routes(
         sort_order: str = "desc",
         status_filter: str | None = Query(default=None, alias="filter[status]"),
         tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
-        request: Request = None,
         context: TenantContext = Depends(tenant_dependency),
     ) -> dict[str, object]:
         if not claim_id.strip() or len(claim_id) > 256:
             raise HTTPException(status_code=422, detail="invalid claim id")
+        _validate_evidence_query(page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, status_filter=status_filter, tenant_filter=tenant_filter, request=request)
         if evidence_store is None:
             raise HTTPException(status_code=503, detail="research evidence persistence is not configured")
-        rows = evidence_store.list_for_claim(context.workspace_id, claim_id)
+        try:
+            rows = evidence_store.list_for_claim(context.workspace_id, claim_id)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="research evidence persistence unavailable") from exc
         return _evidence_page(rows, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, status_filter=status_filter, tenant_filter=tenant_filter, request=request, context=context)
 
 
