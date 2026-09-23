@@ -25,8 +25,8 @@ drop policy if exists tenant_select on public.entitlements;
 drop policy if exists tenant_insert on public.entitlements;
 drop policy if exists tenant_update on public.entitlements;
 drop policy if exists tenant_delete on public.entitlements;
-create policy tenant_select on public.entitlements for select to authenticated using (auth.jwt() ->> 'tenant_id' = tenant_id::text and deleted_at is null);
-create policy tenant_insert on public.entitlements for insert to authenticated with check (auth.jwt() ->> 'tenant_id' = tenant_id::text and deleted_at is null);
+create policy tenant_select on public.entitlements for select to authenticated using (auth.jwt() ->> 'tenant_id' = tenant_id::text);
+create policy tenant_insert on public.entitlements for insert to authenticated with check (auth.jwt() ->> 'tenant_id' = tenant_id::text);
 create policy tenant_update on public.entitlements for update to authenticated using (auth.jwt() ->> 'tenant_id' = tenant_id::text and deleted_at is null) with check (auth.jwt() ->> 'tenant_id' = tenant_id::text and deleted_at is null);
 create policy tenant_delete on public.entitlements for delete to authenticated using (auth.jwt() ->> 'tenant_id' = tenant_id::text);
 
