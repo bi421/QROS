@@ -31,7 +31,7 @@ POLICY: dict[WorkspaceRole, dict[str, dict[str, bool]]] = {
     },
     WorkspaceRole.RESEARCHER: {
         "dataset": {"create": True, "read": True, "list": True, "update": True, "delete": False},
-        "job": {"create": True, "read": True, "list": True, "update": False, "delete": False},
+        "job": {"create": True, "read": True, "list": True, "update": True, "delete": False},
         "evidence": {"create": False, "read": True, "list": True, "update": False, "delete": False},
         "finding": {"create": True, "read": True, "list": True, "update": False, "delete": False},
         "billing": {"create": False, "read": False, "list": False, "update": False, "delete": False},
