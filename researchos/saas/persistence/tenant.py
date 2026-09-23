@@ -57,6 +57,9 @@ class TenantPersistence(Protocol):
     def export_workspace(self, workspace_id: UUID) -> bytes:
         ...
 
+    def hard_purge_expired(self, *, now: datetime | None = None) -> int:
+        ...
+
 
 def _historical_hash(payload: object) -> str:
     encoded = json.dumps(
@@ -172,6 +175,16 @@ class InMemoryTenantPersistence:
         )
         self._receipts[workspace_id] = receipt
         return receipt
+
+    def hard_purge_expired(self, *, now: datetime | None = None) -> int:
+        current = now or datetime.now(timezone.utc)
+        expired = [workspace_id for workspace_id, receipt in self._receipts.items() if receipt.scheduled_purge_at <= current]
+        if not expired:
+            return 0
+        self._rows = [row for row in self._rows if row.workspace_id not in expired]
+        for workspace_id in expired:
+            self._receipts.pop(workspace_id, None)
+        return len(expired)
 
     def export_workspace(self, workspace_id: UUID) -> bytes:
         rows = [row for row in self._rows if row.workspace_id == workspace_id]
