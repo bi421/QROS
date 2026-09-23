@@ -19,14 +19,25 @@ TENANT_TEST = ROOT / "supabase" / "tests" / "tenant_isolation_test.sql"
 REQUIRED_RLS_TABLES = (
     "workspace",
     "workspace_member",
+    "subscription",
     "dataset",
     "dataset_version",
     "research_run",
     "artifact",
     "evidence",
+    "usage_event",
+    "audit_log",
+    "billing_event",
+    "api_idempotency",
     "research_claim",
+    "research_validation",
+    "research_finding",
+    "research_run_result",
+    "research_run_artifact",
     "audit_event",
     "retention_deletion_operation",
+    "workspace_retention_policy",
+    "tenant_deletion_tombstone",
 )
 
 
