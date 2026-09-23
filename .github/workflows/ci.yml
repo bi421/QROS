@@ -98,9 +98,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_PYTHON_BINDINGS=ON
           cmake --build researchos/engines/quant/build -j
-      - name: Run health check
+      - name: Run exact-commit health check
         env:
           PYTHONPATH: researchos/engines/quant/python
         run: |
-          python -m pytest researchos/tests/ researchos/research_core/tests/ -v --tb=short -x
-          ruff check . --exit-zero
+          python scripts/final_health_check.py --exact-commit="${GITHUB_SHA}"
