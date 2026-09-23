@@ -84,7 +84,7 @@ def query(sql: str) -> list[dict[str, str | None]]:
 
 
 def normalize_sql(value: str | None) -> str:
-    return " ".join((value or "").replace('"', "").split()).lower()
+    return " ".join((value or "").replace('"', "").replace("::text", "").replace("(", "").replace(")", "").split()).lower()
 
 
 def main() -> int:
