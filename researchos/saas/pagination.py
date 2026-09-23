@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import ceil
+from collections.abc import Mapping
 
 
 DEFAULT_PAGE = 1
@@ -87,12 +88,19 @@ def parse_list_query(
     )
 
 
+def validate_filter_keys(filters: Mapping[str, object], *, allowed: frozenset[str]) -> None:
+    for key in filters:
+        if key not in allowed:
+            raise PaginationParameterError(f"invalid filter: {key}", code="INVALID_FILTER")
+
+
 def pagination_envelope(
     *,
     data: list[object],
     page: int,
     page_size: int,
     total: int,
+    request_id: str | None = None,
 ) -> dict[str, object]:
     return {
         "data": data,
@@ -102,6 +110,7 @@ def pagination_envelope(
             "total": total,
             "total_pages": ceil(total / page_size) if total else 0,
         },
+        "request_id": request_id,
     }
 
 
@@ -113,4 +122,5 @@ __all__ = [
     "PaginationParameterError",
     "pagination_envelope",
     "parse_list_query",
+    "validate_filter_keys",
 ]
