@@ -167,11 +167,14 @@ class RequestMetrics:
         return "\n".join(lines)
 
 
+DEFAULT_METRICS = RequestMetrics()
+
+
 class StructuredRequestObserver:
     """Record and emit one sanitized event for each completed HTTP request."""
 
     def __init__(self, metrics: RequestMetrics | None = None) -> None:
-        self.metrics = metrics or RequestMetrics()
+        self.metrics = metrics or DEFAULT_METRICS
 
     def observe(
         self,
@@ -233,3 +236,7 @@ def observe_request(
         tenant_id=tenant_id,
         job_id=job_id,
     )
+
+
+def metrics_registry() -> RequestMetrics:
+    return DEFAULT_METRICS
