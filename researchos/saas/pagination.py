@@ -27,6 +27,7 @@ class ListQuery:
     sort_by: str = "created_at"
     sort_order: str = "desc"
     status: str | None = None
+    tenant_id: str | None = None
 
     @property
     def offset(self) -> int:
@@ -40,6 +41,7 @@ def parse_list_query(
     sort_by: str = "created_at",
     sort_order: str = "desc",
     status: str | None = None,
+    tenant_id: str | None = None,
     allowed_sort_fields: frozenset[str],
 ) -> ListQuery:
     try:
@@ -73,6 +75,9 @@ def parse_list_query(
         )
 
     normalized_status = status.strip() if status is not None else None
+    normalized_tenant_id = tenant_id.strip() if tenant_id is not None else None
+    if normalized_tenant_id is not None and len(normalized_tenant_id) > 128:
+        raise PaginationParameterError("tenant_id filter is too long", code="INVALID_FILTER")
     return ListQuery(
         page=parsed_page,
         page_size=parsed_page_size,
