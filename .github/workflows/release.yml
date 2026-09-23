@@ -84,7 +84,8 @@ jobs:
           aws s3api head-object --bucket "$BACKUP_S3_BUCKET" --key "$sha_key" >/dev/null
           aws s3 cp "s3://$BACKUP_S3_BUCKET/$latest_key" .health/backup/latest.dump --only-show-errors
           aws s3 cp "s3://$BACKUP_S3_BUCKET/$sha_key" .health/backup/latest.sha256 --only-show-errors
-          sed -i "s#^[^ ]*  #.health/backup/latest.dump  #" .health/backup/latest.sha256
+          checksum="$(awk '{print $1}' .health/backup/latest.sha256)"
+          printf "%s  .health/backup/latest.dump\\n" "$checksum" > .health/backup/latest.sha256
           sha256sum --check .health/backup/latest.sha256
           python - <<'PY'
           import json
