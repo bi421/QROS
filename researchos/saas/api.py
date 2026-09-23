@@ -41,6 +41,7 @@ from researchos.saas.finding_api import InMemoryResearchFindingStore, register_r
 from researchos.saas.research_report import build_research_report
 from researchos.saas.observability import StructuredRequestObserver, observe_request
 from researchos.saas.api.pagination import envelope, parse_list_query, sort_items
+from researchos.saas.request_context import reset_request_id, set_request_id
 from researchos.saas.billing import (
     BillingEventConflict,
     BillingEventStore,
@@ -100,6 +101,7 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
         request_id = supplied[:MAX_REQUEST_ID_LENGTH] if supplied else str(uuid4())
         request_id = "".join(char if ord(char) >= 32 and ord(char) != 127 else "-" for char in request_id)
         request.state.request_id = request_id
+        token = set_request_id(request_id)
         started_at = time.perf_counter()
         try:
             response = await call_next(request)
@@ -118,6 +120,7 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
                 )
             raise
         response.headers[REQUEST_ID_HEADER] = request_id
+        reset_request_id(token)
         observer = getattr(request.app.state, "observability", None)
         if isinstance(observer, StructuredRequestObserver):
             route = request.scope.get("route")
