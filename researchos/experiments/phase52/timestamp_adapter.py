@@ -11,6 +11,7 @@ from __future__ import annotations
 import csv
 import io
 from dataclasses import dataclass
+from typing import Any
 from datetime import datetime, timezone
 
 
@@ -117,14 +118,14 @@ def _install_fred_scalar_adapter() -> None:
     if getattr(original, "_phase52_fred_scalar_adapter", False):
         return
 
-    def load_candles_auto_from_text_phase52(self, text, symbol, timeframe=None, timezone=None):
+    def load_candles_auto_from_text_phase52(\n        self: Any,\n        text: str,\n        symbol: str,\n        timeframe: str | None = None,\n        timezone: str | None = None,\n    ) -> list[ScalarObservation] | list[Any]:
         observations = load_fred_scalar_series_from_text(text)
         if observations is not None:
             return observations
         return original(self, text, symbol, timeframe, timezone)
 
     load_candles_auto_from_text_phase52._phase52_fred_scalar_adapter = True
-    CsvLoader.load_candles_auto_from_text = load_candles_auto_from_text_phase52
+    setattr(CsvLoader, "load_candles_auto_from_text", load_candles_auto_from_text_phase52)
 
 
 _install_fred_scalar_adapter()
