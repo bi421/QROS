@@ -53,6 +53,9 @@ class DatasetStore(Protocol):
 
 
 class DatasetStorage(Protocol):
+    def exists(self, storage_path: str) -> bool:
+        ...
+
     def put(self, storage_path: str, file: BinaryIO) -> None:
         ...
 
@@ -126,6 +129,9 @@ class InMemoryDatasetStorage:
 
     def __init__(self) -> None:
         self._objects: dict[str, bytes] = {}
+
+    def exists(self, storage_path: str) -> bool:
+        return storage_path in self._objects
 
     def put(self, storage_path: str, file: BinaryIO) -> None:
         if storage_path in self._objects:
@@ -268,6 +274,13 @@ class SupabaseDatasetStorage:
     def __init__(self, supabase_client: object, bucket: str = "qros-datasets") -> None:
         self._client = supabase_client
         self._bucket = bucket
+
+    def exists(self, storage_path: str) -> bool:
+        parent = storage_path.rstrip("/")
+        name = parent.rsplit("/", 1)[-1]
+        prefix = parent.rsplit("/", 1)[0] + "/"
+        result = self._client.storage.from_(self._bucket).list(prefix, {"search": name, "limit": 10})
+        return any(str(row.get("name", "")) == name for row in (result or []))
 
     def put(self, storage_path: str, file: BinaryIO) -> None:
         self._client.storage.from_(self._bucket).upload(
