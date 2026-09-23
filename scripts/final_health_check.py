@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HEALTH_DIR = ROOT / ".health"
 COVERAGE_JSON = HEALTH_DIR / "coverage.json"
 BACKUP_WORKFLOW = ROOT / ".github" / "workflows" / "production-db-backup.yml"
+BACKUP_RESULT = HEALTH_DIR / "backup_verify.json"
 
 REQUIRED_CHECKS = (
     "ruff",
@@ -145,7 +146,20 @@ def main() -> int:
         "authz_matrix",
         [sys.executable, "scripts/verify_authz_routes.py"],
     )
-    checks["backup_verify_contract"] = backup_verify_contract()
+    if BACKUP_RESULT.exists():
+        try:
+            checks["backup_verify_contract"] = json.loads(BACKUP_RESULT.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            checks["backup_verify_contract"] = {
+                "label": "backup_verify_contract",
+                "status": "FAIL",
+                "returncode": 1,
+                "command": [],
+                "stdout": "",
+                "stderr": f"invalid backup verification evidence: {exc}",
+            }
+    else:
+        checks["backup_verify_contract"] = backup_verify_contract()
 
     coverage: dict[str, object] = {"status": "UNAVAILABLE"}
     if COVERAGE_JSON.exists():
