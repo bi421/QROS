@@ -80,6 +80,13 @@ Dataset bytes are streamed through a bounded SHA-256 calculation before persiste
 
 - `GET /v1/findings` — list tenant-scoped governed findings with bounded pagination, status filtering, and deterministic sorting.
 
+### Workspace compliance
+
+- `DELETE /v1/workspaces/{workspace_id}` — soft-delete the authenticated workspace and return a deletion receipt with the scheduled purge date.
+- `GET /v1/workspaces/{workspace_id}/export` — download a machine-readable ZIP export containing tenant datasets, research jobs, evidence envelopes, and related lifecycle records.
+
+Workspace deletion is fail-closed: tenant rows receive `deleted_at`, list/read persistence queries exclude soft-deleted rows, and physical purge is allowed only after the workspace retention window (30 days by default; production-configurable). Evidence hashes are retained in immutable deletion tombstones so historical lineage cannot be resurrected.
+
 The initial MVP accepts only the frozen XAUUSD M1 workflow.
 
 ## 5. Research Claim API semantics
