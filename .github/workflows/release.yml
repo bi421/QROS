@@ -34,13 +34,13 @@ jobs:
         run: mypy researchos/saas
       - name: Unit and integration tests
         env:
-          SUPABASE_URL: \${{ secrets.QROS_STAGING_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: \${{ secrets.QROS_STAGING_SUPABASE_SERVICE_ROLE_KEY }}
-          SUPABASE_ANON_KEY: \${{ secrets.QROS_STAGING_SUPABASE_ANON_KEY }}
+          SUPABASE_URL: ${{ secrets.QROS_STAGING_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.QROS_STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.QROS_STAGING_SUPABASE_ANON_KEY }}
         run: python -m pytest researchos/tests/ researchos/research_core/tests/ researchos/saas/tests/ --real-db -v --tb=short
       - name: Backup and restore verification
         env:
-          QROS_BACKUP_DATABASE_URL: \${{ secrets.QROS_STAGING_DATABASE_URL }}
+          QROS_BACKUP_DATABASE_URL: ${{ secrets.QROS_STAGING_DATABASE_URL }}
         run: python scripts/backup_verify.py
       - name: Exact health evidence
         run: |
@@ -49,6 +49,6 @@ jobs:
       - name: Publish health evidence
         uses: actions/upload-artifact@v4
         with:
-          name: health-evidence-\${{ github.sha }}
-          path: .health/health_evidence_\${{ github.sha }}.json
+          name: health-evidence-${{ github.sha }}
+          path: .health/health_evidence_${{ github.sha }}.json
           if-no-files-found: error
