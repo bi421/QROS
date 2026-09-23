@@ -785,3 +785,16 @@ def test_stripe_webhook_replay_same_event_id_is_ignored() -> None:
     assert first.json()["status"] == "processed"
     assert second.status_code == 200
     assert second.json()["status"] == "replayed"
+
+
+def test_plan_rate_limiter_selects_free_workspace_limit() -> None:
+    free_limiter = StaticRateLimiter()
+    fallback = StaticRateLimiter()
+    context = TenantContext(uuid4(), uuid4(), Plan.FREE, WorkspaceRole.RESEARCHER)
+    TestClient(create_app(
+        auth_provider=StaticAuth(context),
+        rate_limiter=fallback,
+        plan_rate_limiters={Plan.FREE: free_limiter, Plan.PRO: StaticRateLimiter()},
+    )).get("/v1/research-runs", headers={"Authorization": "Bearer test"})
+    assert len(free_limiter.keys) == 1
+    assert fallback.keys == []
