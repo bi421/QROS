@@ -6,13 +6,13 @@ import hashlib
 from typing import Any, Protocol
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
 from researchos.claims.claim import ResearchClaim, ResearchClaimType, ResearchPlan
 from researchos.saas.auth.authorization import require_permission
 from researchos.saas.contracts import TenantContext, WorkspaceRole
-from researchos.saas.pagination import PaginationParameterError, pagination_envelope, parse_list_query
+from researchos.saas.pagination import PaginationParameterError, pagination_envelope, parse_list_query, validate_filter_keys
 
 
 class ResearchClaimStore(Protocol):
@@ -261,6 +261,8 @@ def register_research_claim_routes(
         sort_by: str = "created_at",
         sort_order: str = "desc",
         status_filter: str | None = Query(default=None, alias="filter[status]"),
+        tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
+        request: Request,
         context: TenantContext = Depends(tenant_dependency),
     ) -> ResearchClaimPageResponse:
         try:
@@ -270,6 +272,7 @@ def register_research_claim_routes(
                 sort_by=sort_by,
                 sort_order=sort_order,
                 status=status_filter,
+                tenant_id=tenant_filter,
                 allowed_sort_fields=frozenset({"created_at", "status", "statement"}),
             )
         except PaginationParameterError as exc:
@@ -277,6 +280,10 @@ def register_research_claim_routes(
                 status_code=400,
                 detail={"code": exc.code, "message": str(exc)},
             ) from exc
+        validate_filter_keys(
+            {key.removeprefix("filter[").removesuffix("]"): value for key, value in request.query_params.items() if key.startswith("filter[")},
+            allowed=frozenset({"status", "tenant_id"}),
+        )
         store = require_store()
         try:
             claims, total = store.list(
@@ -304,6 +311,7 @@ def register_research_claim_routes(
                 page=query.page,
                 page_size=query.page_size,
                 total=total,
+                request_id=request.state.request_id,
             )
         )
 
