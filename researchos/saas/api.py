@@ -811,15 +811,82 @@ def create_app(
             )
         )
 
-    @app.get("/v1/research-runs/{job_id}/logs", response_model=list[dict[str, object]], tags=["research"])
+    def _list_job_logs(
+        job_id: UUID,
+        *,
+        page: str,
+        page_size: str,
+        sort_by: str,
+        sort_order: str,
+        tenant_filter: str | None,
+        request: Request,
+        tenant: TenantContext,
+    ) -> PageResponse:
+        try:
+            validate_filter_keys(
+                {key.removeprefix("filter[").removesuffix("]"): value for key, value in request.query_params.items() if key.startswith("filter[")},
+                allowed=frozenset({"tenant_id"}),
+            )
+            query = parse_list_query(
+                page=page,
+                page_size=page_size,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                tenant_id=tenant_filter,
+                allowed_sort_fields=frozenset({"created_at"}),
+            )
+        except PaginationParameterError as exc:
+            raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)}) from exc
+        if tenant_filter is not None and tenant_filter != str(tenant.workspace_id):
+            logs: list[dict[str, object]] = []
+        else:
+            if store.get(tenant.workspace_id, job_id) is None:
+                raise HTTPException(status_code=404, detail="research run not found")
+            logs = store.logs(tenant.workspace_id, job_id)
+        total = len(logs)
+        return PageResponse.model_validate(
+            pagination_envelope(
+                data=logs[query.offset:query.offset + query.page_size],
+                page=query.page,
+                page_size=query.page_size,
+                total=total,
+                request_id=request.state.request_id,
+            )
+        )
+
+    @app.get("/v1/research-runs/{job_id}/logs", response_model=PageResponse, tags=["research"])
     @require_permission("job", "read")
     def get_research_run_logs(
         job_id: UUID,
+        page: str = "1",
+        page_size: str = "20",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
+        request: Request = None,
         tenant: TenantContext = Depends(current_tenant),
-    ) -> list[dict[str, object]]:
-        if store.get(tenant.workspace_id, job_id) is None:
-            raise HTTPException(status_code=404, detail="research run not found")
-        return store.logs(tenant.workspace_id, job_id)
+    ) -> PageResponse:
+        return _list_job_logs(
+            job_id, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order,
+            tenant_filter=tenant_filter, request=request, tenant=tenant,
+        )
+
+    @app.get("/v1/jobs/{job_id}/logs", response_model=PageResponse, tags=["research"])
+    @require_permission("job", "read")
+    def get_job_logs(
+        job_id: UUID,
+        page: str = "1",
+        page_size: str = "20",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
+        request: Request = None,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> PageResponse:
+        return _list_job_logs(
+            job_id, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order,
+            tenant_filter=tenant_filter, request=request, tenant=tenant,
+        )
 
     @app.get("/v1/research-runs/{job_id}/result", tags=["research"])
     @require_permission("job", "read")
