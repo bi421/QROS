@@ -413,8 +413,8 @@ def create_app(
         sort_order: str = Query(default="desc"),
         filter_status: str | None = Query(default=None, alias="filter[status]"),
         filter_tenant_id: UUID | None = Query(default=None, alias="filter[tenant_id]"),
-        tenant: TenantContext = Depends(current_tenant),
         request: Request,
+        tenant: TenantContext = Depends(current_tenant),
     ) -> dict[str, object]:
         if page < 1 or page_size < 1 or page_size > 100:
             raise HTTPException(status_code=400, detail="INVALID_PAGINATION")
