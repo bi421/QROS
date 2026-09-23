@@ -75,6 +75,9 @@ class DatasetStorage(Protocol):
     def remove(self, storage_path: str) -> None:
         ...
 
+    def download_verified(self, storage_path: str, expected_sha256: str) -> bytes:
+        ...
+
     def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
         """Create a short-lived URL for an already-authorized private object."""
         ...
@@ -154,6 +157,14 @@ class InMemoryDatasetStorage:
 
     def remove(self, storage_path: str) -> None:
         self._objects.pop(storage_path, None)
+
+    def download_verified(self, storage_path: str, expected_sha256: str) -> bytes:
+        data = self._objects.get(storage_path)
+        if data is None:
+            raise FileNotFoundError(storage_path)
+        if sha256(data).hexdigest() != expected_sha256:
+            raise ValueError("dataset SHA-256 verification failed")
+        return data
 
     def get(self, storage_path: str) -> bytes | None:
         return self._objects.get(storage_path)
@@ -334,6 +345,13 @@ class SupabaseDatasetStorage:
 
     def remove(self, storage_path: str) -> None:
         self._client.storage.from_(self._bucket).remove([storage_path])
+
+    def download_verified(self, storage_path: str, expected_sha256: str) -> bytes:
+        response = self._client.storage.from_(self._bucket).download(storage_path)
+        data = response if isinstance(response, bytes) else bytes(response)
+        if sha256(data).hexdigest() != expected_sha256:
+            raise ValueError("dataset SHA-256 verification failed")
+        return data
 
     def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
         if not 1 <= expires_in <= 900:
