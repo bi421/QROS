@@ -254,6 +254,10 @@ def create_app(
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+        if isinstance(exc.detail, dict) and exc.detail.get("code") == "ENTITLEMENT_EXCEEDED":
+            detail = dict(exc.detail)
+            detail["request_id"] = getattr(request.state, "request_id", None)
+            return JSONResponse(status_code=402, headers=exc.headers, content=detail)
         return JSONResponse(
             status_code=exc.status_code,
             headers=exc.headers,
