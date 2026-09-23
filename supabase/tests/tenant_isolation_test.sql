@@ -4,7 +4,7 @@
 -- server-only Data API boundary; the transaction rolls back all changes.
 begin;
 
-select plan(23);
+select plan(22);
 
 insert into auth.users (id, email)
 values
