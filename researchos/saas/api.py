@@ -465,28 +465,39 @@ def create_app(
         sort_by: str = "created_at",
         sort_order: str = "desc",
         name: str | None = None,
+        tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
+        request: Request = None,
         tenant: TenantContext = Depends(current_tenant),
     ) -> PageResponse:
         try:
+            if request is not None:
+                validate_filter_keys(
+                    {key.removeprefix("filter[").removesuffix("]"): value for key, value in request.query_params.items() if key.startswith("filter[")},
+                    allowed=frozenset({"tenant_id"}),
+                )
             query = parse_list_query(
                 page=page,
                 page_size=page_size,
                 sort_by=sort_by,
                 sort_order=sort_order,
+                tenant_id=tenant_filter,
                 allowed_sort_fields=frozenset({"created_at", "name"}),
             )
             if name is not None and not 1 <= len(name.strip()) <= 256:
                 raise PaginationParameterError(
                     "name filter must be between 1 and 256 characters"
                 )
-            rows, total = datasets.list_datasets(
-                tenant.workspace_id,
-                limit=query.page_size,
-                offset=query.offset,
-                name_filter=name,
-                sort_by=query.sort_by,
-                sort_order=query.sort_order,
-            )
+            if tenant_filter is not None and tenant_filter != str(tenant.workspace_id):
+                rows, total = [], 0
+            else:
+                rows, total = datasets.list_datasets(
+                    tenant.workspace_id,
+                    limit=query.page_size,
+                    offset=query.offset,
+                    name_filter=name,
+                    sort_by=query.sort_by,
+                    sort_order=query.sort_order,
+                )
         except PaginationParameterError as exc:
             raise HTTPException(
                 status_code=400,
@@ -509,6 +520,7 @@ def create_app(
                 page=query.page,
                 page_size=query.page_size,
                 total=total,
+                request_id=request.state.request_id if request is not None else "",
             )
         )
 
