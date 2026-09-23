@@ -125,6 +125,7 @@ class SupabaseResearchEvidenceStore:
             self._client.table("evidence")
             .select("id,workspace_id,research_run_id,artifact_id,claim,status,provenance")
             .eq("workspace_id", str(workspace_id))
+            .is_("deleted_at", "null")
             .eq("research_run_id", str(research_run_id))
             .order("id")
             .execute()
