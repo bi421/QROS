@@ -41,7 +41,8 @@ jobs:
       - name: Install Supabase CLI
         uses: supabase/setup-cli@v2
         with:
-          version: latest
+          version: 2.117.0
+          github-token: ${{ github.token }}
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
@@ -72,15 +73,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .dr-objects/before .dr-objects/after
-          printf 'QROS DR fixture\n' > .dr-objects/before/object.txt
+          printf 'QROS DR fixture
+' > .dr-objects/before/object.txt
           cp .dr-objects/before/object.txt .dr-objects/after/object.txt
-          python scripts/final_health_check.py \
-            --expected-commit "$RELEASE_SHA" \
-            --db-url "$DATABASE_URL" \
-            --source-db-url "$DATABASE_URL" \
-            --admin-db-url "$DATABASE_URL" \
-            --object-before .dr-objects/before \
-            --object-after .dr-objects/after
+          python scripts/final_health_check.py             --expected-commit "$RELEASE_SHA"             --db-url "$DATABASE_URL"             --source-db-url "$DATABASE_URL"             --admin-db-url "$DATABASE_URL"             --object-before .dr-objects/before             --object-after .dr-objects/after
       - name: Require exact health evidence
         shell: bash
         run: |

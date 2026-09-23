@@ -22,6 +22,7 @@ jobs:
         uses: supabase/setup-cli@v2
         with:
           version: 2.117.0
+          github-token: ${{ github.token }}
 
       - name: Initialize local Supabase configuration
         run: supabase init
@@ -41,7 +42,26 @@ jobs:
           PY
 
       - name: Start local Supabase
-        run: supabase start
+        shell: bash
+        run: |
+          set -euo pipefail
+          max_attempts=5
+          for attempt in $(seq 1 "$max_attempts"); do
+            echo "Starting local Supabase (attempt $attempt/$max_attempts)"
+            if supabase start; then
+              echo "Local Supabase started successfully."
+              exit 0
+            fi
+            echo "::warning::supabase start failed on attempt $attempt/$max_attempts; retrying after registry backoff"
+            supabase stop || true
+            if [ "$attempt" -lt "$max_attempts" ]; then
+              sleep_seconds=$((30 * attempt))
+              echo "Sleeping ${sleep_seconds}s before retry."
+              sleep "$sleep_seconds"
+            fi
+          done
+          echo "::error::Unable to start local Supabase after $max_attempts attempts."
+          exit 1
 
       - name: Run database security tests
         run: supabase test db supabase/tests/tenant_isolation_test.sql
