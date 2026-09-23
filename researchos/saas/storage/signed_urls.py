@@ -57,7 +57,7 @@ def verify_signed_url(
         hashlib.sha256,
     ).digest()
     try:
-        supplied = base64.urlsafe_b64decode(signature + "=" * (-len(signature) % 4), validate=False)
+        supplied = base64.b64decode(signature + "=" * (-len(signature) % 4), altchars=b"-_", validate=True)
     except (ValueError, TypeError):
         return False
     return hmac.compare_digest(expected, supplied)
