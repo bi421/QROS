@@ -795,6 +795,6 @@ def test_plan_rate_limiter_selects_free_workspace_limit() -> None:
         auth_provider=StaticAuth(context),
         rate_limiter=fallback,
         plan_rate_limiters={Plan.FREE: free_limiter, Plan.PRO: StaticRateLimiter()},
-    )).get("/v1/research-runs", headers={"Authorization": "Bearer test"})
+    )).post("/v1/research-runs", headers={"Authorization": "Bearer test", "Idempotency-Key": "plan-rate"}, json={"dataset_version_id": str(uuid4())})
     assert len(free_limiter.keys) == 1
     assert fallback.keys == []
