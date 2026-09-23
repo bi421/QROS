@@ -123,7 +123,7 @@ class ResearchJob:
 
 
 DEFAULT_USAGE_POLICIES: dict[Plan, UsagePolicy] = {
-    Plan.FREE: UsagePolicy(monthly_research_runs=5, max_dataset_bytes=50_000_000, max_concurrent_runs=1),
+    Plan.FREE: UsagePolicy(monthly_research_runs=100, max_dataset_bytes=50_000_000, max_concurrent_runs=1),
     Plan.PRO: UsagePolicy(monthly_research_runs=100, max_dataset_bytes=2_000_000_000, max_concurrent_runs=2),
     Plan.TEAM: UsagePolicy(monthly_research_runs=1_000, max_dataset_bytes=10_000_000_000, max_concurrent_runs=8),
     Plan.ENTERPRISE: UsagePolicy(monthly_research_runs=0, max_dataset_bytes=0, max_concurrent_runs=0),
