@@ -150,10 +150,10 @@ The `qros-datasets` bucket is private. Server-side code uses the privileged Supa
 Current object path contract:
 
 ```text
-{workspace_id}/datasets/{dataset_id}/sha256/{sha256}
+tenant/{workspace_id}/datasets/{sha256}/{version}/
 ```
 
-The API computes SHA-256 and byte size before persistence and removes an uploaded object if metadata persistence fails. Supabase recommends resumable/TUS upload flows for large files; those will replace the current server-side multipart path before large-plan production rollout.
+The API computes SHA-256 and byte size before persistence, deduplicates identical content by hash, and never mutates an existing version. Supabase recommends resumable/TUS upload flows for large files; those will replace the current server-side multipart path before large-plan production rollout.
 
 ## Queue contract
 
