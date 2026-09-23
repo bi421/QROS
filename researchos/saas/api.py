@@ -395,7 +395,10 @@ def create_app(
             raise HTTPException(status_code=400, detail="billing signature and provider are required")
         payload = await request.body()
         try:
-            verify_hmac_signature(payload, x_billing_signature, billing_webhook_secret)
+            if x_billing_signature.startswith("t="):
+                verify_stripe_signature(payload, x_billing_signature, billing_webhook_secret)
+            else:
+                verify_hmac_signature(payload, x_billing_signature, billing_webhook_secret)
             event = parse_billing_event(payload)
         except BillingSignatureError as exc:
             raise HTTPException(status_code=401, detail="invalid billing webhook signature") from exc
