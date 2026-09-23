@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import json
 import time
+import io
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.exceptions import RequestValidationError
@@ -248,11 +249,8 @@ class PageResponse(BaseModel):
     request_id: str
 
 class DeletionReceiptResponse(BaseModel):
-    workspace_id: UUID
-    deleted_at: str
-    scheduled_purge_date: str
-    retention_days: int
-    receipt_id: UUID
+    deletion_receipt_id: UUID
+    scheduled_purge_at: str
 
 
 class ResearchJobResponse(BaseModel):
@@ -452,6 +450,53 @@ def create_app(
             raise HTTPException(status_code=404, detail="metrics endpoint not found")
         observer = app.state.observability
         return Response(content=observer.metrics.prometheus_text(), media_type="text/plain; version=0.0.4")
+
+    @app.delete("/v1/workspaces/{workspace_id}", response_model=DeletionReceiptResponse, tags=["workspace"])
+    @require_permission("workspace", "delete")
+    def delete_workspace(
+        workspace_id: UUID,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> DeletionReceiptResponse:
+        require_role(tenant, WorkspaceRole.OWNER)
+        if tenant.workspace_id != workspace_id:
+            raise HTTPException(status_code=404, detail="workspace not found")
+        try:
+            receipt = persistence.soft_delete_workspace(
+                workspace_id,
+                retention=retention,
+            )
+        except (TenantPersistenceError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail={"code": "WORKSPACE_DELETE_FAILED", "message": str(exc)}) from exc
+        return DeletionReceiptResponse(
+            deletion_receipt_id=receipt.receipt_id,
+            scheduled_purge_at=receipt.scheduled_purge_at.isoformat(),
+        )
+
+    @app.get("/v1/workspaces/{workspace_id}/export", response_model=dict[str, str], tags=["workspace"])
+    @require_permission("workspace", "read")
+    def export_workspace(
+        workspace_id: UUID,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> dict[str, str]:
+        if tenant.workspace_id != workspace_id:
+            raise HTTPException(status_code=404, detail="workspace not found")
+        try:
+            payload = persistence.export_workspace(workspace_id)
+            export_id = uuid4()
+            storage_path = f"tenant/{workspace_id}/exports/{export_id}.zip"
+            storage.put(storage_path, io.BytesIO(payload))
+            provider_url = storage.create_signed_download_url(storage_path, min(DEFAULT_EXPIRY_SECONDS, 900))
+            url = bind_signed_url(
+                provider_url,
+                workspace_id,
+                storage_path,
+                expires_in=DEFAULT_EXPIRY_SECONDS,
+            )
+        except (FileNotFoundError, SignedUrlError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail={"code": "EXPORT_FAILED", "message": str(exc)}) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="workspace export service unavailable") from exc
+        return {"url": url, "expires_in": str(DEFAULT_EXPIRY_SECONDS)}
 
     @app.get("/healthz", tags=["system"])
     def healthz() -> dict[str, str]:
