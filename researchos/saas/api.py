@@ -9,7 +9,7 @@ import hmac
 import json
 import time
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -38,6 +38,7 @@ from researchos.saas.claim_api import ResearchClaimStore, register_research_clai
 from researchos.saas.evidence_api import ResearchEvidenceStore, register_research_evidence_routes
 from researchos.saas.validation_api import InMemoryResearchValidationStore, ResearchValidationStore, register_research_validation_routes
 from researchos.saas.finding_api import InMemoryResearchFindingStore, register_research_finding_routes
+from researchos.saas.pagination import PaginationParameterError, pagination_envelope, parse_list_query
 from researchos.saas.research_report import build_research_report
 from researchos.saas.observability import StructuredRequestObserver, observe_request
 from researchos.saas.auth.authorization import require_permission
@@ -156,12 +157,16 @@ class ResearchCreateRequest(BaseModel):
     plan_hash: str | None = Field(default=None, min_length=64, max_length=64)
 
 
-class PageResponse(BaseModel):
-    items: Sequence[object]
+class PaginationResponse(BaseModel):
+    page: int
+    page_size: int
     total: int
-    limit: int
-    offset: int
-    has_more: bool
+    total_pages: int
+
+
+class PageResponse(BaseModel):
+    data: list[object]
+    pagination: PaginationResponse
 
 
 class ResearchJobResponse(BaseModel):
@@ -172,14 +177,6 @@ class ResearchJobResponse(BaseModel):
     status: ResearchJobStatus
     claim_id: str | None = None
     plan_hash: str | None = None
-
-
-class DatasetPageResponse(BaseModel):
-    items: list[DatasetResponse]
-    total: int
-    limit: int
-    offset: int
-    has_more: bool
 
 
 class DatasetResponse(BaseModel):
@@ -380,23 +377,41 @@ def create_app(
     def me(tenant: TenantContext = Depends(current_tenant)) -> dict[str, str]:
         return {"user_id": str(tenant.user_id), "workspace_id": str(tenant.workspace_id), "plan": tenant.plan.value}
 
-    @app.get("/v1/datasets", response_model=DatasetPageResponse, tags=["datasets"])
+    @app.get("/v1/datasets", response_model=PageResponse, tags=["datasets"])
     @require_permission("dataset", "list")
     def list_datasets(
-        limit: int = 50,
-        offset: int = 0,
+        page: str = "1",
+        page_size: str = "20",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
         name: str | None = None,
         tenant: TenantContext = Depends(current_tenant),
-    ) -> DatasetPageResponse:
+    ) -> PageResponse:
         try:
-            page = PageRequest(limit=limit, offset=offset)
-            if name is not None and not 1 <= len(name.strip()) <= 256:
-                raise ValueError("name filter must be between 1 and 256 characters")
-            rows, total = datasets.list_datasets(
-                tenant.workspace_id, limit=page.limit, offset=page.offset, name_filter=name
+            query = parse_list_query(
+                page=page,
+                page_size=page_size,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                allowed_sort_fields=frozenset({"created_at", "name"}),
             )
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            if name is not None and not 1 <= len(name.strip()) <= 256:
+                raise PaginationParameterError(
+                    "name filter must be between 1 and 256 characters"
+                )
+            rows, total = datasets.list_datasets(
+                tenant.workspace_id,
+                limit=query.page_size,
+                offset=query.offset,
+                name_filter=name,
+                sort_by=query.sort_by,
+                sort_order=query.sort_order,
+            )
+        except PaginationParameterError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
         items = [
             DatasetResponse(
                 id=row.id, workspace_id=row.workspace_id, name=row.name,
@@ -408,9 +423,13 @@ def create_app(
             )
             for row in rows
         ]
-        return DatasetPageResponse(
-            items=items, total=total, limit=page.limit, offset=page.offset,
-            has_more=page.offset + len(items) < total,
+        return PageResponse.model_validate(
+            pagination_envelope(
+                data=[item.model_dump(mode="json") for item in items],
+                page=query.page,
+                page_size=query.page_size,
+                total=total,
+            )
         )
 
     @app.post("/v1/datasets", response_model=DatasetResponse, status_code=201, tags=["datasets"])
@@ -588,32 +607,51 @@ def create_app(
     @app.get("/v1/research-runs", response_model=PageResponse, tags=["research"])
     @require_permission("job", "list")
     def list_research_runs(
-        limit: int = 50,
-        offset: int = 0,
-        status_filter: ResearchJobStatus | None = None,
+        page: str = "1",
+        page_size: str = "20",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        status_filter: str | None = Query(default=None, alias="filter[status]"),
         workflow_id: str | None = None,
         tenant: TenantContext = Depends(current_tenant),
     ) -> PageResponse:
         try:
-            page = PageRequest(limit=limit, offset=offset)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            query = parse_list_query(
+                page=page,
+                page_size=page_size,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                status=status_filter,
+                allowed_sort_fields=frozenset({"created_at", "status", "workflow_id"}),
+            )
+            status_value = (
+                ResearchJobStatus(query.status) if query.status is not None else None
+            )
+        except (PaginationParameterError, ValueError) as exc:
+            code = exc.code if isinstance(exc, PaginationParameterError) else "INVALID_FILTER"
+            raise HTTPException(
+                status_code=400,
+                detail={"code": code, "message": str(exc)},
+            ) from exc
         if workflow_id is not None and not 1 <= len(workflow_id) <= 128:
-            raise HTTPException(status_code=422, detail="workflow_id must be between 1 and 128 characters")
+            raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "message": "workflow_id must be between 1 and 128 characters"})
         jobs, total = store.list(
             tenant.workspace_id,
-            limit=page.limit,
-            offset=page.offset,
-            status=status_filter,
+            limit=query.page_size,
+            offset=query.offset,
+            status=status_value,
             workflow_id=workflow_id,
+            sort_by=query.sort_by,
+            sort_order=query.sort_order,
         )
         items = [_research_job_response(job).model_dump(mode="json") for job in jobs]
-        return PageResponse(
-            items=items,
-            total=total,
-            limit=page.limit,
-            offset=page.offset,
-            has_more=page.offset + len(items) < total,
+        return PageResponse.model_validate(
+            pagination_envelope(
+                data=items,
+                page=query.page,
+                page_size=query.page_size,
+                total=total,
+            )
         )
 
     @app.get("/v1/research-runs/{job_id}/logs", response_model=list[dict[str, object]], tags=["research"])
