@@ -26,6 +26,8 @@ jobs:
       - run: python scripts/check_text_integrity.py
       - run: python -m compileall -q researchos scripts
       - run: python scripts/check_migrations.py
+      - run: python scripts/verify_authz_routes.py
+      - run: python scripts/verify_api_contract.py
 
   type-check:
     name: Mypy Type Check

@@ -30,6 +30,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
             error_code=str(row["error_code"]) if row.get("error_code") else None,
             claim_id=str(row["claim_id"]) if row.get("claim_id") else None,
             plan_hash=str(row["plan_hash"]) if row.get("plan_hash") else None,
+            created_at=datetime.fromisoformat(str(row["created_at"]).replace("Z", "+00:00")),
         )
 
     def create_idempotent(
@@ -90,7 +91,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
                     "plan_hash": job.plan_hash,
                 }
             )
-            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash")
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash,created_at")
             .execute()
         )
         rows = result.data or []
@@ -180,7 +181,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
     def get(self, workspace_id: UUID, job_id: UUID) -> ResearchJob | None:
         result = (
             self._client.table("research_run")
-            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash")
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash,created_at")
             .eq("workspace_id", str(workspace_id))
             .eq("id", str(job_id))
             .limit(1)
@@ -189,19 +190,23 @@ class SupabaseResearchJobStore(ResearchJobStore):
         rows = result.data or []
         return self._row_to_job(rows[0]) if rows else None
 
-    def list(self, workspace_id: UUID, *, limit: int, offset: int, status: ResearchJobStatus | None = None, workflow_id: str | None = None) -> tuple[list[ResearchJob], int]:
+    def list(self, workspace_id: UUID, *, limit: int, offset: int, status: ResearchJobStatus | None = None, workflow_id: str | None = None, sort_by: str = "created_at", sort_order: str = "desc") -> tuple[list[ResearchJob], int]:
         if not 1 <= limit <= 100 or offset < 0:
             raise ValueError("invalid pagination")
+        if sort_by not in {"created_at", "status", "workflow_id"}:
+            raise ValueError("invalid sort field")
+        if sort_order not in {"asc", "desc"}:
+            raise ValueError("invalid sort order")
         query = (
             self._client.table("research_run")
-            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash", count="exact")
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash,created_at", count="exact")
             .eq("workspace_id", str(workspace_id))
         )
         if status is not None:
             query = query.eq("status", status.value)
         if workflow_id is not None:
             query = query.eq("workflow_id", workflow_id)
-        result = query.order("id").range(offset, offset + limit - 1).execute()
+        result = query.order(sort_by, desc=sort_order == "desc").range(offset, offset + limit - 1).execute()
         return [self._row_to_job(row) for row in (result.data or [])], int(result.count or 0)
 
     def count_active(self, workspace_id: UUID) -> int:
@@ -308,7 +313,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
             .eq("workspace_id", str(workspace_id))
             .eq("id", str(job_id))
             .eq("status", expected.value)
-            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash")
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash,created_at")
             .execute()
         )
         rows = result.data or []

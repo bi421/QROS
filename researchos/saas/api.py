@@ -9,7 +9,7 @@ import hmac
 import json
 import time
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -38,8 +38,10 @@ from researchos.saas.claim_api import ResearchClaimStore, register_research_clai
 from researchos.saas.evidence_api import ResearchEvidenceStore, register_research_evidence_routes
 from researchos.saas.validation_api import InMemoryResearchValidationStore, ResearchValidationStore, register_research_validation_routes
 from researchos.saas.finding_api import InMemoryResearchFindingStore, register_research_finding_routes
+from researchos.saas.pagination import PaginationParameterError, pagination_envelope, parse_list_query
 from researchos.saas.research_report import build_research_report
 from researchos.saas.observability import StructuredRequestObserver, observe_request
+from researchos.saas.auth.authorization import require_permission
 from researchos.saas.billing import (
     BillingEventConflict,
     BillingEventStore,
@@ -71,14 +73,20 @@ def _error_code(status_code: int) -> str:
 
 
 def _error_payload(request: Request, status_code: int, detail: object) -> dict[str, object]:
-    message = detail if isinstance(detail, str) else "request failed"
+    detail_code = detail.get("code") if isinstance(detail, dict) else None
+    detail_message = detail.get("message") if isinstance(detail, dict) else None
+    message = (
+        str(detail_message)
+        if detail_message is not None
+        else detail
+        if isinstance(detail, str)
+        else "request failed"
+    )
     return {
-        "detail": detail,
-        "error": {
-            "code": _error_code(status_code),
-            "message": message,
-            "request_id": getattr(request.state, "request_id", None),
-        },
+        "code": str(detail_code) if detail_code else _error_code(status_code),
+        "message": message,
+        "request_id": getattr(request.state, "request_id", None),
+        "correlation_id": getattr(request.state, "request_id", None),
     }
 
 
@@ -90,6 +98,7 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
         request_id = supplied[:MAX_REQUEST_ID_LENGTH] if supplied else str(uuid4())
         request_id = "".join(char if ord(char) >= 32 and ord(char) != 127 else "-" for char in request_id)
         request.state.request_id = request_id
+        request.state.correlation_id = request_id
         started_at = time.perf_counter()
         try:
             response = await call_next(request)
@@ -155,12 +164,16 @@ class ResearchCreateRequest(BaseModel):
     plan_hash: str | None = Field(default=None, min_length=64, max_length=64)
 
 
-class PageResponse(BaseModel):
-    items: Sequence[object]
+class PaginationResponse(BaseModel):
+    page: int
+    page_size: int
     total: int
-    limit: int
-    offset: int
-    has_more: bool
+    total_pages: int
+
+
+class PageResponse(BaseModel):
+    data: list[object]
+    pagination: PaginationResponse
 
 
 class ResearchJobResponse(BaseModel):
@@ -178,7 +191,7 @@ class DatasetResponse(BaseModel):
     workspace_id: UUID
     name: str
     created_by: UUID
-    version: DatasetVersion
+    version: DatasetVersion | None
 
 
 def _research_job_response(job: ResearchJob) -> ResearchJobResponse:
@@ -241,6 +254,14 @@ def create_app(
         return JSONResponse(
             status_code=422,
             content=_error_payload(request, 422, exc.errors()),
+        )
+
+    @app.exception_handler(Exception)
+    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        del exc
+        return JSONResponse(
+            status_code=500,
+            content=_error_payload(request, 500, "internal server error"),
         )
 
     def current_tenant(
@@ -331,6 +352,7 @@ def create_app(
         return {"status": "ready"}
 
     @app.post("/v1/billing/webhook", status_code=200, tags=["billing"])
+    @require_permission("billing", "create", service_principal=True)
     async def billing_webhook(
         request: Request,
         x_billing_signature: str | None = Header(default=None, alias="X-Billing-Signature"),
@@ -358,10 +380,67 @@ def create_app(
         return {"status": "processed" if processed else "replayed"}
 
     @app.get("/v1/me", response_model=dict[str, str], tags=["identity"])
+    @require_permission("workspace", "read")
     def me(tenant: TenantContext = Depends(current_tenant)) -> dict[str, str]:
         return {"user_id": str(tenant.user_id), "workspace_id": str(tenant.workspace_id), "plan": tenant.plan.value}
 
+    @app.get("/v1/datasets", response_model=PageResponse, tags=["datasets"])
+    @require_permission("dataset", "list")
+    def list_datasets(
+        page: str = "1",
+        page_size: str = "20",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        name: str | None = None,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> PageResponse:
+        try:
+            query = parse_list_query(
+                page=page,
+                page_size=page_size,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                allowed_sort_fields=frozenset({"created_at", "name"}),
+            )
+            if name is not None and not 1 <= len(name.strip()) <= 256:
+                raise PaginationParameterError(
+                    "name filter must be between 1 and 256 characters"
+                )
+            rows, total = datasets.list_datasets(
+                tenant.workspace_id,
+                limit=query.page_size,
+                offset=query.offset,
+                name_filter=name,
+                sort_by=query.sort_by,
+                sort_order=query.sort_order,
+            )
+        except PaginationParameterError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
+        items = [
+            DatasetResponse(
+                id=row.id, workspace_id=row.workspace_id, name=row.name,
+                created_by=row.created_by,
+                version=sorted(
+                    datasets.list_versions(tenant.workspace_id, row.id),
+                    key=lambda item: item.version_no,
+                )[-1] if datasets.list_versions(tenant.workspace_id, row.id) else None,
+            )
+            for row in rows
+        ]
+        return PageResponse.model_validate(
+            pagination_envelope(
+                data=[item.model_dump(mode="json") for item in items],
+                page=query.page,
+                page_size=query.page_size,
+                total=total,
+            )
+        )
+
     @app.post("/v1/datasets", response_model=DatasetResponse, status_code=201, tags=["datasets"])
+    @require_permission("dataset", "create")
     def upload_dataset(
         name: str = Form(..., min_length=1, max_length=256),
         file: UploadFile = File(...),
@@ -410,6 +489,7 @@ def create_app(
         )
 
     @app.post("/v1/datasets/{dataset_id}/versions", response_model=DatasetVersion, status_code=201, tags=["datasets"])
+    @require_permission("dataset", "update")
     def upload_dataset_version(
         dataset_id: UUID,
         file: UploadFile = File(...),
@@ -421,6 +501,7 @@ def create_app(
         return persist_version(dataset_id=dataset_id, tenant=tenant, file=file)
 
     @app.get("/v1/datasets/{dataset_id}/versions", response_model=list[DatasetVersion], tags=["datasets"])
+    @require_permission("dataset", "list")
     def list_dataset_versions(
         dataset_id: UUID,
         tenant: TenantContext = Depends(current_tenant),
@@ -428,6 +509,7 @@ def create_app(
         return datasets.list_versions(tenant.workspace_id, dataset_id)
 
     @app.get("/v1/datasets/{dataset_id}/versions/{version_id}/download", response_model=dict[str, str], tags=["datasets"])
+    @require_permission("dataset", "read")
     def create_dataset_download_url(
         dataset_id: UUID,
         version_id: UUID,
@@ -448,6 +530,7 @@ def create_app(
         return {"url": url, "expires_in": "300"}
 
     @app.post("/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"])
+    @require_permission("job", "create")
     def create_research_run(
         request: ResearchCreateRequest,
         tenant: TenantContext = Depends(current_tenant),
@@ -529,36 +612,72 @@ def create_app(
         return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
 
     @app.get("/v1/research-runs", response_model=PageResponse, tags=["research"])
+    @require_permission("job", "list")
     def list_research_runs(
-        limit: int = 50,
-        offset: int = 0,
-        status_filter: ResearchJobStatus | None = None,
+        page: str = "1",
+        page_size: str = "20",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        status_filter: str | None = Query(default=None, alias="filter[status]"),
         workflow_id: str | None = None,
         tenant: TenantContext = Depends(current_tenant),
     ) -> PageResponse:
         try:
-            page = PageRequest(limit=limit, offset=offset)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            query = parse_list_query(
+                page=page,
+                page_size=page_size,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                status=status_filter,
+                allowed_sort_fields=frozenset({"created_at", "status", "workflow_id"}),
+            )
+            normalized_status = (
+                "succeeded" if query.status == "completed" else query.status
+            )
+            status_value = (
+                ResearchJobStatus(normalized_status)
+                if normalized_status is not None
+                else None
+            )
+        except (PaginationParameterError, ValueError) as exc:
+            code = exc.code if isinstance(exc, PaginationParameterError) else "INVALID_FILTER"
+            raise HTTPException(
+                status_code=400,
+                detail={"code": code, "message": str(exc)},
+            ) from exc
         if workflow_id is not None and not 1 <= len(workflow_id) <= 128:
-            raise HTTPException(status_code=422, detail="workflow_id must be between 1 and 128 characters")
+            raise HTTPException(status_code=400, detail={"code": "INVALID_FILTER", "message": "workflow_id must be between 1 and 128 characters"})
         jobs, total = store.list(
             tenant.workspace_id,
-            limit=page.limit,
-            offset=page.offset,
-            status=status_filter,
+            limit=query.page_size,
+            offset=query.offset,
+            status=status_value,
             workflow_id=workflow_id,
+            sort_by=query.sort_by,
+            sort_order=query.sort_order,
         )
         items = [_research_job_response(job).model_dump(mode="json") for job in jobs]
-        return PageResponse(
-            items=items,
-            total=total,
-            limit=page.limit,
-            offset=page.offset,
-            has_more=page.offset + len(items) < total,
+        return PageResponse.model_validate(
+            pagination_envelope(
+                data=items,
+                page=query.page,
+                page_size=query.page_size,
+                total=total,
+            )
         )
 
+    @app.get("/v1/research-runs/{job_id}/logs", response_model=list[dict[str, object]], tags=["research"])
+    @require_permission("job", "read")
+    def get_research_run_logs(
+        job_id: UUID,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> list[dict[str, object]]:
+        if store.get(tenant.workspace_id, job_id) is None:
+            raise HTTPException(status_code=404, detail="research run not found")
+        return store.logs(tenant.workspace_id, job_id)
+
     @app.get("/v1/research-runs/{job_id}/result", tags=["research"])
+    @require_permission("job", "read")
     def get_research_run_result(
         job_id: UUID,
         tenant: TenantContext = Depends(current_tenant),
@@ -586,6 +705,7 @@ def create_app(
         }
 
     @app.get("/v1/research-runs/{job_id}/report", tags=["research"])
+    @require_permission("job", "read")
     def get_research_run_report(
         job_id: UUID,
         tenant: TenantContext = Depends(current_tenant),
@@ -620,6 +740,7 @@ def create_app(
         }
 
     @app.get("/v1/research-runs/{job_id}", response_model=ResearchJobResponse, tags=["research"])
+    @require_permission("job", "read")
     def get_research_run(job_id: UUID, tenant: TenantContext = Depends(current_tenant)) -> ResearchJobResponse:
         job = store.get(tenant.workspace_id, job_id)
         if job is None:
@@ -653,6 +774,52 @@ def create_app(
         validation_store=effective_validation_store,
     )
 
+    original_openapi = app.openapi
+
+    def _custom_openapi() -> dict[str, object]:
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = original_openapi()
+        components = schema.setdefault("components", {})
+        schemas = components.setdefault("schemas", {})
+        schemas["ErrorResponse"] = {
+            "type": "object",
+            "required": ["code", "message", "request_id", "correlation_id"],
+            "properties": {
+                "code": {"type": "string", "example": "not_found"},
+                "message": {"type": "string", "example": "research run not found"},
+                "request_id": {"type": "string", "example": "01JQROSREQUEST123"},
+                "correlation_id": {"type": "string", "example": "01JQROSREQUEST123"},
+            },
+        }
+        for path_item in schema.get("paths", {}).values():
+            for operation in path_item.values():
+                if not isinstance(operation, dict):
+                    continue
+                responses = operation.setdefault("responses", {})
+                for code in ("400", "401", "403", "404", "409", "413", "422", "429", "500", "503"):
+                    response = responses.setdefault(code, {"description": "Structured API error"})
+                    response.setdefault("content", {})["application/json"] = {
+                        "schema": {"$ref": "#/components/schemas/ErrorResponse"},
+                        "example": {
+                            "code": _error_code(int(code)),
+                            "message": "request failed",
+                            "request_id": "01JQROSREQUEST123",
+                            "correlation_id": "01JQROSREQUEST123",
+                        },
+                    }
+                for response in responses.values():
+                    if isinstance(response, dict):
+                        headers = response.setdefault("headers", {})
+                        headers["X-Request-ID"] = {
+                            "description": "Bounded request/correlation identifier.",
+                            "schema": {"type": "string", "maxLength": MAX_REQUEST_ID_LENGTH},
+                            "example": "01JQROSREQUEST123",
+                        }
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = _custom_openapi
     return app
 
 

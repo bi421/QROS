@@ -37,13 +37,14 @@ The authenticated context contains:
 - `user_id`
 - `workspace_id`
 - `plan`
-- `role` — server-authoritative workspace membership role.
+- `role` — server-authoritative workspace membership role (`owner`, `admin`, `researcher`, `viewer`, `billing`).
 
 ## 4. Endpoints
 
 ### System
 
 - `GET /healthz` — process health.
+- `POST /v1/billing/webhook` — provider-signed billing event callback.
 - `GET /readyz` — dependency/readiness boundary.
 
 ### Identity
@@ -54,20 +55,30 @@ The authenticated context contains:
 
 - `POST /v1/datasets` — create a dataset and immutable version from an upload.
 - `POST /v1/datasets/{dataset_id}/versions` — append an immutable dataset version.
+- `GET /v1/datasets` — list datasets visible to the authenticated workspace; optional `name`, `limit`, and `offset` filters.
 - `GET /v1/datasets/{dataset_id}/versions` — list versions visible to the authenticated workspace.
+- `GET /v1/datasets/{dataset_id}/versions/{version_id}/download` — issue a short-lived private download URL after tenant authorization.
 
 Dataset bytes are streamed through a bounded SHA-256 calculation before persistence. Storage paths are tenant-scoped and content-addressed.
 
 ### Research
 
 - `POST /v1/research-runs` — enqueue a frozen research workflow.
+- `GET /v1/research-runs` — list workspace-scoped jobs with bounded status/workflow filters and pagination.
 - `GET /v1/research-runs/{job_id}` — retrieve a workspace-scoped job.
+- `GET /v1/research-runs/{job_id}/logs` — retrieve the tenant-scoped deterministic lifecycle log projection.
 - `GET /v1/research-runs/{job_id}/result` — retrieve the immutable governed result projection.
 - `GET /v1/research-runs/{job_id}/evidence` — retrieve tenant-scoped stored evidence lineage.
 - `GET /v1/research-runs/{job_id}/report` — retrieve a deterministic human-readable report projection.
 - `POST /v1/research-claims` — create a tenant-scoped Research Claim.
 - `GET /v1/research-claims/{claim_id}` — retrieve a workspace-scoped Research Claim.
+- `POST /v1/research-claims/{claim_id}/plan-lock` — lock the immutable research plan for a claim.
+- `GET /v1/research-claims/{claim_id}/evidence-graph` — retrieve tenant-scoped evidence lineage associated with the claim.
 - `GET /v1/research-claims` — list Research Claims with bounded tenant-scoped pagination.
+
+### Findings
+
+- `GET /v1/findings` — list tenant-scoped governed findings with bounded pagination, status filtering, and deterministic sorting.
 
 The initial MVP accepts only the frozen XAUUSD M1 workflow.
 
@@ -109,7 +120,31 @@ Every response receives `X-Request-ID`. A supplied value is bounded to 128 chara
 
 ## 9. Error contract
 
-Errors use the framework HTTP error envelope and stable human-readable `detail` values.
+Every error response is exactly the structured JSON envelope:
+
+```json
+{
+  "code": "not_found",
+  "message": "research run not found",
+  "request_id": "01JQROSREQUEST123",
+  "correlation_id": "01JQROSREQUEST123"
+}
+```
+
+`request_id` and `correlation_id` are identical for one HTTP request. Every response, including errors, also carries the `X-Request-ID` response header with that value.
+
+Stable error codes:
+- `bad_request`
+- `unauthorized`
+- `payment_required`
+- `forbidden`
+- `not_found`
+- `conflict`
+- `payload_too_large`
+- `validation_error`
+- `rate_limited`
+- `internal_error`
+- `service_unavailable`
 
 Important statuses:
 
@@ -126,26 +161,13 @@ Internal exception details and secrets are not returned to clients.
 
 ## 10. Authorization model
 
-Every tenant-owned read/write is scoped by authenticated workspace.
+Every tenant-owned read/write is scoped by authenticated workspace and the executable role matrix in `researchos/saas/auth/authorization.py`.
 
-Database defense in depth uses Supabase RLS for tenant-owned tables. Trusted server-side RPCs additionally require explicit workspace/resource matching.
+See **`docs/saas/AUTHZ_MATRIX.md`** for the complete 5-role × 6-resource × 5-action contract. Every `/v1` route is statically required to carry `@require_permission(resource, action)`; missing coverage fails CI.
 
-Membership roles are resolved from server-side `workspace_member.role`; client claims and profile metadata are never used for authorization.
+Membership roles are resolved from server-side `workspace_member.role`; client claims and profile metadata are never used for authorization. Forbidden role actions return HTTP 403. Cross-workspace resource lookups remain 404 where the resource is not visible to the authenticated workspace.
 
-| Capability | Owner | Admin | Researcher | Viewer |
-|---|---:|---:|---:|---:|
-| Read own workspace identity | yes | yes | yes | yes |
-| Read tenant datasets/versions | yes | yes | yes | yes |
-| Upload dataset | yes | yes | yes | no |
-| Append dataset version | yes | yes | yes | no |
-| Create research run | yes | yes | yes | no |
-| Read research runs | yes | yes | yes | yes |
-| Membership administration | reserved for future API | reserved for future API | no | no |
-| Billing/subscription mutation | server-side webhook only | server-side webhook only | server-side webhook only | server-side webhook only |
-
-The current API exposes no user-facing membership-management or billing-management endpoints. Those permissions are therefore not implicitly granted by role; future endpoints must add explicit policy entries and tests before implementation.
-
-Forbidden role actions return HTTP 403. Cross-workspace resource lookups remain 404 where the resource is not visible to the authenticated workspace.
+The billing webhook is a provider-signed server callback and is explicitly decorated with the billing capability using a service principal; it does not accept user JWT authorization.
 
 ## 11. Research integrity
 

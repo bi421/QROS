@@ -4,15 +4,19 @@ from __future__ import annotations
 from typing import Protocol
 from uuid import UUID, uuid4
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from researchos.saas.finding import ResearchFindingRecord, VALIDATED_STATUS
+from researchos.saas.pagination import PaginationParameterError, pagination_envelope, parse_list_query
+from researchos.saas.auth.authorization import require_permission
+from researchos.saas.auth.authorization import require_permission
 
 
 class ResearchFindingStore(Protocol):
     def create(self, record: ResearchFindingRecord) -> ResearchFindingRecord: ...
     def get(self, workspace_id: UUID, research_run_id: UUID) -> ResearchFindingRecord | None: ...
+    def list(self, workspace_id: UUID, *, limit: int = 20, offset: int = 0, sort_by: str = "created_at", sort_order: str = "desc", status: str | None = None) -> tuple[list[ResearchFindingRecord], int]: ...
 
 
 class InMemoryResearchFindingStore:
@@ -32,6 +36,30 @@ class InMemoryResearchFindingStore:
     def get(self, workspace_id: UUID, research_run_id: UUID) -> ResearchFindingRecord | None:
         return self._records.get((workspace_id, research_run_id))
 
+    def list(
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        status: str | None = None,
+    ) -> tuple[list[ResearchFindingRecord], int]:
+        if not 1 <= limit <= 100 or offset < 0:
+            raise ValueError("invalid pagination")
+        if sort_by not in {"created_at", "status"}:
+            raise ValueError("invalid sort field")
+        if sort_order not in {"asc", "desc"}:
+            raise ValueError("invalid sort order")
+        records = [
+            record for (row_workspace, _), record in self._records.items()
+            if row_workspace == workspace_id and (status is None or record.status == status)
+        ]
+        key = (lambda item: item.created_at) if sort_by == "created_at" else (lambda item: item.status)
+        records.sort(key=key, reverse=sort_order == "desc")
+        return records[offset:offset + limit], len(records)
+
 
 class ResearchFindingRequest(BaseModel):
     validation_sha256: str = Field(min_length=64, max_length=64)
@@ -46,6 +74,8 @@ def register_research_finding_routes(
     validation_store,
 ) -> None:
     @app.post("/v1/research-runs/{job_id}/finding", status_code=status.HTTP_201_CREATED, tags=["research"])
+    @require_permission("finding", "create")
+    @require_permission("finding", "create")
     def create_finding(
         job_id: UUID,
         request: ResearchFindingRequest,
@@ -81,7 +111,55 @@ def register_research_finding_routes(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return _response(persisted)
 
+    @app.get("/v1/findings", tags=["research"])
+    @require_permission("finding", "list")
+    def list_findings(
+        page: str = "1",
+        page_size: str = "20",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        status_filter: str | None = Query(default=None, alias="filter[status]"),
+        tenant=Depends(tenant_dependency),
+    ) -> dict[str, object]:
+        if finding_store is None:
+            raise HTTPException(status_code=503, detail="research finding persistence is not configured")
+        try:
+            query = parse_list_query(
+                page=page,
+                page_size=page_size,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                status=status_filter,
+                allowed_sort_fields=frozenset({"created_at", "status"}),
+            )
+            records, total = finding_store.list(
+                tenant.workspace_id,
+                limit=query.page_size,
+                offset=query.offset,
+                sort_by=query.sort_by,
+                sort_order=query.sort_order,
+                status=query.status,
+            )
+        except PaginationParameterError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "INVALID_SORT" if "sort" in str(exc) else "INVALID_FILTER", "message": str(exc)},
+            ) from exc
+        return pagination_envelope(
+            data=[_response(record) for record in records],
+            page=query.page,
+            page_size=query.page_size,
+            total=total,
+        )
+
     @app.get("/v1/research-runs/{job_id}/finding", tags=["research"])
+    @require_permission("finding", "read")
+    @require_permission("finding", "read")
     def get_finding(job_id: UUID, tenant=Depends(tenant_dependency)) -> dict[str, object]:
         if finding_store is None:
             raise HTTPException(status_code=503, detail="research finding persistence is not configured")

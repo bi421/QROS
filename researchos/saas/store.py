@@ -41,8 +41,20 @@ class ResearchJobStore:
     def get(self, workspace_id: UUID, job_id: UUID) -> ResearchJob | None:
         raise NotImplementedError
 
-    def list(self, workspace_id: UUID, *, limit: int, offset: int, status: ResearchJobStatus | None = None, workflow_id: str | None = None) -> tuple[list[ResearchJob], int]:
+    def list(self, workspace_id: UUID, *, limit: int, offset: int, status: ResearchJobStatus | None = None, workflow_id: str | None = None, sort_by: str = "created_at", sort_order: str = "desc") -> tuple[list[ResearchJob], int]:
         raise NotImplementedError
+
+    def logs(self, workspace_id: UUID, job_id: UUID) -> list[dict[str, object]]:
+        """Return tenant-scoped lifecycle log projection for the public API."""
+        job = self.get(workspace_id, job_id)
+        if job is None:
+            return []
+        return [{
+            "event": "job_state",
+            "status": job.status.value,
+            "attempt_count": job.attempt_count,
+            "error_code": job.error_code,
+        }]
 
     def count_active(self, workspace_id: UUID) -> int:
         raise NotImplementedError
@@ -169,9 +181,13 @@ class InMemoryResearchJobStore(ResearchJobStore):
                 return None
             return job
 
-    def list(self, workspace_id: UUID, *, limit: int, offset: int, status: ResearchJobStatus | None = None, workflow_id: str | None = None) -> tuple[list[ResearchJob], int]:
+    def list(self, workspace_id: UUID, *, limit: int, offset: int, status: ResearchJobStatus | None = None, workflow_id: str | None = None, sort_by: str = "created_at", sort_order: str = "desc") -> tuple[list[ResearchJob], int]:
         if not 1 <= limit <= 100 or offset < 0:
             raise ValueError("invalid pagination")
+        if sort_by not in {"created_at", "status", "workflow_id"}:
+            raise ValueError("invalid sort field")
+        if sort_order not in {"asc", "desc"}:
+            raise ValueError("invalid sort order")
         with self._lock:
             jobs = [
                 job for job in self._jobs.values()
@@ -179,7 +195,13 @@ class InMemoryResearchJobStore(ResearchJobStore):
                 and (status is None or job.status == status)
                 and (workflow_id is None or job.workflow_id == workflow_id)
             ]
-            jobs.sort(key=lambda item: item.id.hex)
+            reverse = sort_order == "desc"
+            key = {
+                "created_at": lambda item: item.created_at,
+                "status": lambda item: item.status.value,
+                "workflow_id": lambda item: item.workflow_id,
+            }[sort_by]
+            jobs.sort(key=key, reverse=reverse)
             total = len(jobs)
             return jobs[offset : offset + limit], total
 
