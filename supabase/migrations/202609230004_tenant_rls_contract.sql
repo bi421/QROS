@@ -76,7 +76,6 @@ begin
     union all select tenant_id from public.research_run_result where tenant_id is null
     union all select tenant_id from public.research_run_artifact where tenant_id is null
     union all select tenant_id from public.audit_event where tenant_id is null
-    union all select tenant_id from public.retention_deletion_operation where tenant_id is null
     union all select tenant_id from public.workspace_retention_policy where tenant_id is null
     union all select tenant_id from public.tenant_deletion_tombstone where tenant_id is null
   ) missing;
@@ -103,9 +102,80 @@ alter table public.research_finding alter column tenant_id set not null;
 alter table public.research_run_result alter column tenant_id set not null;
 alter table public.research_run_artifact alter column tenant_id set not null;
 alter table public.audit_event alter column tenant_id set not null;
-alter table public.retention_deletion_operation alter column tenant_id set not null;
 alter table public.workspace_retention_policy alter column tenant_id set not null;
 alter table public.tenant_deletion_tombstone alter column tenant_id set not null;
+
+create or replace function public.set_qros_tenant_from_workspace()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $
+begin
+  if new.workspace_id is not null then
+    new.tenant_id := new.workspace_id;
+  end if;
+  return new;
+end;
+$;
+
+create or replace function public.set_qros_tenant_from_dataset()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $
+begin
+  select d.workspace_id
+    into new.tenant_id
+    from public.dataset d
+   where d.id = new.dataset_id;
+  return new;
+end;
+$;
+
+create or replace function public.set_qros_workspace_tenant()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $
+begin
+  new.tenant_id := new.id;
+  return new;
+end;
+$;
+
+drop trigger if exists set_qros_tenant_id on public.workspace;
+create trigger set_qros_tenant_id
+before insert or update on public.workspace
+for each row execute function public.set_qros_workspace_tenant();
+
+drop trigger if exists set_qros_tenant_id on public.dataset_version;
+create trigger set_qros_tenant_id
+before insert or update on public.dataset_version
+for each row execute function public.set_qros_tenant_from_dataset();
+
+do $
+declare
+  table_name text;
+begin
+  foreach table_name in array array[
+    'workspace_member','subscription','dataset','research_run','artifact',
+    'evidence','usage_event','audit_log','billing_event','api_idempotency',
+    'research_claim','research_validation','research_finding','research_run_result',
+    'research_run_artifact','audit_event','retention_deletion_operation',
+    'workspace_retention_policy','tenant_deletion_tombstone'
+  ] loop
+    execute format('drop trigger if exists set_qros_tenant_id on public.%I', table_name);
+    execute format(
+      'create trigger set_qros_tenant_id
+       before insert or update on public.%I
+       for each row execute function public.set_qros_tenant_from_workspace()',
+      table_name
+    );
+  end loop;
+end $;
 
 create index if not exists idx_workspace_tenant_id on public.workspace(tenant_id);
 create index if not exists idx_dataset_tenant_id on public.dataset(tenant_id);
