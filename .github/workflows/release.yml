@@ -79,7 +79,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: health-evidence-${{ env.RELEASE_SHA }}
-          path: .health/health_evidence_$RELEASE_SHA.json
+          path: .health/health_evidence_${{ env.RELEASE_SHA }}.json
           if-no-files-found: error
           retention-days: 90
       - name: Create GitHub release only after all gates pass
