@@ -724,10 +724,12 @@ def create_app(
         validation_store=effective_validation_store,
     )
 
+    original_openapi = app.openapi
+
     def _custom_openapi() -> dict[str, object]:
         if app.openapi_schema:
             return app.openapi_schema
-        schema = app.openapi()
+        schema = original_openapi()
         components = schema.setdefault("components", {})
         schemas = components.setdefault("schemas", {})
         schemas["ErrorResponse"] = {
@@ -756,12 +758,14 @@ def create_app(
                             "correlation_id": "01JQROSREQUEST123",
                         },
                     }
-                headers = operation.setdefault("responses", {}).setdefault("200", {}).setdefault("headers", {})
-                headers["X-Request-ID"] = {
-                    "description": "Bounded request/correlation identifier.",
-                    "schema": {"type": "string", "maxLength": MAX_REQUEST_ID_LENGTH},
-                    "example": "01JQROSREQUEST123",
-                }
+                for response in responses.values():
+                    if isinstance(response, dict):
+                        headers = response.setdefault("headers", {})
+                        headers["X-Request-ID"] = {
+                            "description": "Bounded request/correlation identifier.",
+                            "schema": {"type": "string", "maxLength": MAX_REQUEST_ID_LENGTH},
+                            "example": "01JQROSREQUEST123",
+                        }
         app.openapi_schema = schema
         return schema
 
