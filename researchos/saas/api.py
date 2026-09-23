@@ -299,15 +299,23 @@ def create_app(
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
-            storage_path = storage_path_for(tenant.workspace_id, dataset_id, digest)
-            storage.put(storage_path, file.file)
+            existing = datasets.find_version_by_hash(tenant.workspace_id, dataset_id, digest)
+            if existing is not None:
+                return existing
+            version_no = len(datasets.list_versions(tenant.workspace_id, dataset_id)) + 1
+            storage_path = storage_path_for(tenant.workspace_id, digest, version_no)
+            try:
+                storage.put(storage_path, file.file)
+            except ValueError:
+                # Content-addressed objects may already exist for another dataset/version.
+                pass
             try:
                 version = datasets.create_version(
                     tenant.workspace_id,
                     DatasetVersion(
                         id=uuid4(),
                         dataset_id=dataset_id,
-                        version_no=len(datasets.list_versions(tenant.workspace_id, dataset_id)) + 1,
+                        version_no=version_no,
                         content_sha256=digest,
                         storage_path=storage_path,
                         byte_size=size,
@@ -315,7 +323,6 @@ def create_app(
                     )
                 )
             except Exception:
-                storage.remove(storage_path)
                 raise
             return version
         except ValueError as exc:
@@ -389,11 +396,16 @@ def create_app(
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
-            storage_path = storage_path_for(tenant.workspace_id, dataset.id, digest)
-            storage.put(storage_path, file.file)
+            storage_path = storage_path_for(tenant.workspace_id, digest, 1)
+            try:
+                storage.put(storage_path, file.file)
+            except ValueError:
+                # Same tenant/content/version path already exists; reuse it.
+                pass
             try:
                 persisted_dataset = datasets.create_dataset(tenant.workspace_id, dataset)
-                version = datasets.create_version(
+                existing = datasets.find_version_by_hash(tenant.workspace_id, dataset.id, digest)
+                version = existing or datasets.create_version(
                     tenant.workspace_id,
                     DatasetVersion(
                         id=uuid4(),
