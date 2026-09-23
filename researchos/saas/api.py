@@ -346,7 +346,10 @@ def create_app(
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
             storage_path = storage_path_for(tenant.workspace_id, digest, 1)
-            storage.put(storage_path, file.file)
+            object_created = False
+            if not storage.exists(storage_path):
+                storage.put(storage_path, file.file)
+                object_created = True
             try:
                 persisted_dataset = datasets.create_dataset(tenant.workspace_id, dataset)
                 version = datasets.create_version(
@@ -365,7 +368,8 @@ def create_app(
                 try:
                     datasets.delete_dataset(tenant.workspace_id, dataset.id)
                 finally:
-                    storage.remove(storage_path)
+                    if object_created:
+                        storage.remove(storage_path)
                 raise
         except ValueError as exc:
             raise HTTPException(status_code=413, detail=str(exc)) from exc
