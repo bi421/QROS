@@ -5,14 +5,14 @@ from researchos.storage.repository import ResearchRepository
 
 
 @click.group()
-def cli():
+def cli() -> None:
     """ResearchOS Command Line Interface"""
     pass
 
 
 @cli.command()
 @click.option("--topic", prompt="Research topic", help="The topic for the research cycle.")
-def run(topic):
+def run(topic: str) -> None:
     click.echo(f"[-] Initializing research cycle for topic: '{topic}'...")
     repo = ResearchRepository()
     pipeline = ResearchPipeline(repo)
@@ -23,7 +23,7 @@ def run(topic):
 
 
 @cli.command()
-def verify():
+def verify() -> None:
     click.echo("[-] Verifying cryptographic audit chain integrity...")
     repo = ResearchRepository()
     is_valid = repo.verify_audit_chain()
