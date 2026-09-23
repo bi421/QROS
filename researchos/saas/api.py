@@ -185,10 +185,13 @@ def create_app(
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-        return JSONResponse(
-            status_code=400,
-            content=_error_payload(request, 400, "INVALID_REQUEST", details=exc.errors()),
-        )
+        payload = _error_payload(request, 400, exc.errors())
+        payload["code"] = "validation_error"
+        error = payload["error"]
+        if isinstance(error, dict):
+            error["code"] = "validation_error"
+            error["message"] = "Request validation failed"
+        return JSONResponse(status_code=400, content=payload)
 
     @app.exception_handler(Exception)
     async def internal_exception_handler(request: Request, exc: Exception) -> JSONResponse:
