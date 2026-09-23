@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from threading import Event, Thread
 import time
-from typing import Protocol
+from typing import Mapping, Protocol
 from uuid import UUID, uuid4
 
 from researchos.research_core.contracts import ResearchResult
@@ -42,6 +42,19 @@ class ResearchWorker:
                 self._store.renew(workspace_id, job_id, token, self._lease_seconds)
             except Exception:
                 return
+
+    def run_queued_message(self, message: Mapping[str, object]) -> ResearchResult:
+        """Consume a durable queue payload while preserving its correlation ID."""
+        try:
+            workspace_id = UUID(str(message["workspace_id"]))
+            job_id = UUID(str(message["research_run_id"]))
+        except (KeyError, ValueError) as exc:
+            raise ValueError("invalid research queue message") from exc
+        request_id_value = message.get("request_id")
+        request_id = str(request_id_value) if request_id_value is not None else None
+        if request_id is not None and len(request_id) > 128:
+            raise ValueError("request_id exceeds 128 characters")
+        return self.run_once(workspace_id, job_id, request_id=request_id)
 
     def run_once(
         self,
