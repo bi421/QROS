@@ -163,7 +163,7 @@ class KnowledgeProposal:
             evidence_hash=str(data["evidence_hash"]),
             learning_record_id=str(data["learning_record_id"]),
             statement=str(data["statement"]),
-            confidence=float(data["confidence"]),
+            confidence=float(cast(float, data["confidence"])),
             supporting_ids=tuple(str(x) for x in cast(Iterable[object], data.get("supporting_ids", []))),
         )
 
