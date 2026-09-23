@@ -4,6 +4,12 @@ from __future__ import annotations
 from threading import Event, Thread
 from typing import Protocol
 from uuid import UUID, uuid4
+import time
+
+import structlog
+
+from researchos.saas.auth.permissions import current_request_id
+from researchos.saas.tracing import job_span
 
 from researchos.research_core.contracts import ResearchResult
 from researchos.saas.contracts import ResearchJobStatus
@@ -45,6 +51,18 @@ class ResearchWorker:
         workspace_id: UUID,
         job_id: UUID,
     ) -> ResearchResult:
+        request_id = request_id or current_request_id()
+        started = time.perf_counter()
+        log = structlog.get_logger("qros.worker").bind(
+            request_id=request_id,
+            tenant_id=str(workspace_id),
+            job_id=str(job_id),
+        )
+        log.info("job_started")
+        with job_span(request_id, str(job_id)):
+            return self._run_once_traced(workspace_id, job_id, started, log)
+    
+    def _run_once_traced(self, workspace_id: UUID, job_id: UUID, started: float, log) -> ResearchResult:
         lease = self._store.claim(
             workspace_id,
             job_id,
