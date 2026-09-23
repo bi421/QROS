@@ -304,14 +304,14 @@ def create_app(
                 raise ValueError("dataset exceeds plan upload limit")
             existing = datasets.find_version_by_content(tenant.workspace_id, dataset_id, digest)
             if existing is not None:
-                if not storage.verify_sha256(existing.storage_path, existing.content_sha256):
+                if not storage.verify_sha256(existing.storage_path, existing.content_sha256, tenant_id=tenant.workspace_id, access_token=tenant.access_token):
                     raise HTTPException(status_code=503, detail="dataset object integrity check failed")
                 return existing
             version_no = datasets.next_version_no(tenant.workspace_id, dataset_id)
             storage_path = storage_path_for(tenant.workspace_id, digest, version_no)
-            storage.put(storage_path, file.file)
-            if not storage.verify_sha256(storage_path, digest):
-                storage.remove(storage_path)
+            storage.put(storage_path, file.file, tenant_id=tenant.workspace_id, access_token=tenant.access_token)
+            if not storage.verify_sha256(storage_path, digest, tenant_id=tenant.workspace_id, access_token=tenant.access_token):
+                storage.remove(storage_path, tenant_id=tenant.workspace_id, access_token=tenant.access_token)
                 raise HTTPException(status_code=503, detail="dataset upload integrity verification failed")
             try:
                 version = datasets.create_version(
@@ -537,9 +537,9 @@ def create_app(
         if version is None or version.dataset_id != dataset_id:
             raise HTTPException(status_code=404, detail="dataset version not found")
         try:
-            if not storage.verify_sha256(version.storage_path, version.content_sha256):
+            if not storage.verify_sha256(version.storage_path, version.content_sha256, tenant_id=tenant.workspace_id, access_token=tenant.access_token):
                 raise HTTPException(status_code=503, detail="dataset object integrity check failed")
-            url = storage.create_signed_download_url(version.storage_path, 300)
+            url = storage.create_signed_download_url(version.storage_path, 3600, tenant_id=tenant.workspace_id, access_token=tenant.access_token)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="dataset object not found") from exc
         except ValueError as exc:
