@@ -44,7 +44,6 @@ from researchos.saas.observability import StructuredRequestObserver, observe_req
 from researchos.saas.auth.authorization import require_permission
 from researchos.saas.persistence import (
     DEFAULT_RETENTION_DAYS,
-    DeletionReceipt,
     InMemoryTenantPersistence,
     RetentionConfig,
     TenantPersistence,
