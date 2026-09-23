@@ -140,6 +140,8 @@ class SupabaseBillingEventStore:
             if rows[0].get("processed_at"):
                 return False
 
+        max_datasets, max_jobs, max_storage = ENTITLEMENTS_BY_PLAN[event.plan]
+        self._client.table("entitlement").upsert({"tenant_id": event.workspace_id, "plan": event.plan, "max_datasets": max_datasets, "max_jobs_per_month": max_jobs, "max_storage_mb": max_storage, "updated_at": datetime.now(timezone.utc).isoformat()}, on_conflict="tenant_id").execute()
         self._client.table("subscription").upsert(
             {
                 "workspace_id": event.workspace_id,
@@ -184,16 +186,17 @@ def verify_hmac_signature(payload: bytes, signature: str, secret: str) -> None:
 
 def parse_billing_event(payload: bytes) -> BillingEvent:
     data: dict[str, Any] = json.loads(payload)
-    required = ("event_id", "workspace_id", "plan", "status")
-    if any(not str(data.get(k, "")).strip() for k in required):
+    event_id = data.get("event_id") or data.get("id")
+    obj = data.get("data", {}).get("object", {}) if isinstance(data.get("data"), dict) else {}
+    metadata = obj.get("metadata", {}) if isinstance(obj, dict) else {}
+    workspace_id = data.get("workspace_id") or metadata.get("workspace_id") or obj.get("workspace_id")
+    plan = data.get("plan") or metadata.get("plan") or obj.get("plan")
+    status = data.get("status") or obj.get("status") or "active"
+    if not all(str(value or "").strip() for value in (event_id, workspace_id, plan)):
         raise ValueError("billing event missing required fields")
-    return BillingEvent(
-        str(data["event_id"]),
-        str(data["workspace_id"]),
-        str(data["plan"]),
-        str(data["status"]),
-        data.get("current_period_end"),
-    )
+    if str(plan) not in ENTITLEMENTS_BY_PLAN:
+        raise ValueError("unsupported billing entitlement plan")
+    return BillingEvent(str(event_id), str(workspace_id), str(plan), str(status), data.get("current_period_end") or obj.get("current_period_end"))
 
 
 __all__ = [
