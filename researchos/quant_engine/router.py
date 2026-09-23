@@ -863,7 +863,8 @@ class BackendRouter:
         if not callable(getter):
             return None
         try:
-            return getter()
+            result = getter()
+            return result if isinstance(result, BackendCapabilities) else None
         except Exception:
             return None
 
