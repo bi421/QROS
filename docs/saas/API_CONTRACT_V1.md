@@ -44,6 +44,7 @@ The authenticated context contains:
 ### System
 
 - `GET /healthz` — process health.
+- `POST /v1/billing/webhook` — provider-signed billing event callback.
 - `GET /readyz` — dependency/readiness boundary.
 
 ### Identity
@@ -56,12 +57,14 @@ The authenticated context contains:
 - `POST /v1/datasets/{dataset_id}/versions` — append an immutable dataset version.
 - `GET /v1/datasets` — list datasets visible to the authenticated workspace; optional `name`, `limit`, and `offset` filters.
 - `GET /v1/datasets/{dataset_id}/versions` — list versions visible to the authenticated workspace.
+- `GET /v1/datasets/{dataset_id}/versions/{version_id}/download` — issue a short-lived private download URL after tenant authorization.
 
 Dataset bytes are streamed through a bounded SHA-256 calculation before persistence. Storage paths are tenant-scoped and content-addressed.
 
 ### Research
 
 - `POST /v1/research-runs` — enqueue a frozen research workflow.
+- `GET /v1/research-runs` — list workspace-scoped jobs with bounded status/workflow filters and pagination.
 - `GET /v1/research-runs/{job_id}` — retrieve a workspace-scoped job.
 - `GET /v1/research-runs/{job_id}/logs` — retrieve the tenant-scoped deterministic lifecycle log projection.
 - `GET /v1/research-runs/{job_id}/result` — retrieve the immutable governed result projection.
@@ -69,6 +72,7 @@ Dataset bytes are streamed through a bounded SHA-256 calculation before persiste
 - `GET /v1/research-runs/{job_id}/report` — retrieve a deterministic human-readable report projection.
 - `POST /v1/research-claims` — create a tenant-scoped Research Claim.
 - `GET /v1/research-claims/{claim_id}` — retrieve a workspace-scoped Research Claim.
+- `POST /v1/research-claims/{claim_id}/plan-lock` — lock the immutable research plan for a claim.
 - `GET /v1/research-claims/{claim_id}/evidence-graph` — retrieve tenant-scoped evidence lineage associated with the claim.
 - `GET /v1/research-claims` — list Research Claims with bounded tenant-scoped pagination.
 
