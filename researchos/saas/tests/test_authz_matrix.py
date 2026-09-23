@@ -37,7 +37,7 @@ def test_viewer_cannot_create_job() -> None:
         return context(WorkspaceRole.VIEWER)
 
     @app.post("/v1/test-job")
-    @require_permission(Resource.JOB, Action.CREATE)
+    @require_permission("job", "create")
     def create_job(
         tenant: TenantContext = Depends(viewer_context),
     ) -> dict[str, str]:
@@ -60,7 +60,7 @@ def test_researcher_cannot_delete_workspace() -> None:
         return context(WorkspaceRole.RESEARCHER)
 
     @app.delete("/v1/test-workspace")
-    @require_permission(Resource.WORKSPACE, Action.DELETE)
+    @require_permission("workspace", "delete")
     def delete_workspace(
         tenant: TenantContext = Depends(researcher_context),
     ) -> dict[str, str]:
@@ -75,7 +75,7 @@ def test_missing_tenant_context_is_fail_closed() -> None:
     app = FastAPI()
 
     @app.get("/v1/test")
-    @require_permission(Resource.DATASET, Action.READ)
+    @require_permission("dataset", "read")
     def read_dataset() -> dict[str, str]:
         return {"status": "visible"}
 
