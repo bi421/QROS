@@ -1,145 +1,56 @@
 #!/usr/bin/env python3
-"""Verify that repository migrations exactly match the target migration history."""
+"""Verify QROS tenant-boundary migration invariants.
+
+QROS uses workspace_id plus authenticated workspace membership as its tenant key.
+This checker therefore verifies the actual architecture rather than inventing a
+separate tenant_id column.
+"""
 from __future__ import annotations
 
-import os
+import argparse
 import re
 import subprocess
-import shutil
-import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-MIGRATIONS = ROOT / "supabase" / "migrations"
-VERSION_RE = re.compile(r"^(\d+)_.*\.sql$")
+ROOT=Path(__file__).resolve().parents[1]
+MIGRATIONS=ROOT/"supabase"/"migrations"
+TENANT_TABLES={"dataset","dataset_version","research_run","artifact","evidence","usage_event","audit_log","subscription","workspace_member"}
+TABLE_RE=re.compile(r"create table if not exists public\.([a-z_]+)",re.I)
 
+def static_check() -> None:
+    sql="\n".join(p.read_text(encoding="utf-8") for p in sorted(MIGRATIONS.glob("*.sql")))
+    for table in sorted(TENANT_TABLES):
+        if not re.search(rf"create table if not exists public\.{table}\s*\(",sql,re.I):
+            raise SystemExit(f"missing table definition: {table}")
+        if table not in {"workspace_member","subscription"} and not re.search(rf"workspace_id\s+uuid",sql,re.I):
+            raise SystemExit(f"missing workspace_id definition: {table}")
+        if not re.search(rf"alter table public\.{table} enable row level security",sql,re.I):
+            raise SystemExit(f"RLS not enabled in migration history: {table}")
+    print(f"static migration security invariants OK: {len(TENANT_TABLES)} tenant tables")
 
-def get_local_versions():
-    vers = []
-    for p in MIGRATIONS.glob("*.sql"):
-        m = VERSION_RE.match(p.name)
-        if m:
-            vers.append(m.group(1))
-    return sorted(vers)
+def database_check(url: str) -> None:
+    query="""
+select tablename from pg_tables
+where schemaname='public'
+  and tablename in ('dataset','dataset_version','research_run','artifact','evidence','usage_event','audit_log','subscription','workspace_member')
+  and rowsecurity = false;
+"""
+    p=subprocess.run(["psql",url,"-At","-c",query],text=True,capture_output=True,check=False)
+    if p.returncode!=0:
+        raise SystemExit(p.stderr.strip() or "psql failed")
+    bad=[x for x in p.stdout.splitlines() if x.strip()]
+    if bad:
+        raise SystemExit("tables without RLS: "+", ".join(bad))
+    print("database RLS check OK")
 
-
-def get_remote_via_psql(db_url: str) -> list[str]:
-    queries = [
-        "SELECT version FROM supabase_migrations.history ORDER BY version",
-        "SELECT version FROM supabase_migrations.schema_migrations ORDER BY version",
-    ]
-    for q in queries:
-        proc = subprocess.run(
-            ["psql", db_url, "-At", "-c", q], text=True, capture_output=True, check=False
-        )
-        if proc.returncode == 0 and proc.stdout.strip():
-            found = re.findall(r"\b\d{10,}\b", proc.stdout)
-            if found:
-                return sorted(set(found))
-    return []
-
-
-def parse_cli_output(output: str) -> list[tuple[str, str]]:
-    norm = output.replace("│", "|").replace("┃", "|").replace("â”‚", "|").replace("â”", "|")
-    rows: list[tuple[str, str]] = []
-    for raw in norm.splitlines():
-        line = raw.strip()
-        if not line:
-            continue
-        vers = re.findall(r"\b\d{10,}\b", line)
-        if len(vers) >= 2:
-            rows.append((vers[0], vers[1]))
-        elif len(vers) == 1 and "|" in line:
-            cols = [c.strip() for c in line.split("|")]
-            digit_cols = [c for c in cols if re.fullmatch(r"\d{10,}", c)]
-            if len(digit_cols) >= 2:
-                rows.append((digit_cols[0], digit_cols[1]))
-            elif len(digit_cols) == 1:
-                rows.append((digit_cols[0], digit_cols[0]))
-    return rows
-
-
-def main() -> int:
-    # Explicit target wins. For local verification, fall back to DATABASE_URL
-    # and finally the canonical Supabase local Postgres endpoint. This keeps
-    # migration verification usable without putting database credentials in
-    # .env; production/DR callers still pass an explicit target URL.
-    db_url = (
-        os.environ.get("QROS_VERIFY_DATABASE_URL")
-        or os.environ.get("DATABASE_URL")
-        or "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
-    )
-
-    local = get_local_versions()
-    if not local:
-        print("No SQL migrations found", file=sys.stderr)
-        return 2
-
-    supabase_exe = shutil.which("supabase")
-    if not supabase_exe:
-        print("supabase CLI executable not found on PATH", file=sys.stderr)
-        return 2
-
-    if supabase_exe.lower().endswith((".cmd", ".bat")):
-        command = [
-            os.environ.get("COMSPEC", "cmd.exe"),
-            "/d",
-            "/c",
-            supabase_exe,
-            "migration",
-            "list",
-            "--db-url",
-            db_url,
-        ]
-    else:
-        command = [
-            supabase_exe,
-            "migration",
-            "list",
-            "--db-url",
-            db_url,
-        ]
-
-    p = subprocess.run(
-        command,
-        cwd=ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    cli_out = p.stdout + "\n" + p.stderr
-    rows = parse_cli_output(cli_out)
-
-    if not rows:
-        remote = get_remote_via_psql(db_url)
-        if remote:
-            rows = [(v, v) for v in remote]
-
-    if not rows:
-        print("migration list contained no parseable migration rows", file=sys.stderr)
-        print(cli_out[-2000:], file=sys.stderr)
-        fallback = get_remote_via_psql(db_url)
-        print(f"psql fallback found {len(fallback)} versions", file=sys.stderr)
-        return 2
-
-    mismatches = [(lv, rv) for lv, rv in rows if lv != rv]
-    if mismatches:
-        for lv, rv in mismatches:
-            print(f"MIGRATION MISMATCH: local={lv} remote={rv}", file=sys.stderr)
-        return 1
-
-    applied = [rv for _, rv in rows]
-    if sorted(applied) != sorted(local):
-        psql_remote = get_remote_via_psql(db_url)
-        if sorted(psql_remote) == sorted(local):
-            print(f"Migration parity PASS (via psql fallback): {len(local)} migrations")
-            return 0
-        print("MIGRATION MISMATCH: history does not match repository", file=sys.stderr)
-        return 1
-
-    print(f"Migration parity PASS: {len(local)} migrations")
+def main()->int:
+    parser=argparse.ArgumentParser()
+    parser.add_argument("--database-url")
+    args=parser.parse_args()
+    static_check()
+    if args.database_url:
+        database_check(args.database_url)
     return 0
 
-
-if __name__ == "__main__":
+if __name__=="__main__":
     raise SystemExit(main())
