@@ -28,6 +28,7 @@ EXPECTED = {
     "GET /v1/research-claims",
     "GET /v1/research-claims/{claim_id}",
     "GET /v1/research-claims/{claim_id}/evidence-graph",
+    "GET /v1/findings",
     "POST /v1/research-claims/{claim_id}/plan-lock",
 }
 
