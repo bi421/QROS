@@ -757,3 +757,31 @@ def test_free_tenant_101st_job_is_entitlement_exceeded() -> None:
     assert response.status_code == 402
     assert response.json()["code"] == "ENTITLEMENT_EXCEEDED"
     assert response.json()["upgrade_url"] == "https://qros.ai/upgrade"
+
+
+def test_stripe_webhook_replay_same_event_id_is_ignored() -> None:
+    import time
+    billing = InMemoryBillingEventStore()
+    workspace_id = str(uuid4())
+    client, _, _, _ = _client(billing_store=billing, billing_secret="secret")
+    payload = json.dumps({
+        "id": "evt_stripe_replay_1",
+        "type": "customer.subscription.updated",
+        "data": {"object": {"metadata": {"workspace_id": workspace_id, "plan": "pro"}, "status": "active"}},
+    }).encode()
+    timestamp = int(time.time())
+    signature = hmac.new(
+        b"secret",
+        f"{timestamp}.".encode() + payload,
+        hashlib.sha256,
+    ).hexdigest()
+    headers = {
+        "Stripe-Signature": f"t={timestamp},v1={signature}",
+        "X-Billing-Provider": "stripe",
+    }
+    first = client.post("/v1/billing/webhook", content=payload, headers=headers)
+    second = client.post("/v1/billing/webhook", content=payload, headers=headers)
+    assert first.status_code == 200
+    assert first.json()["status"] == "processed"
+    assert second.status_code == 200
+    assert second.json()["status"] == "replayed"
