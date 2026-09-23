@@ -49,6 +49,9 @@ from researchos.saas.billing import (
     BillingSignatureError,
     parse_billing_event,
     verify_hmac_signature,
+    verify_stripe_signature,
+    EntitlementStore,
+    InMemoryEntitlementStore,
 )
 
 REQUEST_ID_HEADER = "X-Request-ID"
@@ -220,6 +223,8 @@ def create_app(
     idempotency_store: IdempotencyStore | None = None,
     billing_store: BillingEventStore | None = None,
     billing_webhook_secret: str | None = None,
+    entitlement_store: EntitlementStore | None = None,
+    plan_rate_limiters: dict[object, RateLimiter] | None = None,
     metrics_token: str | None = None,
     rate_limiter: RateLimiter | None = None,
     claim_store: ResearchClaimStore | None = None,
@@ -237,6 +242,8 @@ def create_app(
     queue = job_queue or InMemoryResearchJobQueue()
     limiter = rate_limiter or FixedWindowRateLimiter(limit=120, window_seconds=60)
     billing = billing_store
+    entitlements = entitlement_store or InMemoryEntitlementStore()
+    plan_limiters = plan_rate_limiters or {}
     app = FastAPI(
         title="QROS SaaS API",
         version="1.0.0",
