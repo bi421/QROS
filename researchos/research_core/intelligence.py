@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Sequence
 
+from opentelemetry import trace
+
 
 class Decision(str, Enum):
     ELIGIBLE = "ELIGIBLE"
@@ -223,6 +225,18 @@ class ResearchPlanner:
         self._registry = registry
 
     def plan(self, context: ResearchContext) -> tuple[ComputePlan, ValidationPlan]:
+        tracer = trace.get_tracer("qros.research")
+        with tracer.start_as_current_span(
+            "qros.planner",
+            attributes={
+                "research.dataset_id": context.dataset_id,
+                "research.analysis_class": context.analysis_class,
+                "research.sample_size": context.sample_size,
+            },
+        ):
+            return self._plan(context)
+
+    def _plan(self, context: ResearchContext) -> tuple[ComputePlan, ValidationPlan]:
         decisions = tuple(
             MethodDecision(
                 method.method_id,
