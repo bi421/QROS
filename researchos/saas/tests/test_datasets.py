@@ -84,12 +84,12 @@ def test_in_memory_store_rejects_dataset_write_from_other_workspace() -> None:
 def test_in_memory_signed_download_url_requires_existing_object_and_bounded_expiry() -> None:
     storage = InMemoryDatasetStorage()
     with pytest.raises(FileNotFoundError):
-        storage.create_signed_download_url("missing", 300)
+        storage.create_signed_download_url("missing", 3600)
 
     storage.put("tenant/object", BytesIO(b"data"))
-    assert storage.create_signed_download_url("tenant/object", 300).endswith("?expires_in=300")
+    assert storage.create_signed_download_url("tenant/object", 3600).endswith("?expires_in=3600")
 
-    for expires_in in (0, 901):
+    for expires_in in (0, 3599, 3601):
         with pytest.raises(ValueError, match="signed URL expiry"):
             storage.create_signed_download_url("tenant/object", expires_in)
 
@@ -157,3 +157,35 @@ def test_storage_sha256_verification_detects_tampering() -> None:
     storage.put(path, BytesIO(b"original"))
 
     assert storage.verify_sha256(path, "0" * 64) is False
+
+
+def test_tenant_b_cannot_generate_signed_url_for_tenant_a_file() -> None:
+    storage = InMemoryDatasetStorage()
+    tenant_a = uuid4()
+    tenant_b = uuid4()
+    digest = "a" * 64
+    path = storage_path_for(tenant_a, digest, 1)
+    storage.put(path, BytesIO(b"tenant-a"), tenant_id=tenant_a)
+
+    with pytest.raises(PermissionError, match="outside tenant context"):
+        storage.create_signed_download_url(
+            path,
+            3600,
+            tenant_id=tenant_b,
+            access_token="tenant-b-token",
+        )
+
+    assert storage.create_signed_download_url(
+        path,
+        3600,
+        tenant_id=tenant_a,
+        access_token="tenant-a-token",
+    ).startswith(f"memory://tenant/{tenant_a}/datasets/{digest}/1/")
+
+
+def test_direct_storage_path_without_tenant_prefix_is_rejected() -> None:
+    storage = InMemoryDatasetStorage()
+    tenant = uuid4()
+
+    with pytest.raises(PermissionError, match="outside tenant context"):
+        storage.put("datasets/" + "a" * 64 + "/1/", BytesIO(b"bad"), tenant_id=tenant)

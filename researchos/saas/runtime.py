@@ -37,7 +37,11 @@ def build_production_app():
         auth_provider=auth,
         job_store=SupabaseResearchJobStore(client),
         dataset_store=SupabaseDatasetStore(client),
-        dataset_storage=SupabaseDatasetStorage(client),
+        dataset_storage=SupabaseDatasetStorage(
+            client,
+            supabase_url=url,
+            publishable_key=os.environ["SUPABASE_ANON_KEY"],
+        ),
         job_queue=SupabaseResearchJobQueue(client),
         idempotency_store=SupabaseIdempotencyStore(client),
         claim_store=SupabaseResearchClaimStore(client),
