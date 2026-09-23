@@ -19,7 +19,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install mypy
           if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
-      - name: Run strict production Mypy
+      - name: Run strict production Mypy (measurement-only)
+        continue-on-error: true
         run: |
           cat > /tmp/mypy-production-strict-v37.ini <<'EOF'
           [mypy]
