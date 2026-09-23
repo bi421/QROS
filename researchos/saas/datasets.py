@@ -254,6 +254,7 @@ class SupabaseDatasetStore:
             .select("id,workspace_id,name,created_by,created_at")
             .eq("id", str(dataset_id))
             .eq("workspace_id", str(workspace_id))
+            .is_("deleted_at", "null")
             .limit(1)
             .execute()
         )
