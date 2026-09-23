@@ -106,7 +106,10 @@ def main() -> int:
     }
 
     HEALTH_DIR.mkdir(parents=True, exist_ok=True)
-    HEALTH_JSON.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    serialized = json.dumps(evidence, indent=2, sort_keys=True) + "\n"
+    HEALTH_JSON.write_text(serialized, encoding="utf-8")
+    exact_evidence = HEALTH_DIR / f"health_evidence_{evidence['commit']}.json"
+    exact_evidence.write_text(serialized, encoding="utf-8")
 
     print(json.dumps(evidence, indent=2, sort_keys=True))
     print(f"HEALTH: {overall}")
