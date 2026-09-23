@@ -1,111 +1,40 @@
 #!/usr/bin/env python3
-"""Run the canonical local health gate and emit machine-readable evidence."""
+"""Run the exact release health gate and emit health_evidence_<sha>.json."""
 from __future__ import annotations
-
-import argparse
-import datetime as dt
-import json
-import os
-import shutil
-import subprocess
-import sys
+import argparse, datetime as dt, json, os, subprocess, sys
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-CPP_SOURCE = ROOT / "researchos" / "engines" / "quant"
-HEALTH_BUILD = ROOT / ".healthcheck" / "cpp"
-HEALTH_DIR = ROOT / ".health"
-HEALTH_JSON = HEALTH_DIR / "last_run.json"
-
-
-def command_result(label: str, command: list[str], *, cwd: Path = ROOT) -> dict[str, object]:
-    completed = subprocess.run(command, cwd=cwd, text=True, capture_output=True, check=False)
-    stdout = completed.stdout.strip()
-    stderr = completed.stderr.strip()
-    return {
-        "label": label,
-        "command": command,
-        "returncode": completed.returncode,
-        "status": "PASS" if completed.returncode == 0 else "FAIL",
-        "stdout": stdout[-12000:],
-        "stderr": stderr[-12000:],
-    }
-
-
-def git_value(args: list[str]) -> str:
-    completed = subprocess.run(["git", *args], cwd=ROOT, text=True, capture_output=True, check=False)
-    return completed.stdout.strip()
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--skip-cpp", action="store_true", help="Skip C++ configure/build")
-    args = parser.parse_args()
-    os.chdir(ROOT)
-
-    checks: dict[str, dict[str, object]] = {}
-
-    ruff = ["ruff", "check", "."] if shutil.which("ruff") else [sys.executable, "-m", "ruff", "check", "."]
-    checks["ruff"] = command_result("ruff", ruff)
-    checks["pytest"] = command_result("pytest", [sys.executable, "-m", "pytest", "-q"])
-
-    if args.skip_cpp:
-        checks["cpp_compile"] = {
-            "label": "cpp_compile",
-            "command": [],
-            "returncode": None,
-            "status": "SKIPPED",
-            "stdout": "",
-            "stderr": "--skip-cpp",
-        }
-    elif not CPP_SOURCE.exists() or not shutil.which("cmake"):
-        checks["cpp_compile"] = {
-            "label": "cpp_compile",
-            "command": [],
-            "returncode": 1,
-            "status": "FAIL",
-            "stdout": "",
-            "stderr": "cpp_quant_engine/ or cmake is unavailable",
-        }
-    else:
-        HEALTH_BUILD.mkdir(parents=True, exist_ok=True)
-        configure = command_result(
-            "cpp_configure",
-            ["cmake", "-S", str(CPP_SOURCE), "-B", str(HEALTH_BUILD), "-DCMAKE_BUILD_TYPE=Release"],
-        )
-        if configure["status"] == "PASS":
-            build = command_result("cpp_build", ["cmake", "--build", str(HEALTH_BUILD), "--config", "Release"])
-        else:
-            build = {"label": "cpp_build", "command": [], "returncode": 1, "status": "NOT_RUN", "stdout": "", "stderr": "configure failed"}
-        checks["cpp_compile"] = {
-            "label": "cpp_compile",
-            "status": "PASS" if build["status"] == "PASS" else "FAIL",
-            "configure": configure,
-            "build": build,
-        }
-
-    git_status = command_result("git_status", ["git", "status", "--short", "--branch"])
-    checks["git_status"] = git_status
-
-    statuses = [check["status"] for check in checks.values()]
-    overall = "PASS" if all(status == "PASS" for status in statuses) else "FAIL"
-    evidence = {
-        "schema_version": 1,
-        "health_status": overall,
-        "timestamp_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "commit": git_value(["rev-parse", "HEAD"]),
-        "branch": git_value(["branch", "--show-current"]),
-        "checks": checks,
-    }
-
-    HEALTH_DIR.mkdir(parents=True, exist_ok=True)
-    HEALTH_JSON.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-    print(json.dumps(evidence, indent=2, sort_keys=True))
-    print(f"HEALTH: {overall}")
-    print(f"EVIDENCE: {HEALTH_JSON.relative_to(ROOT)}")
-    return 0 if overall == "PASS" else 1
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+ROOT=Path(__file__).resolve().parents[1]
+HEALTH=ROOT/".health"
+def run(label, command, env=None):
+    p=subprocess.run(command,cwd=ROOT,env=env,text=True,capture_output=True,check=False)
+    return {"label":label,"command":command,"returncode":p.returncode,"status":"PASS" if p.returncode==0 else "FAIL","stdout":p.stdout[-10000:],"stderr":p.stderr[-10000:]}
+def main():
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--expected-commit",required=True); ap.add_argument("--db-url",required=True)
+    ap.add_argument("--source-db-url",required=True); ap.add_argument("--admin-db-url",required=True)
+    ap.add_argument("--object-before",type=Path); ap.add_argument("--object-after",type=Path)
+    a=ap.parse_args()
+    actual=subprocess.run(["git","rev-parse","HEAD"],cwd=ROOT,text=True,capture_output=True,check=True).stdout.strip()
+    if actual!=a.expected_commit:
+        print(f"commit mismatch: expected {a.expected_commit}, got {actual}",file=sys.stderr); return 1
+    env={**os.environ,"QROS_VERIFY_DATABASE_URL":a.db_url}
+    checks={}
+    checks["ruff"]=run("ruff",[sys.executable,"-m","ruff","check","."])
+    checks["mypy"]=run("mypy",[sys.executable,"-m","mypy","researchos/saas","--strict"])
+    checks["pytest"]=run("pytest",[sys.executable,"-m","pytest","--real-db","-q","--cov=researchos","--cov-report=json:.health/coverage.json"],env)
+    checks["verify_migrations"]=run("verify_migrations",[sys.executable,"scripts/verify_migrations.py"],env)
+    checks["authz"]=run("authz",[sys.executable,"scripts/check_authz_coverage.py","--db-url",a.db_url])
+    checks["tenant_isolation"]=run("tenant_isolation",["supabase","test","db","supabase/tests/tenant_isolation_test.sql","--db-url",a.db_url])
+    backup=[sys.executable,"scripts/backup_verify.py","--source-db-url",a.source_db_url,"--admin-db-url",a.admin_db_url]
+    if a.object_before and a.object_after: backup += ["--object-before",str(a.object_before),"--object-after",str(a.object_after)]
+    checks["backup_restore"]=run("backup_restore",backup,env)
+    coverage={}
+    cp=ROOT/".health/coverage.json"
+    if cp.exists(): coverage=json.loads(cp.read_text(encoding="utf-8")).get("totals",{})
+    passed=all(c["status"]=="PASS" for c in checks.values())
+    evidence={"schema_version":1,"commit":actual,"timestamp":dt.datetime.now(dt.timezone.utc).isoformat(),"tests_passed":passed,"health_status":"PASS" if passed else "FAIL","coverage":coverage,"rls_check":checks["authz"]["status"]=="PASS","authz_check":checks["authz"]["status"]=="PASS","tenant_isolation_check":checks["tenant_isolation"]["status"]=="PASS","checks":checks}
+    HEALTH.mkdir(parents=True,exist_ok=True)
+    path=HEALTH/f"health_evidence_{actual}.json"; path.write_text(json.dumps(evidence,indent=2,sort_keys=True)+"\n",encoding="utf-8")
+    print(json.dumps(evidence,indent=2,sort_keys=True)); print(f"EVIDENCE={path}")
+    return 0 if passed else 1
+if __name__=="__main__": raise SystemExit(main())
