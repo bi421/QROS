@@ -18,6 +18,7 @@ from typing import Mapping
 
 try:
     import structlog
+    import structlog.stdlib
 except ImportError:  # pragma: no cover
     structlog = None
 
@@ -31,6 +32,7 @@ if structlog is not None:
             structlog.processors.add_log_level,
             structlog.processors.JSONRenderer(),
         ],
+        logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
 
