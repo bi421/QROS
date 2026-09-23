@@ -5,17 +5,16 @@ import time
 from uuid import uuid4
 
 from fastapi import Request
+from opentelemetry import trace
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
-from opentelemetry import trace
-
-_TRACER = trace.get_tracer("qros.saas")
 
 from researchos.saas.observability import StructuredRequestObserver, observe_request
 from researchos.saas.request_context import reset_request_id, set_request_id
 
 REQUEST_ID_HEADER = "X-Request-ID"
 MAX_REQUEST_ID_LENGTH = 128
+_TRACER = trace.get_tracer("qros.saas")
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
@@ -39,14 +38,14 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                 response = await call_next(request)
             except Exception as exc:
                 if isinstance(observer, StructuredRequestObserver):
-                observe_request(
-                    observer,
-                    request_id=request_id,
-                    method=request.method,
-                    path=request.url.path,
-                    status_code=500,
-                    started_at=started,
-                )
+                    observe_request(
+                        observer,
+                        request_id=request_id,
+                        method=request.method,
+                        path=request.url.path,
+                        status_code=500,
+                        started_at=started,
+                    )
                 span.record_exception(exc)
                 reset_request_id(token)
                 raise
