@@ -91,3 +91,19 @@ def test_tenant_signed_url_cannot_cross_tenant() -> None:
     assert "tenant_id=tenant-a" in signed
     assert verify_path_signature("tenant-a", path, 4600, signed.split("sig=")[1], "secret", now=100) is True
     assert verify_path_signature("tenant-b", path, 4600, signed.split("sig=")[1], "secret", now=100) is False
+
+
+def test_metrics_expose_required_security_counters() -> None:
+    api, _ = client()
+    api = TestClient(create_app(
+        auth_provider=api.app.state.auth if hasattr(api.app.state, "auth") else Auth(TenantContext(uuid4(), uuid4(), Plan.TEAM, WorkspaceRole.RESEARCHER)),
+        metrics_token="metrics-secret",
+    ))
+    response = api.get("/metrics", headers={"X-Metrics-Token": "metrics-secret"})
+    assert response.status_code == 200
+    text = response.text
+    assert "jobs_created_total" in text
+    assert "jobs_failed_total" in text
+    assert "jobs_duration_seconds" in text
+    assert "tenant_isolation_violations_total 0" in text
+    assert "rls_violations_total 0" in text
