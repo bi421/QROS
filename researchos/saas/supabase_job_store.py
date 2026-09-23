@@ -133,7 +133,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
         result = (
             self._client.table("research_run_result")
             .select("workspace_id,research_run_id,source_dataset_sha256,status,manifest_sha256,failures")
-            .eq("workspace_id", str(workspace_id))
+            .eq("workspace_id", str(workspace_id)).is_("deleted_at", "null")
             .eq("research_run_id", str(job_id))
             .limit(1)
             .execute()
