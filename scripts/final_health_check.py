@@ -10,7 +10,6 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 TENANT_TEST = ROOT / "supabase" / "tests" / "tenant_isolation_test.sql"
