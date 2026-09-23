@@ -311,9 +311,11 @@ def stream_sha256(file: BinaryIO, max_bytes: int) -> tuple[str, int]:
     return digest.hexdigest(), size
 
 
-def storage_path_for(workspace_id: UUID, dataset_id: UUID, digest: str) -> str:
-    """Return a tenant-scoped content-addressed object path."""
-    return f"{workspace_id}/datasets/{dataset_id}/sha256/{digest}"
+def storage_path_for(workspace_id: UUID, digest: str, version_no: int) -> str:
+    """Return tenant/{tenant_id}/datasets/{sha256(content)}/{version}/."""
+    if version_no < 1:
+        raise ValueError("version_no must be positive")
+    return f"tenant/{workspace_id}/datasets/{digest}/{version_no}/"
 
 
 __all__ = [
