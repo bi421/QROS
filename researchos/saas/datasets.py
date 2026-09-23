@@ -213,10 +213,15 @@ class InMemoryDatasetStorage:
         self._objects: dict[str, bytes] = {}
 
     def put(self, storage_path: str, file: BinaryIO) -> None:
-        if storage_path in self._objects:
+        payload = file.read()
+        existing = self._objects.get(storage_path)
+        if existing is not None:
+            if existing != payload:
+                raise ValueError("storage object already exists with different content")
+            file.seek(0)
             return
-
-        self._objects[storage_path] = file.read()
+        self._objects[storage_path] = payload
+        file.seek(0)
 
     def remove(self, storage_path: str) -> None:
         self._objects.pop(storage_path, None)
