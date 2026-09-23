@@ -146,6 +146,7 @@ def register_research_claim_routes(
     def create_research_claim(
         request: ResearchClaimCreateRequest,
         context: TenantContext = Depends(tenant_dependency),
+        request: Request,
     ) -> ResearchClaimResponse:
         require_write_role(context)
         store = require_store()
