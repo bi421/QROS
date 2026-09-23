@@ -10,9 +10,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 FORBIDDEN_NEW_PATHS = (
-    # Root-level Python scripts are intentionally not an allowed extension point.
-    # Existing legacy files are audited separately; new/changed root scripts must
-    # live under an owned directory such as scripts/ or examples/.
     re.compile(r"^[^/]+\.py$", re.I),
     re.compile(r"(^|/)(?:_tmp|tmp_|scratch_).*", re.I),
     re.compile(r"(^|/).*\.bak$", re.I),
@@ -31,7 +28,9 @@ def changed_paths(base: str | None, staged: bool) -> list[str]:
     else:
         command.append("HEAD")
     completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=True)
-    return [line.strip().replace("\\", "/") for line in completed.stdout.splitlines() if line.strip()]
+    return [
+        line.strip().replace("\\", "/") for line in completed.stdout.splitlines() if line.strip()
+    ]
 
 
 def main() -> int:
@@ -57,7 +56,13 @@ def main() -> int:
         text = workflow.read_text(encoding="utf-8")
         if re.search(r"^\s*-\s*master\s*$", text, re.MULTILINE):
             failures.append(f"workflow uses forbidden master branch trigger: {workflow.as_posix()}")
-        if "branches:" in text and not re.search(r"^\s*-\s*main\s*$", text, re.MULTILINE):
+
+        has_main_trigger = bool(
+            re.search(r"^\s*-\s*main\s*$", text, re.MULTILINE)
+            or re.search(r"branches:\s*\[[^\]]*\bmain\b[^\]]*\]", text)
+            or re.search(r"branches:\s*main\s*$", text, re.MULTILINE)
+        )
+        if "branches:" in text and not has_main_trigger:
             failures.append(f"workflow has no explicit main trigger: {workflow.as_posix()}")
 
     if failures:
