@@ -8,6 +8,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Protocol
+from uuid import UUID
 
 
 @dataclass(frozen=True)
@@ -17,6 +18,64 @@ class BillingEvent:
     plan: str
     status: str
     current_period_end: str | None
+
+
+
+@dataclass(frozen=True)
+class Entitlement:
+    tenant_id: UUID
+    plan: str
+    max_datasets: int
+    max_jobs_per_month: int
+    max_storage_mb: int
+
+    def allows_jobs(self, used: int) -> bool:
+        return self.max_jobs_per_month == 0 or used < self.max_jobs_per_month
+
+
+ENTITLEMENTS_BY_PLAN: dict[str, tuple[int, int, int]] = {
+    "free": (10, 100, 1024),
+    "pro": (1000, 1000, 10240),
+    "enterprise": (0, 0, 0),
+}
+
+
+class EntitlementStore(Protocol):
+    def get(self, tenant_id: UUID, plan: str) -> Entitlement: ...
+    def upsert(self, entitlement: Entitlement) -> Entitlement: ...
+
+
+class InMemoryEntitlementStore:
+    def __init__(self) -> None:
+        self._rows: dict[UUID, Entitlement] = {}
+
+    def get(self, tenant_id: UUID, plan: str) -> Entitlement:
+        existing = self._rows.get(tenant_id)
+        if existing is not None:
+            return existing
+        limits = ENTITLEMENTS_BY_PLAN[plan]
+        return Entitlement(tenant_id, plan, *limits)
+
+    def upsert(self, entitlement: Entitlement) -> Entitlement:
+        self._rows[entitlement.tenant_id] = entitlement
+        return entitlement
+
+
+class SupabaseEntitlementStore:
+    def __init__(self, supabase_client: Any) -> None:
+        self._client = supabase_client
+
+    def get(self, tenant_id: UUID, plan: str) -> Entitlement:
+        result = self._client.table("entitlement").select("tenant_id,plan,max_datasets,max_jobs_per_month,max_storage_mb").eq("tenant_id", str(tenant_id)).limit(1).execute()
+        rows = result.data or []
+        if rows:
+            row = rows[0]
+            return Entitlement(UUID(str(row["tenant_id"])), str(row["plan"]), int(row["max_datasets"]), int(row["max_jobs_per_month"]), int(row["max_storage_mb"]))
+        return Entitlement(tenant_id, plan, *ENTITLEMENTS_BY_PLAN[plan])
+
+    def upsert(self, entitlement: Entitlement) -> Entitlement:
+        self._client.table("entitlement").upsert({"tenant_id": str(entitlement.tenant_id), "plan": entitlement.plan, "max_datasets": entitlement.max_datasets, "max_jobs_per_month": entitlement.max_jobs_per_month, "max_storage_mb": entitlement.max_storage_mb, "updated_at": datetime.now(timezone.utc).isoformat()}, on_conflict="tenant_id").execute()
+        return entitlement
 
 
 class BillingSignatureError(ValueError):
