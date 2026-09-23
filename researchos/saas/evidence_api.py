@@ -206,14 +206,14 @@ def register_research_evidence_routes(
         return pagination_envelope(data=data, page=query.page, page_size=query.page_size, total=total, request_id=request.state.request_id)
 
     @router.get(
-        "/v1/research-runs/{research_run_id}/evidence",
+        "/v1/research-runs/{job_id}/evidence",
         response_model=dict[str, object],
         tags=["evidence"],
     )
     @require_permission("evidence", "list")
     def list_research_run_evidence(
         request: Request,
-        research_run_id: UUID,
+        job_id: UUID,
         page: str = "1",
         page_size: str = "20",
         sort_by: str = "created_at",
@@ -226,7 +226,7 @@ def register_research_evidence_routes(
         if evidence_store is None:
             raise HTTPException(status_code=503, detail="research evidence persistence is not configured")
         try:
-            rows = evidence_store.list_for_run(context.workspace_id, research_run_id)
+            rows = evidence_store.list_for_run(context.workspace_id, job_id)
         except Exception as exc:
             raise HTTPException(status_code=503, detail="research evidence persistence unavailable") from exc
         return _evidence_page(rows, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, status_filter=status_filter, tenant_filter=tenant_filter, request=request, context=context)
