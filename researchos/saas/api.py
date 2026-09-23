@@ -13,7 +13,7 @@ from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, 
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse, Response, StreamingResponse
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, PageRequest, ResearchJob, ResearchJobStatus, TenantContext, WorkspaceRole
@@ -42,6 +42,14 @@ from researchos.saas.pagination import PaginationParameterError, pagination_enve
 from researchos.saas.research_report import build_research_report
 from researchos.saas.observability import StructuredRequestObserver, observe_request
 from researchos.saas.auth.authorization import require_permission
+from researchos.saas.persistence import (
+    DEFAULT_RETENTION_DAYS,
+    DeletionReceipt,
+    InMemoryTenantPersistence,
+    RetentionConfig,
+    TenantPersistence,
+    TenantPersistenceError,
+)
 from researchos.saas.billing import (
     BillingEventConflict,
     BillingEventStore,
@@ -175,6 +183,13 @@ class PageResponse(BaseModel):
     data: list[object]
     pagination: PaginationResponse
 
+class DeletionReceiptResponse(BaseModel):
+    workspace_id: UUID
+    deleted_at: str
+    scheduled_purge_date: str
+    retention_days: int
+    receipt_id: UUID
+
 
 class ResearchJobResponse(BaseModel):
     id: UUID
@@ -223,6 +238,8 @@ def create_app(
     evidence_store: ResearchEvidenceStore | None = None,
     validation_store: ResearchValidationStore | None = None,
     finding_store=None,
+    tenant_persistence: TenantPersistence | None = None,
+    retention_days: int = DEFAULT_RETENTION_DAYS,
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
@@ -233,6 +250,8 @@ def create_app(
     queue = job_queue or InMemoryResearchJobQueue()
     limiter = rate_limiter or FixedWindowRateLimiter(limit=120, window_seconds=60)
     billing = billing_store
+    persistence = tenant_persistence or InMemoryTenantPersistence()
+    retention = RetentionConfig(retention_days)
     app = FastAPI(
         title="QROS SaaS API",
         version="1.0.0",
@@ -274,7 +293,10 @@ def create_app(
                 requested_workspace_id = UUID(workspace_header.strip())
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail="invalid X-Workspace-ID") from exc
-        return auth.authenticate(authorization, requested_workspace_id)
+        tenant = auth.authenticate(authorization, requested_workspace_id)
+        if persistence.is_workspace_deleted(tenant.workspace_id):
+            raise HTTPException(status_code=410, detail="workspace is deleted")
+        return tenant
 
     def require_role(tenant: TenantContext, *allowed: WorkspaceRole) -> None:
         """Enforce server-resolved membership roles; never trust request data."""
@@ -383,6 +405,50 @@ def create_app(
     @require_permission("workspace", "read")
     def me(tenant: TenantContext = Depends(current_tenant)) -> dict[str, str]:
         return {"user_id": str(tenant.user_id), "workspace_id": str(tenant.workspace_id), "plan": tenant.plan.value}
+
+    @app.delete("/v1/workspaces/{workspace_id}", response_model=DeletionReceiptResponse, tags=["workspace"])
+    @require_permission("workspace", "delete")
+    def delete_workspace(
+        workspace_id: UUID,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> DeletionReceiptResponse:
+        if workspace_id != tenant.workspace_id:
+            raise HTTPException(status_code=404, detail="workspace not found")
+        require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.ADMIN)
+        try:
+            receipt = persistence.soft_delete_workspace(
+                workspace_id,
+                retention=retention,
+            )
+        except TenantPersistenceError as exc:
+            raise HTTPException(status_code=503, detail="workspace deletion unavailable") from exc
+        return DeletionReceiptResponse(
+            workspace_id=receipt.workspace_id,
+            deleted_at=receipt.deleted_at.isoformat(),
+            scheduled_purge_date=receipt.scheduled_purge_at.isoformat(),
+            retention_days=receipt.retention_days,
+            receipt_id=receipt.receipt_id,
+        )
+
+    @app.get("/v1/workspaces/{workspace_id}/export", tags=["workspace"])
+    @require_permission("workspace", "read")
+    def export_workspace(
+        workspace_id: UUID,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> Response:
+        if workspace_id != tenant.workspace_id:
+            raise HTTPException(status_code=404, detail="workspace not found")
+        try:
+            archive = persistence.export_workspace(workspace_id)
+        except TenantPersistenceError as exc:
+            raise HTTPException(status_code=503, detail="workspace export unavailable") from exc
+        return StreamingResponse(
+            iter((archive,)),
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="qros-workspace-{workspace_id}.zip"',
+            },
+        )
 
     @app.get("/v1/datasets", response_model=PageResponse, tags=["datasets"])
     @require_permission("dataset", "list")
