@@ -86,9 +86,8 @@ def resources(real_tenants: RealTenantPair) -> dict[str, object]:
         creator=str(a.user_id),
         research_id="tenant-isolation-real",
     )
-    claim.plan = plan
-    claim.plan_hash = plan.content_hash
-    claim.evidence_state = "CANDIDATE"
+    claim.lock_plan(plan)
+    claim.set_evidence_state("CANDIDATE")
     service.table("research_claim").insert(
         {
             "id": claim.id,
