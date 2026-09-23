@@ -73,13 +73,12 @@ def _error_code(status_code: int) -> str:
 
 def _error_payload(request: Request, status_code: int, detail: object) -> dict[str, object]:
     message = detail if isinstance(detail, str) else "request failed"
+    request_id = getattr(request.state, "request_id", None)
     return {
-        "detail": detail,
-        "error": {
-            "code": _error_code(status_code),
-            "message": message,
-            "request_id": getattr(request.state, "request_id", None),
-        },
+        "code": _error_code(status_code),
+        "message": message,
+        "request_id": request_id,
+        "correlation_id": request_id,
     }
 
 
@@ -91,6 +90,7 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
         request_id = supplied[:MAX_REQUEST_ID_LENGTH] if supplied else str(uuid4())
         request_id = "".join(char if ord(char) >= 32 and ord(char) != 127 else "-" for char in request_id)
         request.state.request_id = request_id
+        request.state.correlation_id = request_id
         started_at = time.perf_counter()
         try:
             response = await call_next(request)
@@ -250,6 +250,14 @@ def create_app(
         return JSONResponse(
             status_code=422,
             content=_error_payload(request, 422, exc.errors()),
+        )
+
+    @app.exception_handler(Exception)
+    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        del exc
+        return JSONResponse(
+            status_code=500,
+            content=_error_payload(request, 500, "internal server error"),
         )
 
     def current_tenant(
