@@ -40,8 +40,15 @@ def git_value(args: list[str]) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-cpp", action="store_true", help="Skip C++ configure/build")
+    parser.add_argument("--exact-commit", help="Require HEAD to match this exact commit SHA")
     args = parser.parse_args()
     os.chdir(ROOT)
+
+    if args.exact_commit:
+        actual_commit = git_value(["rev-parse", "HEAD"])
+        if actual_commit != args.exact_commit:
+            print(f"EXACT_COMMIT_MISMATCH: expected {args.exact_commit}, got {actual_commit}")
+            return 2
 
     checks: dict[str, dict[str, object]] = {}
 
@@ -103,6 +110,8 @@ def main() -> int:
 
     print(json.dumps(evidence, indent=2, sort_keys=True))
     print(f"HEALTH: {overall}")
+    if overall == "PASS" and (not args.exact_commit or evidence["commit"] == args.exact_commit):
+        print("VERIFIED: exact commit health gate passed")
     print(f"EVIDENCE: {HEALTH_JSON.relative_to(ROOT)}")
     return 0 if overall == "PASS" else 1
 

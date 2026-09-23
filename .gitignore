@@ -121,3 +121,8 @@ archive/*
 !archive/reports/
 archive/reports/*
 !archive/reports/**/
+
+# Keep documentation while ignoring all datasets
+data/
+!data/
+!data/README.md

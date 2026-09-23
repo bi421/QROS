@@ -124,20 +124,17 @@ The project is in the **research-core → SaaS hardening** stage.
 
 ### Remaining production gates
 
-- Complete tenant-isolation integration tests against the real persistence boundary
-- Migration/version compatibility verification
-- Full public API contract coverage
-- Complete authorization policy matrix
-- Pagination/filter/sort contracts where required
-- Tenant-scoped production object-storage authorization
-- Retention/deletion controls
-- Dataset registry hardening
-- Security/threat-model review and red-team isolation tests
-- Structured application observability
-- Production UI
-- Commercial entitlement enforcement
-- Backup/restore and disaster-recovery verification
-- Exact-release CI and final integration gates
+1. [ ] Tenant isolation and real-persistence integration
+2. [ ] Migration/version compatibility
+3. [ ] Public API contract coverage
+4. [ ] Authorization policy matrix
+5. [ ] Pagination/filter/sort contracts
+6. [ ] Tenant-scoped object storage, retention, and dataset registry
+7. [x] Security/threat-model and red-team review
+8. [ ] Observability, billing, UI, and operational controls
+9. [ ] Exact-release CI, backup/restore, and final production verification
+
+Only gates directly verified by implementation/tests are checked. No release-readiness claim is made from unobserved CI or local execution.
 
 See `todo/saas.md` for the canonical execution checklist.
 
@@ -151,6 +148,8 @@ QROS/
 │   ├── probability/         # Probability contracts
 │   ├── research_core/       # Governed research contracts
 │   └── saas/                # API, jobs, datasets, billing, persistence
+├── examples/
+│   └── research_lab/        # Standalone research example
 ├── supabase/
 │   └── migrations/          # Database/RLS/tenant-boundary migrations
 ├── docs/
