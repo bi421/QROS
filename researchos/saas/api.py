@@ -297,11 +297,10 @@ def create_app(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="workspace role is not authorized")
 
     def require_rate_limit(tenant: TenantContext) -> None:
-        principal = hashlib.sha256(
-            f"workspace:{tenant.workspace_id}".encode()
-        ).hexdigest()
+        principal = hashlib.sha256(f"workspace:{tenant.workspace_id}".encode()).hexdigest()
+        selected = plan_limiters.get(tenant.plan, limiter)
         try:
-            allowed = limiter.allow(principal)
+            allowed = selected.allow(principal)
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
