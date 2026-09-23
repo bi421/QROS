@@ -1,132 +1,7 @@
-[build-system]
-requires = [
-    "scikit-build-core>=0.9.0",
-    "nanobind>=1.5.0",
-]
-build-backend = "scikit_build_core.build"
 
-[project]
-name = "researchos"
-version = "1.0.1"
-description = "Institutional-grade market research platform - deterministic, explainable, scientific"
-readme = "README.md"
-requires-python = ">=3.10,<3.15"
-license = {text = "ResearchOS Scientific License"}
-authors = [
-    {name = "QROS / ResearchOS Team"},
-]
-keywords = [
-    "market-research",
-    "institutional-trading",
-    "deterministic",
-    "explainable-ai",
-    "scientific-method",
-]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Science/Research",
-    "License :: Other/Proprietary License",
-    "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
-    "Topic :: Scientific/Engineering",
-    "Topic :: Office/Business :: Financial",
-]
-dependencies = [
-    "pandas>=2.0",
-    "numpy>=1.24",
-    "polars>=1.0",
-    "pydantic>=2.0",
-]
-
-[project.optional-dependencies]
-cli = ["click>=8.0"]
-api = ["fastapi>=0.100.0", "uvicorn>=0.20.0"]
-saas = ["fastapi>=0.100.0", "uvicorn>=0.20.0", "python-multipart>=0.0.9", "supabase>=2.18.1"]
-dev = [
-    "pytest>=7.0", "pytest-cov>=4.0", "httpx>=0.27", "ruff>=0.1.0",
-    "mypy>=1.0.0", "scikit-build-core>=0.9.0", "nanobind>=1.5.0",
-    "cmake>=3.27", "ninja>=1.11",
-]
-test = ["yfinance>=0.2"]
-
-[project.scripts]
-researchos-health = "scripts.final_health_check:main"
-
-[project.urls]
-Homepage = "https://github.com/bi421/QROS"
-Documentation = "docs/"
-
-[tool.scikit-build]
-cmake.source-dir = "researchos/engines/quant"
-cmake.version = ">=3.27"
-cmake.build-type = "Release"
-wheel.packages = [
-    "researchos",
-    "researchos/engines/quant/python/cpp_quant_engine",
-    "financial_research_lab/src/financial_research_lab",
-]
-
-[tool.scikit-build.cmake.define]
-BUILD_PYTHON_BINDINGS = true
-BUILD_TESTS = false
-BUILD_BENCHMARKS = false
-
-[tool.pytest.ini_options]
-testpaths = [
-    "researchos/experiments/phase51/tests",
-    "researchos/market_memory/tests",
-    "researchos/experiments/phase52_rebuild/tests",
-    "researchos/data_engine/tests",
-    "tests/unit",
-    "researchos/self_healing/tests",
-    "researchos/experiments/phase52/tests",
-    "researchos/tests",
-    "researchos/engines/data/tests",
-    "researchos/engines/quant/tests",
-    "researchos/memory/tests",
-    "researchos/saas/tests",
-    "financial_research_lab/tests",
-]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = "-v --tb=short"
-markers = [
-    "fast: default development feedback tests",
-    "frozen: expensive validated evidence tests; run on demand or when dependencies change",
-    "performance: performance and scale validation tests",
-    "cpp: tests that require the compiled C++ quant backend",
-]
-
-# ═══════════════════════════════════════════════════════════
-# MYpy ТОХИРГОО: Бүх кодыг шалгахгүй, зөвхөн чухал хэсгүүдийг л шалгана
-# ═══════════════════════════════════════════════════════════
 [tool.mypy]
 python_version = "3.12"
-warn_return_any = false
-warn_unused_configs = false
-disallow_untyped_defs = false
-disallow_incomplete_defs = false
-check_untyped_defs = false
-disallow_untyped_decorators = false
-no_implicit_optional = false
-warn_redundant_casts = false
-warn_unused_ignores = false
-warn_no_return = false
-strict_equality = false
-
-# Бүх 3rd-party сангийн импортыг үл тоомсорлох
-disable_error_code = [
-    "import-untyped",
-    "import-not-found",
-]
-
-# Шалгахгүй байх фолдерууд
+strict = true
 exclude = [
     "build-nanobind/",
     ".*_deps/",
@@ -134,20 +9,6 @@ exclude = [
     "venv",
     "archive",
 ]
-
-# ═══════════════════════════════════════════════════════════
-# БҮХ researchos кодыг mypy-н шалгалтаас чөлөөлөх
-# Таны код ажиллаж байгаа, mypy зөвхөн "шуугиан" тарьж байна
-# ═══════════════════════════════════════════════════════════
-[[tool.mypy.overrides]]
-module = [
-    "researchos.*",
-    "researchos.*.*",
-    "researchos.*.*.*",
-    "researchos.*.*.*.*",
-    "tests.*",
-]
-ignore_errors = true
 
 [tool.ruff]
 exclude = ["archive", "build-nanobind", ".venv", "venv"]
@@ -160,10 +21,13 @@ ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/**" = ["E402"]
-"src/**" = ["E402"]
 "researchos/tests/**" = ["E402"]
 "researchos/**/tests/**" = ["E402"]
 
 [tool.ruff.format]
 quote-style = "double"
 line-ending = "auto"
+
+[tool.bandit]
+exclude_dirs = ["tests", "archive", "build-nanobind", ".venv", "venv"]
+skips = []

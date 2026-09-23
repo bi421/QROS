@@ -59,7 +59,6 @@ archive/old_structure/cpp_quant_engine_archive/python/cpp_quant_engine/cpp_quant
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
-reports/
 backup*/
 _backup*/
 .lint_fix_backup/
@@ -99,6 +98,14 @@ __pycache__/
 *.dll
 build/
 dist/
+
+# Research data is external-only; keep only the documented XAUUSD download location.
+data/
+data/mt5/
+!data/
+!data/mt5/
+!data/mt5/xauusd/
+!data/mt5/xauusd/README.md
 
 # Data files (optional - хэрэв том бол)
 data/curated/*.json

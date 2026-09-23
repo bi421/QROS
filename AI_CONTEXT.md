@@ -67,7 +67,7 @@ Every new engine or capability must state which existing architecture block it b
 
 ## Documentation rule
 
-Current decisions and status belong in canonical docs. Historical audits and reports are evidence, not active architecture. Preserve useful historical material under `archive/reports/YYYY-MM/` when cleanup is performed; do not let stale reports become competing sources of truth.
+Current decisions and status belong in canonical docs. Historical audits and reports are evidence, not active architecture. Preserve useful historical material under `reports/YYYY-MM/` when cleanup is performed; do not let stale reports become competing sources of truth.
 
 ## Review rule
 

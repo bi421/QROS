@@ -13,10 +13,27 @@ repos:
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-added-large-files
-        exclude: ^data/mt5/xauusd/XAUUSD_M1_2021_2025_MT5\.zip$
+        args: [--maxkb=5120]
+      - id: check-merge-conflict
+      - id: detect-private-key
 
   - repo: local
     hooks:
+      - id: mypy-strict
+        name: mypy strict (researchos)
+        entry: python -m mypy --strict researchos
+        language: system
+        pass_filenames: false
+      - id: bandit
+        name: bandit security scan
+        entry: python -m bandit -r researchos -c pyproject.toml
+        language: system
+        pass_filenames: false
+      - id: check-env-files
+        name: reject environment files
+        entry: python scripts/check_env_files.py
+        language: system
+        pass_filenames: false
       - id: researchos-text-integrity
         name: ResearchOS text integrity (no BOM / trailing whitespace)
         entry: python scripts/check_text_integrity.py
