@@ -54,12 +54,13 @@ The authenticated context contains:
 ### Datasets
 
 - `POST /v1/datasets` — create a dataset and immutable version from an upload.
+- `DELETE /v1/datasets/{dataset_id}` — delete a dataset only when no non-deleted Finding references any version; referenced datasets return `409 DATASET_REFERENCED`.
 - `POST /v1/datasets/{dataset_id}/versions` — append an immutable dataset version.
 - `GET /v1/datasets` — list datasets visible to the authenticated workspace; optional `name`, `limit`, and `offset` filters.
 - `GET /v1/datasets/{dataset_id}/versions` — list versions visible to the authenticated workspace.
 - `GET /v1/datasets/{dataset_id}/versions/{version_id}/download` — issue a short-lived private download URL after tenant authorization.
 
-Dataset bytes are streamed through a bounded SHA-256 calculation before persistence. Storage paths are tenant-scoped and content-addressed.
+Dataset bytes are streamed through a bounded SHA-256 calculation before persistence. Storage paths are exactly `tenant/{tenant_id}/datasets/{sha256(content)}/{version}/`. Dataset versions are immutable; an update appends a new version and never overwrites an old object. Re-uploading identical content returns the existing version/path. Upload and download paths are SHA-256 verified.
 
 ### Research
 
