@@ -118,7 +118,7 @@ def register_research_finding_routes(
         sort_order: str = "desc",
         status_filter: str | None = Query(default=None, alias="filter[status]"),
         tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
-        request: Request,
+        request: Request = None,
         tenant=Depends(tenant_dependency),
     ) -> dict[str, object]:
         if finding_store is None:
@@ -137,14 +137,17 @@ def register_research_finding_routes(
                 tenant_id=tenant_filter,
                 allowed_sort_fields=frozenset({"created_at", "status"}),
             )
-            records, total = finding_store.list(
-                tenant.workspace_id,
+            if tenant_filter is not None and tenant_filter != str(tenant.workspace_id):
+                records, total = [], 0
+            else:
+                records, total = finding_store.list(
+                    tenant.workspace_id,
                 limit=query.page_size,
                 offset=query.offset,
                 sort_by=query.sort_by,
                 sort_order=query.sort_order,
-                status=query.status,
-            )
+                    status=query.status,
+                )
         except PaginationParameterError as exc:
             raise HTTPException(
                 status_code=400,
