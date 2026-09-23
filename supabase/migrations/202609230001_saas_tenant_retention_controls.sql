@@ -96,20 +96,25 @@ declare
     table_name text;
 begin
     foreach table_name in array array[
+        'workspace',
         'workspace_member',
         'subscription',
         'dataset',
+        'dataset_version',
         'research_run',
         'artifact',
         'evidence',
         'usage_event',
         'audit_log',
         'billing_event',
+        'api_idempotency',
         'research_claim',
         'research_validation',
         'research_finding',
         'research_run_result',
-        'research_run_artifact'
+        'research_run_artifact',
+        'audit_event',
+        'retention_deletion_operation'
     ]
     loop
         execute format('drop trigger if exists prevent_deleted_row_resurrection on public.%I', table_name);
