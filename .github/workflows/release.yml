@@ -76,7 +76,7 @@ jobs:
           test -n "$AWS_DEFAULT_REGION"
           test -n "$BACKUP_S3_BUCKET"
           mkdir -p .health/backup
-          latest_key="$(aws s3api list-objects-v2             --bucket "$BACKUP_S3_BUCKET"             --prefix qros/postgres/             --query 'Contents[?ends_with(Key, \`\.dump\`)] | sort_by(@, &LastModified)[-1].Key'             --output text)"
+          latest_key="$(aws s3api list-objects-v2 --bucket "$BACKUP_S3_BUCKET" --prefix qros/postgres/ --query 'Contents[].Key' --output text | tr '\\t' '\\n' | grep '\\.dump$' | sort | tail -n 1)"
           test -n "$latest_key"
           test "$latest_key" != "None"
           sha_key="${latest_key%.dump}.sha256"
