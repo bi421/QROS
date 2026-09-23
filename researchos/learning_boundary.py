@@ -1,4 +1,4 @@
-"""API-first boundary from validated research evidence to knowledge proposals.
+""""API-first boundary from validated research evidence to knowledge proposals.
 
 Phase 4 establishes a deterministic, auditable bridge:
 Research -> Evidence -> Learning -> Knowledge.
@@ -163,7 +163,7 @@ class KnowledgeProposal:
             evidence_hash=str(data["evidence_hash"]),
             learning_record_id=str(data["learning_record_id"]),
             statement=str(data["statement"]),
-            confidence=float(data["confidence"]),
+            confidence=float(cast(float, data["confidence"])),
             supporting_ids=tuple(str(x) for x in cast(Iterable[object], data.get("supporting_ids", []))),
         )
 
@@ -245,3 +245,4 @@ def proposals_from_learning(learning: LearningInput) -> tuple[KnowledgeProposal,
         add("lesson", index, recommendation, (learning.validation_id, learning.evidence_collection_id))
 
     return tuple(proposals)
+"
