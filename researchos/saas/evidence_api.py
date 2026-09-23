@@ -166,6 +166,24 @@ def register_research_evidence_routes(
     tenant_dependency: Any,
     evidence_store: ResearchEvidenceStore | None,
 ) -> None:
+
+    def _validate_evidence_query(*, page: str, page_size: str, sort_by: str, sort_order: str, status_filter: str | None, tenant_filter: str | None, request: Request) -> None:
+        try:
+            validate_filter_keys(
+                {key.removeprefix("filter[").removesuffix("]"): value for key, value in request.query_params.items() if key.startswith("filter[")},
+                allowed=frozenset({"status", "tenant_id"}),
+            )
+            parse_list_query(
+                page=page,
+                page_size=page_size,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                status=status_filter,
+                tenant_id=tenant_filter,
+                allowed_sort_fields=frozenset({"created_at", "status"}),
+            )
+        except PaginationParameterError as exc:
+            raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)}) from exc
     def _evidence_page(rows: list[ResearchEvidenceRecord], *, page: str, page_size: str, sort_by: str, sort_order: str, status_filter: str | None, tenant_filter: str | None, request: Request, context: TenantContext) -> dict[str, object]:
         try:
             validate_filter_keys(
@@ -203,6 +221,7 @@ def register_research_evidence_routes(
         tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
         context: TenantContext = Depends(tenant_dependency),
     ) -> dict[str, object]:
+        _validate_evidence_query(page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, status_filter=status_filter, tenant_filter=tenant_filter, request=request)
         if evidence_store is None:
             raise HTTPException(status_code=503, detail="research evidence persistence is not configured")
         try:
