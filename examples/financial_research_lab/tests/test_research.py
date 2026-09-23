@@ -1,4 +1,4 @@
-from financial_research_lab.core.research import ResearchObservation
+from examples.financial_research_lab.core.research import ResearchObservation
 
 
 def test_observation() -> None:
