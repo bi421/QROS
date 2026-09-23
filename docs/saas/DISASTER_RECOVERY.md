@@ -19,7 +19,7 @@ QROS has two independent recovery domains:
 1. **PostgreSQL** — tenant/workspace metadata, datasets, dataset versions, research jobs/runs, evidence and lineage metadata, claims/findings/validation records, retention/deletion audit state, and supported Supabase metadata.
 2. **Object storage** — dataset files and other content addressed by `storage_path`.
 
-The database backup does not contain Supabase Storage object bytes; object storage must therefore be replicated/backed up independently. Supabase documents that Storage objects are not included in database backups. citeturn0search1
+The database backup does not contain Supabase Storage object bytes; object storage must therefore be replicated/backed up independently.
 
 ## Backup verification procedure
 
