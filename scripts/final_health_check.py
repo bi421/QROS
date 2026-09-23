@@ -8,11 +8,13 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 HEALTH = ROOT / ".health"
 
-def run(name, cmd, env=None):
+
+def run(name: str, cmd: list[str], env: dict[str, str] | None = None) -> dict[str, Any]:
     try:
         result = subprocess.run(
             cmd,
@@ -32,7 +34,8 @@ def run(name, cmd, env=None):
     except Exception as exc:
         return {"name": name, "status": "FAIL", "error": str(exc)}
 
-def main():
+
+def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--expected-commit", required=True)
     ap.add_argument("--db-url", required=True)
@@ -40,7 +43,7 @@ def main():
     ap.add_argument("--admin-db-url", required=True)
     ap.add_argument("--object-before", type=Path)
     ap.add_argument("--object-after", type=Path)
-    a = ap.parse_args()
+    args = ap.parse_args()
 
     actual = subprocess.run(
         ["git", "rev-parse", "HEAD"],
@@ -50,15 +53,15 @@ def main():
         check=True,
     ).stdout.strip()
 
-    if actual!= a.expected_commit:
+    if actual != args.expected_commit:
         print(
-            f"commit mismatch: expected {a.expected_commit}, got {actual}",
+            f"commit mismatch: expected {args.expected_commit}, got {actual}",
             file=sys.stderr,
         )
         return 1
 
-    env = {**os.environ, "QROS_VERIFY_DATABASE_URL": a.db_url}
-    checks = {}
+    env = {**os.environ, "QROS_VERIFY_DATABASE_URL": args.db_url}
+    checks: dict[str, dict[str, Any]] = {}
 
     checks["tenant_isolation"] = run(
         "tenant_isolation",
@@ -68,8 +71,14 @@ def main():
             "db",
             "supabase/tests/tenant_isolation_test.sql",
             "--db-url",
-            a.db_url,
+            args.db_url,
         ],
+        env,
+    )
+
+    checks["authz"] = run(
+        "authz",
+        [sys.executable, "scripts/check_authz_coverage.py", "--db-url", args.db_url],
         env,
     )
 
@@ -77,32 +86,39 @@ def main():
         sys.executable,
         "scripts/backup_verify.py",
         "--source-db-url",
-        a.source_db_url,
+        args.source_db_url,
         "--admin-db-url",
-        a.admin_db_url,
+        args.admin_db_url,
     ]
-    if a.object_before and a.object_after:
+    if args.object_before and args.object_after:
         backup += [
             "--object-before",
-            str(a.object_before),
+            str(args.object_before),
             "--object-after",
-            str(a.object_after),
+            str(args.object_after),
         ]
 
     checks["backup_restore"] = run("backup_restore", backup, env)
 
-    coverage = {}
+    coverage: dict[str, Any] = {}
     cp = ROOT / ".health" / "coverage.json"
     if cp.exists():
         coverage = json.loads(cp.read_text(encoding="utf-8")).get("totals", {})
 
-    passed = all(c["status"] == "PASS" for c in checks.values())
+    tenant_pass = checks["tenant_isolation"]["status"] == "PASS"
+    authz_pass = checks["authz"]["status"] == "PASS"
+    backup_pass = checks["backup_restore"]["status"] == "PASS"
+    passed = tenant_pass and authz_pass and backup_pass
 
     evidence = {
         "schema_version": 1,
         "commit": actual,
         "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
         "tests_passed": passed,
+        "health_status": "PASS" if passed else "FAIL",
+        "rls_check": tenant_pass,
+        "authz_check": authz_pass,
+        "tenant_isolation_check": tenant_pass,
         "health": checks,
         "coverage": coverage,
     }
@@ -116,8 +132,8 @@ def main():
 
     print(json.dumps(evidence, indent=2, sort_keys=True))
     print(f"EVIDENCE={path}")
-
     return 0 if passed else 1
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
