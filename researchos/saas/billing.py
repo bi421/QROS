@@ -37,6 +37,7 @@ ENTITLEMENTS_BY_PLAN: dict[str, tuple[int, int, int]] = {
     "free": (10, 100, 1024),
     "pro": (1000, 1000, 10240),
     "enterprise": (0, 0, 0),
+    "team": (1000, 1000, 10240),
 }
 
 
