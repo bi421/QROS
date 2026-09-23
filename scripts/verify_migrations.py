@@ -130,7 +130,7 @@ def main() -> int:
                 'research_claim','research_validation','research_finding',
                 'research_run_result','research_run_artifact','audit_event',
                 'retention_deletion_operation','workspace_retention_policy',
-                'tenant_deletion_tombstone'
+                'tenant_deletion_tombstone','entitlements'
               )
             order by tablename
             """
@@ -162,7 +162,7 @@ def main() -> int:
                 'research_claim','research_validation','research_finding',
                 'research_run_result','research_run_artifact','audit_event',
                 'retention_deletion_operation','workspace_retention_policy',
-                'tenant_deletion_tombstone'
+                'tenant_deletion_tombstone','entitlements'
               ])
             order by tablename, policyname
             """
