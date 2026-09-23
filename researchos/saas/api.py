@@ -264,7 +264,9 @@ def create_app(
                 requested_workspace_id = UUID(workspace_header.strip())
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail="invalid X-Workspace-ID") from exc
-        return auth.authenticate(authorization, requested_workspace_id)
+        context = auth.authenticate(authorization, requested_workspace_id)
+        request.state.tenant = context
+        return context
 
     def require_role(tenant: TenantContext, *allowed: WorkspaceRole) -> None:
         """Enforce server-resolved membership roles; never trust request data."""
