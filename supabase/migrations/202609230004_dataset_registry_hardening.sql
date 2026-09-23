@@ -54,3 +54,5 @@ for each row execute function public.prevent_referenced_dataset_delete();
 
 revoke all on table public.dataset_version_feed from anon, authenticated;
 grant all on table public.dataset_version_feed to service_role;
+create policy dataset_version_feed_service_role on public.dataset_version_feed
+    for all to service_role using (true) with check (true);
