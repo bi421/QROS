@@ -19,7 +19,7 @@ QROS has two independent recovery domains:
 1. **PostgreSQL** — tenant/workspace metadata, datasets, dataset versions, research jobs/runs, evidence and lineage metadata, claims/findings/validation records, retention/deletion audit state, and supported Supabase metadata.
 2. **Object storage** — dataset files and other content addressed by `storage_path`.
 
-The database backup does not contain Supabase Storage object bytes; object storage must therefore be replicated/backed up independently. Supabase Storage supports S3-compatible access for this purpose.
+The database backup does not contain Supabase Storage object bytes; object storage must therefore be replicated/backed up independently. Supabase documents that Storage objects are not included in database backups. citeturn0search1
 
 ## Backup verification procedure
 
@@ -35,12 +35,13 @@ The verifier:
 
 1. creates a custom-format `pg_dump`;
 2. creates a fresh PostgreSQL database;
-3. restores with `pg_restore`;
-4. runs `scripts/check_migrations.py`;
-5. executes the tenant-isolation pgTAP suite against the restored database;
-6. computes SHA-256 for every supplied object-storage file;
-7. requires before/after object paths and hashes to match;
-8. removes the temporary restore database unless `--keep-target` is supplied.
+3. applies every repository migration with `supabase migration up --include-all`;
+4. runs `scripts/verify_migrations.py` against the restored target schema;
+5. restores source public data with `pg_restore --data-only`;
+6. compares every `dataset_version.content_sha256` before/after restore;
+7. executes the tenant-isolation pgTAP suite against the restored database;
+8. computes SHA-256 for every supplied object-storage file and requires exact before/after equality;
+9. removes the temporary restore database unless `--keep-target` is supplied.
 
 `pg_restore` is designed to restore PostgreSQL archives created by `pg_dump`, including custom-format archives.
 
