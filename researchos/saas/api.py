@@ -6,6 +6,7 @@ from typing import Protocol
 from uuid import UUID, uuid4
 import hashlib
 import json
+import logging
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
 from fastapi.exceptions import RequestValidationError
@@ -44,6 +45,8 @@ REQUEST_ID_HEADER = "X-Request-ID"
 IDEMPOTENCY_HEADER = "Idempotency-Key"
 MAX_REQUEST_ID_LENGTH = 128
 
+logger = logging.getLogger(__name__)
+
 
 def _error_code(status_code: int) -> str:
     return {
@@ -71,6 +74,14 @@ def _error_payload(request: Request, status_code: int, detail: object) -> dict[s
             "request_id": getattr(request.state, "request_id", None),
         },
     }
+
+
+def _validate_dataset_name(name: str) -> str:
+    """Reject path-like dataset names before they cross any storage boundary."""
+    normalized = name.strip()
+    if not normalized or "/" in normalized or "\" in normalized or ".." in normalized:
+        raise HTTPException(status_code=400, detail="INVALID_PATH")
+    return normalized
 
 
 class RequestCorrelationMiddleware(BaseHTTPMiddleware):
@@ -177,6 +188,15 @@ def create_app(
             content=_error_payload(request, 422, exc.errors()),
         )
 
+    @app.exception_handler(Exception)
+    async def internal_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        request_id = getattr(request.state, "request_id", None)
+        logger.exception("unhandled request exception request_id=%s", request_id)
+        return JSONResponse(
+            status_code=500,
+            content=_error_payload(request, 500, "Internal error"),
+        )
+
     def current_tenant(authorization: str | None = Header(default=None)) -> TenantContext:
         return auth.authenticate(authorization)
 
@@ -277,7 +297,7 @@ def create_app(
         file: UploadFile = File(...),
         tenant: TenantContext = Depends(current_tenant),
     ) -> DatasetResponse:
-        dataset = Dataset(id=uuid4(), workspace_id=tenant.workspace_id, name=name.strip(), created_by=tenant.user_id)
+        dataset = Dataset(id=uuid4(), workspace_id=tenant.workspace_id, name=_validate_dataset_name(name), created_by=tenant.user_id)
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         try:
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
