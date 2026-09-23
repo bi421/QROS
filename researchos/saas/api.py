@@ -585,13 +585,61 @@ def create_app(
             raise HTTPException(status_code=404, detail="dataset not found")
         return persist_version(dataset_id=dataset_id, tenant=tenant, file=file)
 
-    @app.get("/v1/datasets/{dataset_id}/versions", response_model=list[DatasetVersion], tags=["datasets"])
+    @app.get("/v1/datasets/{dataset_id}/versions", response_model=PageResponse, tags=["datasets"])
     @require_permission("dataset", "list")
     def list_dataset_versions(
         dataset_id: UUID,
+        page: str = "1",
+        page_size: str = "20",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
+        request: Request = None,
         tenant: TenantContext = Depends(current_tenant),
-    ) -> list[DatasetVersion]:
-        return datasets.list_versions(tenant.workspace_id, dataset_id)
+    ) -> PageResponse:
+        try:
+            if request is not None:
+                validate_filter_keys(
+                    {key.removeprefix("filter[").removesuffix("]"): value for key, value in request.query_params.items() if key.startswith("filter[")},
+                    allowed=frozenset({"tenant_id"}),
+                )
+            query = parse_list_query(
+                page=page,
+                page_size=page_size,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                tenant_id=tenant_filter,
+                allowed_sort_fields=frozenset({"created_at"}),
+            )
+        except PaginationParameterError as exc:
+            raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)}) from exc
+        if tenant_filter is not None and tenant_filter != str(tenant.workspace_id):
+            versions: list[DatasetVersion] = []
+        else:
+            versions = datasets.list_versions(tenant.workspace_id, dataset_id)
+        total = len(versions)
+        rows = versions[query.offset:query.offset + query.page_size]
+        data = [
+            {
+                "id": str(version.id),
+                "dataset_id": str(version.dataset_id),
+                "version_no": version.version_no,
+                "content_sha256": version.content_sha256,
+                "storage_path": version.storage_path,
+                "byte_size": version.byte_size,
+                "created_by": str(version.created_by),
+            }
+            for version in rows
+        ]
+        return PageResponse.model_validate(
+            pagination_envelope(
+                data=data,
+                page=query.page,
+                page_size=query.page_size,
+                total=total,
+                request_id=request.state.request_id if request is not None else "",
+            )
+        )
 
     @app.get("/v1/datasets/{dataset_id}/versions/{version_id}/download", response_model=dict[str, str], tags=["datasets"])
     @require_permission("dataset", "read")
