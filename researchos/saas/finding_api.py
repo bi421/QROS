@@ -78,6 +78,7 @@ def register_research_finding_routes(
         job_id: UUID,
         request: ResearchFindingRequest,
         tenant=Depends(tenant_dependency),
+        request: Request,
     ) -> dict[str, object]:
         if finding_store is None:
             raise HTTPException(status_code=503, detail="research finding persistence is not configured")
