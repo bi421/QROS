@@ -44,6 +44,7 @@ from researchos.saas.finding_api import InMemoryResearchFindingStore, register_r
 from researchos.saas.research_report import build_research_report
 from researchos.saas.observability import StructuredRequestObserver, observe_request
 from researchos.saas.api.pagination import envelope, parse_list_query, sort_items
+from researchos.saas.api.middleware import RequestContextMiddleware
 from researchos.saas.request_context import reset_request_id, set_request_id
 from researchos.saas.billing import (
     BillingEventConflict,
@@ -230,7 +231,7 @@ def create_app(
         version="1.0.0",
         description="Multi-tenant delivery API for auditable financial research.",
     )
-    app.add_middleware(RequestCorrelationMiddleware)
+    app.add_middleware(RequestContextMiddleware)
     app.state.observability = StructuredRequestObserver()
 
     @app.exception_handler(HTTPException)
