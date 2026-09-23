@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Callable, Protocol
 from uuid import UUID, uuid4
 import hashlib
 import hmac
@@ -179,7 +179,7 @@ class UnconfiguredAuthProvider:
 class BillingGateMiddleware(BaseHTTPMiddleware):
     """Authenticate tenant-scoped API requests, enforce plan rate limits and creation entitlements."""
 
-    def __init__(self, app, *, auth: AuthProvider, entitlement_store: EntitlementStore, rate_limiter: PlanRateLimiter, usage_provider) -> None:
+    def __init__(self, app, *, auth: AuthProvider, entitlement_store: EntitlementStore, rate_limiter: PlanRateLimiter, usage_provider: Callable[[UUID, str], UsageSnapshot]) -> None:
         super().__init__(app)
         self.auth = auth
         self.entitlement_store = entitlement_store
