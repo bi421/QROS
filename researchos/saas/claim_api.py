@@ -141,7 +141,7 @@ def register_research_claim_routes(
         status_code=status.HTTP_201_CREATED,
         tags=["research-claims"],
     )
-    @require_permission("job", "create")
+    @require_permission("claim", "create")
     def create_research_claim(
         request: ResearchClaimCreateRequest,
         context: TenantContext = Depends(tenant_dependency),
@@ -184,7 +184,7 @@ def register_research_claim_routes(
         response_model=ResearchClaimResponse,
         tags=["research-claims"],
     )
-    @require_permission("job", "update")
+    @require_permission("plan", "update")
     def lock_research_claim_plan(
         claim_id: str,
         request: ResearchPlanLockRequest,
@@ -230,7 +230,7 @@ def register_research_claim_routes(
         response_model=ResearchClaimResponse,
         tags=["research-claims"],
     )
-    @require_permission("job", "read")
+    @require_permission("claim", "read")
     def get_research_claim(
         claim_id: str,
         context: TenantContext = Depends(tenant_dependency),
@@ -254,7 +254,7 @@ def register_research_claim_routes(
         response_model=ResearchClaimPageResponse,
         tags=["research-claims"],
     )
-    @require_permission("job", "list")
+    @require_permission("claim", "list")
     def list_research_claims(
         page: str = "1",
         page_size: str = "20",
