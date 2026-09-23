@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import inspect
 import logging
+
+import pytest
 from io import BytesIO
+from typing import Any
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -28,28 +31,28 @@ class _StaticAuth:
 
 
 class _ExplodingStorage(InMemoryDatasetStorage):
-    def put(self, storage_path: str, file: BytesIO) -> None:
+    def put(self, storage_path: str, file: Any) -> None:
         raise RuntimeError(
             "traceback: SELECT * FROM secret; SUPABASE_SERVICE_ROLE_KEY=super-secret"
         )
 
 
 class _RejectingSupabaseAuth:
-    def get_claims(self, token: str):
+    def get_claims(self, token: str) -> dict[str, object]:
         if token == "forged-tenant-token":
             raise ValueError("invalid JWT signature")
         return {"claims": {"sub": str(uuid4()), "tenant_id": str(uuid4())}}
 
 
 class _Membership:
-    def __init__(self, workspace_id):
+    def __init__(self, workspace_id: Any) -> None:
         self.workspace_id = workspace_id
 
-    def resolve(self, user_id):
+    def resolve(self, user_id: Any) -> tuple[Any, Plan]:
         return self.workspace_id, Plan.PRO
 
 
-def _client(context: TenantContext, *, storage=None, raise_server_exceptions=True) -> TestClient:
+def _client(context: TenantContext, *, storage: Any = None, raise_server_exceptions: bool = True) -> TestClient:
     return TestClient(
         create_app(
             auth_provider=_StaticAuth(context),
@@ -133,7 +136,7 @@ def test_error_leak_is_blocked() -> None:
     assert response.headers["X-Request-ID"] == request_id
 
 
-def test_service_role_bypass_is_not_part_of_worker_boundary(caplog) -> None:
+def test_service_role_bypass_is_not_part_of_worker_boundary(caplog: pytest.LogCaptureFixture) -> None:
     source = inspect.getsource(ResearchWorker)
     assert "service_role" not in source
     assert "SUPABASE_SERVICE_ROLE_KEY" not in source
