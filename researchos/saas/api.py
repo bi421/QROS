@@ -17,6 +17,7 @@ from starlette.responses import JSONResponse, Response, StreamingResponse
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, PageRequest, ResearchJob, ResearchJobStatus, TenantContext, WorkspaceRole
+from researchos.saas.storage.signed_urls import DEFAULT_EXPIRY_SECONDS, SignedUrlError, bind_signed_url
 from researchos.saas.datasets import (
     Dataset,
     DatasetStorage,
@@ -656,14 +657,15 @@ def create_app(
         if version is None or version.dataset_id != dataset_id:
             raise HTTPException(status_code=404, detail="dataset version not found")
         try:
-            url = storage.create_signed_download_url(version.storage_path, 300)
+            provider_url = storage.create_signed_download_url(version.storage_path, DEFAULT_EXPIRY_SECONDS)
+            url = bind_signed_url(provider_url, tenant.workspace_id, version.storage_path, expires_in=DEFAULT_EXPIRY_SECONDS)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="dataset object not found") from exc
-        except ValueError as exc:
+        except (ValueError, SignedUrlError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
             raise HTTPException(status_code=503, detail="dataset download service unavailable") from exc
-        return {"url": url, "expires_in": "300"}
+        return {"url": url, "expires_in": str(DEFAULT_EXPIRY_SECONDS)}
 
     @app.post("/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"])
     @require_permission("job", "create")
