@@ -631,8 +631,13 @@ def create_app(
                 status=status_filter,
                 allowed_sort_fields=frozenset({"created_at", "status", "workflow_id"}),
             )
+            normalized_status = (
+                "succeeded" if query.status == "completed" else query.status
+            )
             status_value = (
-                ResearchJobStatus(query.status) if query.status is not None else None
+                ResearchJobStatus(normalized_status)
+                if normalized_status is not None
+                else None
             )
         except (PaginationParameterError, ValueError) as exc:
             code = exc.code if isinstance(exc, PaginationParameterError) else "INVALID_FILTER"
