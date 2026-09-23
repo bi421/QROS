@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from researchos.research_core.contracts import ResearchArtifact, ResearchResult
 from researchos.saas.api import create_app
 from researchos.saas.observability import RequestMetrics, StructuredRequestObserver, emit_log, sanitize_log_fields
 from researchos.saas.queue import InMemoryResearchJobQueue
@@ -82,11 +83,11 @@ def test_worker_log_preserves_request_id_for_same_job(caplog) -> None:
     class Executor:
         def execute(self, received_job_id):
             assert received_job_id == job_id
-            return type("Result", (), {
-                "status": "SUCCEEDED",
-                "source_dataset_sha256": "0" * 64,
-                "artifacts": (),
-            })()
+            return ResearchResult(
+                status="SUCCEEDED",
+                source_dataset_sha256="0" * 64,
+                artifacts=(ResearchArtifact("artifact-1", "evidence", "1" * 64),),
+            )
 
     # The queue retains the API correlation ID alongside the durable job ID.
     queue = InMemoryResearchJobQueue()
@@ -137,8 +138,11 @@ def test_observer_records_5xx_as_error() -> None:
     assert snapshot["status_counts"] == {503: 1}
 
 
-def test_emit_log_is_json_parseable() -> None:
-    import researchos.saas.observability as module
-    module._LOGGER.setLevel(logging.INFO)
-    # This is intentionally a direct structured-log contract test.
+def test_emit_log_is_json_parseable(caplog) -> None:
+    caplog.set_level(logging.INFO, logger="qros.saas")
     emit_log(level=logging.INFO, message="contract-test", request_id="req-1")
+    record = next(r for r in caplog.records if r.name == "qros.saas")
+    payload = json.loads(record.message)
+    assert payload["request_id"] == "req-1"
+    assert payload["message"] == "contract-test"
+    assert {"timestamp", "level", "request_id", "tenant_id", "job_id", "message", "duration_ms"} <= payload.keys()
