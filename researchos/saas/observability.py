@@ -17,6 +17,9 @@ from typing import Mapping
 
 import structlog
 
+structlog.configure(
+    processors=[structlog.processors.TimeStamper(fmt="iso"), structlog.processors.add_log_level, structlog.processors.JSONRenderer()],
+)
 _LOGGER = structlog.get_logger("qros.saas")
 
 _SENSITIVE_KEYS = frozenset(
