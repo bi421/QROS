@@ -100,14 +100,15 @@ class SupabaseResearchClaimStore:
             self._client.table("research_claim")
             .select("id,workspace_id,claim_hash,payload", count="exact")
             .eq("workspace_id", str(workspace_id))
+            .is_("deleted_at", "null")
             .order(
                 "evidence_state" if sort_by == "status" else sort_by,
                 desc=sort_order == "desc",
             )
-            .range(offset, offset + limit - 1)
-        )
         if status:
             query = query.eq("evidence_state", status)
+            .range(offset, offset + limit - 1)
+        )
         result = query.execute()
         return [self._claim(row) for row in (result.data or [])], int(result.count or 0)
 
