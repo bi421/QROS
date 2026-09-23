@@ -468,6 +468,7 @@ def create_app(
     @app.get("/v1/datasets", response_model=PageResponse, tags=["datasets"])
     @require_permission("dataset", "list")
     def list_datasets(
+        request: Request,
         page: str = "1",
         page_size: str = "20",
         sort_by: str = "created_at",
