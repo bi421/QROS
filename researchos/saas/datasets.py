@@ -40,21 +40,7 @@ class DatasetStore(Protocol):
         ...
 
     def create_dataset(self, workspace_id: UUID, dataset: Dataset) -> Dataset:
-        """Create a dataset only when its tenant identity matches the boundary."""
         ...
-
-    def list_datasets(self, workspace_id: UUID, *, limit: int = 50, offset: int = 0, name_filter: str | None = None, sort_by: str = "created_at", sort_order: str = "desc") -> tuple[list[Dataset], int]:
-        if not 1 <= limit <= 100 or offset < 0:
-            raise ValueError("invalid pagination")
-        needle = name_filter.strip().lower() if name_filter else None
-        rows = [d for d in self._datasets.values() if d.workspace_id == workspace_id and (needle is None or needle in d.name.lower())]
-        if sort_by not in {"created_at", "name"}:
-            raise ValueError("invalid sort field")
-        if sort_order not in {"asc", "desc"}:
-            raise ValueError("invalid sort order")
-        reverse = sort_order == "desc"
-        rows.sort(key=lambda item: item.created_at if sort_by == "created_at" else item.name.lower(), reverse=reverse)
-        return rows[offset:offset + limit], len(rows)
 
     def delete_dataset(self, workspace_id: UUID, dataset_id: UUID) -> None:
         ...
@@ -218,12 +204,20 @@ class SupabaseDatasetStore:
     def list_datasets(self, workspace_id: UUID, *, limit: int = 50, offset: int = 0, name_filter: str | None = None, sort_by: str = "created_at", sort_order: str = "desc") -> tuple[list[Dataset], int]:
         if not 1 <= limit <= 100 or offset < 0:
             raise ValueError("invalid pagination")
-        query = self._client.table("dataset").select("id,workspace_id,name,created_by,created_at", count="exact").eq("workspace_id", str(workspace_id))
+        if sort_by not in {"created_at", "name"}:
+            raise ValueError("invalid sort field")
+        if sort_order not in {"asc", "desc"}:
+            raise ValueError("invalid sort order")
+        query = (
+            self._client.table("dataset")
+            .select("id,workspace_id,name,created_by,created_at", count="exact")
+            .eq("workspace_id", str(workspace_id))
+            .is_("deleted_at", "null")
+        )
         if name_filter:
             query = query.ilike("name", f"%{name_filter.strip()}%")
         result = query.order(sort_by, desc=sort_order == "desc").range(offset, offset + limit - 1).execute()
-        rows = [self._dataset(row) for row in (result.data or [])]
-        return rows, int(result.count or 0)
+        return [self._dataset(row) for row in (result.data or [])], int(result.count or 0)
 
     def delete_dataset(self, workspace_id: UUID, dataset_id: UUID) -> None:
         self._client.table("dataset").delete().eq("id", str(dataset_id)).eq(
@@ -260,6 +254,7 @@ class SupabaseDatasetStore:
             .select("id,workspace_id,name,created_by,created_at")
             .eq("id", str(dataset_id))
             .eq("workspace_id", str(workspace_id))
+            .is_("deleted_at", "null")
             .limit(1)
             .execute()
         )
