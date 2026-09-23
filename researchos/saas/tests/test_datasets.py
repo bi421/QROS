@@ -117,3 +117,44 @@ def test_old_versions_remain_readable_after_new_version() -> None:
 
     assert store.get_version(dataset.workspace_id, first.id) == first
     assert store.get_version(dataset.workspace_id, second.id) == second
+
+
+def test_storage_path_rejects_noncanonical_digest() -> None:
+    workspace_id = uuid4()
+
+    with pytest.raises(ValueError, match="SHA-256 digest"):
+        storage_path_for(workspace_id, "A" * 64, 1)
+
+    with pytest.raises(ValueError, match="SHA-256 digest"):
+        storage_path_for(workspace_id, "not-a-digest", 1)
+
+
+def test_version_storage_path_is_immutable_and_canonical() -> None:
+    store = InMemoryDatasetStore()
+    dataset = Dataset(uuid4(), uuid4(), "sample", uuid4())
+    store.create_dataset(dataset.workspace_id, dataset)
+    digest = "f" * 64
+
+    valid = DatasetVersion(
+        uuid4(), dataset.id, 1, digest,
+        storage_path_for(dataset.workspace_id, digest, 1),
+        1, dataset.created_by,
+    )
+    store.create_version(dataset.workspace_id, valid)
+
+    invalid = DatasetVersion(
+        uuid4(), dataset.id, 2, digest,
+        "tenant/other/datasets/" + digest + "/2/",
+        1, dataset.created_by,
+    )
+    with pytest.raises(ValueError, match="canonical content-addressed path"):
+        store.create_version(dataset.workspace_id, invalid)
+
+
+def test_storage_sha256_verification_detects_tampering() -> None:
+    storage = InMemoryDatasetStorage()
+    path = "tenant/example/datasets/" + "a" * 64 + "/1/"
+    storage.put(path, BytesIO(b"original"))
+
+    assert storage.verify_sha256(path, "0689b6b9c5f8b0c4e1f7f9b4f0d9d8f7e3f4f8c4f5d4f6e8e8d6f7f8f8f9f8f7") is False
+    assert storage.verify_sha256(path, "0689b6b9c5f8b0c4e1f7f9b4f0d9d8f7e3f4f8c4f5d4f6e8e8d6f7f8f8f9f8f7") is False
