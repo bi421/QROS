@@ -14,7 +14,7 @@ workspace
 workspace_member
   workspace_id uuid FK workspace
   user_id uuid FK auth.users
-  role text CHECK (owner|admin|researcher|viewer)
+  role text CHECK (owner|admin|researcher|viewer|billing)
   created_at timestamptz
   PK (workspace_id, user_id)
 
