@@ -327,7 +327,7 @@ def create_app(
         except HTTPException:
             raise
         except Exception as exc:
-            raise HTTPException(status_code=500, detail="dataset version persistence failed") from exc
+            raise RuntimeError("dataset version persistence failed") from exc
 
     @app.get("/metrics", tags=["system"])
     def metrics(metrics_header: str | None = Header(default=None, alias="X-Metrics-Token")) -> Response:
@@ -373,7 +373,7 @@ def create_app(
         except BillingEventConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except Exception as exc:
-            raise HTTPException(status_code=500, detail="billing event processing failed") from exc
+            raise RuntimeError("billing event processing failed") from exc
         return {"status": "processed" if processed else "replayed"}
 
     @app.get("/v1/me", response_model=dict[str, str], tags=["identity"])
@@ -424,7 +424,7 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=413, detail=str(exc)) from exc
         except Exception as exc:
-            raise HTTPException(status_code=500, detail="dataset persistence failed") from exc
+            raise RuntimeError("dataset persistence failed") from exc
 
         return DatasetResponse(
             id=persisted_dataset.id,
@@ -550,7 +550,8 @@ def create_app(
                 )
             except Exception:
                 pass
-            raise HTTPException(status_code=503, detail="research job queue unavailable") from exc
+<<<<<<< HEAD
+            raise RuntimeError("research job queue unavailable") from exc
         return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
 
     @app.get("/v1/research-runs", response_model=PageResponse, tags=["research"])
