@@ -55,15 +55,15 @@ def test_real_supabase_dataset_rls_isolation(service_client: Client) -> None:
         foreign_list = client_b.table("dataset").select("id").execute()
         assert dataset_id not in {str(row["id"]) for row in (foreign_list.data or [])}
 
-        denied_insert = client_b.table("dataset").insert(
-            {
-                "id": str(uuid4()),
-                "workspace_id": workspace_a,
-                "name": "cross-tenant-write",
-                "created_by": user_b,
-            }
-        ).execute()
-        assert denied_insert.data in (None, [])
+        with pytest.raises(Exception):
+            client_b.table("dataset").insert(
+                {
+                    "id": str(uuid4()),
+                    "workspace_id": workspace_a,
+                    "name": "cross-tenant-write",
+                    "created_by": user_b,
+                }
+            ).execute()
 
     finally:
         service_client.table("dataset").delete().eq("id", dataset_id).execute()
