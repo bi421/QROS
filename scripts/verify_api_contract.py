@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import ast
-import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,10 +33,13 @@ EXPECTED = {
 
 def main() -> int:
     text = CONTRACT.read_text(encoding="utf-8")
-    documented = {
-        f"{method} {path}"
-        for method, path in re.findall(r"- \\`((?:GET|POST|PUT|PATCH|DELETE)) (/v1[^\\` ]*)\\`", text)
-    }
+    documented = set()
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- `") and "`" in stripped[3:]:
+            value = stripped[3:stripped.index("`", 3)]
+            if value.split(" ", 1)[0] in {"GET", "POST", "PUT", "PATCH", "DELETE"} and " /v1" in value:
+                documented.add(value)
     actual: set[str] = set()
     for source in (ROOT / "researchos" / "saas").rglob("*.py"):
         tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
