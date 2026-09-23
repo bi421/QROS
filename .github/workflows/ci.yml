@@ -1,4 +1,5 @@
 name: CI
+# Billing/compliance stacked PRs use the same full gate.
 
 on:
   push:
