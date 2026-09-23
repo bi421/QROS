@@ -4,12 +4,11 @@ from pathlib import Path
 import polars as pl
 
 
-# Энэ бол таны researchos/data_engine/dataset.py дээр нэмэх ёстой класс
 @dataclass
 class XAUUSD_M1_Dataset:
     path: Path = Path("data/curated/xauusd/xauusd_m1_2023_2025.parquet")
 
-    def load(self, year=None, resample="1h"):
+    def load(self, year: int | None = None, resample: str | None = "1h") -> pl.DataFrame:
         df = pl.read_parquet(self.path).sort("ts_utc")
         if year:
             df = df.filter(pl.col("ts_utc").dt.year() == year)
@@ -29,7 +28,6 @@ class XAUUSD_M1_Dataset:
         return df
 
 
-# Тест
 if __name__ == "__main__":
     ds = XAUUSD_M1_Dataset()
     print("H1 2025:", ds.load(year=2025, resample="1h").height, "rows")
