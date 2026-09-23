@@ -42,6 +42,7 @@ dependencies = [
     "polars>=1.0",
     "pydantic>=2.0",
     "opentelemetry-api>=1.25.0",
+    "opentelemetry-sdk>=1.25.0",
 ]
 
 [project.optional-dependencies]
