@@ -338,14 +338,17 @@ def create_app(
                     )
                 )
             except Exception:
-                storage.remove(storage_path)
+                storage.remove(storage_path, tenant_id=tenant.workspace_id, access_token=tenant.access_token)
                 existing = datasets.find_version_by_content(tenant.workspace_id, dataset_id, digest)
                 if existing is not None:
-                    if not storage.verify_sha256(existing.storage_path, existing.content_sha256):
+                    if not storage.verify_sha256(existing.storage_path, existing.content_sha256, tenant_id=tenant.workspace_id, access_token=tenant.access_token):
                         raise HTTPException(status_code=503, detail="dataset object integrity check failed")
                     return existing
                 raise
             return version
+        except PermissionError as exc:
+            app.state.observability.metrics.inc_tenant_isolation_violation()
+            raise HTTPException(status_code=403, detail="tenant storage authorization failed") from exc
         except ValueError as exc:
             raise HTTPException(status_code=413, detail=str(exc)) from exc
         except HTTPException:
