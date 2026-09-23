@@ -137,9 +137,11 @@ class RequestMetrics:
         ]
         buckets = s["latency_buckets"]
         assert isinstance(buckets, dict)
+        cumulative = 0
         for bucket in _LATENCY_BUCKETS_MS:
+            cumulative += int(buckets.get(bucket, 0))
             lines.append(
-                f'qros_http_request_duration_ms_bucket{{le="{bucket}"}} {int(buckets.get(bucket, 0))}'
+                f'qros_http_request_duration_ms_bucket{{le="{bucket}"}} {cumulative}'
             )
         lines.extend([
             f'qros_http_request_duration_ms_bucket{{le="+Inf"}} {int(s["requests_total"])}',
