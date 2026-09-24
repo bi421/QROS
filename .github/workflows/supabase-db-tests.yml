@@ -26,8 +26,9 @@ jobs:
           version: 2.117.0
           github-token: ${{ github.token }}
 
-      - name: Initialize local Supabase configuration
-        run: supabase init
+      - name: Ensure Supabase config exists
+        run: |
+          if [ ! -f supabase/config.toml ]; then supabase init; fi
 
       - name: Isolate local database port
         shell: bash
@@ -75,4 +76,5 @@ jobs:
       - name: Stop local Supabase
         if: always()
         run: supabase stop
+
 

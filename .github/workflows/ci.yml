@@ -139,7 +139,7 @@ jobs:
       - uses: supabase/setup-cli@v2
         with:
           version: latest
-      - run: supabase init
+      - run: if [ ! -f supabase/config.toml ]; then supabase init; fi
       - run: supabase start
       - name: Install pgtap extension for tests
         run: |
@@ -155,5 +155,6 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - run: echo "All checks passed"
+
 
 

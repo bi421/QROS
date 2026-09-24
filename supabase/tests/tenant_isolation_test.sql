@@ -2,6 +2,7 @@
 -- The fixture is fully transactional. Grants are temporarily widened inside
 -- the transaction so the tests exercise RLS independently of the production
 -- server-only Data API boundary; the transaction rolls back all changes.
+create extension if not exists pgtap;
 begin;
 
 select plan(23);
@@ -266,4 +267,5 @@ select results_eq(
 
 select * from finish();
 rollback;
+
 
