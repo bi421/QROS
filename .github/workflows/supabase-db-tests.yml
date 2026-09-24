@@ -33,7 +33,6 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-
           path = Path("supabase/config.toml")
           text = path.read_text(encoding="utf-8")
           marker = "port = 54322"
@@ -61,12 +60,12 @@ jobs:
               sleep "$sleep_seconds"
             fi
           done
+          echo "::error::Unable to start local Supabase after $max_attempts attempts."
+          exit 1
 
       - name: Install pgtap extension
         run: |
           PGPASSWORD=postgres psql -h 127.0.0.1 -p 54332 -U postgres -d postgres -c "create extension if not exists pgtap;" || true
-          echo "::error::Unable to start local Supabase after $max_attempts attempts."
-          exit 1
 
       - name: Run database security tests
         run: supabase test db supabase/tests/tenant_isolation_test.sql
@@ -74,5 +73,3 @@ jobs:
       - name: Stop local Supabase
         if: always()
         run: supabase stop
-
-
