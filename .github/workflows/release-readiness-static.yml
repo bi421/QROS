@@ -2,6 +2,8 @@ name: Release Readiness Static Gate
 
 on:
   push:
+    branches:
+      - main
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
