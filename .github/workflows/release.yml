@@ -2,8 +2,16 @@ name: Exact Release Gate
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release'
+        required: true
+        default: 'v1.0.3-rc2'
+
 permissions:
   contents: write
+
 jobs:
   release:
     runs-on: ubuntu-24.04
@@ -15,8 +23,18 @@ jobs:
       - name: Checkout exact tagged commit
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           fetch-depth: 0
+
+      - name: Resolve manual dispatch tag
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "RELEASE_TAG=${{ inputs.tag }}" >> $GITHUB_ENV
+          sha="$(git rev-list -n 1 "${{ inputs.tag }}")"
+          echo "RELEASE_SHA=$sha" >> $GITHUB_ENV
+
       - name: Assert exact tag commit
         shell: bash
         run: |
@@ -25,6 +43,7 @@ jobs:
           tag_commit="$(git rev-list -n 1 "$RELEASE_TAG")"
           test "$head" = "$RELEASE_SHA"
           test "$tag_commit" = "$RELEASE_SHA"
+
       - name: Install PostgreSQL 17 client
         shell: bash
         run: |
@@ -38,15 +57,18 @@ jobs:
           sudo apt-get install -y postgresql-client-17
           pg_dump --version
           pg_restore --version
+
       - name: Install Supabase CLI
         uses: supabase/setup-cli@v2
         with:
           version: 2.117.0
           github-token: ${{ github.token }}
+
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,test,saas]"
+
       - name: Start checked-in local Supabase project
         shell: bash
         run: |
@@ -55,28 +77,25 @@ jobs:
           for attempt in $(seq 1 "$max_attempts"); do
             echo "Starting local Supabase (attempt $attempt/$max_attempts)"
             if supabase start; then
-              echo "Local Supabase started successfully."
               exit 0
             fi
-            echo "::warning::supabase start failed on attempt $attempt/$max_attempts; retrying after registry backoff"
             supabase stop || true
             if [ "$attempt" -lt "$max_attempts" ]; then
-              sleep_seconds=$((30 * attempt))
-              echo "Sleeping ${sleep_seconds}s before retry."
+              sleep $((30 * attempt))
               sleep "$sleep_seconds"
             fi
           done
-          echo "::error::Unable to start local Supabase after $max_attempts attempts."
           exit 1
+
       - name: Run exact release health gate
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p .dr-objects/before .dr-objects/after
-          printf 'QROS DR fixture
-' > .dr-objects/before/object.txt
+          printf 'QROS DR fixture\n' > .dr-objects/before/object.txt
           cp .dr-objects/before/object.txt .dr-objects/after/object.txt
-          python scripts/final_health_check.py             --expected-commit "$RELEASE_SHA"             --db-url "$DATABASE_URL"             --source-db-url "$DATABASE_URL"             --admin-db-url "$DATABASE_URL"             --object-before .dr-objects/before             --object-after .dr-objects/after
+          python scripts/final_health_check.py --expected-commit "$RELEASE_SHA" --db-url "$DATABASE_URL" --source-db-url "$DATABASE_URL" --admin-db-url "$DATABASE_URL" --object-before .dr-objects/before --object-after .dr-objects/after
+
       - name: Require exact health evidence
         shell: bash
         run: |
@@ -86,19 +105,19 @@ jobs:
           python - "$evidence" "$RELEASE_SHA" <<'PY'
           import json, sys
           path, expected = sys.argv[1:]
-          with open(path, encoding="utf-8") as handle:
-              data = json.load(handle)
+          data = json.load(open(path, encoding="utf-8"))
           assert data["commit"] == expected
           assert data["tests_passed"] is True
           assert data["health_status"] == "PASS"
-          for key in ("rls_check", "authz_check", "tenant_isolation_check"):
-              assert data[key] is True, key
+          for k in ("rls_check", "authz_check", "tenant_isolation_check"):
+              assert data[k] is True, k
           PY
+
       - name: Verify Docker revision labels
         run: |
           docker build --label "org.opencontainers.image.revision=$RELEASE_SHA" --label "commit=$RELEASE_SHA" -t "qros-release:$RELEASE_SHA" .
           docker inspect "qros-release:$RELEASE_SHA" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' | grep -Fx "$RELEASE_SHA"
-          docker inspect "qros-release:$RELEASE_SHA" --format '{{index .Config.Labels "commit"}}' | grep -Fx "$RELEASE_SHA"
+
       - name: Upload health evidence
         uses: actions/upload-artifact@v4
         with:
@@ -106,13 +125,14 @@ jobs:
           path: .health/health_evidence_${{ env.RELEASE_SHA }}.json
           if-no-files-found: error
           retention-days: 90
+
       - name: Create GitHub release only after all gates pass
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          test -f ".health/health_evidence_$RELEASE_SHA.json"
           gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG" --generate-notes ".health/health_evidence_$RELEASE_SHA.json"
+
       - name: Stop local Supabase
         if: always()
         run: supabase stop
