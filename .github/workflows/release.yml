@@ -7,7 +7,7 @@ on:
       tag:
         description: 'Tag to release'
         required: true
-        default: 'v1.0.3-rc2'
+        default: 'v1.0.3-rc4'
 
 permissions:
   contents: write
@@ -19,6 +19,7 @@ jobs:
       RELEASE_SHA: ${{ github.sha }}
       RELEASE_TAG: ${{ github.ref_name }}
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      PATH: /usr/lib/postgresql/17/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     steps:
       - name: Checkout exact tagged commit
         uses: actions/checkout@v5
@@ -44,7 +45,7 @@ jobs:
           test "$head" = "$RELEASE_SHA"
           test "$tag_commit" = "$RELEASE_SHA"
 
-      - name: Install PostgreSQL 17 client
+      - name: Install PostgreSQL 17 client (fix version mismatch)
         shell: bash
         run: |
           set -euo pipefail
@@ -54,9 +55,18 @@ jobs:
           curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
           sudo apt-get update
+          sudo apt-get remove -y postgresql-client-16 || true
           sudo apt-get install -y postgresql-client-17
+          sudo update-alternatives --install /usr/bin/pg_dump pg_dump /usr/lib/postgresql/17/bin/pg_dump 100
+          sudo update-alternatives --install /usr/bin/pg_restore pg_restore /usr/lib/postgresql/17/bin/pg_restore 100
+          sudo update-alternatives --install /usr/bin/psql psql /usr/lib/postgresql/17/bin/psql 100
+          sudo update-alternatives --install /usr/bin/createdb createdb /usr/lib/postgresql/17/bin/createdb 100
+          sudo update-alternatives --install /usr/bin/dropdb dropdb /usr/lib/postgresql/17/bin/dropdb 100
+          sudo update-alternatives --set pg_dump /usr/lib/postgresql/17/bin/pg_dump
+          sudo update-alternatives --set pg_restore /usr/lib/postgresql/17/bin/pg_restore
           pg_dump --version
           pg_restore --version
+          psql --version
 
       - name: Install Supabase CLI
         uses: supabase/setup-cli@v2
@@ -76,14 +86,9 @@ jobs:
           max_attempts=5
           for attempt in $(seq 1 "$max_attempts"); do
             echo "Starting local Supabase (attempt $attempt/$max_attempts)"
-            if supabase start; then
-              exit 0
-            fi
+            if supabase start; then exit 0; fi
             supabase stop || true
-            if [ "$attempt" -lt "$max_attempts" ]; then
-              sleep $((30 * attempt))
-              sleep "$sleep_seconds"
-            fi
+            if [ "$attempt" -lt "$max_attempts" ]; then sleep $((30 * attempt)); fi
           done
           exit 1
 
@@ -102,6 +107,7 @@ jobs:
           set -euo pipefail
           evidence=".health/health_evidence_$RELEASE_SHA.json"
           test -f "$evidence"
+          cat "$evidence"
           python - "$evidence" "$RELEASE_SHA" <<'PY'
           import json, sys
           path, expected = sys.argv[1:]
@@ -111,6 +117,7 @@ jobs:
           assert data["health_status"] == "PASS"
           for k in ("rls_check", "authz_check", "tenant_isolation_check"):
               assert data[k] is True, k
+          print("Evidence PASS")
           PY
 
       - name: Verify Docker revision labels
