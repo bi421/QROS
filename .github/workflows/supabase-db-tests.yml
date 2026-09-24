@@ -1,4 +1,4 @@
-name: Supabase Database Security Tests
+﻿name: Supabase Database Security Tests
 
 on:
   push:
@@ -62,6 +62,10 @@ jobs:
               sleep "$sleep_seconds"
             fi
           done
+
+      - name: Install pgtap extension
+        run: |
+          PGPASSWORD=postgres psql -h 127.0.0.1 -p 54332 -U postgres -d postgres -c "create extension if not exists pgtap;" || true
           echo "::error::Unable to start local Supabase after $max_attempts attempts."
           exit 1
 
@@ -71,3 +75,4 @@ jobs:
       - name: Stop local Supabase
         if: always()
         run: supabase stop
+

@@ -1,4 +1,4 @@
--- R3 adversarial tenant-isolation tests.
+﻿-- R3 adversarial tenant-isolation tests.
 -- The fixture is fully transactional. Grants are temporarily widened inside
 -- the transaction so the tests exercise RLS independently of the production
 -- server-only Data API boundary; the transaction rolls back all changes.
@@ -266,3 +266,4 @@ select results_eq(
 
 select * from finish();
 rollback;
+

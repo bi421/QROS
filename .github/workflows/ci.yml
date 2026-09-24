@@ -1,9 +1,7 @@
-name: CI
+﻿name: CI
 
 on:
   push:
-    branches:
-      - main
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
@@ -143,6 +141,9 @@ jobs:
           version: latest
       - run: supabase init
       - run: supabase start
+      - name: Install pgtap extension for tests
+        run: |
+          PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -c "create extension if not exists pgtap;" || true
       - run: supabase test db supabase/tests/tenant_isolation_test.sql
       - if: always()
         run: supabase stop
@@ -154,3 +155,5 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - run: echo "All checks passed"
+
+
