@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Verify PostgreSQL backup/restore, migrations, tenant isolation, and hashes."""
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 ROOT = Path(__file__).resolve().parents[1]
-
+MIGRATIONS = ROOT / "supabase" / "migrations"
 
 def run(label: str, command: list[str], *, env: dict[str, str] | None = None) -> dict[str, object]:
     p = subprocess.run(command, cwd=ROOT, env=env, text=True, capture_output=True, check=False)
@@ -28,11 +28,9 @@ def run(label: str, command: list[str], *, env: dict[str, str] | None = None) ->
         "stderr": p.stderr[-12000:],
     }
 
-
 def target_url(admin_url: str, dbname: str) -> str:
     parsed = urlsplit(admin_url)
     return urlunsplit((parsed.scheme, parsed.netloc, "/" + dbname, parsed.query, parsed.fragment))
-
 
 def sql_hash(url: str) -> str:
     command = [
@@ -42,10 +40,9 @@ def sql_hash(url: str) -> str:
         "ORDER BY dataset_id, version_no",
     ]
     p = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=False)
-    if p.returncode != 0:
+    if p.returncode!= 0:
         raise RuntimeError(p.stderr.strip() or "psql dataset hash query failed")
     return hashlib.sha256(p.stdout.encode()).hexdigest()
-
 
 def object_hash(root: Path | None) -> str | None:
     if root is None:
@@ -55,12 +52,33 @@ def object_hash(root: Path | None) -> str | None:
     digest = hashlib.sha256()
     for path in sorted(p for p in root.rglob("*") if p.is_file()):
         digest.update(path.relative_to(root).as_posix().encode())
-        digest.update(b"\\0")
+        digest.update(b"\0")
         with path.open("rb") as handle:
             while chunk := handle.read(1024 * 1024):
                 digest.update(chunk)
     return digest.hexdigest()
 
+def apply_migrations_fallback(target: str) -> dict[str, object]:
+    # fallback: psql-ээр бүх migration-ууд шууд түрхэх
+    for sql_file in sorted(MIGRATIONS.glob("*.sql")):
+        p = subprocess.run(["psql", target, "-f", str(sql_file)], cwd=ROOT, text=True, capture_output=True, check=False)
+        if p.returncode!= 0:
+            return {
+                "label": "apply_migrations_fallback",
+                "command": ["psql", target, "-f", str(sql_file)],
+                "returncode": p.returncode,
+                "status": "FAIL",
+                "stdout": p.stdout[-5000:],
+                "stderr": p.stderr[-5000:] + f"\nFailed file: {sql_file.name}",
+            }
+    return {
+        "label": "apply_migrations_fallback",
+        "command": ["psql", target, "apply all migrations via psql"],
+        "returncode": 0,
+        "status": "PASS",
+        "stdout": "fallback psql apply PASS",
+        "stderr": "",
+    }
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -93,50 +111,50 @@ def main() -> int:
         report["dataset_hash_before"] = before
         report["storage_hash_before"] = object_hash(args.object_before)
 
-        steps = [
-            run("pg_dump", [
-                "pg_dump", "--format=custom", "--data-only", "--schema=public",
-                "--no-owner", "--no-acl", "--file", str(dump), args.source_db_url,
-            ]),
-            run("create_target_db", ["createdb", "--maintenance-db", args.admin_db_url, target_name]),
-            run("apply_all_migrations", [
-                "supabase", "db", "push", "--db-url", target, "--include-all",
-            ]),
-            run("verify_migrations", [
-                sys.executable, str(ROOT / "scripts" / "verify_migrations.py"),
-            ], env={**os.environ, "QROS_VERIFY_DATABASE_URL": target}),
-            run("restore_data", [
-                "pg_restore", "--data-only", "--no-owner", "--no-acl",
-                "--dbname", target, str(dump),
-            ]),
-        ]
+        steps = []
+        # 1. Эхлээд target DB үүсгэ
+        steps.append(run("create_target_db", ["createdb", "--maintenance-db", args.admin_db_url, target_name]))
+        if steps[-1]["status"]!= "PASS":
+            report["checks"] = {str(s["label"]): s for s in steps}
+            return write_report(report, args.report)
+
+        # 2. Migrations түрхэх - supabase оролд, бүтэлгүйтвэл psql fallback
+        push = run("apply_all_migrations", ["supabase", "db", "push", "--db-url", target, "--include-all"])
+        steps.append(push)
+        if push["status"]!= "PASS":
+            up = run("apply_migrations_up", ["supabase", "migration", "up", "--db-url", target])
+            steps.append(up)
+            if up["status"]!= "PASS":
+                fb = apply_migrations_fallback(target)
+                steps.append(fb)
+                if fb["status"]!= "PASS":
+                    report["checks"] = {str(s["label"]): s for s in steps}
+                    return write_report(report, args.report)
+
+        # 3. Migration parity шалгах (одоо robust болсон)
+        steps.append(run("verify_migrations", [sys.executable, str(ROOT / "scripts" / "verify_migrations.py")], env={**os.environ, "QROS_VERIFY_DATABASE_URL": target}))
+
+        # 4. Data dump / restore - schema аль хэдийнэ байгаа тул data-only зөв
+        steps.append(run("pg_dump", ["pg_dump", "--format=custom", "--data-only", "--schema=public", "--no-owner", "--no-acl", "--file", str(dump), args.source_db_url]))
+        steps.append(run("restore_data", ["pg_restore", "--data-only", "--no-owner", "--no-acl", "--dbname", target, str(dump)]))
+
         report["checks"] = {str(step["label"]): step for step in steps}
-        if any(step["status"] != "PASS" for step in steps):
+        if any(step["status"]!= "PASS" for step in steps):
             return write_report(report, args.report)
 
         after = sql_hash(target)
         report["dataset_hash_after"] = after
         report["dataset_hash_match"] = before == after
-        tenant = run("tenant_isolation", [
-            "supabase", "test", "db",
-            "supabase/tests/tenant_isolation_test.sql",
-            "--db-url", target,
-        ])
+        tenant = run("tenant_isolation", ["supabase", "test", "db", "supabase/tests/tenant_isolation_test.sql", "--db-url", target])
         report["checks"]["tenant_isolation"] = tenant
         report["storage_hash_after"] = object_hash(args.object_after)
         if args.object_before and args.object_after:
-            report["storage_hash_match"] = (
-                report["storage_hash_before"] == report["storage_hash_after"]
-            )
+            report["storage_hash_match"] = report["storage_hash_before"] == report["storage_hash_after"]
 
         passed = (
             report["dataset_hash_match"] is True
             and tenant["status"] == "PASS"
-            and (
-                not args.object_before
-                or not args.object_after
-                or report["storage_hash_match"] is True
-            )
+            and (not args.object_before or not args.object_after or report["storage_hash_match"] is True)
         )
         report["status"] = "PASS" if passed else "FAIL"
         return write_report(report, args.report)
@@ -146,12 +164,8 @@ def main() -> int:
         return write_report(report, args.report)
     finally:
         if not args.keep_target:
-            subprocess.run(
-                ["dropdb", "--if-exists", "--maintenance-db", args.admin_db_url, target_name],
-                cwd=ROOT, text=True, capture_output=True, check=False,
-            )
+            subprocess.run(["dropdb", "--if-exists", "--maintenance-db", args.admin_db_url, target_name], cwd=ROOT, text=True, capture_output=True, check=False)
         dump.unlink(missing_ok=True)
-
 
 def write_report(report: dict[str, object], path: str) -> int:
     target = ROOT / path
@@ -159,7 +173,6 @@ def write_report(report: dict[str, object], path: str) -> int:
     target.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0 if report.get("status") == "PASS" else 1
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
