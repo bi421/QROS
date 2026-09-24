@@ -1,4 +1,4 @@
-﻿name: Supabase Database Security Tests
+name: Supabase Database Security Tests
 
 on:
   push:

@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Verify that repository migrations exactly match the target migration history."""
 from __future__ import annotations
 
