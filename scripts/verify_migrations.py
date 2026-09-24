@@ -5,12 +5,14 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import shutil
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = ROOT / "supabase" / "migrations"
 VERSION_RE = re.compile(r"^(\d+)_.*\.sql$")
+
 
 def get_local_versions():
     vers = []
@@ -20,18 +22,22 @@ def get_local_versions():
             vers.append(m.group(1))
     return sorted(vers)
 
+
 def get_remote_via_psql(db_url: str) -> list[str]:
     queries = [
         "SELECT version FROM supabase_migrations.history ORDER BY version",
         "SELECT version FROM supabase_migrations.schema_migrations ORDER BY version",
     ]
     for q in queries:
-        proc = subprocess.run(["psql", db_url, "-At", "-c", q], text=True, capture_output=True, check=False)
+        proc = subprocess.run(
+            ["psql", db_url, "-At", "-c", q], text=True, capture_output=True, check=False
+        )
         if proc.returncode == 0 and proc.stdout.strip():
             found = re.findall(r"\b\d{10,}\b", proc.stdout)
             if found:
                 return sorted(set(found))
     return []
+
 
 def parse_cli_output(output: str) -> list[tuple[str, str]]:
     norm = output.replace("│", "|").replace("┃", "|").replace("â”‚", "|").replace("â”", "|")
@@ -52,6 +58,7 @@ def parse_cli_output(output: str) -> list[tuple[str, str]]:
                 rows.append((digit_cols[0], digit_cols[0]))
     return rows
 
+
 def main() -> int:
     # Explicit target wins. For local verification, fall back to DATABASE_URL
     # and finally the canonical Supabase local Postgres endpoint. This keeps
@@ -68,7 +75,38 @@ def main() -> int:
         print("No SQL migrations found", file=sys.stderr)
         return 2
 
-    p = subprocess.run(["supabase", "migration", "list", "--db-url", db_url], cwd=ROOT, text=True, capture_output=True, check=False)
+    supabase_exe = shutil.which("supabase")
+    if not supabase_exe:
+        print("supabase CLI executable not found on PATH", file=sys.stderr)
+        return 2
+
+    if supabase_exe.lower().endswith((".cmd", ".bat")):
+        command = [
+            os.environ.get("COMSPEC", "cmd.exe"),
+            "/d",
+            "/c",
+            supabase_exe,
+            "migration",
+            "list",
+            "--db-url",
+            db_url,
+        ]
+    else:
+        command = [
+            supabase_exe,
+            "migration",
+            "list",
+            "--db-url",
+            db_url,
+        ]
+
+    p = subprocess.run(
+        command,
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
     cli_out = p.stdout + "\n" + p.stderr
     rows = parse_cli_output(cli_out)
 
@@ -84,14 +122,14 @@ def main() -> int:
         print(f"psql fallback found {len(fallback)} versions", file=sys.stderr)
         return 2
 
-    mismatches = [(lv, rv) for lv, rv in rows if lv!= rv]
+    mismatches = [(lv, rv) for lv, rv in rows if lv != rv]
     if mismatches:
         for lv, rv in mismatches:
             print(f"MIGRATION MISMATCH: local={lv} remote={rv}", file=sys.stderr)
         return 1
 
     applied = [rv for _, rv in rows]
-    if sorted(applied)!= sorted(local):
+    if sorted(applied) != sorted(local):
         psql_remote = get_remote_via_psql(db_url)
         if sorted(psql_remote) == sorted(local):
             print(f"Migration parity PASS (via psql fallback): {len(local)} migrations")
@@ -101,6 +139,7 @@ def main() -> int:
 
     print(f"Migration parity PASS: {len(local)} migrations")
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -31,7 +31,9 @@ def changed_paths(base: str | None, staged: bool) -> list[str]:
     else:
         command.append("HEAD")
     completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=True)
-    return [line.strip().replace("\\", "/") for line in completed.stdout.splitlines() if line.strip()]
+    return [
+        line.strip().replace("\\", "/") for line in completed.stdout.splitlines() if line.strip()
+    ]
 
 
 def main() -> int:
@@ -57,8 +59,13 @@ def main() -> int:
         text = workflow.read_text(encoding="utf-8")
         if re.search(r"^\s*-\s*master\s*$", text, re.MULTILINE):
             failures.append(f"workflow uses forbidden master branch trigger: {workflow.as_posix()}")
-        if "branches:" in text and not re.search(r"^\s*-\s*main\s*$", text, re.MULTILINE):
-            failures.append(f"workflow has no explicit main trigger: {workflow.as_posix()}")
+        if "branches:" in text:
+            has_main = bool(
+                re.search(r"^\s*-\s*main\s*$", text, re.MULTILINE)
+                or re.search(r"branches:\s*\[[^]]*\bmain\b[^]]*\]", text)
+            )
+            if not has_main:
+                failures.append(f"workflow has no explicit main trigger: {workflow.as_posix()}")
 
     if failures:
         print("SCOPE GUARD: FAIL")
