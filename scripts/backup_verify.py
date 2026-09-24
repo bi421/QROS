@@ -91,14 +91,15 @@ def main() -> int:
             report["checks"] = {str(s["label"]): s for s in steps}
             return write_report(report, args.report)
 
-        # auth stub - supabase auth.uid() байхгүй бол policy унана
+        # FIX: auth.users stub + private schema + auth functions
         steps.append(run("create_auth_stub", ["psql", target, "-c",
-            "CREATE SCHEMA IF NOT EXISTS private; CREATE SCHEMA IF NOT EXISTS auth; "
+            "CREATE SCHEMA IF NOT EXISTS private; "
+            "CREATE SCHEMA IF NOT EXISTS auth; "
+            "CREATE TABLE IF NOT EXISTS auth.users (id uuid PRIMARY KEY); "
             "CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT NULL::uuid $$; "
             "CREATE OR REPLACE FUNCTION auth.role() RETURNS text LANGUAGE sql AS $$ SELECT 'authenticated' $$;"
         ]))
 
-        # public + private хоёуланг dump хийх - private.is_workspace_member эндээс ирнэ
         steps.append(run("pg_dump_schema", ["pg_dump", "--format=custom",
             "--schema=public", "--schema=private",
             "--no-owner", "--no-acl", "--file", str(schema_dump), args.source_db_url]))
