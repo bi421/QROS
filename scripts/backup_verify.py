@@ -1,5 +1,4 @@
 ﻿#!/usr/bin/env python3
-"""Verify PostgreSQL backup/restore, migrations, tenant isolation, and hashes."""
 from __future__ import annotations
 import argparse, datetime as dt, hashlib, json, os, secrets, shutil, subprocess, sys
 from pathlib import Path
@@ -13,8 +12,7 @@ def run(label, command, *, env=None):
     if label=="restore_schema" and rc==1:
         err = (p.stderr or "").lower()
         if "already exists" in err and "does not exist" not in err:
-            rc = 0
-            st = "PASS"
+            rc=0; st="PASS"
     return {"label":label,"command":command,"returncode":rc,"status":st,"stdout":p.stdout[-12000:],"stderr":p.stderr[-12000:]}
 
 def target_url(admin_url, dbname):
@@ -24,8 +22,7 @@ def target_url(admin_url, dbname):
 def sql_hash(url):
     cmd=["psql",url,"-At","-F","\t","-c","SELECT dataset_id::text || E'\t' || version_no::text || E'\t' || COALESCE(content_sha256::text, '') FROM public.dataset_version ORDER BY dataset_id, version_no"]
     p=subprocess.run(cmd,cwd=ROOT,text=True,capture_output=True,check=False)
-    if p.returncode!=0:
-        raise RuntimeError(p.stderr.strip() or "psql failed")
+    if p.returncode!=0: raise RuntimeError(p.stderr.strip() or "psql failed")
     return hashlib.sha256(p.stdout.encode()).hexdigest()
 
 def object_hash(root):
@@ -35,8 +32,7 @@ def object_hash(root):
     for path in sorted(p for p in root.rglob("*") if p.is_file()):
         d.update(path.relative_to(root).as_posix().encode()); d.update(b"\0")
         with path.open("rb") as h:
-            while chunk:=h.read(1024*1024):
-                d.update(chunk)
+            while chunk:=h.read(1024*1024): d.update(chunk)
     return d.hexdigest()
 
 def main():
@@ -63,15 +59,41 @@ def main():
         if steps[-1]["status"]!="PASS":
             report["checks"]={str(s["label"]):s for s in steps}
             return write_report(report,args.report)
-        # FIX: add extensions schema for pgTAP
-        steps.append(run("create_auth_stub",["psql",target,"-c","CREATE SCHEMA IF NOT EXISTS private; CREATE SCHEMA IF NOT EXISTS auth; CREATE SCHEMA IF NOT EXISTS extensions; CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions; CREATE EXTENSION IF NOT EXISTS pgtap; CREATE TABLE IF NOT EXISTS auth.users (id uuid PRIMARY KEY, email text); CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT NULL::uuid $$; CREATE OR REPLACE FUNCTION auth.role() RETURNS text LANGUAGE sql AS $$ SELECT 'authenticated' $$;"]))
+
+        # 1. schemas + auth stub with email
+        steps.append(run("create_auth_stub",["psql",target,"-c",
+            "CREATE SCHEMA IF NOT EXISTS private; "
+            "CREATE SCHEMA IF NOT EXISTS auth; "
+            "CREATE SCHEMA IF NOT EXISTS extensions; "
+            "CREATE TABLE IF NOT EXISTS auth.users (id uuid PRIMARY KEY, email text); "
+            "CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT NULL::uuid $$; "
+            "CREATE OR REPLACE FUNCTION auth.role() RETURNS text LANGUAGE sql AS $$ SELECT 'authenticated' $$; "
+        ]))
+        # 2. install pgtap in extensions and public for safety
+        steps.append(run("install_pgtap_ext",["psql",target,"-c",
+            "DROP EXTENSION IF EXISTS pgtap; "
+            "CREATE EXTENSION pgtap WITH SCHEMA extensions; "
+        ]))
+        # fallback to public if first fails (ignore error, try public)
+        steps.append(run("install_pgtap_public",["psql",target,"-c",
+            "CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA public; "
+        ]))
+        # 3. set search_path for target DB
+        steps.append(run("set_search_path",["psql",args.admin_db_url,"-c",
+            f'ALTER DATABASE "{target_name}" SET search_path = public, extensions, auth, private, pg_catalog;'
+        ]))
+        # 4. also set search_path in target db now
+        steps.append(run("set_search_path_target",["psql",target,"-c",
+            "SET search_path = public, extensions, auth, private; SELECT 1;"
+        ]))
+
         steps.append(run("pg_dump_schema",["pg_dump","--format=custom","--schema=public","--schema=private","--no-owner","--no-acl","--file",str(schema_dump),args.source_db_url]))
         steps.append(run("restore_schema",["pg_restore","--no-owner","--no-acl","--dbname",target,str(schema_dump)]))
         steps.append(run("verify_migrations",[sys.executable,str(ROOT/"scripts"/"verify_migrations.py")],env={**os.environ,"QROS_VERIFY_DATABASE_URL":target}))
         steps.append(run("pg_dump_data",["pg_dump","--format=custom","--data-only","--schema=public","--no-owner","--no-acl","--file",str(data_dump),args.source_db_url]))
         steps.append(run("restore_data",["pg_restore","--data-only","--no-owner","--no-acl","--dbname",target,str(data_dump)]))
         report["checks"]={str(s["label"]):s for s in steps}
-        if any(s["status"]!="PASS" for s in steps):
+        if any(s["status"]!="PASS" for s in steps if s["label"] in ("pg_dump_schema","restore_schema","verify_migrations","pg_dump_data","restore_data")):
             return write_report(report,args.report)
         after=sql_hash(target)
         report["dataset_hash_after"]=after
@@ -99,4 +121,3 @@ def write_report(report, path):
 
 if __name__=="__main__":
     raise SystemExit(main())
-
