@@ -53,10 +53,15 @@ def parse_cli_output(output: str) -> list[tuple[str, str]]:
     return rows
 
 def main() -> int:
-    db_url = os.environ.get("QROS_VERIFY_DATABASE_URL")
-    if not db_url:
-        print("QROS_VERIFY_DATABASE_URL is required", file=sys.stderr)
-        return 2
+    # Explicit target wins. For local verification, fall back to DATABASE_URL
+    # and finally the canonical Supabase local Postgres endpoint. This keeps
+    # migration verification usable without putting database credentials in
+    # .env; production/DR callers still pass an explicit target URL.
+    db_url = (
+        os.environ.get("QROS_VERIFY_DATABASE_URL")
+        or os.environ.get("DATABASE_URL")
+        or "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+    )
 
     local = get_local_versions()
     if not local:
