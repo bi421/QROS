@@ -64,7 +64,7 @@ def main():
             report["checks"]={str(s["label"]):s for s in steps}
             return write_report(report,args.report)
         # FIX: add extensions schema for pgTAP
-        steps.append(run("create_auth_stub",["psql",target,"-c","CREATE SCHEMA IF NOT EXISTS private; CREATE SCHEMA IF NOT EXISTS auth; CREATE SCHEMA IF NOT EXISTS extensions; CREATE TABLE IF NOT EXISTS auth.users (id uuid PRIMARY KEY, email text); CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT NULL::uuid $$; CREATE OR REPLACE FUNCTION auth.role() RETURNS text LANGUAGE sql AS $$ SELECT 'authenticated' $$;"]))
+        steps.append(run("create_auth_stub",["psql",target,"-c","CREATE SCHEMA IF NOT EXISTS private; CREATE SCHEMA IF NOT EXISTS auth; CREATE SCHEMA IF NOT EXISTS extensions; CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions; CREATE EXTENSION IF NOT EXISTS pgtap; CREATE TABLE IF NOT EXISTS auth.users (id uuid PRIMARY KEY, email text); CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT NULL::uuid $$; CREATE OR REPLACE FUNCTION auth.role() RETURNS text LANGUAGE sql AS $$ SELECT 'authenticated' $$;"]))
         steps.append(run("pg_dump_schema",["pg_dump","--format=custom","--schema=public","--schema=private","--no-owner","--no-acl","--file",str(schema_dump),args.source_db_url]))
         steps.append(run("restore_schema",["pg_restore","--no-owner","--no-acl","--dbname",target,str(schema_dump)]))
         steps.append(run("verify_migrations",[sys.executable,str(ROOT/"scripts"/"verify_migrations.py")],env={**os.environ,"QROS_VERIFY_DATABASE_URL":target}))
@@ -99,3 +99,4 @@ def write_report(report, path):
 
 if __name__=="__main__":
     raise SystemExit(main())
+
