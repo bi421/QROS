@@ -15,7 +15,6 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATIONS = ROOT / "supabase" / "migrations"
 
 def run(label: str, command: list[str], *, env: dict[str, str] | None = None) -> dict[str, object]:
     p = subprocess.run(command, cwd=ROOT, env=env, text=True, capture_output=True, check=False)
@@ -33,13 +32,9 @@ def target_url(admin_url: str, dbname: str) -> str:
     return urlunsplit((parsed.scheme, parsed.netloc, "/" + dbname, parsed.query, parsed.fragment))
 
 def sql_hash(url: str) -> str:
-    command = [
-        "psql", url, "-At", "-F", "\t", "-c",
-        "SELECT dataset_id::text || E'\\t' || version_no::text || E'\\t' || "
-        "COALESCE(content_sha256::text, '') FROM public.dataset_version "
-        "ORDER BY dataset_id, version_no",
-    ]
-    p = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=False)
+    cmd = ["psql", url, "-At", "-F", "\t", "-c",
+           "SELECT dataset_id::text || E'\\t' || version_no::text || E'\\t' || COALESCE(content_sha256::text, '') FROM public.dataset_version ORDER BY dataset_id, version_no"]
+    p = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True, check=False)
     if p.returncode!= 0:
         raise RuntimeError(p.stderr.strip() or "psql dataset hash query failed")
     return hashlib.sha256(p.stdout.encode()).hexdigest()
@@ -58,28 +53,6 @@ def object_hash(root: Path | None) -> str | None:
                 digest.update(chunk)
     return digest.hexdigest()
 
-def apply_migrations_fallback(target: str) -> dict[str, object]:
-    # fallback: psql-ээр бүх migration-ууд шууд түрхэх
-    for sql_file in sorted(MIGRATIONS.glob("*.sql")):
-        p = subprocess.run(["psql", target, "-f", str(sql_file)], cwd=ROOT, text=True, capture_output=True, check=False)
-        if p.returncode!= 0:
-            return {
-                "label": "apply_migrations_fallback",
-                "command": ["psql", target, "-f", str(sql_file)],
-                "returncode": p.returncode,
-                "status": "FAIL",
-                "stdout": p.stdout[-5000:],
-                "stderr": p.stderr[-5000:] + f"\nFailed file: {sql_file.name}",
-            }
-    return {
-        "label": "apply_migrations_fallback",
-        "command": ["psql", target, "apply all migrations via psql"],
-        "returncode": 0,
-        "status": "PASS",
-        "stdout": "fallback psql apply PASS",
-        "stderr": "",
-    }
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-db-url", required=True)
@@ -90,8 +63,8 @@ def main() -> int:
     parser.add_argument("--keep-target", action="store_true")
     args = parser.parse_args()
 
-    if not all(shutil.which(x) for x in ("pg_dump", "pg_restore", "createdb", "dropdb", "psql", "supabase")):
-        missing = [x for x in ("pg_dump", "pg_restore", "createdb", "dropdb", "psql", "supabase") if not shutil.which(x)]
+    if not all(shutil.which(x) for x in ("pg_dump", "pg_restore", "createdb", "dropdb", "psql")):
+        missing = [x for x in ("pg_dump", "pg_restore", "createdb", "dropdb", "psql") if not shutil.which(x)]
         print("Missing required executables:", ", ".join(missing), file=sys.stderr)
         return 2
 
@@ -103,8 +76,9 @@ def main() -> int:
     }
     target_name = "qros_dr_" + secrets.token_hex(6)
     target = target_url(args.admin_db_url, target_name)
-    dump = ROOT / ".health" / f"{target_name}.dump"
-    dump.parent.mkdir(parents=True, exist_ok=True)
+    schema_dump = ROOT / ".health" / f"{target_name}.schema.dump"
+    data_dump = ROOT / ".health" / f"{target_name}.data.dump"
+    schema_dump.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         before = sql_hash(args.source_db_url)
@@ -112,34 +86,24 @@ def main() -> int:
         report["storage_hash_before"] = object_hash(args.object_before)
 
         steps = []
-        # 1. Эхлээд target DB үүсгэ
         steps.append(run("create_target_db", ["createdb", "--maintenance-db", args.admin_db_url, target_name]))
         if steps[-1]["status"]!= "PASS":
             report["checks"] = {str(s["label"]): s for s in steps}
             return write_report(report, args.report)
 
-        # 2. Migrations түрхэх - supabase оролд, бүтэлгүйтвэл psql fallback
-        push = run("apply_all_migrations", ["supabase", "db", "push", "--db-url", target, "--include-all"])
-        steps.append(push)
-        if push["status"]!= "PASS":
-            up = run("apply_migrations_up", ["supabase", "migration", "up", "--db-url", target])
-            steps.append(up)
-            if up["status"]!= "PASS":
-                fb = apply_migrations_fallback(target)
-                steps.append(fb)
-                if fb["status"]!= "PASS":
-                    report["checks"] = {str(s["label"]): s for s in steps}
-                    return write_report(report, args.report)
+        # 1. Schema dump/restore - supabase CLI-ээс хамааралгүй, 100% pg17
+        steps.append(run("pg_dump_schema", ["pg_dump", "--format=custom", "--schema-only", "--schema=public", "--no-owner", "--no-acl", "--file", str(schema_dump), args.source_db_url]))
+        steps.append(run("restore_schema", ["pg_restore", "--no-owner", "--no-acl", "--dbname", target, str(schema_dump)]))
 
-        # 3. Migration parity шалгах (одоо robust болсон)
+        # 2. Migration parity - одоо schema байгаа тул psql-ээр шалгана
         steps.append(run("verify_migrations", [sys.executable, str(ROOT / "scripts" / "verify_migrations.py")], env={**os.environ, "QROS_VERIFY_DATABASE_URL": target}))
 
-        # 4. Data dump / restore - schema аль хэдийнэ байгаа тул data-only зөв
-        steps.append(run("pg_dump", ["pg_dump", "--format=custom", "--data-only", "--schema=public", "--no-owner", "--no-acl", "--file", str(dump), args.source_db_url]))
-        steps.append(run("restore_data", ["pg_restore", "--data-only", "--no-owner", "--no-acl", "--dbname", target, str(dump)]))
+        # 3. Data dump/restore
+        steps.append(run("pg_dump_data", ["pg_dump", "--format=custom", "--data-only", "--schema=public", "--no-owner", "--no-acl", "--file", str(data_dump), args.source_db_url]))
+        steps.append(run("restore_data", ["pg_restore", "--data-only", "--no-owner", "--no-acl", "--dbname", target, str(data_dump)]))
 
-        report["checks"] = {str(step["label"]): step for step in steps}
-        if any(step["status"]!= "PASS" for step in steps):
+        report["checks"] = {str(s["label"]): s for s in steps}
+        if any(s["status"]!= "PASS" for s in steps):
             return write_report(report, args.report)
 
         after = sql_hash(target)
@@ -151,11 +115,7 @@ def main() -> int:
         if args.object_before and args.object_after:
             report["storage_hash_match"] = report["storage_hash_before"] == report["storage_hash_after"]
 
-        passed = (
-            report["dataset_hash_match"] is True
-            and tenant["status"] == "PASS"
-            and (not args.object_before or not args.object_after or report["storage_hash_match"] is True)
-        )
+        passed = report["dataset_hash_match"] is True and tenant["status"] == "PASS" and (not args.object_before or report.get("storage_hash_match") is True)
         report["status"] = "PASS" if passed else "FAIL"
         return write_report(report, args.report)
     except Exception as exc:
@@ -165,7 +125,8 @@ def main() -> int:
     finally:
         if not args.keep_target:
             subprocess.run(["dropdb", "--if-exists", "--maintenance-db", args.admin_db_url, target_name], cwd=ROOT, text=True, capture_output=True, check=False)
-        dump.unlink(missing_ok=True)
+        schema_dump.unlink(missing_ok=True)
+        data_dump.unlink(missing_ok=True)
 
 def write_report(report: dict[str, object], path: str) -> int:
     target = ROOT / path
