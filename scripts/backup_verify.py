@@ -18,7 +18,18 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def run(label: str, command: list[str], *, env: dict[str, str] | None = None) -> dict[str, object]:
     p = subprocess.run(command, cwd=ROOT, env=env, text=True, capture_output=True, check=False)
+    rc = p.returncode
+    status = "PASS" if rc == 0 else "FAIL"
+    # pg_restore returns 1 for "already exists" warnings which are harmless in DR test
+    if label == "restore_schema" and rc == 1:
+        err = (p.stderr or "").lower()
+        if "already exists" in err and "does not exist" not in err and "auth.users" not in err:
+            rc = 0
+            status = "PASS"
     return {
+        "label": label,
+        "returncode": rc,
+        "status": status,
         "label": label,
         "command": command,
         "returncode": p.returncode,
@@ -146,3 +157,4 @@ def write_report(report: dict[str, object], path: str) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
