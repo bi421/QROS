@@ -43,6 +43,12 @@ jobs:
         env:
           QROS_BACKUP_DATABASE_URL: ${{ secrets.QROS_STAGING_DATABASE_URL }}
         run: python scripts/backup_verify.py
+      - name: Publish backup and restore evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-restore-evidence-${{ github.sha }}
+          path: backup/qros_restore_report.json
+          if-no-files-found: error
       - name: Exact health evidence
         run: |
           SHA="$(git rev-parse HEAD)"

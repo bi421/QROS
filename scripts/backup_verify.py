@@ -1,72 +1,223 @@
 #!/usr/bin/env python3
-"""Verify a PostgreSQL backup can be restored into a disposable container."""
+"""Verify a PostgreSQL logical backup can be restored into a disposable container.
+
+The drill is deliberately fail-closed. It proves backup creation, restore,
+required QROS schema/RLS, immutable dataset-version identity, critical
+governed-record counts, and repository migration/security invariants.
+It does not claim Supabase Auth/Data API, Storage, worker recovery, or RPO/RTO.
+"""
 from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import shutil
 import subprocess
+import sys
+import time
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+REQUIRED_TABLES = (
+    "workspace", "workspace_member", "dataset", "dataset_version",
+    "research_claim", "research_run", "research_run_result",
+    "research_run_artifact", "artifact", "evidence", "research_validation",
+    "research_finding", "audit_event",
+)
+CRITICAL_COUNT_TABLES = (
+    "research_claim", "research_run", "research_run_result",
+    "research_run_artifact", "evidence", "artifact",
+    "research_validation", "research_finding",
+)
 
-def run(cmd: list[str], **kwargs: object) -> None:
-    subprocess.run(cmd, check=True, **kwargs)
+
+def run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(cmd, check=True, text=True, **kwargs)
+
+
+def psql(url: str, sql: str) -> str:
+    return run(
+        ["psql", url, "-At", "-F", "\t", "-v", "ON_ERROR_STOP=1", "-c", sql],
+        capture_output=True,
+    ).stdout.strip()
+
+
+def require_tools(names: tuple[str, ...]) -> None:
+    for tool in names:
+        if shutil.which(tool) is None:
+            raise SystemExit(f"{tool} is required")
+
+
+def database_snapshot(url: str) -> dict[str, object]:
+    quoted = ",".join("'" + table + "'" for table in REQUIRED_TABLES)
+    tables = psql(
+        url,
+        f"""
+        select c.relname from pg_class c
+        join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind = 'r'
+          and c.relname = any(ARRAY[{quoted}])
+        order by c.relname
+        """,
+    ).splitlines()
+    expected = sorted(REQUIRED_TABLES)
+    if sorted(tables) != expected:
+        raise SystemExit(
+            "required schema mismatch: "
+            f"missing={sorted(set(expected) - set(tables))}"
+        )
+
+    rls = psql(
+        url,
+        """
+        select c.relname || '=' || case when c.relrowsecurity
+               then 'enabled' else 'disabled' end
+        from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind = 'r'
+          and c.relname in (
+            'workspace','workspace_member','dataset','dataset_version',
+            'research_claim','research_run','research_run_result',
+            'research_run_artifact','artifact','evidence','research_validation',
+            'research_finding','audit_event'
+          )
+        order by c.relname
+        """,
+    ).splitlines()
+    expected_rls = [f"{table}=enabled" for table in expected]
+    if rls != expected_rls:
+        raise SystemExit(f"RLS verification failed: {rls}")
+
+    dataset_versions = psql(
+        url,
+        """
+        select id::text, dataset_id::text, version_no::text, content_sha256
+        from public.dataset_version order by id
+        """,
+    ).splitlines()
+
+    counts = {
+        table: int(psql(url, f"select count(*) from public.{table}") or "0")
+        for table in CRITICAL_COUNT_TABLES
+    }
+    return {
+        "required_tables": expected,
+        "rls": rls,
+        "dataset_versions": dataset_versions,
+        "critical_counts": counts,
+    }
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--database-url", default=os.getenv("QROS_BACKUP_DATABASE_URL"))
     parser.add_argument("--output", type=Path, default=Path("backup/qros.dump"))
+    parser.add_argument("--report", type=Path, default=Path("backup/qros_restore_report.json"))
     parser.add_argument("--skip-restore", action="store_true")
     args = parser.parse_args()
 
     if not args.database_url:
         raise SystemExit("QROS_BACKUP_DATABASE_URL or --database-url is required")
-    for tool in ("pg_dump", "pg_restore", "psql"):
-        if shutil.which(tool) is None:
-            raise SystemExit(f"{tool} is required")
-
+    require_tools(("pg_dump", "pg_restore", "psql"))
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.report.parent.mkdir(parents=True, exist_ok=True)
+
+    started = time.time()
+    source_version = psql(args.database_url, "show server_version;")
+    source_major = source_version.split(".")[0]
+    if not source_major.isdigit():
+        raise SystemExit(f"could not determine PostgreSQL major version: {source_version}")
+
     run(["pg_dump", "--format=custom", "--no-owner", "--file", str(args.output), args.database_url])
-    digest = hashlib.sha256(args.output.read_bytes()).hexdigest()
     size = args.output.stat().st_size
     if size <= 0:
         raise SystemExit("backup is empty")
+    digest = hashlib.sha256(args.output.read_bytes()).hexdigest()
+    source = database_snapshot(args.database_url)
 
-    report = {"backup": str(args.output), "bytes": size, "sha256": digest, "restored": False}
-    if not args.skip_restore:
-        if shutil.which("docker") is None:
-            raise SystemExit("docker is required for restore verification")
-        name = "qros-backup-verify"
-        subprocess.run(["docker", "rm", "-f", name], capture_output=True, check=False)
-        try:
-            run(["docker", "run", "-d", "--name", name, "-e", "POSTGRES_PASSWORD=qros", "postgres:17"])
-            for _ in range(60):
-                probe = subprocess.run(
-                    ["docker", "exec", name, "pg_isready", "-U", "postgres"],
-                    capture_output=True,
-                )
-                if probe.returncode == 0:
-                    break
-            else:
-                raise SystemExit("temporary postgres did not become ready")
-            run(
-                [
-                    "pg_restore",
-                    "--clean",
-                    "--if-exists",
-                    "--no-owner",
-                    "--dbname",
-                    "postgresql://postgres:qros@127.0.0.1:5432/postgres",
-                    str(args.output),
-                ]
+    report: dict[str, object] = {
+        "schema_version": 2,
+        "status": "BLOCKED",
+        "backup": {
+            "path": str(args.output),
+            "bytes": size,
+            "sha256": digest,
+            "postgres_major": int(source_major),
+        },
+        "source_integrity": {
+            "dataset_versions": len(source["dataset_versions"]),
+            "critical_counts": source["critical_counts"],
+        },
+        "restore": {"executed": False, "verified": False},
+        "migration_security": {"verified": False},
+        "application_readability": "NOT_EXECUTED",
+        "rpo_rto": "NOT_EXECUTED",
+    }
+
+    if args.skip_restore:
+        report["status"] = "BACKUP_ONLY"
+        args.report.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0
+
+    require_tools(("docker",))
+    name = f"qros-backup-verify-{os.getpid()}"
+    port = "55432"
+    restore_url = f"postgresql://postgres:qros@127.0.0.1:{port}/postgres"
+    subprocess.run(["docker", "rm", "-f", name], capture_output=True, check=False)
+    try:
+        run([
+            "docker", "run", "-d", "--name", name, "-p", f"{port}:5432",
+            "-e", "POSTGRES_PASSWORD=qros", f"postgres:{source_major}",
+        ])
+        for _ in range(60):
+            if subprocess.run(
+                ["docker", "exec", name, "pg_isready", "-U", "postgres"],
+                capture_output=True,
+            ).returncode == 0:
+                break
+            time.sleep(1)
+        else:
+            raise SystemExit("temporary postgres did not become ready")
+
+        run(["pg_restore", "--clean", "--if-exists", "--no-owner",
+             "--dbname", restore_url, str(args.output)])
+        report["restore"] = {"executed": True, "verified": False,
+                             "postgres_major": int(source_major)}
+
+        restored = database_snapshot(restore_url)
+        if restored["dataset_versions"] != source["dataset_versions"]:
+            raise SystemExit("immutable dataset-version identity mismatch after restore")
+        if restored["critical_counts"] != source["critical_counts"]:
+            raise SystemExit(
+                "critical governed-record counts changed after restore: "
+                f"source={source['critical_counts']} restored={restored['critical_counts']}"
             )
-            report["restored"] = True
-        finally:
-            subprocess.run(["docker", "rm", "-f", name], capture_output=True, check=False)
 
-    print(report)
+        migration_check = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "verify_migrations.py"),
+             "--database-url", restore_url],
+            text=True, capture_output=True, check=False,
+        )
+        if migration_check.returncode != 0:
+            raise SystemExit(
+                "restored database migration/security verification failed: "
+                + (migration_check.stderr.strip() or migration_check.stdout.strip())
+            )
+
+        report["restore"]["verified"] = True
+        report["restore"]["dataset_versions"] = len(restored["dataset_versions"])
+        report["restore"]["critical_counts"] = restored["critical_counts"]
+        report["migration_security"] = {
+            "verified": True, "output": migration_check.stdout.strip()
+        }
+        report["status"] = "VERIFIED"
+    finally:
+        subprocess.run(["docker", "rm", "-f", name], capture_output=True, check=False)
+
+    report["elapsed_seconds"] = round(time.time() - started, 3)
+    args.report.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(json.dumps(report, indent=2, sort_keys=True))
     return 0
 
 
