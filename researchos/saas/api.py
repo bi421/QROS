@@ -70,6 +70,7 @@ from researchos.saas.idempotency import (
 )
 from researchos.saas.rate_limit import FixedWindowRateLimiter, RateLimiter
 from researchos.saas.pagination import paginate, validate_filter_tenant_id
+from researchos.saas.research_report import build_research_report
 from researchos.saas.billing import (
     BillingEventConflict,
     BillingEventStore,
@@ -540,6 +541,69 @@ def create_app(
             jobs_failed_total.inc()
             raise RuntimeError("research job queue unavailable") from exc
         return JSONResponse(status_code=202, content=body)
+
+    @app.get("/v1/research-runs/{job_id}/result", tags=["research"])
+    @require_permission(Resource.JOB, Action.READ)
+    def get_research_run_result(
+        job_id: UUID,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> dict[str, object]:
+        record = store.get_result(tenant.workspace_id, job_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="research result not found")
+        return {
+            "workspace_id": str(record.workspace_id),
+            "research_run_id": str(record.research_run_id),
+            "claim_id": str(record.claim_id) if record.claim_id else None,
+            "plan_hash": record.plan_hash,
+            "source_dataset_sha256": record.source_dataset_sha256,
+            "status": record.status,
+            "manifest_sha256": record.manifest_sha256,
+            "artifacts": [
+                {
+                    "artifact_id": artifact.artifact_id,
+                    "kind": artifact.kind,
+                    "content_sha256": artifact.content_sha256,
+                }
+                for artifact in record.artifacts
+            ],
+            "failures": list(record.failures),
+        }
+
+    @app.get("/v1/research-runs/{job_id}/report", tags=["research"])
+    @require_permission(Resource.JOB, Action.READ)
+    def get_research_run_report(
+        job_id: UUID,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> dict[str, object]:
+        record = store.get_result(tenant.workspace_id, job_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="research result not found")
+        if evidence_store is None:
+            raise HTTPException(
+                status_code=503,
+                detail="research evidence persistence is not configured",
+            )
+        try:
+            evidence = evidence_store.list_for_run(tenant.workspace_id, job_id)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="research evidence persistence unavailable",
+            ) from exc
+        finding = finding_store.get(tenant.workspace_id, job_id) if finding_store is not None else None
+        report = build_research_report(record, evidence, finding)
+        return {
+            "schema": report.schema,
+            "workspace_id": str(report.workspace_id),
+            "research_run_id": str(report.research_run_id),
+            "status": report.status,
+            "source_dataset_sha256": report.source_dataset_sha256,
+            "manifest_sha256": report.manifest_sha256,
+            "report_sha256": report.report_sha256,
+            "finding_sha256": report.finding_sha256,
+            "markdown": report.markdown,
+        }
 
     @app.get("/v1/research-runs/{job_id}", response_model=ResearchJobResponse, tags=["research"])
     @require_permission(Resource.JOB, Action.READ)
