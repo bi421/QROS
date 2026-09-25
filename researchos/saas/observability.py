@@ -51,6 +51,7 @@ _SENSITIVE_KEYS = frozenset(
         "aws-access-key-id",
         "aws-secret-access-key",
         "private-dataset",
+        "private-dataset-content",
         "dataset-content",
         "request-body",
         "raw-payload",
