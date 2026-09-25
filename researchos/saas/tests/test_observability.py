@@ -147,6 +147,35 @@ def test_unhandled_exception_is_counted_as_5xx() -> None:
     assert snapshot["status_counts"] == {500: 1}
 
 
+def test_unhandled_exception_emits_only_safe_structured_error_event(caplog) -> None:
+    app = create_app(metrics_token="scrape-secret")
+
+    @app.get("/test-unhandled-observability")
+    def test_unhandled_observability() -> None:
+        raise RuntimeError("password=super-secret-token")
+
+    client = TestClient(app, raise_server_exceptions=False)
+    caplog.set_level(logging.ERROR, logger="qros.saas")
+
+    response = client.get(
+        "/test-unhandled-observability",
+        headers={"X-Request-ID": "obs-unhandled-123"},
+    )
+
+    assert response.status_code == 500
+    structured_errors = [
+        record.message
+        for record in caplog.records
+        if '"event":"qros_error"' in record.message
+    ]
+    assert len(structured_errors) == 1
+    message = structured_errors[0]
+    assert '"error_code":"internal_error"' in message
+    assert '"request_id":"obs-unhandled-123"' in message
+    assert "super-secret-token" not in message
+    assert "unhandled request exception" not in caplog.text
+
+
 def test_required_secret_classes_are_redacted() -> None:
     sanitized = sanitize_log_fields(
         {
