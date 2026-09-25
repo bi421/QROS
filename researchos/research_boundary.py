@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 from researchos.data_engine.boundary import ValidatedDatasetRef
 from researchos.research_identity import DatasetIdentity
@@ -46,7 +47,7 @@ class ResearchInput:
             research_id=str(data["research_id"]),
             question=str(data["question"]),
             methodology_version=str(data["methodology_version"]),
-            dataset=ValidatedDatasetRef.from_dict(dict(data["dataset"])),
+            dataset=ValidatedDatasetRef.from_dict(cast(dict[str, object], data["dataset"])),
         )
 
 
