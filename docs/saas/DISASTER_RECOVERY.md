@@ -35,10 +35,12 @@ Supabase database backups do not include objects stored through the Storage API,
 ### Deterministic verifier
 
 ```bash
-python scripts/backup_verify.py --database-url "$QROS_BACKUP_DATABASE_URL"
+python scripts/backup_verify.py --source-environment staging --database-url "$QROS_BACKUP_DATABASE_URL"
 ```
 
-The verifier fails closed when prerequisites are missing and emits `backup/qros_restore_report.json`. It verifies:
+For local disposable verification, use `--source-environment local`. Do not use an arbitrary production URL with this tool; this change does not authorize a production recovery path.
+
+The verifier fails closed when prerequisites are missing and emits `backup/qros_restore_report.json`. The source environment must be explicitly selected with `--source-environment local|staging` or `QROS_BACKUP_SOURCE_ENVIRONMENT`; an arbitrary database URL alone is insufficient. Production is not an authorized source for this tool. `--skip-restore` is backup-only, not a dry-run, and does not bypass source authorization. The generated evidence manifest records only controls actually executed; unexecuted controls remain explicitly `NOT_EXECUTED`/`NOT_RECORDED`.
 
 1. non-empty custom-format `pg_dump`;
 2. source immutable dataset-version IDs, version numbers, and SHA-256 identities;
