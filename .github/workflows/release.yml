@@ -32,7 +32,7 @@ jobs:
       - name: Ruff
         run: ruff check .
       - name: Mypy
-        run: mypy researchos/saas
+        run: mypy
       - name: Unit and integration tests
         env:
           SUPABASE_URL: ${{ secrets.QROS_STAGING_SUPABASE_URL }}
