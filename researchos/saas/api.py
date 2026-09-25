@@ -225,6 +225,7 @@ def create_app(
         logger.exception("unhandled request exception request_id=%s", request_id)
         return JSONResponse(
             status_code=500,
+            headers={REQUEST_ID_HEADER: request_id} if request_id else None,
             content=_error_payload(request, 500, "Internal error"),
         )
 

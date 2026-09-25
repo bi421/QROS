@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 
 import pytest
+from supabase import Client, create_client
 
 
 def pytest_addoption(parser) -> None:
@@ -18,3 +19,12 @@ def real_db(request) -> bool:
     if missing:
         pytest.fail("missing real-db environment: " + ", ".join(missing))
     return True
+
+
+@pytest.fixture(scope="session")
+def service_client(real_db: bool) -> Client:
+    """Create the privileged client used only for real-db test setup and cleanup."""
+    return create_client(
+        os.environ["SUPABASE_URL"],
+        os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+    )
