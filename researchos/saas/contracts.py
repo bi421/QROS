@@ -82,6 +82,8 @@ class ResearchJob:
     status: ResearchJobStatus
     source_dataset_sha256: str
     created_by: UUID | None = None
+    claim_id: str | None = None
+    plan_hash: str | None = None
     attempt_count: int = 0
     max_attempts: int = 3
     error_code: str | None = None
@@ -92,6 +94,12 @@ class ResearchJob:
             raise TypeError("dataset_version_id must be a UUID")
         if not self.workflow_id.strip():
             raise ValueError("workflow_id must not be empty")
+        if (self.claim_id is None) != (self.plan_hash is None):
+            raise ValueError("claim_id and plan_hash must be provided together")
+        if self.claim_id is not None and not self.claim_id.strip():
+            raise ValueError("claim_id must not be empty")
+        if self.plan_hash is not None:
+            _validate_sha256(self.plan_hash, "plan_hash")
         if self.attempt_count < 0:
             raise ValueError("attempt_count must not be negative")
         if self.max_attempts < 1:
