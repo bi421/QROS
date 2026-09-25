@@ -13,9 +13,9 @@ __version__ = "1.0.1"
 __version_info__ = (1, 0, 1)
 
 # Release metadata
-VERSION_CODENAME = "Production-Ready"
+VERSION_CODENAME = "Release-Candidate"
 PHASE = 5  # Last completed phase
-STATUS = "stable"
+STATUS = "release-candidate"
 
 # Git information (updated by CI/CD on release)
 GIT_COMMIT = ""  # Will be set by CI pipeline
