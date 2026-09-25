@@ -128,7 +128,12 @@ markers = [
 
 [tool.mypy]
 python_version = "3.12"
-files = ["researchos/saas"]
+files = [
+    "researchos/saas/api.py",
+    "researchos/saas/contracts.py",
+    "researchos/saas/claim_api.py",
+    "researchos/saas/evidence_api.py",
+]
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

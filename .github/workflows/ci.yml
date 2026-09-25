@@ -57,7 +57,7 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install -e ".[dev,test,saas]"
       - name: Run mypy
-        run: mypy researchos/saas
+        run: mypy
 
   quant-engine:
     name: Quant Engine (C++ / nanobind)
