@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,6 +31,11 @@ CRITICAL_COUNT_TABLES = (
     "research_run_artifact", "evidence", "artifact",
     "research_validation", "research_finding",
 )
+ALLOWED_SOURCE_ENVIRONMENTS = frozenset({"local", "staging", "recovery"})
+
+
+def utc_now() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -47,6 +53,26 @@ def require_tools(names: tuple[str, ...]) -> None:
     for tool in names:
         if shutil.which(tool) is None:
             raise SystemExit(f"{tool} is required")
+
+
+def authorize_source_environment(source_environment: str | None) -> str:
+    if not source_environment:
+        raise SystemExit(
+            "backup source environment is not explicitly authorized. "
+            "Provide --source-environment local|staging|recovery or set "
+            "QROS_BACKUP_SOURCE_ENVIRONMENT. An arbitrary database URL is "
+            "insufficient, and --skip-restore does not make source selection safe. "
+            "Production source targeting is not authorized by this verifier."
+        )
+    normalized = source_environment.strip().lower()
+    if normalized not in ALLOWED_SOURCE_ENVIRONMENTS:
+        raise SystemExit(
+            f"backup source environment {source_environment!r} is not explicitly "
+            "authorized. Allowed values are local, staging, or recovery. "
+            "Production source targeting is not authorized by this verifier; "
+            "--skip-restore does not bypass this gate."
+        )
+    return normalized
 
 
 def database_snapshot(url: str) -> dict[str, object]:
@@ -108,14 +134,42 @@ def database_snapshot(url: str) -> dict[str, object]:
     }
 
 
-def main() -> int:
+def evidence_metadata(args: argparse.Namespace, source_environment: str) -> dict[str, object]:
+    return {
+        "evidence_id": args.evidence_id,
+        "source_environment": source_environment,
+        "source_project_ref": args.source_project_ref,
+        "source_release_sha": args.source_release_sha,
+        "source_migration_version": args.source_migration_version,
+        "restore_target": None,
+        "operator": {"signoff": "NOT_PROVIDED"},
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--database-url", default=os.getenv("QROS_BACKUP_DATABASE_URL"))
+    parser.add_argument(
+        "--source-environment",
+        default=os.getenv("QROS_BACKUP_SOURCE_ENVIRONMENT"),
+        help="Explicit non-production source: local, staging, or recovery.",
+    )
+    parser.add_argument("--source-project-ref", default=os.getenv("QROS_BACKUP_SOURCE_PROJECT_REF"))
+    parser.add_argument("--source-release-sha", default=os.getenv("QROS_BACKUP_SOURCE_RELEASE_SHA"))
+    parser.add_argument(
+        "--source-migration-version",
+        default=os.getenv("QROS_BACKUP_SOURCE_MIGRATION_VERSION"),
+    )
+    parser.add_argument(
+        "--evidence-id",
+        default=os.getenv("QROS_DR_EVIDENCE_ID") or f"dr-{int(time.time())}",
+    )
     parser.add_argument("--output", type=Path, default=Path("backup/qros.dump"))
     parser.add_argument("--report", type=Path, default=Path("backup/qros_restore_report.json"))
     parser.add_argument("--skip-restore", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
+    source_environment = authorize_source_environment(args.source_environment)
     if not args.database_url:
         raise SystemExit("QROS_BACKUP_DATABASE_URL or --database-url is required")
     require_tools(("pg_dump", "pg_restore", "psql"))
@@ -123,12 +177,14 @@ def main() -> int:
     args.report.parent.mkdir(parents=True, exist_ok=True)
 
     started = time.time()
+    backup_started_at = utc_now()
     source_version = psql(args.database_url, "show server_version;")
     source_major = source_version.split(".")[0]
     if not source_major.isdigit():
         raise SystemExit(f"could not determine PostgreSQL major version: {source_version}")
 
     run(["pg_dump", "--format=custom", "--no-owner", "--file", str(args.output), args.database_url])
+    backup_completed_at = utc_now()
     size = args.output.stat().st_size
     if size <= 0:
         raise SystemExit("backup is empty")
@@ -136,8 +192,15 @@ def main() -> int:
     source = database_snapshot(args.database_url)
 
     report: dict[str, object] = {
-        "schema_version": 2,
+        "schema_version": 3,
         "status": "BLOCKED",
+        "evidence": evidence_metadata(args, source_environment),
+        "timeline": {
+            "backup_started_at": backup_started_at,
+            "backup_completed_at": backup_completed_at,
+            "restore_started_at": None,
+            "restore_completed_at": None,
+        },
         "backup": {
             "path": str(args.output),
             "bytes": size,
@@ -150,8 +213,24 @@ def main() -> int:
         },
         "restore": {"executed": False, "verified": False},
         "migration_security": {"verified": False},
-        "application_readability": "NOT_EXECUTED",
+        "checks": {
+            "required_tables": {"status": "VERIFIED"},
+            "rls_security": {"status": "VERIFIED"},
+            "dataset_version_integrity": {"status": "PENDING_RESTORE"},
+            "critical_governed_record_counts": {"status": "PENDING_RESTORE"},
+            "migration_security": {"status": "PENDING_RESTORE"},
+            "tenant_isolation_recovery": {"status": "NOT_EXECUTED"},
+            "storage_recovery": {"status": "NOT_EXECUTED"},
+            "queue_job_recovery": {"status": "NOT_EXECUTED"},
+            "application_recovery": {"status": "NOT_EXECUTED"},
+        },
         "rpo_rto": "NOT_EXECUTED",
+        "recovery_measurements": {
+            "rpo_seconds": None,
+            "rto_seconds": None,
+            "status": "NOT_EXECUTED",
+        },
+        "application_readability": "NOT_EXECUTED",
     }
 
     if args.skip_restore:
@@ -164,8 +243,10 @@ def main() -> int:
     name = f"qros-backup-verify-{os.getpid()}"
     port = "55432"
     restore_url = f"postgresql://postgres:qros@127.0.0.1:{port}/postgres"
+    report["evidence"]["restore_target"] = f"docker:{name}:postgres:{source_major}"
     subprocess.run(["docker", "rm", "-f", name], capture_output=True, check=False)
     try:
+        report["timeline"]["restore_started_at"] = utc_now()
         run([
             "docker", "run", "-d", "--name", name, "-p", f"{port}:5432",
             "-e", "POSTGRES_PASSWORD=qros", f"postgres:{source_major}",
@@ -208,9 +289,15 @@ def main() -> int:
         report["restore"]["verified"] = True
         report["restore"]["dataset_versions"] = len(restored["dataset_versions"])
         report["restore"]["critical_counts"] = restored["critical_counts"]
+        report["checks"]["dataset_version_integrity"] = {"status": "VERIFIED"}
+        report["checks"]["critical_governed_record_counts"] = {"status": "VERIFIED"}
         report["migration_security"] = {
             "verified": True, "output": migration_check.stdout.strip()
         }
+        report["checks"]["migration_security"] = {
+            "status": "VERIFIED", "output": migration_check.stdout.strip()
+        }
+        report["timeline"]["restore_completed_at"] = utc_now()
         report["status"] = "VERIFIED"
     finally:
         subprocess.run(["docker", "rm", "-f", name], capture_output=True, check=False)

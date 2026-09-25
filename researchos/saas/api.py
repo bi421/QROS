@@ -6,7 +6,6 @@ from typing import Protocol
 from uuid import UUID, uuid4
 import hashlib
 import json
-import logging
 
 from fastapi import (
     Depends,
@@ -31,6 +30,7 @@ from researchos.saas.observability import (
     jobs_created_total,
     jobs_failed_total,
     observe_error,
+    request_id_var,
     tenant_id_var,
 )
 from researchos.saas.auth.permissions import Action, Resource, require_permission
@@ -86,7 +86,6 @@ REQUEST_ID_HEADER = "X-Request-ID"
 IDEMPOTENCY_HEADER = "Idempotency-Key"
 MAX_REQUEST_ID_LENGTH = 128
 
-logger = logging.getLogger(__name__)
 configure_logging()
 
 
@@ -277,17 +276,20 @@ def create_app(
     @app.exception_handler(Exception)
     async def internal_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         request_id = getattr(request.state, "request_id", None)
-        observe_error(
-            severity="error",
-            error_code="internal_error",
-            error=exc,
-            metadata={
-                "method": request.method,
-                "path": request.url.path,
-                "status_code": 500,
-            },
-        )
-        logger.exception("unhandled request exception request_id=%s", request_id)
+        request_id_token = request_id_var.set(request_id)
+        try:
+            observe_error(
+                severity="error",
+                error_code="internal_error",
+                error=exc,
+                metadata={
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": 500,
+                },
+            )
+        finally:
+            request_id_var.reset(request_id_token)
         return JSONResponse(
             status_code=500,
             headers={REQUEST_ID_HEADER: request_id} if request_id else None,
