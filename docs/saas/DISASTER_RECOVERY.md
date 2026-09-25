@@ -72,3 +72,21 @@ Supabase Auth/Data API behavior, Storage objects, worker-loss recovery, and RPO/
 11. Preserve the evidence package and operator sign-off before traffic is re-enabled.
 
 Do not assign an RPO/RTO target from documentation before a drill measures it.
+
+
+## Git-controlled DR infrastructure contract
+
+The repository version-controls only the non-secret contract required to reach a controlled non-production DR drill. See:
+
+- `docs/saas/dr_infrastructure_contract.json` — source/recovery/storage/application identity schema, status semantics, release/drill binding, and safety invariants.
+- `docs/saas/dr_secret_contract.json` — required GitHub `staging` secret names and safe verification states.
+
+The Git-controlled layer includes workflow wiring, the non-secret infrastructure contract, the secret-name contract, and validation/documentation rules.
+
+The external infrastructure layer must be independently provisioned and verified: GitHub `staging` Environment and protection, staging GitHub secrets, authoritative non-production staging Supabase identity, independent recovery target, independent recovery storage, staging application/auth identities, credential scopes, operator authorization, and approved evidence retention.
+
+**Repository configuration does not prove that external infrastructure exists.** A placeholder, workflow reference, secret name, URL-shaped value, or resource status is not infrastructure evidence.
+
+Secret values, passwords, JWTs, service-role keys, AWS credentials, and credential-bearing database URLs must never be committed.
+
+The repository contract does not authorize production access, database backup/restore, SQL or migrations, storage recovery, worker-loss recovery, deployment, or DR workflow dispatch. The infrastructure gate remains blocked until the external evidence package independently verifies all required identities and safety properties.
