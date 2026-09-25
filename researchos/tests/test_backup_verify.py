@@ -85,7 +85,7 @@ def test_connection_secret_never_enters_existing_report(
 ) -> None:
     monkeypatch.setattr(backup_verify, "require_tools", lambda names: None)
     monkeypatch.setattr(backup_verify, "psql", fake_psql)
-    secret_url = "postgresql://backup-user:super-secret-token@staging.example/db"
+    secret_url = "staging-database-reference:super-secret-token"
 
     def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         Path(cmd[cmd.index("--file") + 1]).write_bytes(b"backup-bytes")
@@ -101,6 +101,7 @@ def test_connection_secret_never_enters_existing_report(
     text = report.read_text(encoding="utf-8")
     assert "super-secret-token" not in text
     assert secret_url not in text
+    assert "postgresql://" not in text
 
 
 def test_schema_validation_still_rejects_missing_required_table(monkeypatch: pytest.MonkeyPatch) -> None:
