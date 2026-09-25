@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import logging
+from uuid import uuid4
 
 from researchos.saas.observability import actor_user_id_var, observe_error, tenant_id_var
 
 from fastapi.testclient import TestClient
 
 from researchos.saas.api import create_app
+from researchos.saas.contracts import Plan, TenantContext
 from researchos.saas.observability import RequestMetrics, StructuredRequestObserver, sanitize_log_fields
 
 
@@ -221,8 +223,16 @@ def test_structured_error_contains_safe_correlation_context(caplog) -> None:
     assert "do not log this secret" not in message
 
 
+class _TestAuth:
+    def __init__(self) -> None:
+        self.context = TenantContext(uuid4(), uuid4(), Plan.PRO)
+
+    def authenticate(self, authorization: str | None) -> TenantContext:
+        return self.context
+
+
 def test_validation_response_does_not_echo_submitted_secret() -> None:
-    client = TestClient(create_app())
+    client = TestClient(create_app(auth_provider=_TestAuth()))
     secret = "submitted-secret-token"
 
     response = client.post(
