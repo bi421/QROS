@@ -7,8 +7,9 @@ are explicit and use a deterministic multivariate estimator inside Phase 5.2.
 """
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
+from typing import Protocol
 
 from researchos.experiments.phase51.baseline import baseline_always_predict
 from researchos.experiments.phase51.calibration import _brier_from_proba, evaluate_calibration
@@ -22,6 +23,10 @@ from .contracts import BaselineResult, ModelResult, Phase52Result
 from .dataset import build_macro_augmented_dataset
 from .multivariate import MultivariateEmpiricalProbabilityEstimator
 from .provenance import build_input_provenance
+
+
+class _ProbabilityEstimator(Protocol):
+    def predict_proba(self, feature_row: Sequence[float | None]) -> dict[int, float]: ...
 
 FEATURE_SET_NAMES: tuple[str, ...] = (
     "PRICE_ONLY",
@@ -55,13 +60,16 @@ class Phase52Config:
 
 
 def _resolve_feature_indices(
-    config: Phase52Config, names: Sequence[str], metadata: dict
+    config: Phase52Config, names: Sequence[str], metadata: Mapping[str, object]
 ) -> tuple[int, ...]:
     if config.estimator_feature is not None:
         return (int(config.estimator_feature),)
     if config.feature_set not in FEATURE_SET_NAMES:
         raise ValueError(f"Unsupported Phase 5.2 feature set: {config.feature_set}")
-    price_count = int(metadata["price_feature_count"])
+    price_count_value = metadata.get("price_feature_count")
+    if not isinstance(price_count_value, int):
+        raise ValueError("Dataset metadata missing integer price_feature_count")
+    price_count = price_count_value
     if config.feature_set == "PRICE_ONLY":
         return tuple(range(price_count))
     selected_symbols = {
@@ -79,7 +87,9 @@ def _resolve_feature_indices(
 
 
 def _evaluate_model(
-    est, val_features, val_labels: Sequence[float]
+    est: _ProbabilityEstimator,
+    val_features: Sequence[Sequence[float | None]],
+    val_labels: Sequence[float],
 ) -> tuple[ModelResult, list[int], list[dict[int, float]]]:
     preds: list[int] = []
     probs: list[dict[int, float]] = []
@@ -200,10 +210,10 @@ def _model_like(
 
 
 def run_phase52(
-    close,
-    high,
-    low,
-    volume,
+    close: Sequence[float],
+    high: Sequence[float],
+    low: Sequence[float],
+    volume: Sequence[float],
     macro_factor_series: dict[str, Sequence[float | None]],
     config: Phase52Config | None = None,
     *,
@@ -312,15 +322,16 @@ def run_phase52(
         )
         val_source_indices = source_indices[val_start : val_start + val_size]
         if cfg.estimator_feature is not None:
-            est = EmpiricalProbabilityEstimator(
+            estimator: _ProbabilityEstimator = EmpiricalProbabilityEstimator(
                 n_bins=cfg.n_bins, feature_indices=feature_indices
-            ).fit(tr_feat, tr_lab)
+            )
         else:
-            est = MultivariateEmpiricalProbabilityEstimator(
+            estimator = MultivariateEmpiricalProbabilityEstimator(
                 feature_indices=feature_indices, n_neighbors=cfg.n_neighbors
-            ).fit(tr_feat, tr_lab)
+            )
+        estimator.fit(tr_feat, tr_lab)
         base_pred = baseline_always_predict(tr_lab, val_lab)
-        _, preds, probs = _evaluate_model(est, val_feat, val_lab)
+        _, preds, probs = _evaluate_model(estimator, val_feat, val_lab)
         all_model_preds.extend(preds)
         all_base_preds.extend([int(base_pred)] * len(val_lab))
         all_actuals.extend(val_lab)
@@ -424,12 +435,29 @@ def run_phase52(
 
 
 def run_phase52_comparison(
-    *args, config: Phase52Config | None = None, **kwargs
+    close: Sequence[float],
+    high: Sequence[float],
+    low: Sequence[float],
+    volume: Sequence[float],
+    macro_factor_series: dict[str, Sequence[float | None]],
+    config: Phase52Config | None = None,
+    *,
+    timestamps: Sequence[object] | None = None,
+    macro_timestamps: dict[str, Sequence[object]] | None = None,
 ) -> dict[str, Phase52Result]:
     """Run all five feature sets with identical data, labels, folds and costs."""
     base = config or Phase52Config()
     return {
-        feature_set: run_phase52(*args, config=replace(base, feature_set=feature_set), **kwargs)
+        feature_set: run_phase52(
+            close,
+            high,
+            low,
+            volume,
+            macro_factor_series,
+            config=replace(base, feature_set=feature_set),
+            timestamps=timestamps,
+            macro_timestamps=macro_timestamps,
+        )
         for feature_set in FEATURE_SET_NAMES
     }
 
