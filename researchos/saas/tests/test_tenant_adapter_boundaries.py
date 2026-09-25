@@ -94,8 +94,7 @@ def test_supabase_dataset_version_rejects_foreign_parent_without_version_insert(
         store.create_version(tenant, version)
 
     assert not any(
-        kind == "insert" and table == "dataset_version"
-        for kind, table, _ in client.writes
+        kind == "insert" and table == "dataset_version" for kind, table, _ in client.writes
     )
 
 
@@ -131,21 +130,25 @@ def test_supabase_dataset_version_accepts_matching_parent_and_writes():
     )
     client = _Client(
         responses={
-            "dataset": [{
-                "id": str(dataset.id),
-                "workspace_id": str(tenant),
-                "name": dataset.name,
-                "created_by": str(dataset.created_by),
-            }],
-            "dataset_version": [{
-                "id": str(version.id),
-                "dataset_id": str(version.dataset_id),
-                "version_no": version.version_no,
-                "content_sha256": version.content_sha256,
-                "storage_path": version.storage_path,
-                "byte_size": version.byte_size,
-                "created_by": str(version.created_by),
-            }],
+            "dataset": [
+                {
+                    "id": str(dataset.id),
+                    "workspace_id": str(tenant),
+                    "name": dataset.name,
+                    "created_by": str(dataset.created_by),
+                }
+            ],
+            "dataset_version": [
+                {
+                    "id": str(version.id),
+                    "dataset_id": str(version.dataset_id),
+                    "version_no": version.version_no,
+                    "content_sha256": version.content_sha256,
+                    "storage_path": version.storage_path,
+                    "byte_size": version.byte_size,
+                    "created_by": str(version.created_by),
+                }
+            ],
         }
     )
     store = SupabaseDatasetStore(client)
@@ -153,10 +156,7 @@ def test_supabase_dataset_version_accepts_matching_parent_and_writes():
     created = store.create_version(tenant, version)
 
     assert created == version
-    assert any(
-        kind == "insert" and table == "dataset_version"
-        for kind, table, _ in client.writes
-    )
+    assert any(kind == "insert" and table == "dataset_version" for kind, table, _ in client.writes)
 
 
 def test_storage_path_is_tenant_scoped_and_content_addressed():
