@@ -10,7 +10,9 @@ def test_mypy_governed_scope_is_explicit_and_pinned() -> None:
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert '"mypy==2.3.1"' in pyproject
     assert '[tool.mypy]' in pyproject
-    assert 'files = ["researchos/saas"]' in pyproject
+    assert 'files = [' in pyproject
+    assert '"researchos/saas/api.py"' in pyproject
+    assert '"researchos/saas/contracts.py"' in pyproject
     assert "disallow_untyped_defs = true" in pyproject
 
 
