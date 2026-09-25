@@ -115,10 +115,10 @@ def test_usage_policy_rejects_negative_usage_and_honors_limits(
 
 
 def test_runtime_boundary_rejects_malformed_external_version() -> None:
-    malformed = cast(object, "not-an-integer")
+    malformed = "not-an-integer"
 
     try:
-        storage_path_for(uuid4(), "a" * 64, malformed)  # type: ignore[arg-type]
+        storage_path_for(uuid4(), "a" * 64, malformed)
     except ValueError as exc:
         assert "version_no must be a valid integer" in str(exc)
     else:
