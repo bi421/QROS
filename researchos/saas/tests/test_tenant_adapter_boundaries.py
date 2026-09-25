@@ -165,8 +165,9 @@ def test_storage_path_is_tenant_scoped_and_content_addressed():
     dataset = uuid4()
     digest = "c" * 64
 
-    path = storage_path_for(tenant, dataset, digest)
+    path = storage_path_for(tenant, digest, 1)
 
-    assert path == f"{tenant}/datasets/{dataset}/sha256/{digest}"
+    assert path == f"tenant/{tenant}/datasets/{digest}/1/"
     assert str(foreign_tenant) not in path
-    assert path.startswith(f"{tenant}/")
+    assert str(dataset) not in path
+    assert "sha256" not in path
