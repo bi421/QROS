@@ -224,3 +224,14 @@ def test_source_environment_can_be_supplied_by_environment(
         "--skip-restore",
     ])
     assert result == 0
+
+
+def test_production_source_environment_variable_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("QROS_BACKUP_SOURCE_ENVIRONMENT", "production")
+    monkeypatch.setattr(
+        backup_verify, "run", lambda *args, **kwargs: pytest.fail("pg_dump must not run")
+    )
+    with pytest.raises(SystemExit, match="Production source targeting is not authorized"):
+        backup_verify.main(["--database-url", "postgresql://prod.example/db"])
