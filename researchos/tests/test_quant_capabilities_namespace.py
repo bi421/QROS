@@ -58,7 +58,7 @@ def test_legacy_default_capabilities_preserve_backend_contract() -> None:
     caps = legacy.default_capabilities(PythonQuantBackend())
 
     assert caps.backend_name == "PythonQuantBackend"
-    assert caps.version == "1.0.0"
+    assert caps.version == PythonQuantBackend().get_version()
     assert caps.supported_operations == canonical.QUANT_OPERATIONS
     assert caps.deterministic is True
     assert caps.stateless is True
