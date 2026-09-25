@@ -26,9 +26,12 @@ from starlette.responses import JSONResponse, Response
 from researchos.saas.api_middleware import RequestContextMiddleware
 from researchos.saas.observability import (
     StructuredRequestObserver,
+    actor_user_id_var,
     configure_logging,
     jobs_created_total,
     jobs_failed_total,
+    observe_error,
+    tenant_id_var,
 )
 from researchos.saas.auth.permissions import Action, Resource, require_permission
 
@@ -221,6 +224,16 @@ def create_app(
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+        observe_error(
+            severity="warning",
+            error_code=_error_code(exc.status_code),
+            error=exc,
+            metadata={
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": exc.status_code,
+            },
+        )
         return JSONResponse(
             status_code=exc.status_code,
             headers=exc.headers,
@@ -231,7 +244,17 @@ def create_app(
     async def validation_exception_handler(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
-        payload = _error_payload(request, 400, exc.errors())
+        observe_error(
+            severity="warning",
+            error_code="validation_error",
+            error=exc,
+            metadata={
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": 400,
+            },
+        )
+        payload = _error_payload(request, 400, "Request validation failed")
         payload["code"] = "validation_error"
         error = payload["error"]
         if isinstance(error, dict):
@@ -242,6 +265,16 @@ def create_app(
     @app.exception_handler(Exception)
     async def internal_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         request_id = getattr(request.state, "request_id", None)
+        observe_error(
+            severity="error",
+            error_code="internal_error",
+            error=exc,
+            metadata={
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": 500,
+            },
+        )
         logger.exception("unhandled request exception request_id=%s", request_id)
         return JSONResponse(
             status_code=500,
@@ -250,7 +283,10 @@ def create_app(
         )
 
     def current_tenant(authorization: str | None = Header(default=None)) -> TenantContext:
-        return auth.authenticate(authorization)
+        tenant = auth.authenticate(authorization)
+        tenant_id_var.set(str(tenant.workspace_id))
+        actor_user_id_var.set(str(tenant.user_id))
+        return tenant
 
     def require_rate_limit(tenant: TenantContext) -> None:
         principal = hashlib.sha256(f"workspace:{tenant.workspace_id}".encode()).hexdigest()

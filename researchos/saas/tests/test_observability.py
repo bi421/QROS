@@ -143,3 +143,47 @@ def test_unhandled_exception_is_counted_as_5xx() -> None:
     assert snapshot["requests_total"] == 1
     assert snapshot["errors_total"] == 1
     assert snapshot["status_counts"] == {500: 1}
+
+
+def test_structured_error_event_contains_context_and_stable_code(caplog) -> None:
+    from researchos.saas.observability import actor_user_id_var, observe_error, tenant_id_var
+
+    caplog.set_level(logging.WARNING, logger="qros.saas")
+    tenant_token = tenant_id_var.set("tenant-safe")
+    actor_token = actor_user_id_var.set("actor-safe")
+    try:
+        observe_error(
+            severity="warning",
+            error_code="forbidden",
+            error=PermissionError("do not log this"),
+            metadata={
+                "method": "GET",
+                "path": "/v1/private",
+                "status_code": 403,
+                "resource_type": "dataset",
+                "resource_id": "resource-safe",
+                "authorization": "Bearer JWT-SHOULD-NOT-APPEAR",
+                "database_url": "postgresql://user:secret@db/qros",
+                "private_dataset": "PRIVATE-DATASET-CONTENT",
+                "aws_secret_access_key": "AWS-SECRET",
+            },
+        )
+    finally:
+        tenant_id_var.reset(tenant_token)
+        actor_user_id_var.reset(actor_token)
+
+    records = [record.message for record in caplog.records]
+    assert len(records) == 1
+    message = records[0]
+    assert '"event":"qros_error"' in message
+    assert '"error_code":"forbidden"' in message
+    assert '"error_class":"PermissionError"' in message
+    assert '"tenant_id":"tenant-safe"' in message
+    assert '"actor_user_id":"actor-safe"' in message
+    assert '"resource_type":"dataset"' in message
+    assert '"resource_id":"resource-safe"' in message
+    assert "JWT-SHOULD-NOT-APPEAR" not in message
+    assert "postgresql://user:secret@db/qros" not in message
+    assert "PRIVATE-DATASET-CONTENT" not in message
+    assert "AWS-SECRET" not in message
+    assert "do not log this" not in message
