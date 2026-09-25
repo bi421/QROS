@@ -369,7 +369,7 @@ def generate_decision_report(
         risk_factors.append("No historical scenario matches available")
 
     # Evidence summary
-    source_counts = {}
+    source_counts: dict[str, int] = {}
     for item in score.evidence_items:
         src = item.source.value
         source_counts[src] = source_counts.get(src, 0) + 1
