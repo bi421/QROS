@@ -18,7 +18,7 @@ from researchos.engines.quant.probability.contracts import (
     MonteCarloResult,
     TestStatistic,
 )
-from researchos.engines.quant.probability.mle import (
+from researchos.quant_engine.probability.mle import (
     generic_grid_mle,
     mle_log_normal,
     mle_normal,
