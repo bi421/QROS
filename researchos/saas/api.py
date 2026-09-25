@@ -132,6 +132,18 @@ def _error_payload(
     }
 
 
+def _safe_validation_details(exc: RequestValidationError) -> list[dict[str, object]]:
+    """Return client-safe validation details without echoing submitted values."""
+    return [
+        {
+            "loc": error.get("loc", ()),
+            "msg": str(error.get("msg", "validation error")),
+            "type": str(error.get("type", "validation_error")),
+        }
+        for error in exc.errors()
+    ]
+
+
 def _validate_dataset_name(name: str) -> str:
     """Reject path-like dataset names before they cross any storage boundary."""
     normalized = name.strip()
@@ -254,7 +266,7 @@ def create_app(
                 "status_code": 400,
             },
         )
-        payload = _error_payload(request, 400, exc.errors())
+        payload = _error_payload(request, 400, _safe_validation_details(exc))
         payload["code"] = "validation_error"
         error = payload["error"]
         if isinstance(error, dict):

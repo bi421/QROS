@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+from researchos.saas.observability import actor_user_id_var, observe_error, tenant_id_var
+
 from fastapi.testclient import TestClient
 
 from researchos.saas.api import create_app
@@ -143,3 +145,62 @@ def test_unhandled_exception_is_counted_as_5xx() -> None:
     assert snapshot["requests_total"] == 1
     assert snapshot["errors_total"] == 1
     assert snapshot["status_counts"] == {500: 1}
+
+
+def test_required_secret_classes_are_redacted() -> None:
+    sanitized = sanitize_log_fields(
+        {
+            "Authorization": "Bearer jwt-secret",
+            "jwt": "jwt-secret",
+            "DATABASE_URL": "postgresql://user:secret@db.example/qros",
+            "aws_secret_access_key": "aws-secret",
+            "private_dataset_content": "private-market-data",
+        }
+    )
+
+    assert all(value == "[REDACTED]" for value in sanitized.values())
+
+
+def test_structured_error_contains_safe_correlation_context(caplog) -> None:
+    caplog.set_level(logging.WARNING, logger="qros.saas")
+    tenant_token = tenant_id_var.set("tenant-safe")
+    actor_token = actor_user_id_var.set("actor-safe")
+    try:
+        observe_error(
+            severity="warning",
+            error_code="forbidden",
+            error=PermissionError("do not log this secret"),
+            metadata={
+                "method": "GET",
+                "path": "/v1/private",
+                "status_code": 403,
+                "authorization": "Bearer should-not-appear",
+                "private_dataset_content": "private-data",
+            },
+        )
+    finally:
+        tenant_id_var.reset(tenant_token)
+        actor_user_id_var.reset(actor_token)
+
+    message = caplog.records[-1].message
+    assert '"event":"qros_error"' in message
+    assert '"error_code":"forbidden"' in message
+    assert '"tenant_id":"tenant-safe"' in message
+    assert '"actor_user_id":"actor-safe"' in message
+    assert "should-not-appear" not in message
+    assert "private-data" not in message
+    assert "do not log this secret" not in message
+
+
+def test_validation_response_does_not_echo_submitted_secret() -> None:
+    client = TestClient(create_app())
+    secret = "submitted-secret-token"
+
+    response = client.post(
+        "/v1/research-runs",
+        json={"dataset_version_id": secret},
+    )
+
+    assert response.status_code == 400
+    assert secret not in response.text
+    assert "input" not in response.json()["detail"][0]
