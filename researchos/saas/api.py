@@ -254,7 +254,7 @@ def create_app(
                 "status_code": 400,
             },
         )
-        payload = _error_payload(request, 400, "Request validation failed")
+        payload = _error_payload(request, 400, exc.errors())
         payload["code"] = "validation_error"
         error = payload["error"]
         if isinstance(error, dict):
