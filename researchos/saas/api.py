@@ -25,10 +25,10 @@ from pydantic import BaseModel, Field
 from starlette.responses import JSONResponse, Response
 from researchos.saas.api_middleware import RequestContextMiddleware
 from researchos.saas.observability import (
+    StructuredRequestObserver,
     configure_logging,
     jobs_created_total,
     jobs_failed_total,
-    metrics_text,
 )
 from researchos.saas.auth.permissions import Action, Resource, require_permission
 
