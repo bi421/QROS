@@ -99,7 +99,7 @@ jobs:
           listed_sha="$(jq -er '.[0].content_sha256' "${work}/versions.json")"
           test "${listed_sha}" = "${expected_sha}" || { echo "listed dataset hash mismatch"; exit 1; }
 
-          echo "4/10 tenant boundary for dataset"
+          echo "4/13 tenant boundary for dataset"
           other_status="$(curl --silent --show-error --retry 2 --retry-delay 2 \
             -o "${work}/other.json" -w '%{http_code}' \
             -H "Authorization: Bearer ${QROS_ISOLATION_JWT}" \
@@ -184,6 +184,21 @@ jobs:
           test "${claim_get_status}" = "200" || { echo "GET claim returned HTTP ${claim_get_status}"; cat "${work}/claim-read.json"; exit 1; }
           jq -e --arg ws "${workspace_id}" --arg run "${run_id}" --arg plan "${plan_hash}" --arg rid "staging-golden-${GITHUB_RUN_ID}" '.workspace_id == $ws and .research_id == $rid and .is_plan_locked == true and .plan_hash == $plan' "${work}/claim-read.json" > /dev/null
 
+          echo "10b/13 tenant boundary for governed claim"
+          other_claim_status="$(curl --silent --show-error --retry 2 --retry-delay 2 -o "${work}/other-claim.json" -w '%{http_code}' -H "Authorization: Bearer ${QROS_ISOLATION_JWT}" "${base}/v1/research-claims/${claim_id}")"
+          test "${other_claim_status}" = "404" || { echo "cross-tenant claim lookup returned HTTP ${other_claim_status}"; cat "${work}/other-claim.json"; exit 1; }
+
+          echo "10c/13 tenant boundary for research run"
+          other_run_status="$(curl --silent --show-error --retry 2 --retry-delay 2 -o "${work}/other-run.json" -w '%{http_code}' -H "Authorization: Bearer ${QROS_ISOLATION_JWT}" "${base}/v1/research-runs/${run_id}")"
+          test "${other_run_status}" = "404" || { echo "cross-tenant research run lookup returned HTTP ${other_run_status}"; cat "${work}/other-run.json"; exit 1; }
+
+          echo "10d/13 tenant boundary for result/evidence"
+          other_result_status="$(curl --silent --show-error --retry 2 --retry-delay 2 -o "${work}/other-result.json" -w '%{http_code}' -H "Authorization: Bearer ${QROS_ISOLATION_JWT}" "${base}/v1/research-runs/${run_id}/result")"
+          test "${other_result_status}" = "404" || { echo "cross-tenant result lookup returned HTTP ${other_result_status}"; cat "${work}/other-result.json"; exit 1; }
+          other_evidence_status="$(curl --silent --show-error --retry 2 --retry-delay 2 -o "${work}/other-evidence.json" -w '%{http_code}' -H "Authorization: Bearer ${QROS_ISOLATION_JWT}" "${base}/v1/research-runs/${run_id}/evidence")"
+          test "${other_evidence_status}" = "200" || { echo "cross-tenant evidence lookup returned HTTP ${other_evidence_status}"; cat "${work}/other-evidence.json"; exit 1; }
+          test "$(jq -er 'length' "${work}/other-evidence.json")" = "0" || { echo "cross-tenant evidence was visible"; cat "${work}/other-evidence.json"; exit 1; }
+
           echo "11/13 record governed validation"
           validation_payload="$(jq -nc --arg manifest "$(jq -er '.manifest_sha256' "${work}/result.json")" '{result_manifest_sha256:$manifest,status:"VALIDATED",payload:{metrics:{result_integrity:1.0},checks:{deterministic_fixture:true,evidence_present:true}}}')"
           validation_status="$(call POST "${base}/v1/research-runs/${run_id}/validation" "${work}/validation.json" -H 'Content-Type: application/json' --data "${validation_payload}")"
@@ -211,4 +226,41 @@ jobs:
           elapsed="$((finished_at - started_at))"
           test "${elapsed}" -ge 0
           echo "TIME_TO_FIRST_VALID_RESEARCH_RESULT_SECONDS=${elapsed}"
+          cat > "${work}/golden_path_evidence.json" <<EOF
+          {
+            "schema_version": 1,
+            "status": "PASSED",
+            "commit": "${GITHUB_SHA}",
+            "workflow_run_id": "${GITHUB_RUN_ID}",
+            "workspace_id": "${workspace_id}",
+            "dataset_id": "${dataset_id}",
+            "dataset_version_id": "${version_id}",
+            "dataset_sha256": "${expected_sha}",
+            "claim_id": "${claim_id}",
+            "plan_hash": "${plan_hash}",
+            "research_run_id": "${run_id}",
+            "result_manifest_sha256": "$(jq -er '.manifest_sha256' "${work}/result.json")",
+            "validation_sha256": "${validation_sha}",
+            "finding_sha256": "${finding_sha}",
+            "time_to_first_valid_research_result_seconds": ${elapsed},
+            "tenant_isolation": {
+              "dataset_versions": "verified_empty",
+              "claim": "verified_404",
+              "research_run": "verified_404",
+              "result": "verified_404",
+              "evidence": "verified_empty"
+            }
+          }
+          EOF
+          jq -e '.status == "PASSED" and .commit == $sha and .dataset_sha256 == $dataset_sha' --arg sha "${GITHUB_SHA}" --arg dataset_sha "${expected_sha}" "${work}/golden_path_evidence.json" > /dev/null
+          cp "${work}/golden_path_evidence.json" "golden_path_evidence.json"
+
           echo "GOLDEN_PATH_STATUS=PASSED"
+
+      - name: Publish Golden Path evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-golden-path-evidence-${{ github.sha }}
+          path: golden_path_evidence.json
+          if-no-files-found: error
+
