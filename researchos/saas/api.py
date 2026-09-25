@@ -200,6 +200,7 @@ def create_app(
     finding_store: ResearchFindingStore | None = None,
     billing_webhook_secret: str | None = None,
     rate_limiter: RateLimiter | None = None,
+    metrics_token: str | None = None,
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
@@ -216,6 +217,7 @@ def create_app(
         description="Multi-tenant delivery API for auditable financial research.",
     )
     app.add_middleware(RequestContextMiddleware)
+    app.state.observability = StructuredRequestObserver()
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
@@ -314,8 +316,25 @@ def create_app(
         return {"status": "ok"}
 
     @app.get("/metrics", include_in_schema=False, tags=["system"])
-    def metrics() -> Response:
-        return Response(content=metrics_text(), media_type="text/plain; version=0.0.4")
+    def metrics(request: Request) -> Response:
+        if metrics_token is None:
+            raise HTTPException(status_code=503, detail="metrics endpoint is not configured")
+        if request.headers.get("X-Metrics-Token") != metrics_token:
+            raise HTTPException(status_code=404, detail="not found")
+        observer = request.app.state.observability
+        if not isinstance(observer, StructuredRequestObserver):
+            raise HTTPException(status_code=503, detail="observability is not configured")
+        observer.observe(
+            request_id=getattr(request.state, "request_id", ""),
+            method=request.method,
+            path=request.url.path,
+            status_code=200,
+            duration_ms=0.0,
+        )
+        return Response(
+            content=observer.metrics.prometheus_text(),
+            media_type="text/plain; version=0.0.4",
+        )
 
     @app.get("/readyz", tags=["system"])
     def readyz() -> dict[str, str]:
