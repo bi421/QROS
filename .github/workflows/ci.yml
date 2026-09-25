@@ -1,10 +1,10 @@
+---
 name: CI
 
 on:
   push:
     branches: [main, develop, "feat/**"]
   pull_request:
-    branches: [main, develop]
 
 # Preserve an independent verification result for every main commit.
 # New pushes must not cancel a run already executing for the same branch.
