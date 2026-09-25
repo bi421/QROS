@@ -21,6 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ALLOWED_SOURCE_ENVIRONMENTS = {"local", "staging"}
 
+
 def authorize_source_environment(value: str | None) -> str:
     """Require an explicit non-production recovery source authorization."""
     if not value or not value.strip():
