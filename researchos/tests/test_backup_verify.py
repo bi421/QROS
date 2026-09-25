@@ -51,6 +51,7 @@ def test_missing_source_environment_fails_before_pg_dump(
         called = True
         raise AssertionError("external backup tooling must not run")
 
+    monkeypatch.delenv("QROS_BACKUP_SOURCE_ENVIRONMENT", raising=False)
     monkeypatch.setattr(backup_verify, "require_tools", fail_if_called)
 
     with pytest.raises(SystemExit, match="source environment is not explicitly authorized"):
