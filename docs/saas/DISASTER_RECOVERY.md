@@ -20,14 +20,17 @@ Documentation is not execution. CI is not production recovery.
 
 A successful `pg_dump` proves only that a logical backup was produced. A successful `pg_restore` proves only that the dump can be loaded into the selected PostgreSQL target. The recovery gate additionally requires schema/security checks, immutable dataset identity checks, governed-record integrity checks, and an environment-backed application/security drill.
 
-Supabase database backups do not include objects stored through the Storage API, so Storage recovery is a separate recovery surface. citeturn0search0turn0search3
+Supabase database backups do not include objects stored through the Storage API, so Storage recovery is a separate recovery surface.
 
 ## Database recovery procedure
 
 ### Prerequisites
 
 - `QROS_BACKUP_DATABASE_URL` or `--database-url`
+- explicit source authorization via `QROS_BACKUP_SOURCE_ENVIRONMENT` or `--source-environment local|staging|recovery`
 - `pg_dump`, `pg_restore`, and `psql`
+
+The database URL alone is insufficient: the source environment must be explicitly authorized before any `pg_dump` runs. Production source targeting is not authorized by this verifier. `--skip-restore` is backup-only; it is not a dry-run and does not bypass source authorization.
 - Docker with access to the source PostgreSQL major image
 - network access from the runner to the source database
 - sufficient disk for the dump and disposable restore
@@ -35,7 +38,7 @@ Supabase database backups do not include objects stored through the Storage API,
 ### Deterministic verifier
 
 ```bash
-python scripts/backup_verify.py --database-url "$QROS_BACKUP_DATABASE_URL"
+python scripts/backup_verify.py --database-url "$QROS_BACKUP_DATABASE_URL" --source-environment staging
 ```
 
 The verifier fails closed when prerequisites are missing and emits `backup/qros_restore_report.json`. It verifies:

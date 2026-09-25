@@ -30,6 +30,7 @@ CRITICAL_COUNT_TABLES = (
     "research_run_artifact", "evidence", "artifact",
     "research_validation", "research_finding",
 )
+ALLOWED_SOURCE_ENVIRONMENTS = frozenset({"local", "staging", "recovery"})
 
 
 def run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -47,6 +48,26 @@ def require_tools(names: tuple[str, ...]) -> None:
     for tool in names:
         if shutil.which(tool) is None:
             raise SystemExit(f"{tool} is required")
+
+
+def authorize_source_environment(source_environment: str | None) -> str:
+    if not source_environment:
+        raise SystemExit(
+            "backup source environment is not explicitly authorized. "
+            "Provide --source-environment local|staging|recovery or set "
+            "QROS_BACKUP_SOURCE_ENVIRONMENT. An arbitrary database URL is "
+            "insufficient, and --skip-restore does not make source selection safe. "
+            "Production source targeting is not authorized by this verifier."
+        )
+    normalized = source_environment.strip().lower()
+    if normalized not in ALLOWED_SOURCE_ENVIRONMENTS:
+        raise SystemExit(
+            f"backup source environment {source_environment!r} is not explicitly "
+            "authorized. Allowed values are local, staging, or recovery. "
+            "Production source targeting is not authorized by this verifier; "
+            "--skip-restore does not bypass this gate."
+        )
+    return normalized
 
 
 def database_snapshot(url: str) -> dict[str, object]:
@@ -108,14 +129,20 @@ def database_snapshot(url: str) -> dict[str, object]:
     }
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--database-url", default=os.getenv("QROS_BACKUP_DATABASE_URL"))
+    parser.add_argument(
+        "--source-environment",
+        default=os.getenv("QROS_BACKUP_SOURCE_ENVIRONMENT"),
+        help="Explicit non-production source: local, staging, or recovery.",
+    )
     parser.add_argument("--output", type=Path, default=Path("backup/qros.dump"))
     parser.add_argument("--report", type=Path, default=Path("backup/qros_restore_report.json"))
     parser.add_argument("--skip-restore", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
+    authorize_source_environment(args.source_environment)
     if not args.database_url:
         raise SystemExit("QROS_BACKUP_DATABASE_URL or --database-url is required")
     require_tools(("pg_dump", "pg_restore", "psql"))
