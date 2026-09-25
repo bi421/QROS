@@ -41,7 +41,7 @@ The database URL alone is insufficient: the source environment must be explicitl
 python scripts/backup_verify.py --database-url "$QROS_BACKUP_DATABASE_URL" --source-environment staging
 ```
 
-The verifier fails closed when prerequisites are missing and emits `backup/qros_restore_report.json`. It verifies:
+The verifier fails closed when prerequisites are missing and emits `backup/qros_restore_report.json`. The report is an evidence container: fields for controls that were not executed remain explicitly pending or not executed and do not imply recovery success. It does not authorize production recovery.
 
 1. non-empty custom-format `pg_dump`;
 2. source immutable dataset-version IDs, version numbers, and SHA-256 identities;
@@ -52,7 +52,7 @@ The verifier fails closed when prerequisites are missing and emits `backup/qros_
 7. restored dataset-version identities;
 8. repository migration/security invariants against the restored database.
 
-`--skip-restore` is explicitly **BACKUP_ONLY** and never reports restore verification.
+`--skip-restore` is explicitly **BACKUP_ONLY** and never reports restore verification. The evidence report records this state rather than implying a completed recovery drill.
 
 ### Not proven by this script
 

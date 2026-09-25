@@ -123,3 +123,104 @@ def test_schema_validation_still_rejects_disabled_rls(monkeypatch: pytest.Monkey
     monkeypatch.setattr(backup_verify, "psql", bad_psql)
     with pytest.raises(SystemExit, match="RLS verification failed"):
         backup_verify.database_snapshot("postgresql://recovery/db")
+
+
+def test_evidence_manifest_marks_unexecuted_controls_explicitly(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(backup_verify, "require_tools", lambda names: None)
+    monkeypatch.setattr(backup_verify, "psql", fake_psql)
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        Path(cmd[cmd.index("--file") + 1]).write_bytes(b"backup-bytes")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(backup_verify, "run", fake_run)
+    report = tmp_path / "report.json"
+    backup_verify.main([
+        "--database-url", "postgresql://staging.example/db",
+        "--source-environment", "staging",
+        "--source-project-ref", "staging-ref",
+        "--source-release-sha", "abc123",
+        "--source-migration-version", "37",
+        "--evidence-id", "dr-manifest-001",
+        "--output", str(tmp_path / "backup.dump"),
+        "--report", str(report),
+        "--skip-restore",
+    ])
+
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == 3
+    assert payload["evidence"] == {
+        "evidence_id": "dr-manifest-001",
+        "source_environment": "staging",
+        "source_project_ref": "staging-ref",
+        "source_release_sha": "abc123",
+        "source_migration_version": "37",
+        "restore_target": None,
+        "operator": {"signoff": "NOT_PROVIDED"},
+    }
+    assert payload["timeline"]["backup_started_at"]
+    assert payload["timeline"]["backup_completed_at"]
+    assert payload["checks"]["required_tables"]["status"] == "VERIFIED"
+    assert payload["checks"]["rls_security"]["status"] == "VERIFIED"
+    assert payload["checks"]["dataset_version_integrity"]["status"] == "PENDING_RESTORE"
+    assert payload["checks"]["critical_governed_record_counts"]["status"] == "PENDING_RESTORE"
+    assert payload["checks"]["migration_security"]["status"] == "PENDING_RESTORE"
+    assert payload["checks"]["tenant_isolation_recovery"]["status"] == "NOT_EXECUTED"
+    assert payload["checks"]["storage_recovery"]["status"] == "NOT_EXECUTED"
+    assert payload["checks"]["queue_job_recovery"]["status"] == "NOT_EXECUTED"
+    assert payload["checks"]["application_recovery"]["status"] == "NOT_EXECUTED"
+    assert payload["rpo_rto"] == "NOT_EXECUTED"
+    assert payload["recovery_measurements"] == {
+        "rpo_seconds": None, "rto_seconds": None, "status": "NOT_EXECUTED"
+    }
+
+
+def test_evidence_manifest_never_persists_connection_credentials(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(backup_verify, "require_tools", lambda names: None)
+    monkeypatch.setattr(backup_verify, "psql", fake_psql)
+    secret_url = "postgresql://backup-user:super-secret-token@staging.example/db"
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        Path(cmd[cmd.index("--file") + 1]).write_bytes(b"backup-bytes")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(backup_verify, "run", fake_run)
+    report = tmp_path / "report.json"
+    backup_verify.main([
+        "--database-url", secret_url,
+        "--source-environment", "staging",
+        "--source-project-ref", "staging-ref",
+        "--output", str(tmp_path / "backup.dump"),
+        "--report", str(report),
+        "--skip-restore",
+    ])
+
+    text = report.read_text(encoding="utf-8")
+    assert "super-secret-token" not in text
+    assert secret_url not in text
+    assert "postgresql://" not in text
+
+
+def test_source_environment_can_be_supplied_by_environment(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("QROS_BACKUP_SOURCE_ENVIRONMENT", "staging")
+    monkeypatch.setattr(backup_verify, "require_tools", lambda names: None)
+    monkeypatch.setattr(backup_verify, "psql", fake_psql)
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        Path(cmd[cmd.index("--file") + 1]).write_bytes(b"backup-bytes")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(backup_verify, "run", fake_run)
+    result = backup_verify.main([
+        "--database-url", "postgresql://staging.example/db",
+        "--output", str(tmp_path / "backup.dump"),
+        "--report", str(tmp_path / "report.json"),
+        "--skip-restore",
+    ])
+    assert result == 0
