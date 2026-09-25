@@ -279,7 +279,9 @@ class SupabaseDatasetStorage:
         parent = storage_path.rstrip("/")
         name = parent.rsplit("/", 1)[-1]
         prefix = parent.rsplit("/", 1)[0] + "/"
-        result = self._client.storage.from_(self._bucket).list(prefix, {"search": name, "limit": 10})
+        result = self._client.storage.from_(self._bucket).list(
+            prefix, {"search": name, "limit": 10}
+        )
         return any(str(row.get("name", "")) == name for row in (result or []))
 
     def put(self, storage_path: str, file: BinaryIO) -> None:
@@ -302,7 +304,9 @@ class SupabaseDatasetStorage:
         if isinstance(response, dict):
             signed_url = response.get("signedURL") or response.get("signedUrl")
         else:
-            signed_url = getattr(response, "signedURL", None) or getattr(response, "signedUrl", None)
+            signed_url = getattr(response, "signedURL", None) or getattr(
+                response, "signedUrl", None
+            )
         if not signed_url:
             raise RuntimeError("storage provider returned no signed download URL")
         return str(signed_url)
@@ -324,11 +328,18 @@ def stream_sha256(file: BinaryIO, max_bytes: int) -> tuple[str, int]:
     return digest.hexdigest(), size
 
 
-def storage_path_for(workspace_id: UUID, digest: str, version_no: int) -> str:
-    """Return tenant/{tenant_id}/datasets/{sha256(content)}/{version}/."""
-    if version_no < 1:
+def storage_path_for(workspace_id: UUID, digest: str, version_no: int | str) -> str:
+    """Return tenant/{workspace_id}/datasets/{sha256(content)}/{version}/."""
+    try:
+        # Системийн түвшний хамгаалалт: str эсвэл int аль нь ч ирсэн найдвартай хөрвүүлнэ
+        v_no = int(version_no)
+    except (ValueError, TypeError) as e:
+        raise ValueError(f"version_no must be a valid integer, got: {version_no!r}") from e
+
+    if v_no < 1:
         raise ValueError("version_no must be positive")
-    return f"tenant/{workspace_id}/datasets/{digest}/{version_no}/"
+
+    return f"tenant/{workspace_id}/datasets/{digest}/{v_no}/"
 
 
 __all__ = [

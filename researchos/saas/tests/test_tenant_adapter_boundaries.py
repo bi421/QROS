@@ -162,12 +162,11 @@ def test_supabase_dataset_version_accepts_matching_parent_and_writes():
 def test_storage_path_is_tenant_scoped_and_content_addressed():
     tenant = uuid4()
     foreign_tenant = uuid4()
-    dataset = uuid4()
     digest = "c" * 64
+    version_no = 1
 
-    path = storage_path_for(tenant, digest, 1)
+    path = storage_path_for(tenant, digest, version_no)
 
-    assert path == f"tenant/{tenant}/datasets/{digest}/1/"
+    assert path == f"tenant/{tenant}/datasets/{digest}/{version_no}/"
     assert str(foreign_tenant) not in path
-    assert str(dataset) not in path
-    assert "sha256" not in path
+    assert path.startswith(f"tenant/{tenant}/")
