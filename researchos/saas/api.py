@@ -39,6 +39,19 @@ from researchos.saas.contracts import (
     ResearchJobStatus,
     TenantContext,
 )
+from researchos.saas.claim_api import ResearchClaimStore, register_research_claim_routes
+from researchos.saas.evidence_api import ResearchEvidenceStore, register_research_evidence_routes
+from researchos.saas.finding_api import (
+    InMemoryResearchFindingStore,
+    ResearchFindingStore,
+    register_research_finding_routes,
+)
+from researchos.saas.validation_api import (
+    InMemoryResearchValidationStore,
+    ResearchValidationStore,
+    register_research_validation_routes,
+)
+
 from researchos.saas.datasets import (
     Dataset,
     DatasetStorage,
@@ -180,6 +193,10 @@ def create_app(
     job_queue: ResearchJobQueue | None = None,
     idempotency_store: IdempotencyStore | None = None,
     billing_store: BillingEventStore | None = None,
+    claim_store: ResearchClaimStore | None = None,
+    evidence_store: ResearchEvidenceStore | None = None,
+    validation_store: ResearchValidationStore | None = None,
+    finding_store: ResearchFindingStore | None = None,
     billing_webhook_secret: str | None = None,
     rate_limiter: RateLimiter | None = None,
 ) -> FastAPI:
@@ -533,6 +550,33 @@ def create_app(
         if job is None:
             raise HTTPException(status_code=404, detail="research run not found")
         return _research_job_response(job)
+
+    register_research_claim_routes(
+        app,
+        tenant_dependency=current_tenant,
+        claim_store=claim_store,
+    )
+
+    register_research_evidence_routes(
+        app,
+        tenant_dependency=current_tenant,
+        evidence_store=evidence_store,
+    )
+
+    effective_validation_store = validation_store or InMemoryResearchValidationStore()
+    register_research_validation_routes(
+        app,
+        tenant_dependency=current_tenant,
+        validation_store=effective_validation_store,
+        job_store=store,
+    )
+
+    register_research_finding_routes(
+        app,
+        tenant_dependency=current_tenant,
+        finding_store=finding_store or InMemoryResearchFindingStore(),
+        validation_store=effective_validation_store,
+    )
 
     return app
 
