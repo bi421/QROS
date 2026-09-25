@@ -136,6 +136,10 @@ def database_snapshot(url: str) -> dict[str, object]:
     }
 
 
+def utc_now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--database-url", default=os.getenv("QROS_BACKUP_DATABASE_URL"))
@@ -143,6 +147,18 @@ def main() -> int:
         "--source-environment",
         default=os.getenv("QROS_BACKUP_SOURCE_ENVIRONMENT"),
         help="Explicit recovery source: local or staging; production is not supported.",
+    )
+    parser.add_argument(
+        "--source-project-ref",
+        default=os.getenv("QROS_SOURCE_PROJECT_REF"),
+    )
+    parser.add_argument(
+        "--source-release-sha",
+        default=os.getenv("QROS_SOURCE_RELEASE_SHA") or os.getenv("GITHUB_SHA"),
+    )
+    parser.add_argument(
+        "--evidence-id",
+        default=os.getenv("QROS_DR_EVIDENCE_ID"),
     )
     parser.add_argument("--output", type=Path, default=Path("backup/qros.dump"))
     parser.add_argument("--report", type=Path, default=Path("backup/qros_restore_report.json"))
@@ -156,13 +172,16 @@ def main() -> int:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.report.parent.mkdir(parents=True, exist_ok=True)
 
+    evidence_id = args.evidence_id or f"dr-{int(time.time())}-{os.getpid()}"
     started = time.time()
+    backup_started_at = utc_now()
     source_version = psql(args.database_url, "show server_version;")
     source_major = source_version.split(".")[0]
     if not source_major.isdigit():
         raise SystemExit(f"could not determine PostgreSQL major version: {source_version}")
 
     run(["pg_dump", "--format=custom", "--no-owner", "--file", str(args.output), args.database_url])
+    backup_completed_at = utc_now()
     size = args.output.stat().st_size
     if size <= 0:
         raise SystemExit("backup is empty")
@@ -170,13 +189,15 @@ def main() -> int:
     source = database_snapshot(args.database_url)
 
     report: dict[str, object] = {
-        "schema_version": 2,
+        "schema_version": 3,
         "status": "BLOCKED",
         "backup": {
             "path": str(args.output),
             "bytes": size,
             "sha256": digest,
             "postgres_major": int(source_major),
+            "started_at": backup_started_at,
+            "completed_at": backup_completed_at,
         },
         "source_integrity": {
             "dataset_versions": len(source["dataset_versions"]),
@@ -186,6 +207,42 @@ def main() -> int:
         "migration_security": {"verified": False},
         "application_readability": "NOT_EXECUTED",
         "rpo_rto": "NOT_EXECUTED",
+        "evidence_manifest": {
+            "schema_version": 1,
+            "evidence_id": evidence_id,
+            "source": {
+                "environment": source_environment,
+                "project_ref": args.source_project_ref,
+                "release_sha": args.source_release_sha,
+                "migration_version": None,
+            },
+            "backup": {
+                "status": "VERIFIED",
+                "started_at": backup_started_at,
+                "completed_at": backup_completed_at,
+                "sha256": digest,
+                "postgres_major": int(source_major),
+            },
+            "restore": {
+                "status": "NOT_EXECUTED",
+                "target_identity": None,
+                "started_at": None,
+                "completed_at": None,
+            },
+            "verification": {
+                "required_tables": {"source": "VERIFIED", "restore": "NOT_EXECUTED"},
+                "rls_security": {"source": "VERIFIED", "restore": "NOT_EXECUTED"},
+                "dataset_version_integrity": {"source": "RECORDED", "restore": "NOT_EXECUTED"},
+                "critical_record_counts": {"source": "RECORDED", "restore": "NOT_EXECUTED"},
+                "migration_security": "NOT_EXECUTED",
+                "tenant_isolation_recovery": "NOT_EXECUTED",
+                "storage_recovery": "NOT_EXECUTED",
+                "queue_recovery": "NOT_EXECUTED",
+                "application_recovery": "NOT_EXECUTED",
+            },
+            "rpo_rto": {"status": "NOT_EXECUTED", "rpo_seconds": None, "rto_seconds": None},
+            "operator_signoff": {"status": "NOT_RECORDED", "operator": None, "signed_at": None},
+        },
     }
 
     if args.skip_restore:
@@ -199,6 +256,9 @@ def main() -> int:
     port = "55432"
     restore_url = f"postgresql://postgres:qros@127.0.0.1:{port}/postgres"
     subprocess.run(["docker", "rm", "-f", name], capture_output=True, check=False)
+    restore_started_at = utc_now()
+    report["evidence_manifest"]["restore"]["started_at"] = restore_started_at
+    report["evidence_manifest"]["restore"]["target_identity"] = f"disposable-docker:{name}"
     try:
         run([
             "docker", "run", "-d", "--name", name, "-p", f"{port}:5432",
@@ -239,12 +299,21 @@ def main() -> int:
                 + (migration_check.stderr.strip() or migration_check.stdout.strip())
             )
 
+        restore_completed_at = utc_now()
         report["restore"]["verified"] = True
         report["restore"]["dataset_versions"] = len(restored["dataset_versions"])
         report["restore"]["critical_counts"] = restored["critical_counts"]
         report["migration_security"] = {
             "verified": True, "output": migration_check.stdout.strip()
         }
+        manifest = report["evidence_manifest"]
+        manifest["restore"]["status"] = "VERIFIED"
+        manifest["restore"]["completed_at"] = restore_completed_at
+        manifest["verification"]["required_tables"]["restore"] = "VERIFIED"
+        manifest["verification"]["rls_security"]["restore"] = "VERIFIED"
+        manifest["verification"]["dataset_version_integrity"]["restore"] = "VERIFIED"
+        manifest["verification"]["critical_record_counts"]["restore"] = "VERIFIED"
+        manifest["verification"]["migration_security"] = "VERIFIED"
         report["status"] = "VERIFIED"
     finally:
         subprocess.run(["docker", "rm", "-f", name], capture_output=True, check=False)
