@@ -6,7 +6,6 @@ from typing import Protocol
 from uuid import UUID, uuid4
 import hashlib
 import json
-import logging
 
 from fastapi import (
     Depends,
@@ -86,7 +85,6 @@ REQUEST_ID_HEADER = "X-Request-ID"
 IDEMPOTENCY_HEADER = "Idempotency-Key"
 MAX_REQUEST_ID_LENGTH = 128
 
-logger = logging.getLogger(__name__)
 configure_logging()
 
 
@@ -287,7 +285,6 @@ def create_app(
                 "status_code": 500,
             },
         )
-        logger.exception("unhandled request exception request_id=%s", request_id)
         return JSONResponse(
             status_code=500,
             headers={REQUEST_ID_HEADER: request_id} if request_id else None,
