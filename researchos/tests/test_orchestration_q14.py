@@ -387,7 +387,8 @@ class TestPurityGuards(unittest.TestCase):
             self.assertNotIn(forbidden, src)
 
     def test_stdlib_only_imports(self):
-        engine_src = open(os.path.join(_ORCH_DIR, "engine.py"), encoding="utf-8").read()
+        with open(os.path.join(_ORCH_DIR, "engine.py"), encoding="utf-8") as f:
+            engine_src = f.read()
         compile(engine_src, "engine.py", "exec")
         # Compilation succeeds (already proven), and the import section only
         # references the project package plus the stdlib.
@@ -398,7 +399,8 @@ class TestPurityGuards(unittest.TestCase):
         self.assertNotIn("import sklearn", engine_src)
 
     def test_no_singleton_or_global_mutable_state(self):
-        engine_src = open(os.path.join(_ORCH_DIR, "engine.py"), encoding="utf-8").read()
+        with open(os.path.join(_ORCH_DIR, "engine.py"), encoding="utf-8") as f:
+            engine_src = f.read()
         # Use a multi-line docstring check: the engine __init__ docstring
         # mentions "no global state" but we want to ensure no actual
         # Python-level 'global ' keyword statement exists.
