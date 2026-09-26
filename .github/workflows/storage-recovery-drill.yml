@@ -19,6 +19,27 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+      - name: Validate recovery source and target identity
+        env:
+          SOURCE_ENVIRONMENT: ${{ secrets.QROS_BACKUP_SOURCE_ENVIRONMENT }}
+          STAGING_PROJECT_REF: ${{ secrets.QROS_STAGING_SUPABASE_PROJECT_REF }}
+          TARGET_ENVIRONMENT: ${{ secrets.QROS_RECOVERY_TARGET_ENVIRONMENT }}
+          TARGET_ID: ${{ secrets.QROS_RECOVERY_TARGET_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$SOURCE_ENVIRONMENT" || { echo "::error::QROS_BACKUP_SOURCE_ENVIRONMENT is required"; exit 1; }
+          test -n "$STAGING_PROJECT_REF" || { echo "::error::QROS_STAGING_SUPABASE_PROJECT_REF is required"; exit 1; }
+          test -n "$TARGET_ENVIRONMENT" || { echo "::error::QROS_RECOVERY_TARGET_ENVIRONMENT is required"; exit 1; }
+          test -n "$TARGET_ID" || { echo "::error::QROS_RECOVERY_TARGET_ID is required"; exit 1; }
+          test "$SOURCE_ENVIRONMENT" = "staging" || { echo "::error::Recovery source must be staging"; exit 1; }
+          case "$SOURCE_ENVIRONMENT" in production|prod) echo "::error::Production cannot be a recovery source"; exit 1;; esac
+          case "$TARGET_ENVIRONMENT" in production|prod|staging) echo "::error::Recovery target must be isolated from staging and production"; exit 1;; esac
+          test "$TARGET_ID" != "$STAGING_PROJECT_REF" || { echo "::error::Recovery target identity must differ from staging project identity"; exit 1; }
+          echo "Recovery source/target identity gate: PASS"
+          echo "source_environment=$SOURCE_ENVIRONMENT"
+          echo "recovery_target_environment=$TARGET_ENVIRONMENT"
+          echo "recovery_target_id_is_distinct=true"
+
       - name: Validate recovery secrets
         env:
           SUPABASE_URL: ${{ secrets.QROS_STAGING_SUPABASE_URL }}
@@ -32,6 +53,7 @@ jobs:
           test -n "$SUPABASE_URL"; test -n "$SERVICE_ROLE_KEY"; test -n "$S3_BUCKET"; test -n "$AWS_REGION"
           test -n "$AWS_ACCESS_KEY_ID"
           test -n "$AWS_SECRET_ACCESS_KEY"
+
       - name: Validate drill object name
         env:
           OBJECT_NAME: ${{ inputs.object_name }}
@@ -75,7 +97,7 @@ jobs:
           OBJECT_NAME: ${{ inputs.object_name }}
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error "$SUPABASE_URL/storage/v1/object/qros-datasets/$OBJECT_NAME"             -H "Authorization: Bearer $SERVICE_ROLE_KEY"             -H "apikey: $SERVICE_ROLE_KEY"             -o /tmp/qros-storage-source.bin
+          curl --fail --silent --show-error "$SUPABASE_URL/storage/v1/object/qros-datasets/$OBJECT_NAME" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "apikey: $SERVICE_ROLE_KEY" -o /tmp/qros-storage-source.bin
           cmp /tmp/qros-drill.bin /tmp/qros-storage-source.bin
 
       - name: Export independent recovery copy
