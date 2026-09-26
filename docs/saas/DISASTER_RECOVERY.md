@@ -35,10 +35,12 @@ Supabase database backups do not include objects stored through the Storage API,
 ### Deterministic verifier
 
 ```bash
-python scripts/backup_verify.py --database-url "$QROS_BACKUP_DATABASE_URL"
+python scripts/backup_verify.py --source-environment staging --database-url "$QROS_BACKUP_DATABASE_URL"
 ```
 
-The verifier fails closed when prerequisites are missing and emits `backup/qros_restore_report.json`. It verifies:
+For local disposable verification, use `--source-environment local`. Do not use an arbitrary production URL with this tool; this change does not authorize a production recovery path.
+
+The verifier fails closed when prerequisites are missing and emits `backup/qros_restore_report.json`. The source environment must be explicitly selected with `--source-environment local|staging` or `QROS_BACKUP_SOURCE_ENVIRONMENT`; an arbitrary database URL alone is insufficient. Production is not an authorized source for this tool. `--skip-restore` is backup-only, not a dry-run, and does not bypass source authorization. The generated evidence manifest records only controls actually executed; unexecuted controls remain explicitly `NOT_EXECUTED`/`NOT_RECORDED`.
 
 1. non-empty custom-format `pg_dump`;
 2. source immutable dataset-version IDs, version numbers, and SHA-256 identities;
@@ -70,3 +72,21 @@ Supabase Auth/Data API behavior, Storage objects, worker-loss recovery, and RPO/
 11. Preserve the evidence package and operator sign-off before traffic is re-enabled.
 
 Do not assign an RPO/RTO target from documentation before a drill measures it.
+
+
+## Git-controlled DR infrastructure contract
+
+The repository version-controls only the non-secret contract required to reach a controlled non-production DR drill. See:
+
+- `docs/saas/dr_infrastructure_contract.json` — source/recovery/storage/application identity schema, status semantics, release/drill binding, and safety invariants.
+- `docs/saas/dr_secret_contract.json` — required GitHub `staging` secret names and safe verification states.
+
+The Git-controlled layer includes workflow wiring, the non-secret infrastructure contract, the secret-name contract, and validation/documentation rules.
+
+The external infrastructure layer must be independently provisioned and verified: GitHub `staging` Environment and protection, staging GitHub secrets, authoritative non-production staging Supabase identity, independent recovery target, independent recovery storage, staging application/auth identities, credential scopes, operator authorization, and approved evidence retention.
+
+**Repository configuration does not prove that external infrastructure exists.** A placeholder, workflow reference, secret name, URL-shaped value, or resource status is not infrastructure evidence.
+
+Secret values, passwords, JWTs, service-role keys, AWS credentials, and credential-bearing database URLs must never be committed.
+
+The repository contract does not authorize production access, database backup/restore, SQL or migrations, storage recovery, worker-loss recovery, deployment, or DR workflow dispatch. The infrastructure gate remains blocked until the external evidence package independently verifies all required identities and safety properties.

@@ -42,6 +42,8 @@ jobs:
       - name: Backup and restore verification
         env:
           QROS_BACKUP_DATABASE_URL: ${{ secrets.QROS_STAGING_DATABASE_URL }}
+          QROS_BACKUP_SOURCE_ENVIRONMENT: staging
+          QROS_SOURCE_RELEASE_SHA: ${{ github.sha }}
         run: python scripts/backup_verify.py
       - name: Publish backup and restore evidence
         uses: actions/upload-artifact@v4

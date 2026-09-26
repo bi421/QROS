@@ -14,6 +14,7 @@ from researchos.quant_engine.numerical_validation import (
 )
 from researchos.saas.contracts import UsagePolicy
 from researchos.saas.datasets import storage_path_for
+from researchos.saas.evidence_api import InMemoryResearchEvidenceStore, ResearchEvidenceRecord
 
 
 FINITE_FLOATS = st.floats(
@@ -113,6 +114,55 @@ def test_usage_policy_rejects_negative_usage_and_honors_limits(
         assert policy.allows_concurrency(concurrent - 1)
         assert not policy.allows_concurrency(concurrent)
 
+
+
+@settings(max_examples=50, derandomize=True)
+@given(
+    target_workspace=st.uuids(),
+    target_run=st.uuids(),
+    rows=st.lists(
+        st.tuples(
+            st.uuids(),
+            st.uuids(),
+            st.uuids(),
+            st.text(min_size=1, max_size=64),
+            st.sampled_from(("proven", "disputed", "unresolved")),
+        ),
+        min_size=0,
+        max_size=25,
+        unique_by=lambda row: row[0],
+    ),
+)
+def test_evidence_store_filters_by_tenant_and_run_and_returns_stable_order(
+    target_workspace: UUID,
+    target_run: UUID,
+    rows: list[tuple[UUID, UUID, UUID, str, str]],
+) -> None:
+    store = InMemoryResearchEvidenceStore()
+    expected: list[ResearchEvidenceRecord] = []
+
+    for record_id, workspace_id, research_run_id, claim, status in rows:
+        record = ResearchEvidenceRecord(
+            id=record_id,
+            workspace_id=workspace_id,
+            research_run_id=research_run_id,
+            artifact_id=None,
+            claim=claim,
+            status=status,
+            provenance={"source": "property-test"},
+        )
+        store.add(record)
+        if workspace_id == target_workspace and research_run_id == target_run:
+            expected.append(record)
+
+    expected.sort(key=lambda record: str(record.id))
+    actual = store.list_for_run(target_workspace, target_run)
+
+    assert actual == expected
+    assert all(
+        record.workspace_id == target_workspace and record.research_run_id == target_run
+        for record in actual
+    )
 
 def test_runtime_boundary_rejects_malformed_external_version() -> None:
     malformed = "not-an-integer"

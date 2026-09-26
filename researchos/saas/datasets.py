@@ -329,17 +329,28 @@ def stream_sha256(file: BinaryIO, max_bytes: int) -> tuple[str, int]:
 
 
 def storage_path_for(workspace_id: UUID, digest: str, version_no: int | str) -> str:
-    """Return tenant/{workspace_id}/datasets/{sha256(content)}/{version}/."""
-    try:
-        # Системийн түвшний хамгаалалт: str эсвэл int аль нь ч ирсэн найдвартай хөрвүүлнэ
-        v_no = int(version_no)
-    except (ValueError, TypeError) as e:
-        raise ValueError(f"version_no must be a valid integer, got: {version_no!r}") from e
+    """Return a tenant-scoped, content-addressed dataset version path."""
+    if isinstance(version_no, bool):
+        raise ValueError("version_no must be an integer or numeric string")
 
-    if v_no < 1:
+    if isinstance(version_no, int):
+        normalized_version_no = version_no
+    elif isinstance(version_no, str):
+        try:
+            normalized_version_no = int(version_no)
+        except ValueError as exc:
+            raise ValueError(
+                f"version_no must be a valid integer, got: {version_no!r}"
+            ) from exc
+    else:
+        raise ValueError("version_no must be an integer or numeric string")
+
+    if normalized_version_no < 1:
         raise ValueError("version_no must be positive")
 
-    return f"tenant/{workspace_id}/datasets/{digest}/{v_no}/"
+    return (
+        f"tenant/{workspace_id}/datasets/{digest}/{normalized_version_no}/"
+    )
 
 
 __all__ = [
