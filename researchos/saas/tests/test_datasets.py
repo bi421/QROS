@@ -41,6 +41,25 @@ def test_storage_path_is_tenant_scoped_and_content_addressed() -> None:
     assert "sha256" not in path
 
 
+def test_storage_path_for_accepts_numeric_string_version() -> None:
+    workspace_id = uuid4()
+    digest = "b" * 64
+
+    assert storage_path_for(workspace_id, digest, "7") == (
+        f"tenant/{workspace_id}/datasets/{digest}/7/"
+    )
+
+
+def test_storage_path_for_rejects_non_numeric_version() -> None:
+    with pytest.raises(ValueError, match="version_no must be a valid integer"):
+        storage_path_for(uuid4(), "c" * 64, "not-an-integer")
+
+
+def test_storage_path_for_rejects_version_below_one() -> None:
+    with pytest.raises(ValueError, match="version_no must be positive"):
+        storage_path_for(uuid4(), "d" * 64, 0)
+
+
 def test_in_memory_store_rejects_duplicate_content() -> None:
     store = InMemoryDatasetStore()
     dataset = Dataset(uuid4(), uuid4(), "sample", uuid4())
