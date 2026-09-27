@@ -6,7 +6,7 @@ import hashlib
 import json
 import math
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 FEATURE_SET_NAMES = (
@@ -24,7 +24,7 @@ def _timestamp(value: object) -> datetime:
         raise ValueError("timestamp must be an ISO-8601 string")
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=__import__("datetime").timezone.utc)
+        parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed
 
 
