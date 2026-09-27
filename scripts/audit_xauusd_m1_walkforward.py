@@ -150,12 +150,22 @@ def audit(path: Path) -> dict:
             if not isinstance(training_events, int) or not isinstance(pre_holdout_events, int) or not 0 < training_events <= pre_holdout_events:
                 failures.append("holdout training accounting is invalid")
 
+        seen_holdout: set[str] = set()
         for prediction in holdout_predictions:
             event_id = prediction.get("event_id")
             if not isinstance(event_id, str) or not event_id:
                 failures.append("holdout: invalid prediction event id")
             elif event_id in seen_validation:
                 failures.append(f"holdout event overlaps validation: {event_id}")
+            elif event_id in seen_holdout:
+                failures.append(f"holdout event reused: {event_id}")
+            else:
+                seen_holdout.add(event_id)
+            timestamp_value = prediction.get("timestamp")
+            if isinstance(holdout.get("start"), str) and isinstance(holdout.get("end"), str):
+                timestamp = _time(timestamp_value) if isinstance(timestamp_value, str) else None
+                if timestamp is None or not _time(holdout["start"]) <= timestamp <= _time(holdout["end"]):
+                    failures.append("holdout: prediction outside holdout interval")
             probability = prediction.get("probability")
             if not isinstance(probability, (int, float)) or not math.isfinite(probability) or not 0.0 <= probability <= 1.0:
                 failures.append("holdout: probability outside [0,1]")
@@ -206,6 +216,7 @@ def audit(path: Path) -> dict:
         "folds": fold_count,
         "oos_unique_validation_events": len(seen_validation),
         "prediction_records": prediction_count,
+        "holdout_prediction_records": len(holdout.get("predictions", [])) if isinstance(holdout, dict) else 0,
         "checks": {
             "contract": not any("contract" in f for f in failures),
             "temporal_order": not any("train_end" in f or "validation interval" in f for f in failures),
