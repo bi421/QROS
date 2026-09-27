@@ -14,6 +14,7 @@ REQUIRED_FILES = (
     ".github/workflows/staging-release-gate.yml",
     ".github/workflows/staging-performance-gate.yml",
     ".github/workflows/storage-recovery-drill.yml",
+    ".github/workflows/release.yml",
     "docs/operations/PRODUCTION_RECOVERY_CONTROLS_V1.md",
     "scripts/ci/production_schema_parity.sh",
 )
@@ -56,6 +57,18 @@ REQUIRED_MARKERS = {
         "QROS_RECOVERY_AWS_SECRET_ACCESS_KEY",
         "QROS_RECOVERY_AWS_REGION",
     ),
+    ".github/workflows/release.yml": (
+        'tags:',
+        '"v*"',
+        "permissions:",
+        "contents: read",
+        "Verify migrations",
+        "ruff check .",
+        "mypy",
+        "backup_verify.py",
+        "final_health_check.py",
+        "if-no-files-found: error",
+    ),
     "docs/operations/PRODUCTION_RECOVERY_CONTROLS_V1.md": (
         "RPO/RTO",
         "Release blockers",
@@ -68,6 +81,38 @@ REQUIRED_MARKERS = {
     ),
 }
 
+
+
+GOVERNED_WORKFLOWS = tuple(
+    path for path in REQUIRED_FILES if path.startswith(".github/workflows/")
+)
+
+FAIL_OPEN_PATTERNS = (
+    re.compile(r"\bpip(?:3)?\s+install\b.*\|\|\s*true\b", re.IGNORECASE),
+    re.compile(r"\bpytest\b.*\|\|\s*true\b", re.IGNORECASE),
+    re.compile(r"\bruff\s+check\b.*\|\|\s*true\b", re.IGNORECASE),
+    re.compile(r"\b(?:pytest|ruff\s+check)\b.*--exit-zero\b", re.IGNORECASE),
+    re.compile(r"\bpython(?:3)?\s+\S+.*\|\|\s*true\b", re.IGNORECASE),
+    re.compile(r"^\s*continue-on-error\s*:\s*true\s*$", re.IGNORECASE),
+)
+
+
+def check_workflow_fail_open(
+    relative: str,
+    text: str,
+    failures: list[str],
+) -> None:
+    if relative not in GOVERNED_WORKFLOWS:
+        return
+
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        for pattern in FAIL_OPEN_PATTERNS:
+            if pattern.search(line):
+                failures.append(
+                    f"forbidden fail-open workflow command in "
+                    f"{relative}:{line_number}: {line.strip()!r}"
+                )
+                break
 
 
 def check_release_metadata(root: Path, failures: list[str]) -> None:
@@ -155,6 +200,8 @@ def main() -> int:
                 failures.append(
                     f"missing required marker in {relative}: {marker!r}"
                 )
+
+        check_workflow_fail_open(relative, text, failures)
 
         lines = text.splitlines()
         if any(line == "    env:" for line in lines):
