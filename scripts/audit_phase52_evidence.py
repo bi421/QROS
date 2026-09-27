@@ -189,7 +189,7 @@ def audit(path: Path) -> dict[str, object]:
                     failures.append(f"{feature_set}: invalid WFO fold record")
                     continue
                 try:
-                    training_end = _timestamp(fold["training_end"])
+                    _timestamp(fold["training_end"])
                     training_realized_end = _timestamp(fold["training_max_realized_end"])
                     validation_start = _timestamp(fold["validation_start"])
                     validation_end = _timestamp(fold["validation_end"])
