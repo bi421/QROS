@@ -68,8 +68,8 @@ class WalkForwardValidator:
             raise ValidationError("validation_size must be a positive integer")
         if not isinstance(step_size, int) or step_size <= 0:
             raise ValidationError("step_size must be a positive integer")
-        if test_size is not None and (not isinstance(test_size, int) or test_size < 0):
-            raise ValidationError("test_size must be a non-negative integer")
+        if test_size is not None and (not isinstance(test_size, int) or test_size <= 0):
+            raise ValidationError("test_size must be a positive integer when provided")
 
         self.train_size = train_size
         self.validation_size = validation_size
@@ -82,8 +82,13 @@ class WalkForwardValidator:
     def _check_dataset(self, dataset: ResearchDataset) -> None:
         if not isinstance(dataset, ResearchDataset):
             raise TypeError("expected a ResearchDataset")
-        if dataset.sample_count < self.train_size + self.validation_size:
-            raise ValidationError("dataset too small for the requested window sizes")
+        required = self.train_size + self.validation_size
+        if self.test_size is not None:
+            required += self.test_size
+        if dataset.sample_count < required:
+            raise ValidationError(
+                "dataset too small for the requested train/validation/holdout windows"
+            )
 
     def _check_fold_leakage(self, folds: list[Fold], length: int) -> None:
         if not folds:
@@ -111,10 +116,19 @@ class WalkForwardValidator:
                 raise ValidationError("fold references future timestamps")
             prev_val_start = fold.validation_start
             prev_val_end = fold.validation_end
-        # Reserve a pseudo-test region after the last validation window so the
-        # final fold cannot peek into the tail (leakage).
-        if folds[-1].validation_end >= length - 1:
-            raise ValidationError("no test data remains after final fold")
+        # Reserve an untouched holdout tail after the last validation window.
+        if self.test_size is None:
+            if folds[-1].validation_end >= length - 1:
+                raise ValidationError("no test data remains after final fold")
+            return
+
+        holdout_start = length - self.test_size
+        if folds[-1].validation_end >= holdout_start:
+            raise ValidationError("final validation window overlaps the holdout")
+        if folds[-1].validation_end != holdout_start - 1:
+            raise ValidationError(
+                "final validation window must end immediately before the explicit holdout"
+            )
 
     # -- core validation ----------------------------------------------------
 
@@ -151,8 +165,9 @@ class WalkForwardValidator:
             )
 
         test_size = self.test_size
+        holdout_start = dataset.sample_count - test_size if test_size is not None else folds[-1].validation_end + 1
         if test_size is None:
-            test_size = max(0, dataset.sample_count - folds[-1].validation_end - 1)
+            test_size = dataset.sample_count - holdout_start
 
         return ValidationResult(
             train_size=self.train_size,
@@ -167,6 +182,8 @@ class WalkForwardValidator:
                 "label_name": dataset.label_name,
                 "dataset_version": dataset.version,
                 "sample_count": dataset.sample_count,
+                "holdout_range": [holdout_start, dataset.sample_count - 1],
+                "holdout_is_untouched": True,
             },
         )
 
