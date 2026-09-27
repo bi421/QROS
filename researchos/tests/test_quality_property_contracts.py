@@ -134,3 +134,190 @@ def test_runtime_boundary_rejects_non_numeric_comparison_input() -> None:
         assert str(exc) == "expected a scalar, vector, or matrix of numbers"
     else:
         raise AssertionError("malformed external numeric input must be rejected")
+
+
+JSON_SCALARS = st.one_of(
+    st.none(),
+    st.booleans(),
+    st.integers(min_value=-1_000, max_value=1_000),
+    st.text(min_size=0, max_size=20),
+    FINITE_FLOATS,
+)
+JSON_VALUES = st.recursive(
+    JSON_SCALARS,
+    lambda children: st.one_of(
+        st.lists(children, min_size=0, max_size=5),
+        st.dictionaries(
+            st.text(min_size=1, max_size=12),
+            children,
+            min_size=0,
+            max_size=5,
+        ),
+    ),
+    max_leaves=20,
+)
+
+
+@settings(max_examples=50, derandomize=True)
+@given(value=JSON_VALUES)
+def test_canonicalize_is_idempotent(value: object) -> None:
+    first = canonicalize(value)
+    second = canonicalize(first)
+
+    assert second == first
+
+
+@settings(max_examples=50, derandomize=True)
+@given(
+    payload=st.dictionaries(
+        st.text(min_size=1, max_size=12),
+        JSON_VALUES,
+        min_size=0,
+        max_size=8,
+    )
+)
+def test_compute_input_hash_is_invariant_to_mapping_insertion_order(
+    payload: dict[str, object],
+) -> None:
+    reversed_payload = dict(reversed(list(payload.items())))
+
+    assert compute_input_hash(payload) == compute_input_hash(reversed_payload)
+
+
+@dataclass(frozen=True)
+class _PageItem:
+    value: int
+
+
+@settings(max_examples=50, derandomize=True)
+@given(
+    values=st.lists(
+        st.integers(min_value=-1_000, max_value=1_000),
+        min_size=0,
+        max_size=30,
+        unique=True,
+    ),
+    page=st.integers(min_value=1, max_value=10),
+    page_size=st.integers(min_value=1, max_value=5),
+    sort_order=st.sampled_from(["asc", "desc"]),
+)
+def test_paginate_returns_exact_sorted_page_and_metadata(
+    values: list[int],
+    page: int,
+    page_size: int,
+    sort_order: str,
+) -> None:
+    items = [_PageItem(value=value) for value in values]
+    expected = sorted(values, reverse=sort_order == "desc")
+    start = (page - 1) * page_size
+    expected_page = expected[start : start + page_size]
+    expected_total_pages = (
+        (len(expected) + page_size - 1) // page_size if expected else 0
+    )
+
+    result = paginate(
+        items,
+        page=page,
+        page_size=page_size,
+        sort_by="value",
+        sort_order=sort_order,
+    )
+
+    assert result["data"] == [{"value": value} for value in expected_page]
+    assert result["pagination"] == {
+        "page": page,
+        "page_size": page_size,
+        "total": len(expected),
+        "total_pages": expected_total_pages,
+    }
+
+
+@settings(max_examples=50, derandomize=True)
+@given(workspace=st.uuids(), candidate=st.uuids())
+def test_validate_filter_tenant_id_rejects_cross_tenant_filters(
+    workspace: UUID,
+    candidate: UUID,
+) -> None:
+    if candidate == workspace:
+        validate_filter_tenant_id(candidate, workspace)
+        return
+
+    with pytest.raises(HTTPException) as exc_info:
+        validate_filter_tenant_id(candidate, workspace)
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "INVALID_FILTER"
+
+
+@settings(max_examples=50, derandomize=True)
+@given(
+    workspaces=st.tuples(st.uuids(), st.uuids()).filter(lambda pair: pair[0] != pair[1]),
+    key=st.text(min_size=1, max_size=64),
+    fingerprint=st.text(min_size=1, max_size=64),
+)
+def test_idempotency_store_is_tenant_scoped_and_repeatable(
+    workspaces: tuple[UUID, UUID],
+    key: str,
+    fingerprint: str,
+) -> None:
+    first_workspace, second_workspace = workspaces
+    store = InMemoryIdempotencyStore()
+    first = IdempotencyRecord(
+        workspace_id=first_workspace,
+        key=key,
+        request_fingerprint=fingerprint,
+        status_code=202,
+        response_body={"workspace": str(first_workspace)},
+    )
+    second = IdempotencyRecord(
+        workspace_id=second_workspace,
+        key=key,
+        request_fingerprint=fingerprint,
+        status_code=202,
+        response_body={"workspace": str(second_workspace)},
+    )
+
+    store.put(first)
+    store.put(first)
+    store.put(second)
+
+    assert store.get(first_workspace, key) == first
+    assert store.get(second_workspace, key) == second
+
+
+@settings(max_examples=50, derandomize=True)
+@given(
+    key=st.text(min_size=1, max_size=64),
+    fingerprint_a=st.text(min_size=1, max_size=64),
+    fingerprint_b=st.text(min_size=1, max_size=64),
+)
+def test_idempotency_store_rejects_fingerprint_reuse_for_same_key(
+    key: str,
+    fingerprint_a: str,
+    fingerprint_b: str,
+) -> None:
+    if fingerprint_a == fingerprint_b:
+        return
+
+    workspace = uuid4()
+    store = InMemoryIdempotencyStore()
+    store.put(
+        IdempotencyRecord(
+            workspace_id=workspace,
+            key=key,
+            request_fingerprint=fingerprint_a,
+            status_code=202,
+            response_body={"status": "first"},
+        )
+    )
+
+    with pytest.raises(IdempotencyConflict):
+        store.put(
+            IdempotencyRecord(
+                workspace_id=workspace,
+                key=key,
+                request_fingerprint=fingerprint_b,
+                status_code=202,
+                response_body={"status": "second"},
+            )
+        )
