@@ -129,7 +129,6 @@ def run(
     pre_holdout_rows = rows[:-holdout_size]
     holdout_rows = rows[-holdout_size:]
     holdout_start = holdout_rows[0]["timestamp"]
-    holdout_end = holdout_rows[-1]["timestamp"]
 
     folds = []
     all_predictions: list[float] = []
