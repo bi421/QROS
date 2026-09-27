@@ -964,3 +964,96 @@ Each arrow requires proof.
 
 Never replace missing evidence with confidence, documentation, or a green
 nearby commit.
+
+
+---
+
+# 11. Parallel workstream protocol — 2026-09-27
+
+The repository is now being advanced by two independent engineering workstreams.
+Parallel work is allowed only when ownership and file scope are explicit.
+
+## 11.1 Current exact baseline
+
+Current main SHA after PR #367:
+`03191c86cdff541ac07cfca4291e9801ffab64bc`
+
+Phase 2 — Static typing:
+- PR #367 merged with the governed typing scope at zero mypy errors.
+- No production typing files required modification in that governed scope.
+- This does NOT establish repo-wide mypy == 0.
+
+Phase 3 — Property/invariant testing:
+- PR #367 merged.
+- `researchos/tests/test_quality_property_contracts.py` added 197 lines.
+- 12 property/invariant tests execute in CI.
+- Exact PR-head CI, Release Readiness, and Supabase gates passed.
+- Post-merge main gates passed at the exact resulting SHA.
+
+## 11.2 Workstream A — platform / production engineering
+
+Workstream A owns:
+- Phase 1 architecture/source-of-truth integrity;
+- Phase 4 observability;
+- Phase 7 backup/restore and disaster recovery;
+- Phase 8 production schema/security/tenant-boundary verification;
+- Phase 9 production storage/jobs/claims/evidence execution;
+- Phase 10 billing/provider integration;
+- Phase 11 exact release verification;
+- Phase 12 evidence review.
+
+Workstream A must not modify B-owned quantitative research logic merely to simplify
+its own branch.
+
+Current A branches/PRs must always disclose their exact base SHA.
+
+## 11.3 Workstream B — quantitative research / validation engineering
+
+Workstream B owns research/quantitative validation work only, including:
+- XAUUSD walk-forward validation;
+- out-of-sample holdout enforcement;
+- DXY/US10Y/VIX feature validation;
+- Bayesian probability/calibration contracts;
+- quantitative result artifacts and research methodology documentation.
+
+Workstream B must not modify:
+- `.github/workflows/`;
+- `AGENTS.md`;
+- production/staging Environment controls;
+- SaaS authentication/authorization/storage/billing runtime;
+- observability/runtime operations;
+- backup/recovery controls;
+- canonical architecture/scope guards.
+
+B-owned changes must remain evidence-driven and must not introduce trading
+execution or broker-side actions.
+
+## 11.4 Cross-workstream synchronization
+
+Before any PR:
+1. fetch and verify the exact current main SHA;
+2. create a dedicated branch from that SHA;
+3. inspect the other workstream's open PRs for file overlap;
+4. do not edit the same files/contract surface concurrently;
+5. if main changes, stop and reconcile before further code changes.
+
+A workstream may merge only after its own exact-head required gates are GREEN.
+A merge on another branch is not evidence for a different SHA.
+
+## 11.5 Phase ownership does not transfer evidence
+
+Passing CI for one workstream does not close another workstream's phase.
+Real staging/production execution remains separate evidence even when repository
+tests are green.
+
+## 11.6 Required reporting
+
+Every parallel-workstream update must state:
+- current main SHA;
+- branch and head SHA;
+- files changed;
+- exact CI/release/security evidence;
+- NOT VERIFIED items;
+- BLOCKER items, if any.
+
+Never report a phase as complete merely because another workstream passed CI.
