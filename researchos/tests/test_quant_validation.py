@@ -126,3 +126,47 @@ class TestLeakageProtection:
         validator = WalkForwardValidator(train_size=100, validation_size=50, step_size=50)
         with pytest.raises(ValidationError):
             validator.validate(_dataset(150))
+
+
+    def test_explicit_holdout_size_is_reserved_and_reported(self):
+        validator = WalkForwardValidator(
+            train_size=100,
+            validation_size=50,
+            step_size=50,
+            test_size=100,
+        )
+        result = validator.validate(_dataset(450))
+
+        assert result.test_size == 100
+        assert result.metadata["holdout_range"] == [350, 449]
+        assert result.metadata["holdout_is_untouched"] is True
+        assert result.fold_results[-1].validation_range == (300, 349)
+
+    def test_explicit_holdout_cannot_be_smaller_than_requested_tail(self):
+        validator = WalkForwardValidator(
+            train_size=100,
+            validation_size=50,
+            step_size=50,
+            test_size=100,
+        )
+        with pytest.raises(ValidationError, match="final validation window must end immediately before the explicit holdout"):
+            validator.validate(_dataset(450))
+
+    def test_zero_explicit_holdout_is_rejected(self):
+        with pytest.raises(ValidationError, match="test_size must be a positive integer"):
+            WalkForwardValidator(
+                train_size=100,
+                validation_size=50,
+                step_size=50,
+                test_size=0,
+            )
+
+    def test_explicit_holdout_contributes_to_minimum_dataset_size(self):
+        validator = WalkForwardValidator(
+            train_size=100,
+            validation_size=50,
+            step_size=50,
+            test_size=100,
+        )
+        with pytest.raises(ValidationError, match="train/validation/holdout"):
+            validator.validate(_dataset(249))
