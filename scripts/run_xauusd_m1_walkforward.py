@@ -98,10 +98,10 @@ def run(
     step_size: int,
     holdout_size: int = 500,
 ) -> dict:
-    if train_size <= 0 or validation_size <= 0 or step_size <= 0 or holdout_size <= 0:
-        raise ValueError(
-            "train_size, validation_size, step_size and holdout_size must be positive"
-        )
+    if train_size <= 0 or validation_size <= 0 or step_size <= 0:
+        raise ValueError("train_size, validation_size and step_size must be positive")
+    if holdout_size <= 0:
+        raise ValueError("holdout_size must be positive")
     if step_size < validation_size:
         raise ValueError("step_size must be >= validation_size so OOS validation windows do not overlap")
     if not input_path.exists():
