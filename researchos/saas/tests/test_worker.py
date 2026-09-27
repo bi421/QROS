@@ -109,6 +109,25 @@ def test_worker_marks_job_failed_when_executor_raises(monkeypatch):
     assert saved.attempt_count == 1
 
 
+def test_worker_records_terminal_failed_result(monkeypatch):
+    workspace_id = uuid4()
+    store = InMemoryResearchJobStore()
+    job = store.create(workspace_id, _job(workspace_id))
+    executor = StubExecutor(_result("FAILED"))
+    failures = []
+    monkeypatch.setattr(
+        "researchos.saas.worker.jobs_failed_total.inc",
+        lambda: failures.append(True),
+    )
+
+    result = ResearchWorker(store, executor).run_once(workspace_id, job.id)
+
+    assert result.status == "FAILED"
+    assert failures == [True]
+    saved = store.get(workspace_id, job.id)
+    assert saved.status == ResearchJobStatus.FAILED
+
+
 def test_worker_marks_job_failed_when_provenance_recording_fails(monkeypatch):
     workspace_id = uuid4()
     store = InMemoryResearchJobStore()
