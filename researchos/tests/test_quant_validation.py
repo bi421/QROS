@@ -142,15 +142,18 @@ class TestLeakageProtection:
         assert result.metadata["holdout_is_untouched"] is True
         assert result.fold_results[-1].validation_range == (300, 349)
 
-    def test_explicit_holdout_cannot_be_smaller_than_requested_tail(self):
+    def test_explicit_holdout_boundary_must_follow_final_validation(self):
         validator = WalkForwardValidator(
             train_size=100,
             validation_size=50,
             step_size=50,
             test_size=100,
         )
-        with pytest.raises(ValidationError, match="final validation window must end immediately before the explicit holdout"):
-            validator.validate(_dataset(450))
+        with pytest.raises(
+            ValidationError,
+            match="final validation window must end immediately before the explicit holdout",
+        ):
+            validator.validate(_dataset(425))
 
     def test_zero_explicit_holdout_is_rejected(self):
         with pytest.raises(ValidationError, match="test_size must be a positive integer"):
