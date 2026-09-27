@@ -128,6 +128,14 @@ def test_phase52_has_independent_temporal_holdout_and_excludes_it_from_wfo() -> 
         assert calibration["training_sample_count"] == result.model.sample_count
         assert holdout["model"]["sample_count"] == 40
         assert holdout["baseline"]["sample_count"] == 40
+        assert all(
+            fold["training_sample_count"] == config.train_size
+            for fold in metadata["wfo_folds"]
+        )
+        assert all(
+            fold["embargoed_observation_count"] == config.horizon
+            for fold in metadata["wfo_folds"]
+        )
 
         assert (
             metadata["wfo_folds"][-1]["validation_end"]
