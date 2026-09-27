@@ -24,6 +24,12 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _validate_repository_commit(value: str) -> str:
+    if len(value) != 40 or any(char not in "0123456789abcdefABCDEF" for char in value):
+        raise ValueError("repository_commit must be an exact 40-character Git SHA")
+    return value
+
+
 def _date_key(value: object) -> str:
     return str(value)[:10]
 
@@ -145,8 +151,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--slippage", default="fixed:0.0")
     parser.add_argument("--commission", default="fixed:0.0")
     parser.add_argument("--out-dir", default="reports/phase52")
-    parser.add_argument("--repository-commit", default="unknown")
+    parser.add_argument(
+        "--repository-commit",
+        required=True,
+        help="Exact 40-character Git commit SHA for the code used to generate this evidence",
+    )
     args = parser.parse_args(argv)
+    repository_commit = _validate_repository_commit(args.repository_commit)
 
     paths = {"XAUUSD": Path(args.csv), "DXY": Path(args.dxy), "US10Y": Path(args.us10y), "VIX": Path(args.vix)}
     missing = [name for name, path in paths.items() if not path.is_file()]
@@ -173,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     result_dict = {name: result.to_dict() for name, result in results.items()}
     payload = {
-        "schema": "researchos/phase52/evidence/v1", "repository_commit": args.repository_commit,
+        "schema": "researchos/phase52/evidence/v2", "repository_commit": repository_commit,
         "configuration": {"symbol": args.symbol, "timeframe": args.timeframe, "horizon": args.horizon, "threshold": args.threshold, "train_size": args.train, "validation_size": args.valid, "step_size": args.step, "n_neighbors": args.neighbors, "spread": args.spread, "slippage": args.slippage, "commission": args.commission},
         "sources": {
             "XAUUSD": {"path": str(paths["XAUUSD"]), "sha256": _sha256(paths["XAUUSD"]), "rows": original_counts["XAUUSD"]},
