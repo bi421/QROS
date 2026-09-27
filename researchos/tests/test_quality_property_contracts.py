@@ -1,8 +1,11 @@
 """Property-based contract tests for high-value deterministic boundaries."""
 
+from dataclasses import dataclass
 from typing import cast
 from uuid import UUID, uuid4
 
+import pytest
+from fastapi import HTTPException
 from hypothesis import given, settings, strategies as st
 
 from researchos.quant_engine.numerical_validation import (
@@ -12,8 +15,15 @@ from researchos.quant_engine.numerical_validation import (
     NumericalValidationResult,
     ValidationStatus,
 )
+from researchos.quant_engine.backend_hash import canonicalize, compute_input_hash
 from researchos.saas.contracts import UsagePolicy
 from researchos.saas.datasets import storage_path_for
+from researchos.saas.idempotency import (
+    IdempotencyConflict,
+    IdempotencyRecord,
+    InMemoryIdempotencyStore,
+)
+from researchos.saas.pagination import paginate, validate_filter_tenant_id
 
 
 FINITE_FLOATS = st.floats(
