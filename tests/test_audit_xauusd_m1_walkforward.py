@@ -41,17 +41,18 @@ def _artifact(tmp_path):
 def test_independent_auditor_passes_valid_artifact(tmp_path):
     source = _artifact(tmp_path)
     output = tmp_path / "walkforward.json"
-    run(source, output, train_size=10, validation_size=5, step_size=5)
+    run(source, output, train_size=10, validation_size=5, step_size=5, holdout_size=5)
     result = audit(output)
     assert result["status"] == "PASS"
-    assert result["prediction_records"] == 20
+    assert result["prediction_records"] == 15
+    assert result["holdout_prediction_records"] == 5
     assert all(result["checks"].values())
 
 
 def test_independent_auditor_detects_score_tampering(tmp_path):
     source = _artifact(tmp_path)
     output = tmp_path / "walkforward.json"
-    run(source, output, train_size=10, validation_size=5, step_size=5)
+    run(source, output, train_size=10, validation_size=5, step_size=5, holdout_size=5)
     report = json.loads(output.read_text(encoding="utf-8"))
     report["aggregate"]["model"]["brier_score"] += 0.01
     output.write_text(json.dumps(report), encoding="utf-8")
@@ -63,10 +64,38 @@ def test_independent_auditor_detects_score_tampering(tmp_path):
 def test_independent_auditor_detects_validation_reuse(tmp_path):
     source = _artifact(tmp_path)
     output = tmp_path / "walkforward.json"
-    run(source, output, train_size=10, validation_size=5, step_size=5)
+    run(source, output, train_size=10, validation_size=5, step_size=5, holdout_size=5)
     report = json.loads(output.read_text(encoding="utf-8"))
     report["folds"][1]["predictions"][0] = report["folds"][0]["predictions"][0]
     output.write_text(json.dumps(report), encoding="utf-8")
     result = audit(output)
     assert result["status"] == "FAIL"
     assert any("validation event reused" in item for item in result["failures"])
+
+
+def test_independent_auditor_rejects_missing_final_holdout(tmp_path):
+    source = _artifact(tmp_path)
+    output = tmp_path / "walkforward.json"
+    run(source, output, train_size=10, validation_size=5, step_size=5, holdout_size=5)
+    report = json.loads(output.read_text(encoding="utf-8"))
+    del report["holdout"]
+    output.write_text(json.dumps(report), encoding="utf-8")
+
+    result = audit(output)
+
+    assert result["status"] == "FAIL"
+    assert "mandatory final holdout artifact is missing" in result["failures"]
+
+
+def test_independent_auditor_detects_holdout_score_tampering(tmp_path):
+    source = _artifact(tmp_path)
+    output = tmp_path / "walkforward.json"
+    run(source, output, train_size=10, validation_size=5, step_size=5, holdout_size=5)
+    report = json.loads(output.read_text(encoding="utf-8"))
+    report["holdout"]["model"]["brier_score"] += 0.01
+    output.write_text(json.dumps(report), encoding="utf-8")
+
+    result = audit(output)
+
+    assert result["status"] == "FAIL"
+    assert "holdout model score does not recompute" in result["failures"]
