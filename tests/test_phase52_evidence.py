@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.run_phase52_evidence import _validate_repository_commit
+from scripts.run_phase52_evidence import _validate_holdout_results, _validate_repository_commit
 
 
 def test_repository_commit_requires_exact_40_character_git_sha() -> None:
