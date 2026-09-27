@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -110,6 +111,10 @@ def test_holdout_is_mandatory_for_evidence_envelope(tmp_path: Path) -> None:
     result_data = json.loads(result.read_text(encoding="utf-8"))
     del result_data["holdout"]
     result.write_text(json.dumps(result_data), encoding="utf-8")
+
+    audit_data = json.loads(audit.read_text(encoding="utf-8"))
+    audit_data["result_artifact_sha256"] = hashlib.sha256(result.read_bytes()).hexdigest()
+    audit.write_text(json.dumps(audit_data), encoding="utf-8")
 
     with pytest.raises(ValueError, match="final holdout artifact is missing"):
         build_envelope(
