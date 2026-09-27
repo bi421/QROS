@@ -80,6 +80,7 @@ FAIL_OPEN_PATTERNS = (
     re.compile(r"\bruff\s+check\b.*\|\|\s*true\b", re.IGNORECASE),
     re.compile(r"\b(?:pytest|ruff\s+check)\b.*--exit-zero\b", re.IGNORECASE),
     re.compile(r"\bpython(?:3)?\s+\S+.*\|\|\s*true\b", re.IGNORECASE),
+    re.compile(r"^\s*continue-on-error\s*:\s*true\s*$", re.IGNORECASE),
 )
 
 
