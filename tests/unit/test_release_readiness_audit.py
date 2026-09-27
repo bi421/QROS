@@ -84,3 +84,13 @@ def test_continue_on_error_is_rejected():
 
     assert len(failures) == 1
     assert "fail-open" in failures[0]
+
+
+def test_exact_release_workflow_is_governed():
+    audit = load_audit()
+
+    assert ".github/workflows/release.yml" in audit.GOVERNED_WORKFLOWS
+    assert all(
+        marker in audit.REQUIRED_MARKERS[".github/workflows/release.yml"]
+        for marker in ("mypy", "backup_verify.py", "final_health_check.py")
+    )
