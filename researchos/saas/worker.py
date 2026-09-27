@@ -89,6 +89,8 @@ class ResearchWorker:
                 if result.status == "SUCCEEDED"
                 else ResearchJobStatus.FAILED
             )
+            if target is ResearchJobStatus.FAILED:
+                jobs_failed_total.inc()
             try:
                 self._store.record_result(
                     workspace_id, job_id, lease.token, result
@@ -103,12 +105,14 @@ class ResearchWorker:
                         error_code="provenance_error",
                     )
                 finally:
-                    jobs_failed_total.inc()
+                    if target is not ResearchJobStatus.FAILED:
+                        jobs_failed_total.inc()
                 raise
             try:
                 self._store.finish(workspace_id, job_id, lease.token, target)
             except Exception:
-                jobs_failed_total.inc()
+                if target is not ResearchJobStatus.FAILED:
+                    jobs_failed_total.inc()
                 raise
             return result
         finally:
