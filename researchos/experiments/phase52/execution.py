@@ -15,6 +15,7 @@ from researchos.experiments.phase51.calibration import _brier_from_proba, evalua
 from researchos.experiments.phase51.cost import apply_costs
 from researchos.experiments.phase51.probability import EmpiricalProbabilityEstimator
 from researchos.experiments.phase51.self_validation import aggregate_outcome
+from researchos.experiments.phase51.contracts import reproducibility_hash
 from researchos.experiments.phase51.statistics import confidence_interval_diff, evaluate_significance
 
 from .contracts import BaselineResult, ModelResult, Phase52Result
@@ -176,9 +177,15 @@ def _run_prepared(prepared: Phase52PreparedData, cfg: Phase52Config) -> Phase52R
     fold_metadata: list[dict[str, object]] = []
     folds = 0
     start = 0
-    while start + cfg.train_size + cfg.validation_size <= holdout_start_index:
-        validation_start_index = start + cfg.train_size
+    while (
+        start + cfg.train_size + cfg.horizon + cfg.validation_size
+        <= holdout_start_index
+    ):
+        training_start_index = start
+        training_end_index = start + cfg.train_size
+        validation_start_index = training_end_index + cfg.horizon
         validation_end_index = validation_start_index + cfg.validation_size
+        training_positions = list(range(training_start_index, training_end_index))
         validation_positions = list(range(validation_start_index, validation_end_index))
         validation_start = _timestamp(sample_timestamps[validation_start_index])
         validation_end = _timestamp(sample_timestamps[validation_end_index - 1])
@@ -188,16 +195,13 @@ def _run_prepared(prepared: Phase52PreparedData, cfg: Phase52Config) -> Phase52R
         if validation_realized_end >= holdout_start:
             break
 
-        safe_training_positions = [
-            position
-            for position in range(0, validation_start_index)
-            if _timestamp(realized_end_timestamps[position]) < validation_start
-        ]
-        if len(safe_training_positions) < cfg.train_size:
+        if any(
+            _timestamp(realized_end_timestamps[position]) >= validation_start
+            for position in training_positions
+        ):
             raise RuntimeError(
-                "Insufficient leakage-safe training observations for validation fold"
+                "Validation training window violates realized-end embargo"
             )
-        training_positions = safe_training_positions[-cfg.train_size:]
         training_features = [features[position] for position in training_positions]
         training_labels = [labels[position] for position in training_positions]
         validation_features = [features[position] for position in validation_positions]
@@ -234,6 +238,7 @@ def _run_prepared(prepared: Phase52PreparedData, cfg: Phase52Config) -> Phase52R
                 "training_end": training_end.isoformat(),
                 "training_sample_count": len(training_positions),
                 "training_max_realized_end": training_realized_end.isoformat(),
+                "embargoed_observation_count": cfg.horizon,
                 "validation_start": validation_start.isoformat(),
                 "validation_end": validation_end.isoformat(),
                 "validation_realized_end": validation_realized_end.isoformat(),
