@@ -70,6 +70,37 @@ REQUIRED_MARKERS = {
 
 
 
+GOVERNED_WORKFLOWS = tuple(
+    path for path in REQUIRED_FILES if path.startswith(".github/workflows/")
+)
+
+FAIL_OPEN_PATTERNS = (
+    re.compile(r"\bpip(?:3)?\s+install\b.*\|\|\s*true\b", re.IGNORECASE),
+    re.compile(r"\bpytest\b.*\|\|\s*true\b", re.IGNORECASE),
+    re.compile(r"\bruff\s+check\b.*\|\|\s*true\b", re.IGNORECASE),
+    re.compile(r"\b(?:pytest|ruff\s+check)\b.*--exit-zero\b", re.IGNORECASE),
+    re.compile(r"\bpython(?:3)?\s+\S+.*\|\|\s*true\b", re.IGNORECASE),
+)
+
+
+def check_workflow_fail_open(
+    relative: str,
+    text: str,
+    failures: list[str],
+) -> None:
+    if relative not in GOVERNED_WORKFLOWS:
+        return
+
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        for pattern in FAIL_OPEN_PATTERNS:
+            if pattern.search(line):
+                failures.append(
+                    f"forbidden fail-open workflow command in "
+                    f"{relative}:{line_number}: {line.strip()!r}"
+                )
+                break
+
+
 def check_release_metadata(root: Path, failures: list[str]) -> None:
     version_paths = (
         root / "scripts" / "version.py",
@@ -155,6 +186,8 @@ def main() -> int:
                 failures.append(
                     f"missing required marker in {relative}: {marker!r}"
                 )
+
+        check_workflow_fail_open(relative, text, failures)
 
         lines = text.splitlines()
         if any(line == "    env:" for line in lines):
