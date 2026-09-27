@@ -59,6 +59,36 @@ def _fmt_p(value: object) -> str:
         return "—"
 
 
+def _validate_holdout_results(results: dict[str, object], holdout_size: int) -> None:
+    if holdout_size <= 0:
+        raise ValueError("holdout_size must be positive")
+    for feature_set in FEATURE_SET_NAMES:
+        result = results.get(feature_set)
+        if not isinstance(result, dict):
+            raise ValueError(f"{feature_set}: missing result payload")
+        metadata = result.get("metadata")
+        if not isinstance(metadata, dict):
+            raise ValueError(f"{feature_set}: missing result metadata")
+        holdout = metadata.get("holdout")
+        if not isinstance(holdout, dict):
+            raise ValueError(f"{feature_set}: final holdout artifact is missing")
+        if holdout.get("holdout_events") != holdout_size:
+            raise ValueError(f"{feature_set}: holdout event count does not match configured holdout_size")
+        predictions = holdout.get("predictions")
+        if not isinstance(predictions, list) or len(predictions) != holdout_size:
+            raise ValueError(f"{feature_set}: holdout prediction count does not match holdout_size")
+        if holdout.get("holdout_used_for_selection") is not False:
+            raise ValueError(f"{feature_set}: holdout selection exclusion contract is invalid")
+        if holdout.get("fit_is_pre_holdout_only") is not True:
+            raise ValueError(f"{feature_set}: holdout fit is not marked pre-holdout only")
+        temporal = metadata.get("temporal_contract")
+        if not isinstance(temporal, dict) or temporal.get("holdout_excluded_from_wfo_aggregate") is not True:
+            raise ValueError(f"{feature_set}: holdout/WFO temporal exclusion contract is missing")
+        calibration = metadata.get("calibration_contract")
+        if not isinstance(calibration, dict) or calibration.get("holdout_excluded") is not True:
+            raise ValueError(f"{feature_set}: holdout calibration exclusion contract is missing")
+
+
 def _write_report(path: Path, payload: dict) -> None:
     lines = [
         "# ResearchOS Phase 5.2 — Five-Way Empirical Evidence",
@@ -122,6 +152,29 @@ def _write_report(path: Path, payload: dict) -> None:
         )
     lines += [
         "",
+        "## Final independent holdout",
+        "",
+        "| Feature set | Holdout n | Holdout start | Holdout end | Accuracy | Brier | p-value | Accuracy-delta 95% CI |",
+        "|---|---:|---|---|---:|---:|---:|---|",
+    ]
+    for name in FEATURE_SET_NAMES:
+        metadata = payload["results"].get(name, {}).get("metadata", {})
+        holdout = metadata.get("holdout", {}) if isinstance(metadata, dict) else {}
+        model = holdout.get("model", {}) if isinstance(holdout, dict) else {}
+        sig = holdout.get("significance", {}) if isinstance(holdout, dict) else {}
+        ci = holdout.get("accuracy_delta_ci_95", {}) if isinstance(holdout, dict) else {}
+        lines.append(
+            f"| {name} | {holdout.get('holdout_events', '—')} | "
+            f"{holdout.get('start', '—')} | {holdout.get('end', '—')} | "
+            f"{_fmt_float(model.get('accuracy') if isinstance(model, dict) else None)} | "
+            f"{_fmt_float(model.get('brier_score') if isinstance(model, dict) else None)} | "
+            f"{_fmt_p(sig.get('p_value') if isinstance(sig, dict) else None)} | "
+            f"[{_fmt_float(ci.get('lower') if isinstance(ci, dict) else None)}, "
+            f"{_fmt_float(ci.get('upper') if isinstance(ci, dict) else None)}] |"
+        )
+
+    lines += [
+        "",
         "## Scientific boundary",
         "",
         "This artifact is evidence for the configured ResearchOS experiment and its explicit data sources. It is not evidence of live trading profitability or an investable edge.",
@@ -146,6 +199,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--train", type=int, default=1000)
     parser.add_argument("--valid", type=int, default=200)
     parser.add_argument("--step", type=int, default=200)
+    parser.add_argument("--holdout", type=int, default=40)
     parser.add_argument("--neighbors", type=int, default=25)
     parser.add_argument("--spread", default="fixed:0.0")
     parser.add_argument("--slippage", default="fixed:0.0")
@@ -173,27 +227,65 @@ def main(argv: list[str] | None = None) -> int:
 
     original_counts = {"XAUUSD": len(timestamps), **{symbol: len(macro_timestamps[symbol]) for symbol in macro_timestamps}}
     close, high, low, volume, common_ts, macro, macro_timestamps = _build_common_observation_sample(close, high, low, volume, timestamps, macro, macro_timestamps, ("DXY", "US10Y", "VIX"))
-    if len(common_ts) < args.train + args.valid:
-        print(f"BLOCKED: common sample has {len(common_ts)} rows; requires at least {args.train + args.valid}")
+    required_common_rows = args.train + args.valid + args.holdout + args.horizon
+    if len(common_ts) < required_common_rows:
+        print(
+            f"BLOCKED: common sample has {len(common_ts)} rows; "
+            f"requires at least {required_common_rows} for walk-forward plus final holdout"
+        )
         return 2
 
-    cfg = Phase52Config(symbol=args.symbol, timeframe=args.timeframe, horizon=args.horizon, threshold=args.threshold, train_size=args.train, validation_size=args.valid, step_size=args.step, n_neighbors=args.neighbors, spread_spec=args.spread, slippage_spec=args.slippage, commission_spec=args.commission)
+    cfg = Phase52Config(symbol=args.symbol, timeframe=args.timeframe, horizon=args.horizon, threshold=args.threshold, train_size=args.train, validation_size=args.valid, step_size=args.step, holdout_size=args.holdout, n_neighbors=args.neighbors, spread_spec=args.spread, slippage_spec=args.slippage, commission_spec=args.commission)
     results = run_phase52_comparison(close, high, low, volume, macro, config=cfg, timestamps=common_ts, macro_timestamps=macro_timestamps)
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     result_dict = {name: result.to_dict() for name, result in results.items()}
+    _validate_holdout_results(result_dict, args.holdout)
+    configuration = {
+        "symbol": args.symbol,
+        "timeframe": args.timeframe,
+        "horizon": args.horizon,
+        "threshold": args.threshold,
+        "train_size": args.train,
+        "validation_size": args.valid,
+        "step_size": args.step,
+        "holdout_size": args.holdout,
+        "neighbors": args.neighbors,
+        "spread": args.spread,
+        "slippage": args.slippage,
+        "commission": args.commission,
+    }
+    configuration_hash = hashlib.sha256(
+        json.dumps(configuration, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
     payload = {
-        "schema": "researchos/phase52/evidence/v2", "repository_commit": repository_commit,
-        "configuration": {"symbol": args.symbol, "timeframe": args.timeframe, "horizon": args.horizon, "threshold": args.threshold, "train_size": args.train, "validation_size": args.valid, "step_size": args.step, "n_neighbors": args.neighbors, "spread": args.spread, "slippage": args.slippage, "commission": args.commission},
+        "schema": "researchos/phase52/evidence/v3",
+        "repository_commit": repository_commit,
+        "configuration": configuration,
+        "configuration_hash": configuration_hash,
+        "feature_set_scope": list(FEATURE_SET_NAMES),
         "sources": {
             "XAUUSD": {"path": str(paths["XAUUSD"]), "sha256": _sha256(paths["XAUUSD"]), "rows": original_counts["XAUUSD"]},
             "DXY": {"path": str(paths["DXY"]), "sha256": _sha256(paths["DXY"]), "rows": original_counts["DXY"], "identity": "Dukascopy dollaridxusd; secondary DXY series"},
             "US10Y": {"path": str(paths["US10Y"]), "sha256": _sha256(paths["US10Y"]), "rows": original_counts["US10Y"], "identity": "FRED DGS10"},
             "VIX": {"path": str(paths["VIX"]), "sha256": _sha256(paths["VIX"]), "rows": original_counts["VIX"], "identity": "FRED VIXCLS"},
         },
-        "common_sample": {"count": len(common_ts), "first": _date_key(common_ts[0]), "last": _date_key(common_ts[-1]), "dropped_from_xauusd": original_counts["XAUUSD"] - len(common_ts), "timestamps_sha256": hashlib.sha256(json.dumps([str(x) for x in common_ts], separators=(",", ":")).encode()).hexdigest()},
-        "results": result_dict, "reproducibility_hashes": {name: result.reproducibility_hash for name, result in results.items()},
+        "common_sample": {
+            "count": len(common_ts),
+            "first": _date_key(common_ts[0]),
+            "last": _date_key(common_ts[-1]),
+            "dropped_from_xauusd": original_counts["XAUUSD"] - len(common_ts),
+            "timestamps_sha256": hashlib.sha256(json.dumps([str(x) for x in common_ts], separators=(",", ":")).encode()).hexdigest(),
+        },
+        "holdout_contract": {
+            "holdout_size": args.holdout,
+            "wfo_aggregate_excludes_holdout": True,
+            "selection_excludes_holdout": True,
+            "calibration_excludes_holdout": True,
+        },
+        "results": result_dict,
+        "reproducibility_hashes": {name: result.reproducibility_hash for name, result in results.items()},
     }
     json_path = out_dir / "phase52_evidence.json"
     md_path = out_dir / "phase52_evidence.md"
