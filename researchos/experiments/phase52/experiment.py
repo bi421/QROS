@@ -51,6 +51,7 @@ class Phase52Config:
     estimator_feature: int | None = None
     feature_set: str = "PRICE + DXY"
     n_neighbors: int = 25
+    holdout_size: int = 40
     required_macro_symbols: tuple[str, ...] = ("DXY", "US10Y", "VIX")
 
 
