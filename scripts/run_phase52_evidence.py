@@ -227,8 +227,12 @@ def main(argv: list[str] | None = None) -> int:
 
     original_counts = {"XAUUSD": len(timestamps), **{symbol: len(macro_timestamps[symbol]) for symbol in macro_timestamps}}
     close, high, low, volume, common_ts, macro, macro_timestamps = _build_common_observation_sample(close, high, low, volume, timestamps, macro, macro_timestamps, ("DXY", "US10Y", "VIX"))
-    if len(common_ts) < args.train + args.valid:
-        print(f"BLOCKED: common sample has {len(common_ts)} rows; requires at least {args.train + args.valid}")
+    required_common_rows = args.train + args.valid + args.holdout + args.horizon
+    if len(common_ts) < required_common_rows:
+        print(
+            f"BLOCKED: common sample has {len(common_ts)} rows; "
+            f"requires at least {required_common_rows} for walk-forward plus final holdout"
+        )
         return 2
 
     cfg = Phase52Config(symbol=args.symbol, timeframe=args.timeframe, horizon=args.horizon, threshold=args.threshold, train_size=args.train, validation_size=args.valid, step_size=args.step, holdout_size=args.holdout, n_neighbors=args.neighbors, spread_spec=args.spread, slippage_spec=args.slippage, commission_spec=args.commission)
