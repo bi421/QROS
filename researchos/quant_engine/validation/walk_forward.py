@@ -149,6 +149,9 @@ class WalkForwardValidator:
         """Run full walk-forward validation and return aggregate results."""
         self._check_dataset(dataset)
         folds = self.splitter.split(dataset.sample_count)
+        if self.test_size is not None:
+            holdout_start = dataset.sample_count - self.test_size
+            folds = [fold for fold in folds if fold.validation_end < holdout_start]
         self._check_fold_leakage(folds, dataset.sample_count)
 
         fold_results: list[FoldResult] = []
