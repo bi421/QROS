@@ -14,6 +14,7 @@ REQUIRED_FILES = (
     ".github/workflows/staging-release-gate.yml",
     ".github/workflows/staging-performance-gate.yml",
     ".github/workflows/storage-recovery-drill.yml",
+    ".github/workflows/release.yml",
     "docs/operations/PRODUCTION_RECOVERY_CONTROLS_V1.md",
     "scripts/ci/production_schema_parity.sh",
 )
@@ -55,6 +56,18 @@ REQUIRED_MARKERS = {
         "QROS_RECOVERY_AWS_ACCESS_KEY_ID",
         "QROS_RECOVERY_AWS_SECRET_ACCESS_KEY",
         "QROS_RECOVERY_AWS_REGION",
+    ),
+    ".github/workflows/release.yml": (
+        'tags:',
+        '"v*"',
+        "permissions:",
+        "contents: read",
+        "Verify migrations",
+        "ruff check .",
+        "mypy",
+        "backup_verify.py",
+        "final_health_check.py",
+        "if-no-files-found: error",
     ),
     "docs/operations/PRODUCTION_RECOVERY_CONTROLS_V1.md": (
         "RPO/RTO",
