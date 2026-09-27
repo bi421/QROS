@@ -9,6 +9,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from researchos.experiments.phase51.statistics import confidence_interval_diff, evaluate_significance
+
 FEATURE_SET_NAMES = (
     "PRICE_ONLY",
     "PRICE + DXY",
@@ -308,6 +310,19 @@ def audit(path: Path) -> dict[str, object]:
         else:
             failures.append(f"{feature_set}: holdout baseline score missing")
 
+        significance = holdout.get("significance")
+        if not isinstance(significance, dict):
+            failures.append(f"{feature_set}: holdout significance missing")
+        else:
+            recomputed_significance = evaluate_significance(
+                [int(row["prediction"]) for row in predictions],
+                [baseline_prediction] * len(predictions),
+                [int(row["label"]) for row in predictions],
+            ).to_dict()
+            for key in ("p_value", "model_better_count", "baseline_better_count"):
+                if key not in significance or not _close(float(significance[key]), float(recomputed_significance[key])):
+                    failures.append(f"{feature_set}: holdout significance {key} does not recompute")
+
         ci = holdout.get("accuracy_delta_ci_95")
         if (
             not isinstance(ci, dict)
@@ -316,6 +331,21 @@ def audit(path: Path) -> dict[str, object]:
             or float(ci["lower"]) > float(ci["upper"])
         ):
             failures.append(f"{feature_set}: holdout uncertainty interval missing or invalid")
+        else:
+            recomputed_ci = confidence_interval_diff(
+                [
+                    float(int(row["prediction"]) == int(row["label"]))
+                    for row in predictions
+                ],
+                [
+                    float(baseline_prediction == int(row["label"]))
+                    for row in predictions
+                ],
+            )
+            if not _close(float(ci["lower"]), recomputed_ci[0]) or not _close(
+                float(ci["upper"]), recomputed_ci[1]
+            ):
+                failures.append(f"{feature_set}: holdout uncertainty interval does not recompute")
 
     return {
         "status": "PASS" if not failures else "FAIL",
