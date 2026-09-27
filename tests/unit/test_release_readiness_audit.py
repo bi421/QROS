@@ -70,3 +70,17 @@ def test_governed_workflow_with_clean_commands_passes():
     )
 
     assert failures == []
+
+
+def test_continue_on_error_is_rejected():
+    audit = load_audit()
+    failures: list[str] = []
+
+    audit.check_workflow_fail_open(
+        ".github/workflows/staging-release-gate.yml",
+        "      continue-on-error: true\n",
+        failures,
+    )
+
+    assert len(failures) == 1
+    assert "fail-open" in failures[0]
