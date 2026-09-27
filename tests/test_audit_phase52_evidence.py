@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from scripts.audit_phase52_evidence import audit, _configuration_hash, _model_brier, _baseline_brier
+from scripts.audit_phase52_evidence import (
+    _baseline_brier,
+    _configuration_hash,
+    _model_brier,
+    audit,
+)
 
 
 def _payload() -> dict[str, object]:
@@ -22,13 +28,15 @@ def _payload() -> dict[str, object]:
         "commission": "fixed:0.0",
     }
     predictions = []
+    base_timestamp = datetime(2025, 1, 20, tzinfo=timezone.utc)
     for i in range(40):
         label = 1 if i % 2 == 0 else -1
-        timestamp_day = i + 10
+        timestamp = base_timestamp + timedelta(days=i)
+        realized_end = timestamp + timedelta(days=5)
         predictions.append(
             {
-                "timestamp": f"2025-02-{timestamp_day:02d}T00:00:00+00:00",
-                "realized_end": f"2025-03-{i + 1:02d}T00:00:00+00:00",
+                "timestamp": timestamp.isoformat(),
+                "realized_end": realized_end.isoformat(),
                 "prediction": label,
                 "probabilities": {
                     "-1": 0.10 if label == 1 else 0.85,
