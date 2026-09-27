@@ -168,7 +168,11 @@ class WalkForwardValidator:
             )
 
         test_size = self.test_size
-        holdout_start = dataset.sample_count - test_size if test_size is not None else folds[-1].validation_end + 1
+        holdout_start = (
+            dataset.sample_count - test_size
+            if test_size is not None
+            else folds[-1].validation_end + 1
+        )
         if test_size is None:
             test_size = dataset.sample_count - holdout_start
 
