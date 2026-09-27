@@ -38,7 +38,7 @@ def run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
 
 def psql(url: str, sql: str) -> str:
     return run(
-        ["psql", url, "-At", "-F", "\t", "-v", "ON_ERROR_STOP=1", "-c", sql],
+        ["psql", url, "-At", "-F", "	", "-v", "ON_ERROR_STOP=1", "-c", sql],
         capture_output=True,
     ).stdout.strip()
 
@@ -47,6 +47,17 @@ def require_tools(names: tuple[str, ...]) -> None:
     for tool in names:
         if shutil.which(tool) is None:
             raise SystemExit(f"{tool} is required")
+
+
+def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    """Hash a file incrementally so backup verification is bounded in memory."""
+    if chunk_size < 1:
+        raise ValueError("chunk_size must be positive")
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(chunk_size), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def database_snapshot(url: str) -> dict[str, object]:
@@ -132,7 +143,7 @@ def main() -> int:
     size = args.output.stat().st_size
     if size <= 0:
         raise SystemExit("backup is empty")
-    digest = hashlib.sha256(args.output.read_bytes()).hexdigest()
+    digest = sha256_file(args.output)
     source = database_snapshot(args.database_url)
 
     report: dict[str, object] = {
@@ -156,7 +167,8 @@ def main() -> int:
 
     if args.skip_restore:
         report["status"] = "BACKUP_ONLY"
-        args.report.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        args.report.write_text(json.dumps(report, indent=2, sort_keys=True) + "
+", encoding="utf-8")
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0
 
@@ -216,7 +228,8 @@ def main() -> int:
         subprocess.run(["docker", "rm", "-f", name], capture_output=True, check=False)
 
     report["elapsed_seconds"] = round(time.time() - started, 3)
-    args.report.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    args.report.write_text(json.dumps(report, indent=2, sort_keys=True) + "
+", encoding="utf-8")
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0
 
