@@ -105,3 +105,56 @@ def test_common_observation_sample_rejects_duplicate_macro_timestamps() -> None:
             macro_ts,
             ("DXY", "US10Y", "VIX"),
         )
+
+
+
+def test_common_observation_sample_aligns_same_utc_calendar_day_with_different_time() -> None:
+    timestamps = ts("2025-01-02 00:00", "2025-01-03 00:00")
+    macro_ts = {
+        "DXY": ts("2025-01-02 22:00", "2025-01-03 22:00"),
+        "US10Y": ts("2025-01-02 00:00", "2025-01-03 00:00"),
+        "VIX": ts("2025-01-02 00:00", "2025-01-03 00:00"),
+    }
+    macro = {
+        "DXY": [100.0, 101.0],
+        "US10Y": [4.0, 4.1],
+        "VIX": [15.0, 16.0],
+    }
+
+    result = _build_common_observation_sample(
+        [1900.0, 1910.0],
+        [1910.0, 1920.0],
+        [1890.0, 1900.0],
+        [100.0, 110.0],
+        timestamps,
+        macro,
+        macro_ts,
+        ("DXY", "US10Y", "VIX"),
+    )
+
+    _, _, _, _, common_ts, filtered_macro, filtered_macro_ts = result
+    assert common_ts == timestamps
+    assert filtered_macro["DXY"] == [100.0, 101.0]
+    assert filtered_macro_timestamps["DXY"] == common_ts
+
+
+def test_common_observation_sample_rejects_duplicate_macro_calendar_day() -> None:
+    timestamps = ts("2025-01-02 00:00")
+    macro_ts = {
+        "DXY": ts("2025-01-02 10:00", "2025-01-02 22:00"),
+        "US10Y": timestamps,
+        "VIX": timestamps,
+    }
+    macro = {"DXY": [100.0, 101.0], "US10Y": [4.0], "VIX": [15.0]}
+
+    with pytest.raises(ValueError, match="DXY: duplicate calendar days"):
+        _build_common_observation_sample(
+            [1900.0],
+            [1910.0],
+            [1890.0],
+            [100.0],
+            timestamps,
+            macro,
+            macro_ts,
+            ("DXY", "US10Y", "VIX"),
+        )
