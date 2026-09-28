@@ -28,7 +28,13 @@ This controlled use of `--include-all` is intentionally different from running `
 
 The Supabase Management API `POST /v1/projects/{ref}/database/migrations` is not the QROS production transport for these repository migrations. That endpoint creates a migration with a server-generated version and therefore cannot be used here to preserve the exact repository migration timestamp. This avoids creating new remote-only history entries.
 
-## Current production audit — 2026-09-21
+## Current migration ledger state — 2026-09-28
+
+The current production project contains seven live-only migration-history entries after `202609210001`. This later audit supersedes the older 2026-09-21 parity snapshot below. The historical entries are retained as historical evidence and must not be reconstructed or repaired as part of the current forward deployment.
+
+Production forward reconciliation is governed by `.github/workflows/production-forward-migration.yml`; the workflow does not attempt to make the full repository history equal to the live history.
+
+## Historical production audit — 2026-09-21
 
 The production project was independently queried during hardening. The observed migration-history drift was repaired to the repository's canonical versions, and the durable `public.research_claim` and `public.audit_event` objects were restored using their existing repository migrations.
 
