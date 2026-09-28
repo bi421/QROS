@@ -6,7 +6,7 @@ set -euo pipefail
 : "${MIGRATION_FILE:?MIGRATION_FILE is required}"
 
 case "${MIGRATION_FILE}" in
-  20260928123000_dataset_version_storage_path_reconciliation.sql|  20260928124500_workspace_billing_admin_role_reconciliation.sql|  20260928120000_storage_authorization_workspace_membership_reconciliation.sql)
+  20260928123000_dataset_version_storage_path_reconciliation.sql|20260928124500_workspace_billing_admin_role_reconciliation.sql|20260928120000_storage_authorization_workspace_membership_reconciliation.sql)
     ;;
   *)
     echo "::error::migration is not in the governed M1 forward-migration allowlist: ${MIGRATION_FILE}"
