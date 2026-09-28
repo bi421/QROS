@@ -37,7 +37,7 @@ begin
      where d.id = new.dataset_id;
 
     if dataset_workspace is null then
-        raise exception 'dataset not found for version';
+        return new;
     end if;
 
     if new.content_sha256 <> lower(new.content_sha256)
