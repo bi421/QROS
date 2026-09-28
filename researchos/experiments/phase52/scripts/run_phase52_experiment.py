@@ -11,9 +11,25 @@ from datetime import datetime, timezone
 from researchos.data_engine.loader import CsvLoader
 from researchos.experiments.phase52 import FEATURE_SET_NAMES, Phase52Config, run_phase52, run_phase52_comparison
 from researchos.experiments.phase52.timestamp_adapter import normalize_epoch_timestamp_csv
+from researchos.experiments.phase52_rebuild.daily_dataset import load_daily_xau_from_m1
 
 
 def _load_candles(csv_path: str, fmt: str, symbol: str, timeframe: str):
+    # Phase 5.2 is a daily experiment, while the canonical XAUUSD physical
+    # source is M1. Aggregate that source through the governed daily loader
+    # before calendar-day intersection. This preserves the canonical daily
+    # OHLCV semantics and prevents M1 rows from being mistaken for duplicate
+    # daily observations.
+    if timeframe == "1d" and symbol == "XAUUSD":
+        daily = load_daily_xau_from_m1(csv_path)
+        return (
+            [c.close for c in daily],
+            [c.high for c in daily],
+            [c.low for c in daily],
+            [c.tick_volume for c in daily],
+            [c.timestamp for c in daily],
+        )
+
     loader = CsvLoader()
     if fmt == "mt5":
         candles = loader.load_mt5_candles(csv_path, symbol=symbol, timeframe=timeframe)
