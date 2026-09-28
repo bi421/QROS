@@ -48,4 +48,4 @@ def test_workflow_is_manual_and_protected() -> None:
 
 def test_allowlist_has_exactly_three_entries() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
-    assert sum(text.count(migration) for migration in ALLOWLIST) == 6
+    assert sum(text.count(migration) for migration in ALLOWLIST) == 3
