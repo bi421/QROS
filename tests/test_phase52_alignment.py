@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from researchos.experiments.phase52.alignment import validate_exact_timestamp_alignment
-from researchos.experiments.phase52.scripts.run_phase52_experiment import _build_common_observation_sample
+from researchos.experiments.phase52.scripts.run_phase52_experiment import _build_common_observation_sample, _load_candles
 
 
 def ts(*values: str) -> list[pd.Timestamp]:
@@ -94,7 +94,7 @@ def test_common_observation_sample_rejects_duplicate_macro_timestamps() -> None:
     }
     macro = {"DXY": [100.0, 101.0], "US10Y": [4.0, 4.1], "VIX": [15.0, 16.0]}
 
-    with pytest.raises(ValueError, match="US10Y: duplicate timestamps"):
+    with pytest.raises(ValueError, match="US10Y: duplicate calendar days"):
         _build_common_observation_sample(
             [1900.0, 1910.0],
             [1910.0, 1920.0],
@@ -157,3 +157,35 @@ def test_common_observation_sample_rejects_duplicate_macro_calendar_day() -> Non
             macro_ts,
             ("DXY", "US10Y", "VIX"),
         )
+
+def test_load_candles_aggregates_canonical_m1_to_daily() -> None:
+    import csv
+
+    rows = [
+        ["2025-01-02T00:01:00Z", "1900", "1910", "1890", "1905", "10", "2", "0"],
+        ["2025-01-02T00:02:00Z", "1905", "1920", "1900", "1915", "20", "4", "0"],
+        ["2025-01-03T00:01:00Z", "1915", "1930", "1910", "1925", "30", "6", "0"],
+    ]
+
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "xau.csv"
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["time", "open", "high", "low", "close", "tick_volume", "spread", "real_volume"])
+            writer.writerows(rows)
+
+        close, high, low, volume, timestamps = _load_candles(
+            str(path), "auto", "XAUUSD", "1d"
+        )
+
+    assert close == [1915.0, 1925.0]
+    assert high == [1920.0, 1930.0]
+    assert low == [1890.0, 1910.0]
+    assert volume == [30.0, 30.0]
+    assert [str(ts) for ts in timestamps] == [
+        "2025-01-02T00:00:00+00:00",
+        "2025-01-03T00:00:00+00:00",
+    ]
