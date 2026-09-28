@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.run_phase52_evidence import _validate_holdout_results, _validate_repository_commit
+from scripts.run_phase52_evidence import (
+    FEATURE_SET_NAMES,
+    _build_blocked_payload,
+    _validate_holdout_results,
+    _validate_repository_commit,
+)
 
 
 def test_repository_commit_requires_exact_40_character_git_sha() -> None:
@@ -105,3 +110,50 @@ def test_evidence_report_preserves_holdout_scope_and_lineage() -> None:
     finally:
         if output.exists():
             output.unlink()
+
+
+def test_blocked_evidence_payload_is_truthful(tmp_path) -> None:
+    paths = {}
+    counts = {}
+    for name in ("XAUUSD", "DXY", "US10Y", "VIX"):
+        path = tmp_path / f"{name}.csv"
+        path.write_text(f"{name},2025-01-01,1\n", encoding="utf-8")
+        paths[name] = path
+        counts[name] = 1
+    configuration = {
+        "symbol": "XAUUSD", "timeframe": "1d", "horizon": 5, "threshold": 0.0,
+        "train_size": 1000, "validation_size": 200, "step_size": 200, "holdout_size": 40,
+        "neighbors": 25, "spread": "fixed:0.0", "slippage": "fixed:0.0", "commission": "fixed:0.0",
+    }
+    reason = "insufficient prepared observations"
+    results = {
+        name: {
+            "outcome": "BLOCKED",
+            "metadata": {
+                "feature_set": name,
+                "blocked_reason": reason,
+                "holdout_predictions_present": False,
+                "holdout_metrics_present": False,
+            },
+        }
+        for name in FEATURE_SET_NAMES
+    }
+    payload = _build_blocked_payload(
+        repository_commit="a07dad913e06b1eff812ce1bd4efd550db43e5c6",
+        configuration=configuration,
+        paths=paths,
+        original_counts=counts,
+        common_ts=["2025-01-01T00:00:00+00:00"],
+        results=results,
+        blocking_stage="prepared_execution_gate",
+        blocking_reason=reason,
+        actual_prepared_samples=1181,
+    )
+    assert payload["execution_status"] == "BLOCKED"
+    assert payload["repository_commit"] == "a07dad913e06b1eff812ce1bd4efd550db43e5c6"
+    assert payload["sample_requirements"]["required_prepared_samples"] == 1245
+    assert payload["sample_requirements"]["actual_prepared_samples"] == 1181
+    assert payload["holdout_contract"]["predictions_present"] is False
+    assert payload["holdout_contract"]["metrics_present"] is False
+    assert all(result["outcome"] == "BLOCKED" for result in payload["results"].values())
+    assert all("holdout" not in result["metadata"] for result in payload["results"].values())
