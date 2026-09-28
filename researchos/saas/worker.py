@@ -124,6 +124,5 @@ class ResearchWorker:
             job_id_var.reset(job_token)
             tenant_id_var.reset(tenant_token)
 
-    
 
 __all__ = ["ResearchExecutor", "ResearchWorker"]
