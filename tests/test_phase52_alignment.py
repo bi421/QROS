@@ -4,7 +4,10 @@ import pandas as pd
 import pytest
 
 from researchos.experiments.phase52.alignment import validate_exact_timestamp_alignment
-from researchos.experiments.phase52.scripts.run_phase52_experiment import _build_common_observation_sample, _load_candles
+from researchos.experiments.phase52.scripts.run_phase52_experiment import (
+    _build_common_observation_sample,
+    _load_candles,
+)
 
 
 def ts(*values: str) -> list[pd.Timestamp]:
@@ -158,6 +161,7 @@ def test_common_observation_sample_rejects_duplicate_macro_calendar_day() -> Non
             ("DXY", "US10Y", "VIX"),
         )
 
+
 def test_load_candles_aggregates_canonical_m1_to_daily() -> None:
     import csv
 
@@ -174,18 +178,18 @@ def test_load_candles_aggregates_canonical_m1_to_daily() -> None:
         path = Path(tmp) / "xau.csv"
         with path.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
-            writer.writerow(["time", "open", "high", "low", "close", "tick_volume", "spread", "real_volume"])
+            writer.writerow(
+                ["time", "open", "high", "low", "close", "tick_volume", "spread", "real_volume"]
+            )
             writer.writerows(rows)
 
-        close, high, low, volume, timestamps = _load_candles(
-            str(path), "auto", "XAUUSD", "1d"
-        )
+        close, high, low, volume, timestamps = _load_candles(str(path), "auto", "XAUUSD", "1d")
 
     assert close == [1915.0, 1925.0]
     assert high == [1920.0, 1930.0]
     assert low == [1890.0, 1910.0]
     assert volume == [30.0, 30.0]
     assert [str(ts) for ts in timestamps] == [
-        "2025-01-02T00:00:00+00:00",
-        "2025-01-03T00:00:00+00:00",
+        "2025-01-02T00:00:00Z",
+        "2025-01-03T00:00:00Z",
     ]

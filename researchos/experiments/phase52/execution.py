@@ -137,6 +137,9 @@ def _run_prepared(prepared: Phase52PreparedData, cfg: Phase52Config) -> Phase52R
             metadata={
                 **blocked.metadata,
                 "prepared_dataset_contract": "single_materialized_dataset_shared_across_feature_sets",
+                "actual_prepared_samples": prepared.sample_count,
+                "holdout_predictions_present": False,
+                "holdout_metrics_present": False,
             },
         )
 
@@ -271,6 +274,9 @@ def _run_prepared(prepared: Phase52PreparedData, cfg: Phase52Config) -> Phase52R
             metadata={
                 **blocked.metadata,
                 "prepared_dataset_contract": "single_materialized_dataset_shared_across_feature_sets",
+                "actual_prepared_samples": prepared.sample_count,
+                "holdout_predictions_present": False,
+                "holdout_metrics_present": False,
             },
         )
 

@@ -1,4 +1,5 @@
 """Run the complete Phase 5.2 five-way comparison and emit audit evidence."""
+
 from __future__ import annotations
 
 import argparse
@@ -73,7 +74,9 @@ def _validate_holdout_results(results: dict[str, object], holdout_size: int) -> 
         if not isinstance(holdout, dict):
             raise ValueError(f"{feature_set}: final holdout artifact is missing")
         if holdout.get("holdout_events") != holdout_size:
-            raise ValueError(f"{feature_set}: holdout event count does not match configured holdout_size")
+            raise ValueError(
+                f"{feature_set}: holdout event count does not match configured holdout_size"
+            )
         predictions = holdout.get("predictions")
         if not isinstance(predictions, list) or len(predictions) != holdout_size:
             raise ValueError(f"{feature_set}: holdout prediction count does not match holdout_size")
@@ -82,7 +85,10 @@ def _validate_holdout_results(results: dict[str, object], holdout_size: int) -> 
         if holdout.get("fit_is_pre_holdout_only") is not True:
             raise ValueError(f"{feature_set}: holdout fit is not marked pre-holdout only")
         temporal = metadata.get("temporal_contract")
-        if not isinstance(temporal, dict) or temporal.get("holdout_excluded_from_wfo_aggregate") is not True:
+        if (
+            not isinstance(temporal, dict)
+            or temporal.get("holdout_excluded_from_wfo_aggregate") is not True
+        ):
             raise ValueError(f"{feature_set}: holdout/WFO temporal exclusion contract is missing")
         calibration = metadata.get("calibration_contract")
         if not isinstance(calibration, dict) or calibration.get("holdout_excluded") is not True:
@@ -267,6 +273,7 @@ def _write_report(path: Path, payload: dict) -> None:
         accuracy = _metric(result, "model", "accuracy")
         brier = _metric(result, "model", "brier_score")
         net_accuracy = _metric(result, "cost", "net_accuracy_all")
+
         def delta(value: object, baseline: object) -> str:
             if value is None or baseline is None:
                 return "—"
@@ -274,6 +281,7 @@ def _write_report(path: Path, payload: dict) -> None:
                 return f"{float(value) - float(baseline):+.6f}"
             except (TypeError, ValueError):
                 return "—"
+
         lines.append(
             f"| {name} | {delta(accuracy, price_accuracy)} | "
             f"{delta(brier, price_brier)} | {delta(net_accuracy, price_net_accuracy)} |"
@@ -341,19 +349,29 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     repository_commit = _validate_repository_commit(args.repository_commit)
 
-    paths = {"XAUUSD": Path(args.csv), "DXY": Path(args.dxy), "US10Y": Path(args.us10y), "VIX": Path(args.vix)}
+    paths = {
+        "XAUUSD": Path(args.csv),
+        "DXY": Path(args.dxy),
+        "US10Y": Path(args.us10y),
+        "VIX": Path(args.vix),
+    }
     missing = [name for name, path in paths.items() if not path.is_file()]
     if missing:
         print(f"BLOCKED: missing required real-data files: {', '.join(missing)}")
         return 2
 
-    close, high, low, volume, timestamps = _load_candles(args.csv, args.format, args.symbol, args.timeframe)
+    close, high, low, volume, timestamps = _load_candles(
+        args.csv, args.format, args.symbol, args.timeframe
+    )
     macro, macro_timestamps = {}, {}
     for symbol, path in (("DXY", args.dxy), ("US10Y", args.us10y), ("VIX", args.vix)):
         values, factor_timestamps = _load_macro_series(path, args.format, symbol, args.timeframe)
         macro[symbol], macro_timestamps[symbol] = values, factor_timestamps
 
-    original_counts = {"XAUUSD": len(timestamps), **{symbol: len(macro_timestamps[symbol]) for symbol in macro_timestamps}}
+    original_counts = {
+        "XAUUSD": len(timestamps),
+        **{symbol: len(macro_timestamps[symbol]) for symbol in macro_timestamps},
+    }
     close, high, low, volume, common_ts, macro, macro_timestamps = _build_common_observation_sample(
         close,
         high,
@@ -451,6 +469,16 @@ def main(argv: list[str] | None = None) -> int:
                 common_ts=list(common_ts),
                 results=result_dict,
                 blocking_stage="prepared_execution_gate",
+                actual_prepared_samples=next(
+                    (
+                        result.get("metadata", {}).get("actual_prepared_samples")
+                        for result in result_dict.values()
+                        if result.get("outcome") == "BLOCKED"
+                        and isinstance(result.get("metadata"), dict)
+                        and result.get("metadata", {}).get("actual_prepared_samples") is not None
+                    ),
+                    None,
+                ),
                 blocking_reason=blocked_reasons[0]
                 if blocked_reasons
                 else "Phase 5.2 execution returned BLOCKED",
@@ -467,17 +495,38 @@ def main(argv: list[str] | None = None) -> int:
                 ).hexdigest(),
                 "feature_set_scope": list(FEATURE_SET_NAMES),
                 "sources": {
-                    "XAUUSD": {"path": str(paths["XAUUSD"]), "sha256": _sha256(paths["XAUUSD"]), "rows": original_counts["XAUUSD"]},
-                    "DXY": {"path": str(paths["DXY"]), "sha256": _sha256(paths["DXY"]), "rows": original_counts["DXY"], "identity": "Dukascopy dollaridxusd; secondary DXY series"},
-                    "US10Y": {"path": str(paths["US10Y"]), "sha256": _sha256(paths["US10Y"]), "rows": original_counts["US10Y"], "identity": "FRED DGS10"},
-                    "VIX": {"path": str(paths["VIX"]), "sha256": _sha256(paths["VIX"]), "rows": original_counts["VIX"], "identity": "FRED VIXCLS"},
+                    "XAUUSD": {
+                        "path": str(paths["XAUUSD"]),
+                        "sha256": _sha256(paths["XAUUSD"]),
+                        "rows": original_counts["XAUUSD"],
+                    },
+                    "DXY": {
+                        "path": str(paths["DXY"]),
+                        "sha256": _sha256(paths["DXY"]),
+                        "rows": original_counts["DXY"],
+                        "identity": "Dukascopy dollaridxusd; secondary DXY series",
+                    },
+                    "US10Y": {
+                        "path": str(paths["US10Y"]),
+                        "sha256": _sha256(paths["US10Y"]),
+                        "rows": original_counts["US10Y"],
+                        "identity": "FRED DGS10",
+                    },
+                    "VIX": {
+                        "path": str(paths["VIX"]),
+                        "sha256": _sha256(paths["VIX"]),
+                        "rows": original_counts["VIX"],
+                        "identity": "FRED VIXCLS",
+                    },
                 },
                 "common_sample": {
                     "count": len(common_ts),
                     "first": _date_key(common_ts[0]),
                     "last": _date_key(common_ts[-1]),
                     "dropped_from_xauusd": original_counts["XAUUSD"] - len(common_ts),
-                    "timestamps_sha256": hashlib.sha256(json.dumps([str(x) for x in common_ts], separators=(",", ":")).encode()).hexdigest(),
+                    "timestamps_sha256": hashlib.sha256(
+                        json.dumps([str(x) for x in common_ts], separators=(",", ":")).encode()
+                    ).hexdigest(),
                 },
                 "holdout_contract": {
                     "holdout_size": args.holdout,
@@ -486,7 +535,9 @@ def main(argv: list[str] | None = None) -> int:
                     "calibration_excludes_holdout": True,
                 },
                 "results": result_dict,
-                "reproducibility_hashes": {name: result.reproducibility_hash for name, result in results.items()},
+                "reproducibility_hashes": {
+                    name: result.reproducibility_hash for name, result in results.items()
+                },
                 "dxy_provenance": {
                     "provider": "Dukascopy",
                     "instrument": "dollaridxusd",
@@ -506,8 +557,16 @@ def main(argv: list[str] | None = None) -> int:
     for name in FEATURE_SET_NAMES:
         result_payload = payload["results"][name]
         if payload.get("execution_status") == "EXECUTED":
-            model = result_payload.get("model") if isinstance(result_payload.get("model"), dict) else None
-            sig = result_payload.get("significance") if isinstance(result_payload.get("significance"), dict) else None
+            model = (
+                result_payload.get("model")
+                if isinstance(result_payload.get("model"), dict)
+                else None
+            )
+            sig = (
+                result_payload.get("significance")
+                if isinstance(result_payload.get("significance"), dict)
+                else None
+            )
             folds = result_payload.get("num_folds", 0)
             print(
                 f"{name:18} | {result_payload.get('outcome', 'UNKNOWN'):10} | "

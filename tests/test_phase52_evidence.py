@@ -11,9 +11,10 @@ from scripts.run_phase52_evidence import (
 
 
 def test_repository_commit_requires_exact_40_character_git_sha() -> None:
-    assert _validate_repository_commit(
-        "03191c86cdff541a03545ff521c667e4ccd733c9a"
-    ) == "03191c86cdff541a03545ff521c667e4ccd733c9a"
+    assert (
+        _validate_repository_commit("03191c86cdff541a03545ff521c667e4ccd733c9")
+        == "03191c86cdff541a03545ff521c667e4ccd733c9"
+    )
 
 
 @pytest.mark.parametrize(
@@ -68,7 +69,7 @@ def test_evidence_generation_requires_a_positive_holdout_contract() -> None:
 
 def test_evidence_report_preserves_holdout_scope_and_lineage() -> None:
     payload = {
-        "repository_commit": "03191c86cdff541a03545ff521c667e4ccd733c9a",
+        "repository_commit": "03191c86cdff541a03545ff521c667e4ccd733c9",
         "common_sample": {"count": 1246, "first": "2021-01-04", "last": "2025-12-30"},
         "sources": {"DXY": {"identity": "Dukascopy dollaridxusd; secondary DXY series"}},
         "results": {
@@ -121,9 +122,18 @@ def test_blocked_evidence_payload_is_truthful(tmp_path) -> None:
         paths[name] = path
         counts[name] = 1
     configuration = {
-        "symbol": "XAUUSD", "timeframe": "1d", "horizon": 5, "threshold": 0.0,
-        "train_size": 1000, "validation_size": 200, "step_size": 200, "holdout_size": 40,
-        "neighbors": 25, "spread": "fixed:0.0", "slippage": "fixed:0.0", "commission": "fixed:0.0",
+        "symbol": "XAUUSD",
+        "timeframe": "1d",
+        "horizon": 5,
+        "threshold": 0.0,
+        "train_size": 1000,
+        "validation_size": 200,
+        "step_size": 200,
+        "holdout_size": 40,
+        "neighbors": 25,
+        "spread": "fixed:0.0",
+        "slippage": "fixed:0.0",
+        "commission": "fixed:0.0",
     }
     reason = "insufficient prepared observations"
     results = {
