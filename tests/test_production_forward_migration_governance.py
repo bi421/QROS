@@ -22,7 +22,7 @@ def test_forward_migration_script_exists_and_is_strict() -> None:
     assert "/v1/projects/" not in text
     assert "SUPABASE_PROJECT_ID" in text
     assert "APPLY_MIGRATION" in text
-    assert 'CONFIRM_APPLY:-} = "APPLY"' in text
+    assert '${CONFIRM_APPLY:-} = "APPLY"' in text
 
 
 def test_forward_migration_uses_isolated_single_file_bundle() -> None:
@@ -60,7 +60,7 @@ def test_workflow_is_manual_and_protected() -> None:
 def test_allowlist_has_exactly_three_entries_and_excludes_worker() -> None:
     script = SCRIPT.read_text(encoding="utf-8")
     workflow = WORKFLOW.read_text(encoding="utf-8")
-    assert sum(script.count(migration) for migration in ALLOWLIST) == 3
+    assert all(script.count(migration) == 2 for migration in ALLOWLIST)
     assert sum(workflow.count(migration) for migration in ALLOWLIST) == 3
     assert "20260928103556_saas_worker_queue_consumer.sql" not in script
     assert "20260928103556_saas_worker_queue_consumer.sql" not in workflow
