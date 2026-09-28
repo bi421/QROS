@@ -18,7 +18,23 @@ The repository includes `.github/workflows/production-schema-parity.yml`. It is 
 
 The gate must report **up to date** before a release can be called migration-compatible. A dry-run that reports pending migrations is a release blocker; it must not be bypassed by manually applying SQL outside migration history.
 
-## Current production audit — 2026-09-21
+## Divergent-history forward migration gate
+
+Production migration history may contain legacy live-only entries that are not present in the repository. The repository must not repair, delete, rename, or recreate those historical entries as part of a forward deployment.
+
+The governed forward-only reconciliation path is `.github/workflows/production-forward-migration.yml`. The workflow is manual, protected by the `production` Environment, and accepts only the explicitly allowlisted M1 reconciliation migrations. It creates a temporary Supabase CLI workdir containing exactly one selected migration file, verifies the target project ref, runs `supabase db push --linked --include-all --dry-run`, and refuses to continue unless exactly that migration is the only pending item in the isolated bundle. An apply requires the explicit `APPLY` confirmation input.
+
+This controlled use of `--include-all` is intentionally different from running `supabase db push --include-all` against the full repository: the isolated bundle prevents unrelated repository-only migrations from being selected. Supabase documents `--include-all` as applying migrations not found in the remote history table. The CLI records applied migration versions in the remote migration history, preserving the selected file's timestamp rather than creating a server-generated version.
+
+The Supabase Management API `POST /v1/projects/{ref}/database/migrations` is not the QROS production transport for these repository migrations. That endpoint creates a migration with a server-generated version and therefore cannot be used here to preserve the exact repository migration timestamp. This avoids creating new remote-only history entries.
+
+## Current migration ledger state — 2026-09-28
+
+The current production project contains seven live-only migration-history entries after `202609210001`. This later audit supersedes the older 2026-09-21 parity snapshot below. The historical entries are retained as historical evidence and must not be reconstructed or repaired as part of the current forward deployment.
+
+Production forward reconciliation is governed by `.github/workflows/production-forward-migration.yml`; the workflow does not attempt to make the full repository history equal to the live history.
+
+## Historical production audit — 2026-09-21
 
 The production project was independently queried during hardening. The observed migration-history drift was repaired to the repository's canonical versions, and the durable `public.research_claim` and `public.audit_event` objects were restored using their existing repository migrations.
 
