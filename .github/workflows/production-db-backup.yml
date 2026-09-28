@@ -11,15 +11,49 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
+      - name: Install pg_dump and AWS CLI
         run: |
-          python -m pip install --upgrade pip
-          pip install -e .
+          apt-get update
+          apt-get install -y postgresql-client awscli
 
-      - name: Run backup verification
-        run: python scripts/backup_verify.py
+      - name: Dump production database with pg_dump
+        env:
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          pg_dump --no-password "$PROD_DATABASE_URL" > /tmp/qros-backup.sql
+
+      - name: Generate checksum
+        run: |
+          sha256sum /tmp/qros-backup.sql > /tmp/backup.sha256
+
+      - name: Upload backup to S3 with aws s3 cp
+        env:
+          BACKUP_AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
+          BACKUP_AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
+          BACKUP_AWS_REGION: ${{ secrets.BACKUP_AWS_REGION }}
+        run: |
+          aws configure set aws_access_key_id "$BACKUP_AWS_ACCESS_KEY_ID"
+          aws configure set aws_secret_access_key "$BACKUP_AWS_SECRET_ACCESS_KEY"
+          aws configure set region "$BACKUP_AWS_REGION"
+          aws s3 cp /tmp/qros-backup.sql s3://qros-backups/qros-backup.sql
+          aws s3 cp /tmp/backup.sha256 s3://qros-backups/backup.sha256
+
+      - name: Verify backup exists with head-object
+        env:
+          BACKUP_AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
+          BACKUP_AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
+          BACKUP_AWS_REGION: ${{ secrets.BACKUP_AWS_REGION }}
+        run: |
+          aws configure set aws_access_key_id "$BACKUP_AWS_ACCESS_KEY_ID"
+          aws configure set aws_secret_access_key "$BACKUP_AWS_SECRET_ACCESS_KEY"
+          aws configure set region "$BACKUP_AWS_REGION"
+          aws s3api head-object --bucket qros-backups --key qros-backup.sql
+
+      - name: Verify checksums with sha256sum --check
+        run: |
+          cd /tmp
+          sha256sum --check backup.sha256
+
+      - name: Cleanup
+        if: always()
+        run: rm -f /tmp/qros-backup.sql /tmp/backup.sha256
