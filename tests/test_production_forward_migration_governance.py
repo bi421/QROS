@@ -38,6 +38,7 @@ def test_workflow_is_manual_and_protected() -> None:
     assert "environment: production" in text
     assert "permissions:" in text
     assert "contents: read" in text
+    assert "SUPABASE_ACCESS_TOKEN" in text
     assert "20260928123000_dataset_version_storage_path_reconciliation.sql" in text
     assert "20260928124500_workspace_billing_admin_role_reconciliation.sql" in text
     assert "20260928120000_storage_authorization_workspace_membership_reconciliation.sql" in text
