@@ -17,6 +17,8 @@ REQUIRED_FILES = (
     ".github/workflows/release.yml",
     "docs/operations/PRODUCTION_RECOVERY_CONTROLS_V1.md",
     "scripts/ci/production_schema_parity.sh",
+    "scripts/ci/production_forward_migration.sh",
+    ".github/workflows/production-forward-migration.yml",
 )
 
 REQUIRED_MARKERS = {
@@ -78,6 +80,20 @@ REQUIRED_MARKERS = {
         "supabase migration list --linked",
         "supabase db push --linked --dry-run",
         "relrowsecurity",
+    ),
+    "scripts/ci/production_forward_migration.sh": (
+        "set -euo pipefail",
+        "--include-all",
+        "--dry-run",
+        "APPLY_MIGRATION",
+        "CONFIRM_APPLY",
+    ),
+    ".github/workflows/production-forward-migration.yml": (
+        "workflow_dispatch",
+        "environment: production",
+        "type: choice",
+        "type: boolean",
+        "pvhdsngxyoiqhqwujfjt",
     ),
 }
 
