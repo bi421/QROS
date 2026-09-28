@@ -102,10 +102,27 @@ def run_phase52(
             required_macro_symbols=cfg.required_macro_symbols,
         )
     except (TypeError, ValueError) as exc:
+        message = str(exc)
+        missing_symbols: tuple[str, ...] = ()
+
+        macro_markers = (
+            "Prepared inputs missing required macro symbol: ",
+            "Prepared macro timestamps misaligned: ",
+            "Prepared macro series misaligned: ",
+        )
+
+        for marker in macro_markers:
+            if marker in message:
+                symbol = message.split(marker, 1)[1].strip()
+                if symbol:
+                    missing_symbols = (symbol,)
+                break
+
         return Phase52Result.blocked(
             symbol=cfg.symbol,
             timeframe=cfg.timeframe,
-            reason=f"PHASE 5.2 INPUT CONTRACT FAILED: {exc}",
+            reason=f"PHASE 5.2 INPUT CONTRACT FAILED: {message}",
+            macro_symbols_missing=missing_symbols,
         )
 
     from .execution import _run_prepared

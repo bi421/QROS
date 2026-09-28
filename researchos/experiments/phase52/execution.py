@@ -16,7 +16,10 @@ from researchos.experiments.phase51.cost import apply_costs
 from researchos.experiments.phase51.probability import EmpiricalProbabilityEstimator
 from researchos.experiments.phase51.self_validation import aggregate_outcome
 from researchos.experiments.phase51.contracts import reproducibility_hash
-from researchos.experiments.phase51.statistics import confidence_interval_diff, evaluate_significance
+from researchos.experiments.phase51.statistics import (
+    confidence_interval_diff,
+    evaluate_significance,
+)
 
 from .contracts import BaselineResult, ModelResult, Phase52Result
 from .experiment import FEATURE_SET_NAMES, Phase52Config, _resolve_feature_indices
@@ -109,25 +112,32 @@ def _run_prepared(prepared: Phase52PreparedData, cfg: Phase52Config) -> Phase52R
     if cfg.train_size <= 0 or cfg.validation_size <= 0 or cfg.step_size <= 0:
         raise ValueError("train_size, validation_size and step_size must be positive")
     if cfg.step_size < cfg.validation_size:
-        raise ValueError("step_size must be >= validation_size so OOS validation windows do not overlap")
+        raise ValueError(
+            "step_size must be >= validation_size so OOS validation windows do not overlap"
+        )
     if cfg.horizon <= 0:
         raise ValueError("horizon must be positive")
     if cfg.holdout_size <= 0:
         raise ValueError("holdout_size must be positive")
 
-    required_samples = (
-        cfg.train_size + cfg.validation_size + cfg.holdout_size + cfg.horizon
-    )
+    required_samples = cfg.train_size + cfg.validation_size + cfg.holdout_size + cfg.horizon
     if prepared.sample_count < required_samples:
-        return Phase52Result.blocked(
+        blocked = Phase52Result.blocked(
             symbol=cfg.symbol,
             timeframe=cfg.timeframe,
             reason=(
-                "REAL XAUUSD + MACRO DATA REQUIRED (insufficient aligned samples "
+                "REAL XAUUSD DATA REQUIRED; MACRO DATA REQUIRED (insufficient aligned samples "
                 "for walk-forward plus independent final holdout)"
             ),
             macro_symbols_present=prepared.macro_diagnostics.symbols_present,
             macro_symbols_missing=prepared.macro_diagnostics.symbols_missing,
+        )
+        return replace(
+            blocked,
+            metadata={
+                **blocked.metadata,
+                "prepared_dataset_contract": "single_materialized_dataset_shared_across_feature_sets",
+            },
         )
 
     provenance = prepared.input_provenance
@@ -162,7 +172,9 @@ def _run_prepared(prepared: Phase52PreparedData, cfg: Phase52Config) -> Phase52R
         _timestamp(realized) < _timestamp(observed)
         for observed, realized in zip(sample_timestamps, realized_end_timestamps)
     ):
-        raise ValueError("Phase 5.2 realized-end timestamps must not precede observation timestamps")
+        raise ValueError(
+            "Phase 5.2 realized-end timestamps must not precede observation timestamps"
+        )
 
     holdout_start_index = len(features) - cfg.holdout_size
     holdout_start = _timestamp(sample_timestamps[holdout_start_index])
@@ -177,10 +189,7 @@ def _run_prepared(prepared: Phase52PreparedData, cfg: Phase52Config) -> Phase52R
     fold_metadata: list[dict[str, object]] = []
     folds = 0
     start = 0
-    while (
-        start + cfg.train_size + cfg.horizon + cfg.validation_size
-        <= holdout_start_index
-    ):
+    while start + cfg.train_size + cfg.horizon + cfg.validation_size <= holdout_start_index:
         training_start_index = start
         training_end_index = start + cfg.train_size
         validation_start_index = training_end_index + cfg.horizon
@@ -199,9 +208,7 @@ def _run_prepared(prepared: Phase52PreparedData, cfg: Phase52Config) -> Phase52R
             _timestamp(realized_end_timestamps[position]) >= validation_start
             for position in training_positions
         ):
-            raise RuntimeError(
-                "Validation training window violates realized-end embargo"
-            )
+            raise RuntimeError("Validation training window violates realized-end embargo")
         training_features = [features[position] for position in training_positions]
         training_labels = [labels[position] for position in training_positions]
         validation_features = [features[position] for position in validation_positions]
@@ -224,7 +231,9 @@ def _run_prepared(prepared: Phase52PreparedData, cfg: Phase52Config) -> Phase52R
         all_baseline_predictions.extend([int(baseline_prediction)] * len(validation_labels))
         all_actuals.extend(validation_labels)
         all_probabilities.extend(probabilities)
-        all_close.extend(prepared.close[source_indices[position]] for position in validation_positions)
+        all_close.extend(
+            prepared.close[source_indices[position]] for position in validation_positions
+        )
 
         training_start = _timestamp(sample_timestamps[training_positions[0]])
         training_end = _timestamp(sample_timestamps[training_positions[-1]])
@@ -250,12 +259,19 @@ def _run_prepared(prepared: Phase52PreparedData, cfg: Phase52Config) -> Phase52R
         start += cfg.step_size
 
     if folds == 0:
-        return Phase52Result.blocked(
+        blocked = Phase52Result.blocked(
             symbol=cfg.symbol,
             timeframe=cfg.timeframe,
             reason="No leakage-safe walk-forward folds were produced before the final holdout",
             macro_symbols_present=prepared.macro_diagnostics.symbols_present,
             macro_symbols_missing=prepared.macro_diagnostics.symbols_missing,
+        )
+        return replace(
+            blocked,
+            metadata={
+                **blocked.metadata,
+                "prepared_dataset_contract": "single_materialized_dataset_shared_across_feature_sets",
+            },
         )
 
     baseline = _baseline(all_baseline_predictions, all_actuals)
@@ -288,12 +304,8 @@ def _run_prepared(prepared: Phase52PreparedData, cfg: Phase52Config) -> Phase52R
         if _timestamp(realized_end_timestamps[position]) < holdout_start
     ]
     if len(holdout_training_positions) < cfg.train_size:
-        raise RuntimeError(
-            "Insufficient leakage-safe training observations for final holdout"
-        )
-    holdout_training_features = [
-        features[position] for position in holdout_training_positions
-    ]
+        raise RuntimeError("Insufficient leakage-safe training observations for final holdout")
+    holdout_training_features = [features[position] for position in holdout_training_positions]
     holdout_training_labels = [labels[position] for position in holdout_training_positions]
     holdout_features = [features[position] for position in holdout_positions]
     holdout_labels = [labels[position] for position in holdout_positions]
@@ -316,9 +328,7 @@ def _run_prepared(prepared: Phase52PreparedData, cfg: Phase52Config) -> Phase52R
         holdout_predictions, holdout_labels, holdout_probabilities
     )
     holdout_baseline = _baseline(holdout_baseline_predictions, holdout_labels)
-    holdout_close = [
-        prepared.close[source_indices[position]] for position in holdout_positions
-    ]
+    holdout_close = [prepared.close[source_indices[position]] for position in holdout_positions]
     holdout_cost = apply_costs(
         holdout_predictions,
         holdout_labels,
@@ -336,8 +346,14 @@ def _run_prepared(prepared: Phase52PreparedData, cfg: Phase52Config) -> Phase52R
         cfg.significance_level,
     )
     holdout_accuracy_ci = confidence_interval_diff(
-        [float(int(pred) == int(actual)) for pred, actual in zip(holdout_predictions, holdout_labels)],
-        [float(int(pred) == int(actual)) for pred, actual in zip(holdout_baseline_predictions, holdout_labels)],
+        [
+            float(int(pred) == int(actual))
+            for pred, actual in zip(holdout_predictions, holdout_labels)
+        ],
+        [
+            float(int(pred) == int(actual))
+            for pred, actual in zip(holdout_baseline_predictions, holdout_labels)
+        ],
     )
 
     holdout_prediction_records = []
