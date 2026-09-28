@@ -107,7 +107,6 @@ def test_common_observation_sample_rejects_duplicate_macro_timestamps() -> None:
         )
 
 
-
 def test_common_observation_sample_aligns_same_utc_calendar_day_with_different_time() -> None:
     timestamps = ts("2025-01-02 00:00", "2025-01-03 00:00")
     macro_ts = {
