@@ -5,6 +5,7 @@ import pytest
 
 from researchos.research_core.contracts import ResearchArtifact, ResearchResult
 from researchos.saas.contracts import ResearchJob, ResearchJobStatus
+from researchos.saas.observability import job_id_var, tenant_id_var
 from researchos.saas.store import InMemoryResearchJobStore
 from researchos.saas.worker import ResearchWorker
 
@@ -14,8 +15,12 @@ class StubExecutor:
         self.result = result
         self.error = error
         self.calls = 0
+        self.observed_job_id = None
+        self.observed_tenant_id = None
 
     def execute(self, job_id):
+        self.observed_job_id = job_id_var.get()
+        self.observed_tenant_id = tenant_id_var.get()
         self.calls += 1
         if self.error:
             raise self.error
@@ -48,34 +53,103 @@ def _result(status="SUCCEEDED"):
     )
 
 
-def test_worker_moves_queued_job_to_succeeded():
+def test_worker_moves_queued_job_to_succeeded(monkeypatch):
     workspace_id = uuid4()
     store = InMemoryResearchJobStore()
     job = store.create(workspace_id, _job(workspace_id))
     executor = StubExecutor(_result())
+    durations = []
+    monkeypatch.setattr(
+        "researchos.saas.worker.jobs_duration_seconds.observe",
+        durations.append,
+    )
 
     result = ResearchWorker(store, executor).run_once(workspace_id, job.id)
 
     assert result.status == "SUCCEEDED"
     assert executor.calls == 1
+    assert executor.observed_job_id == str(job.id)
+    assert executor.observed_tenant_id == str(workspace_id)
+    assert len(durations) == 1
+    assert durations[0] >= 0.0
+    assert job_id_var.get() is None
+    assert tenant_id_var.get() is None
     saved = store.get(workspace_id, job.id)
     assert saved.status == ResearchJobStatus.SUCCEEDED
     assert saved.attempt_count == 1
 
 
-def test_worker_marks_job_failed_when_executor_raises():
+def test_worker_marks_job_failed_when_executor_raises(monkeypatch):
     workspace_id = uuid4()
     store = InMemoryResearchJobStore()
     job = store.create(workspace_id, _job(workspace_id))
     executor = StubExecutor(error=RuntimeError("scientific failure"))
+    failures = []
+    durations = []
+    monkeypatch.setattr(
+        "researchos.saas.worker.jobs_failed_total.inc",
+        lambda: failures.append(True),
+    )
+    monkeypatch.setattr(
+        "researchos.saas.worker.jobs_duration_seconds.observe",
+        durations.append,
+    )
 
     with pytest.raises(RuntimeError, match="scientific failure"):
         ResearchWorker(store, executor).run_once(workspace_id, job.id)
 
+    assert len(failures) == 1
+    assert len(durations) == 1
+    assert durations[0] >= 0.0
+    assert job_id_var.get() is None
+    assert tenant_id_var.get() is None
     saved = store.get(workspace_id, job.id)
     assert saved.status == ResearchJobStatus.FAILED
     assert saved.error_code == "executor_error"
     assert saved.attempt_count == 1
+
+
+def test_worker_records_terminal_failed_result(monkeypatch):
+    workspace_id = uuid4()
+    store = InMemoryResearchJobStore()
+    job = store.create(workspace_id, _job(workspace_id))
+    executor = StubExecutor(_result("FAILED"))
+    failures = []
+    monkeypatch.setattr(
+        "researchos.saas.worker.jobs_failed_total.inc",
+        lambda: failures.append(True),
+    )
+
+    result = ResearchWorker(store, executor).run_once(workspace_id, job.id)
+
+    assert result.status == "FAILED"
+    assert failures == [True]
+    saved = store.get(workspace_id, job.id)
+    assert saved.status == ResearchJobStatus.FAILED
+
+
+def test_worker_marks_job_failed_when_provenance_recording_fails(monkeypatch):
+    workspace_id = uuid4()
+    store = InMemoryResearchJobStore()
+    job = store.create(workspace_id, _job(workspace_id))
+    executor = StubExecutor(_result())
+    failures = []
+    monkeypatch.setattr(
+        "researchos.saas.worker.jobs_failed_total.inc",
+        lambda: failures.append(True),
+    )
+
+    def fail_record(*args, **kwargs):
+        raise RuntimeError("persistence failure")
+
+    monkeypatch.setattr(store, "record_result", fail_record)
+
+    with pytest.raises(RuntimeError, match="persistence failure"):
+        ResearchWorker(store, executor).run_once(workspace_id, job.id)
+
+    assert len(failures) == 1
+    assert job_id_var.get() is None
+    assert tenant_id_var.get() is None
 
 
 def test_worker_cannot_run_job_from_another_workspace():
