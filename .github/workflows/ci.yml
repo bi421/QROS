@@ -40,6 +40,8 @@ jobs:
         run: ruff check .
       - name: Run pytest
         run: python -m pytest researchos/tests/ researchos/research_core/tests/ researchos/saas/tests/ -v --tb=short -x --import-mode=importlib
+      - name: Run production forward-migration governance tests
+        run: python -m pytest tests/test_production_forward_migration_governance.py -q
 
 
   static-type-check:
