@@ -108,62 +108,30 @@ echo "migration_sha256=${migration_sha}"
 echo "== postflight: schema contract =="
 case "$MIGRATION_FILE" in
   20260928123000_dataset_version_storage_path_reconciliation.sql)
-    supabase --workdir "$bundle" db query --linked <<'SQL'
-do $
-begin
-  if (select count(*) from public.dataset_version) <> 0 then
-    raise exception 'dataset_version postcondition failed: expected zero rows';
-  end if;
-  if not exists (select 1 from pg_constraint where conrelid = 'public.dataset_version'::regclass and conname = 'dataset_version_storage_path_contract') then
-    raise exception 'dataset_version postcondition failed: canonical CHECK missing';
-  end if;
-  if to_regprocedure('public.validate_dataset_version_storage_path()') is null then
-    raise exception 'dataset_version postcondition failed: validator function missing';
-  end if;
-  if not exists (select 1 from pg_trigger where tgrelid = 'public.dataset_version'::regclass and tgname = 'dataset_version_storage_path_contract' and not tgisinternal) then
-    raise exception 'dataset_version postcondition failed: canonical trigger missing';
-  end if;
-end
-$;
-SQL
+    supabase --workdir "$bundle" db query --linked "
+select 1 / case when
+  (select count(*) from public.dataset_version) = 0
+  and exists (select 1 from pg_constraint where conrelid = 'public.dataset_version'::regclass and conname = 'dataset_version_storage_path_contract')
+  and to_regprocedure('public.validate_dataset_version_storage_path()') is not null
+  and exists (select 1 from pg_trigger where tgrelid = 'public.dataset_version'::regclass and tgname = 'dataset_version_storage_path_contract' and not tgisinternal)
+then 1 else 0 end as postcondition_ok;
+"
     ;;
   20260928124500_workspace_billing_admin_role_reconciliation.sql)
-    supabase --workdir "$bundle" db query --linked <<'SQL'
-do $
-declare
-  definition text;
-begin
-  if (select count(*) from public.workspace_member) <> 0 then
-    raise exception 'workspace_member postcondition failed: expected zero rows';
-  end if;
-  select pg_get_constraintdef(oid) into definition from pg_constraint where conrelid = 'public.workspace_member'::regclass and conname = 'workspace_member_role_check';
-  if definition is null or position('billing_admin' in definition) = 0 then
-    raise exception 'workspace_member postcondition failed: billing_admin is not allowed';
-  end if;
-end
-$;
-SQL
+    supabase --workdir "$bundle" db query --linked "
+select 1 / case when
+  (select count(*) from public.workspace_member) = 0
+  and exists (select 1 from pg_constraint where conrelid = 'public.workspace_member'::regclass and conname = 'workspace_member_role_check' and position('billing_admin' in pg_get_constraintdef(oid)) > 0)
+then 1 else 0 end as postcondition_ok;
+"
     ;;
   20260928120000_storage_authorization_workspace_membership_reconciliation.sql)
-    supabase --workdir "$bundle" db query --linked <<'SQL'
-do $
-declare
-  bad_count integer;
-  policy_count integer;
-begin
-  if not exists (select 1 from storage.buckets where id = 'qros-datasets' and public = false) then
-    raise exception 'storage postcondition failed: qros-datasets is not private';
-  end if;
-  select count(*) into policy_count from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname in ('qros_datasets_tenant_select','qros_datasets_tenant_insert','qros_datasets_tenant_update','qros_datasets_tenant_delete');
-  if policy_count <> 4 then
-    raise exception 'storage postcondition failed: expected four target policies';
-  end if;
-  select count(*) into bad_count from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname in ('qros_datasets_tenant_select','qros_datasets_tenant_insert','qros_datasets_tenant_update','qros_datasets_tenant_delete') and (roles::text <> '{authenticated}' or permissive <> 'PERMISSIVE' or coalesce(qual, '') like '%auth.jwt()%' or coalesce(with_check, '') like '%auth.jwt()%' or coalesce(qual, '') like '%tenant_id%' or coalesce(with_check, '') like '%tenant_id%' or (coalesce(qual, '') not like '%private.is_workspace_member%' and coalesce(with_check, '') not like '%private.is_workspace_member%'));
-  if bad_count <> 0 then
-    raise exception 'storage postcondition failed: JWT tenant authorization remains';
-  end if;
-end
-$;
-SQL
+    supabase --workdir "$bundle" db query --linked "
+select 1 / case when
+  exists (select 1 from storage.buckets where id = 'qros-datasets' and public = false)
+  and (select count(*) from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname in ('qros_datasets_tenant_select','qros_datasets_tenant_insert','qros_datasets_tenant_update','qros_datasets_tenant_delete')) = 4
+  and (select count(*) from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname in ('qros_datasets_tenant_select','qros_datasets_tenant_insert','qros_datasets_tenant_update','qros_datasets_tenant_delete') and (roles::text <> '{authenticated}' or permissive <> 'PERMISSIVE' or coalesce(qual, '') like '%auth.jwt()%' or coalesce(with_check, '') like '%auth.jwt()%' or coalesce(qual, '') like '%tenant_id%' or coalesce(with_check, '') like '%tenant_id%' or (coalesce(qual, '') not like '%private.is_workspace_member%' and coalesce(with_check, '') not like '%private.is_workspace_member%'))) = 0
+then 1 else 0 end as postcondition_ok;
+"
     ;;
 esac
