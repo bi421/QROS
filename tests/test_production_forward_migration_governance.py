@@ -22,7 +22,7 @@ def test_forward_migration_script_exists_and_is_strict() -> None:
     assert "/v1/projects/" not in text
     assert "SUPABASE_PROJECT_ID" in text
     assert "APPLY_MIGRATION" in text
-    assert '${CONFIRM_APPLY:-} = "APPLY"' in text
+    assert '${CONFIRM_APPLY:-}" = "APPLY"' in text
 
 
 def test_forward_migration_uses_isolated_single_file_bundle() -> None:
