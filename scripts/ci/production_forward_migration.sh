@@ -39,8 +39,7 @@ find "${bundle}/supabase/migrations" -maxdepth 1 -type f -printf '%f\n' | sort
 
 echo "== link target =="
 supabase --workdir "${bundle}" link \
-  --project-ref "${SUPABASE_PROJECT_ID}" \
-  --password "${SUPABASE_DB_PASSWORD}"
+  --project-ref "${SUPABASE_PROJECT_ID}"
 
 echo "== preflight: remote history =="
 supabase --workdir "${bundle}" migration list --linked
