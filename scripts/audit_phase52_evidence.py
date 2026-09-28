@@ -68,6 +68,83 @@ def _baseline_brier(records: list[dict], baseline_prediction: int) -> float:
     return total / len(records) / 3.0
 
 
+def _audit_blocked(
+    payload: dict[str, object],
+    failures: list[str],
+    configuration: dict[str, object],
+    common: dict[str, object],
+) -> None:
+    blocking = payload.get("blocking")
+    if not isinstance(blocking, dict):
+        failures.append("blocked evidence blocking metadata is missing")
+        return
+    if not isinstance(blocking.get("stage"), str) or not blocking.get("stage"):
+        failures.append("blocked evidence blocking stage is missing")
+    if not isinstance(blocking.get("reason"), str) or not blocking.get("reason"):
+        failures.append("blocked evidence blocking reason is missing")
+    if blocking.get("holdout_scoring_executed") is not False:
+        failures.append("blocked evidence incorrectly records holdout scoring as executed")
+    requirements = payload.get("sample_requirements")
+    if not isinstance(requirements, dict):
+        failures.append("blocked evidence sample requirements are missing")
+    else:
+        expected = configuration["train_size"] + configuration["validation_size"] + configuration["holdout_size"] + configuration["horizon"]
+        if requirements.get("required_prepared_samples") != expected:
+            failures.append("blocked evidence required prepared sample count is inconsistent")
+        if requirements.get("common_observations") != common.get("count"):
+            failures.append("blocked evidence common observation count is inconsistent")
+        actual = requirements.get("actual_prepared_samples")
+        if actual is not None and (not isinstance(actual, int) or actual < 0 or actual >= expected):
+            failures.append("blocked evidence actual prepared sample count is invalid")
+    holdout_contract = payload.get("holdout_contract")
+    if not isinstance(holdout_contract, dict):
+        failures.append("blocked evidence holdout contract is missing")
+    else:
+        if holdout_contract.get("predictions_present") is not False:
+            failures.append("blocked evidence incorrectly records holdout predictions")
+        if holdout_contract.get("metrics_present") is not False:
+            failures.append("blocked evidence incorrectly records holdout metrics")
+    results = payload.get("results")
+    if not isinstance(results, dict):
+        failures.append("blocked evidence feature-set results are missing")
+        return
+    if set(results) != set(FEATURE_SET_NAMES):
+        failures.append("blocked evidence feature-set results do not match the pre-registered scope")
+    for feature_set in FEATURE_SET_NAMES:
+        result = results.get(feature_set)
+        if not isinstance(result, dict):
+            failures.append(f"{feature_set}: blocked result missing")
+            continue
+        if result.get("outcome") != "BLOCKED":
+            failures.append(f"{feature_set}: blocked evidence result is not BLOCKED")
+        metadata = result.get("metadata")
+        if not isinstance(metadata, dict):
+            failures.append(f"{feature_set}: blocked metadata missing")
+            continue
+        if not isinstance(metadata.get("blocked_reason"), str) or not metadata.get("blocked_reason"):
+            failures.append(f"{feature_set}: blocked reason missing")
+        if metadata.get("holdout_predictions_present") is not False:
+            failures.append(f"{feature_set}: blocked result claims holdout predictions are present")
+        if metadata.get("holdout_metrics_present") is not False:
+            failures.append(f"{feature_set}: blocked result claims holdout metrics are present")
+        if metadata.get("holdout") not in (None, {}):
+            failures.append(f"{feature_set}: blocked result contains holdout artifact")
+        for key in ("predictions", "accuracy", "brier_score", "p_value", "significance", "accuracy_delta_ci_95"):
+            if key in result and result[key] not in (None, {}):
+                failures.append(f"{feature_set}: blocked result contains fabricated numerical field: {key}")
+        for key in ("model", "baseline", "cost", "calibration"):
+            if key in result and result[key] not in (None, {}):
+                failures.append(f"{feature_set}: blocked result contains numerical result section: {key}")
+    dxy = payload.get("dxy_provenance")
+    if not isinstance(dxy, dict):
+        failures.append("blocked evidence DXY provenance is missing")
+    else:
+        expected_identity = {"provider": "Dukascopy", "instrument": "dollaridxusd", "source_type": "secondary", "ice_dxy_equivalence": "NOT PROVEN"}
+        for key, expected in expected_identity.items():
+            if dxy.get(key) != expected:
+                failures.append(f"blocked evidence DXY provenance field invalid: {key}")
+
+
 def audit(path: Path) -> dict[str, object]:
     failures: list[str] = []
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -124,8 +201,24 @@ def audit(path: Path) -> dict[str, object]:
     horizon = configuration.get("horizon") if isinstance(configuration, dict) else None
     if not all(isinstance(v, int) and v > 0 for v in (holdout_size, train_size, validation_size, horizon)):
         failures.append("configuration sample sizes/horizon are invalid")
-    elif not isinstance(common, dict) or int(common.get("count", 0)) < train_size + validation_size + holdout_size + horizon:
+    elif not isinstance(common, dict):
+        failures.append("common sample is missing")
+    elif payload.get("execution_status", "EXECUTED") != "BLOCKED" and int(common.get("count", 0)) < train_size + validation_size + holdout_size + horizon:
         failures.append("common sample is too small for the declared holdout protocol")
+
+    execution_status = payload.get("execution_status", "EXECUTED")
+    if execution_status not in ("EXECUTED", "BLOCKED"):
+        failures.append("execution_status must be EXECUTED or BLOCKED")
+    if execution_status == "BLOCKED" and isinstance(configuration, dict) and isinstance(common, dict):
+        _audit_blocked(payload, failures, configuration, common)
+        return {
+            "status": "PASS" if not failures else "FAIL",
+            "failures": failures,
+            "checked_feature_sets": 5 if not failures else 0,
+            "holdout_size": holdout_size,
+            "execution_status": "BLOCKED",
+            "scientific_status": "BLOCKED",
+        }
 
     results = payload.get("results")
     if not isinstance(results, dict):

@@ -89,7 +89,135 @@ def _validate_holdout_results(results: dict[str, object], holdout_size: int) -> 
             raise ValueError(f"{feature_set}: holdout calibration exclusion contract is missing")
 
 
+def _build_blocked_payload(
+    *,
+    repository_commit: str,
+    configuration: dict[str, object],
+    paths: dict[str, Path],
+    original_counts: dict[str, int],
+    common_ts: list[object],
+    results: dict[str, dict[str, object]],
+    blocking_stage: str,
+    blocking_reason: str,
+    actual_prepared_samples: int | None = None,
+) -> dict[str, object]:
+    configuration_hash = hashlib.sha256(
+        json.dumps(configuration, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    blocked_results = {}
+    for feature_set in FEATURE_SET_NAMES:
+        result = results.get(feature_set)
+        if not isinstance(result, dict):
+            result = {"outcome": "BLOCKED", "metadata": {"blocked_reason": blocking_reason}}
+        blocked_results[feature_set] = result
+    return {
+        "schema": "researchos/phase52/evidence/v3",
+        "repository_commit": repository_commit,
+        "execution_status": "BLOCKED",
+        "blocking": {
+            "stage": blocking_stage,
+            "reason": blocking_reason,
+            "holdout_scoring_executed": False,
+        },
+        "configuration": configuration,
+        "configuration_hash": configuration_hash,
+        "sample_requirements": {
+            "required_prepared_samples": (
+                configuration["train_size"]
+                + configuration["validation_size"]
+                + configuration["holdout_size"]
+                + configuration["horizon"]
+            ),
+            "actual_prepared_samples": actual_prepared_samples,
+            "common_observations": len(common_ts),
+        },
+        "feature_set_scope": list(FEATURE_SET_NAMES),
+        "sources": {
+            "XAUUSD": {
+                "path": str(paths["XAUUSD"]),
+                "sha256": _sha256(paths["XAUUSD"]),
+                "rows": original_counts["XAUUSD"],
+                "identity": "XAUUSD 2021-2025 research series",
+            },
+            "DXY": {
+                "path": str(paths["DXY"]),
+                "sha256": _sha256(paths["DXY"]),
+                "rows": original_counts["DXY"],
+                "identity": "Dukascopy dollaridxusd; secondary DXY series",
+            },
+            "US10Y": {
+                "path": str(paths["US10Y"]),
+                "sha256": _sha256(paths["US10Y"]),
+                "rows": original_counts["US10Y"],
+                "identity": "FRED DGS10",
+            },
+            "VIX": {
+                "path": str(paths["VIX"]),
+                "sha256": _sha256(paths["VIX"]),
+                "rows": original_counts["VIX"],
+                "identity": "FRED VIXCLS",
+            },
+        },
+        "common_sample": {
+            "count": len(common_ts),
+            "first": _date_key(common_ts[0]) if common_ts else None,
+            "last": _date_key(common_ts[-1]) if common_ts else None,
+            "dropped_from_xauusd": original_counts["XAUUSD"] - len(common_ts),
+            "timestamps_sha256": hashlib.sha256(
+                json.dumps([str(x) for x in common_ts], separators=(",", ":")).encode()
+            ).hexdigest(),
+        },
+        "holdout_contract": {
+            "holdout_size": configuration["holdout_size"],
+            "wfo_aggregate_excludes_holdout": True,
+            "selection_excludes_holdout": True,
+            "calibration_excludes_holdout": True,
+            "predictions_present": False,
+            "metrics_present": False,
+        },
+        "results": blocked_results,
+        "reproducibility_hashes": {
+            name: result.get("reproducibility_hash")
+            for name, result in blocked_results.items()
+            if result.get("reproducibility_hash")
+        },
+        "dxy_provenance": {
+            "provider": "Dukascopy",
+            "instrument": "dollaridxusd",
+            "source_type": "secondary",
+            "ice_dxy_equivalence": "NOT PROVEN",
+        },
+    }
+
+
 def _write_report(path: Path, payload: dict) -> None:
+    if payload.get("execution_status") == "BLOCKED":
+        blocking = payload.get("blocking", {})
+        requirements = payload.get("sample_requirements", {})
+        lines = [
+            "# ResearchOS Phase 5.2 — Blocked Evidence",
+            "",
+            f"- Repository commit: {payload['repository_commit']}",
+            "- Execution status: **BLOCKED**",
+            f"- Blocking stage: **{blocking.get('stage', 'UNKNOWN') if isinstance(blocking, dict) else 'UNKNOWN'}**",
+            f"- Blocking reason: {blocking.get('reason', 'MISSING') if isinstance(blocking, dict) else 'MISSING'}",
+            f"- Common observations: **{payload['common_sample']['count']}**",
+            f"- Required prepared observations: **{requirements.get('required_prepared_samples', '—') if isinstance(requirements, dict) else '—'}**",
+            f"- Actual prepared observations: **{requirements.get('actual_prepared_samples', '—') if isinstance(requirements, dict) else '—'}**",
+            "- Final holdout scoring: **NOT EXECUTED**",
+            "- Holdout predictions: **ABSENT**",
+            "- Holdout metrics: **ABSENT**",
+            "",
+            "No numerical holdout result was generated because the governed execution was blocked.",
+            "DXY source: Dukascopy dollaridxusd; ICE benchmark equivalence: **NOT PROVEN**.",
+            "",
+        ]
+        for name in FEATURE_SET_NAMES:
+            result = payload["results"].get(name, {})
+            lines.append(f"- {name}: **{result.get('outcome', 'BLOCKED')}**")
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return
+
     lines = [
         "# ResearchOS Phase 5.2 — Five-Way Empirical Evidence",
         "",
@@ -226,22 +354,18 @@ def main(argv: list[str] | None = None) -> int:
         macro[symbol], macro_timestamps[symbol] = values, factor_timestamps
 
     original_counts = {"XAUUSD": len(timestamps), **{symbol: len(macro_timestamps[symbol]) for symbol in macro_timestamps}}
-    close, high, low, volume, common_ts, macro, macro_timestamps = _build_common_observation_sample(close, high, low, volume, timestamps, macro, macro_timestamps, ("DXY", "US10Y", "VIX"))
+    close, high, low, volume, common_ts, macro, macro_timestamps = _build_common_observation_sample(
+        close,
+        high,
+        low,
+        volume,
+        timestamps,
+        macro,
+        macro_timestamps,
+        ("DXY", "US10Y", "VIX"),
+    )
     required_common_rows = args.train + args.valid + args.holdout + args.horizon
-    if len(common_ts) < required_common_rows:
-        print(
-            f"BLOCKED: common sample has {len(common_ts)} rows; "
-            f"requires at least {required_common_rows} for walk-forward plus final holdout"
-        )
-        return 2
 
-    cfg = Phase52Config(symbol=args.symbol, timeframe=args.timeframe, horizon=args.horizon, threshold=args.threshold, train_size=args.train, validation_size=args.valid, step_size=args.step, holdout_size=args.holdout, n_neighbors=args.neighbors, spread_spec=args.spread, slippage_spec=args.slippage, commission_spec=args.commission)
-    results = run_phase52_comparison(close, high, low, volume, macro, config=cfg, timestamps=common_ts, macro_timestamps=macro_timestamps)
-
-    out_dir = Path(args.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    result_dict = {name: result.to_dict() for name, result in results.items()}
-    _validate_holdout_results(result_dict, args.holdout)
     configuration = {
         "symbol": args.symbol,
         "timeframe": args.timeframe,
@@ -256,37 +380,120 @@ def main(argv: list[str] | None = None) -> int:
         "slippage": args.slippage,
         "commission": args.commission,
     }
-    configuration_hash = hashlib.sha256(
-        json.dumps(configuration, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
-    payload = {
-        "schema": "researchos/phase52/evidence/v3",
-        "repository_commit": repository_commit,
-        "configuration": configuration,
-        "configuration_hash": configuration_hash,
-        "feature_set_scope": list(FEATURE_SET_NAMES),
-        "sources": {
-            "XAUUSD": {"path": str(paths["XAUUSD"]), "sha256": _sha256(paths["XAUUSD"]), "rows": original_counts["XAUUSD"]},
-            "DXY": {"path": str(paths["DXY"]), "sha256": _sha256(paths["DXY"]), "rows": original_counts["DXY"], "identity": "Dukascopy dollaridxusd; secondary DXY series"},
-            "US10Y": {"path": str(paths["US10Y"]), "sha256": _sha256(paths["US10Y"]), "rows": original_counts["US10Y"], "identity": "FRED DGS10"},
-            "VIX": {"path": str(paths["VIX"]), "sha256": _sha256(paths["VIX"]), "rows": original_counts["VIX"], "identity": "FRED VIXCLS"},
-        },
-        "common_sample": {
-            "count": len(common_ts),
-            "first": _date_key(common_ts[0]),
-            "last": _date_key(common_ts[-1]),
-            "dropped_from_xauusd": original_counts["XAUUSD"] - len(common_ts),
-            "timestamps_sha256": hashlib.sha256(json.dumps([str(x) for x in common_ts], separators=(",", ":")).encode()).hexdigest(),
-        },
-        "holdout_contract": {
-            "holdout_size": args.holdout,
-            "wfo_aggregate_excludes_holdout": True,
-            "selection_excludes_holdout": True,
-            "calibration_excludes_holdout": True,
-        },
-        "results": result_dict,
-        "reproducibility_hashes": {name: result.reproducibility_hash for name, result in results.items()},
-    }
+
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if len(common_ts) < required_common_rows:
+        blocking_reason = (
+            f"common sample has {len(common_ts)} rows; "
+            f"requires at least {required_common_rows} for walk-forward plus final holdout"
+        )
+        payload = _build_blocked_payload(
+            repository_commit=repository_commit,
+            configuration=configuration,
+            paths=paths,
+            original_counts=original_counts,
+            common_ts=list(common_ts),
+            results={
+                name: {
+                    "outcome": "BLOCKED",
+                    "metadata": {
+                        "feature_set": name,
+                        "blocked_reason": blocking_reason,
+                        "holdout_predictions_present": False,
+                        "holdout_metrics_present": False,
+                    },
+                }
+                for name in FEATURE_SET_NAMES
+            },
+            blocking_stage="common_sample_gate",
+            blocking_reason=blocking_reason,
+        )
+        results = None
+    else:
+        cfg = Phase52Config(
+            symbol=args.symbol,
+            timeframe=args.timeframe,
+            horizon=args.horizon,
+            threshold=args.threshold,
+            train_size=args.train,
+            validation_size=args.valid,
+            step_size=args.step,
+            holdout_size=args.holdout,
+            n_neighbors=args.neighbors,
+            spread_spec=args.spread,
+            slippage_spec=args.slippage,
+            commission_spec=args.commission,
+        )
+        results = run_phase52_comparison(
+            close,
+            high,
+            low,
+            volume,
+            macro,
+            config=cfg,
+            timestamps=common_ts,
+            macro_timestamps=macro_timestamps,
+        )
+        result_dict = {name: result.to_dict() for name, result in results.items()}
+        if any(result.get("outcome") == "BLOCKED" for result in result_dict.values()):
+            blocked_reasons = [
+                str(result.get("metadata", {}).get("blocked_reason", ""))
+                for result in result_dict.values()
+                if result.get("outcome") == "BLOCKED"
+            ]
+            payload = _build_blocked_payload(
+                repository_commit=repository_commit,
+                configuration=configuration,
+                paths=paths,
+                original_counts=original_counts,
+                common_ts=list(common_ts),
+                results=result_dict,
+                blocking_stage="prepared_execution_gate",
+                blocking_reason=blocked_reasons[0]
+                if blocked_reasons
+                else "Phase 5.2 execution returned BLOCKED",
+            )
+        else:
+            _validate_holdout_results(result_dict, args.holdout)
+            payload = {
+                "schema": "researchos/phase52/evidence/v3",
+                "repository_commit": repository_commit,
+                "execution_status": "EXECUTED",
+                "configuration": configuration,
+                "configuration_hash": hashlib.sha256(
+                    json.dumps(configuration, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                ).hexdigest(),
+                "feature_set_scope": list(FEATURE_SET_NAMES),
+                "sources": {
+                    "XAUUSD": {"path": str(paths["XAUUSD"]), "sha256": _sha256(paths["XAUUSD"]), "rows": original_counts["XAUUSD"]},
+                    "DXY": {"path": str(paths["DXY"]), "sha256": _sha256(paths["DXY"]), "rows": original_counts["DXY"], "identity": "Dukascopy dollaridxusd; secondary DXY series"},
+                    "US10Y": {"path": str(paths["US10Y"]), "sha256": _sha256(paths["US10Y"]), "rows": original_counts["US10Y"], "identity": "FRED DGS10"},
+                    "VIX": {"path": str(paths["VIX"]), "sha256": _sha256(paths["VIX"]), "rows": original_counts["VIX"], "identity": "FRED VIXCLS"},
+                },
+                "common_sample": {
+                    "count": len(common_ts),
+                    "first": _date_key(common_ts[0]),
+                    "last": _date_key(common_ts[-1]),
+                    "dropped_from_xauusd": original_counts["XAUUSD"] - len(common_ts),
+                    "timestamps_sha256": hashlib.sha256(json.dumps([str(x) for x in common_ts], separators=(",", ":")).encode()).hexdigest(),
+                },
+                "holdout_contract": {
+                    "holdout_size": args.holdout,
+                    "wfo_aggregate_excludes_holdout": True,
+                    "selection_excludes_holdout": True,
+                    "calibration_excludes_holdout": True,
+                },
+                "results": result_dict,
+                "reproducibility_hashes": {name: result.reproducibility_hash for name, result in results.items()},
+                "dxy_provenance": {
+                    "provider": "Dukascopy",
+                    "instrument": "dollaridxusd",
+                    "source_type": "secondary",
+                    "ice_dxy_equivalence": "NOT PROVEN",
+                },
+            }
     json_path = out_dir / "phase52_evidence.json"
     md_path = out_dir / "phase52_evidence.md"
     json_path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
@@ -297,15 +504,24 @@ def main(argv: list[str] | None = None) -> int:
     print(f"COMMON SAMPLE : {len(common_ts)}")
     print(f"FIRST / LAST  : {_date_key(common_ts[0])} / {_date_key(common_ts[-1])}")
     for name in FEATURE_SET_NAMES:
-        result = results[name]
-        model = result.model.to_dict() if result.model else None
-        sig = result.significance.to_dict() if result.significance else None
-        print(f"{name:18} | {result.outcome:10} | folds={result.num_folds:3d} | accuracy={_fmt_float(model.get('accuracy') if model else None)} | brier={_fmt_float(model.get('brier_score') if model else None)} | p={_fmt_p(sig.get('p_value') if sig else None)}")
+        result_payload = payload["results"][name]
+        if payload.get("execution_status") == "EXECUTED":
+            model = result_payload.get("model") if isinstance(result_payload.get("model"), dict) else None
+            sig = result_payload.get("significance") if isinstance(result_payload.get("significance"), dict) else None
+            folds = result_payload.get("num_folds", 0)
+            print(
+                f"{name:18} | {result_payload.get('outcome', 'UNKNOWN'):10} | "
+                f"folds={folds:3d} | accuracy={_fmt_float(model.get('accuracy') if model else None)} | "
+                f"brier={_fmt_float(model.get('brier_score') if model else None)} | "
+                f"p={_fmt_p(sig.get('p_value') if sig else None)}"
+            )
+        else:
+            print(f"{name:18} | BLOCKED    | folds=  0 | accuracy=— | brier=— | p=—")
     print(f"JSON            : {json_path}")
     print(f"REPORT          : {md_path}")
     print("DXY BOUNDARY    : Dukascopy secondary series; ICE equivalence NOT PROVEN")
     print("=" * 100)
-    return 0 if all(result.outcome != "BLOCKED" for result in results.values()) else 2
+    return 0 if payload.get("execution_status") == "EXECUTED" else 2
 
 
 if __name__ == "__main__":

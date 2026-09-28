@@ -178,3 +178,80 @@ def test_phase52_evidence_auditor_detects_holdout_score_tampering(tmp_path: Path
 
     assert result["status"] == "FAIL"
     assert "PRICE_ONLY: holdout model Brier does not recompute" in result["failures"]
+
+
+def _blocked_payload() -> dict[str, object]:
+    configuration = {
+        "symbol": "XAUUSD", "timeframe": "1d", "horizon": 5, "threshold": 0.0,
+        "train_size": 1000, "validation_size": 200, "step_size": 200, "holdout_size": 40,
+        "neighbors": 25, "spread": "fixed:0.0", "slippage": "fixed:0.0", "commission": "fixed:0.0",
+    }
+    feature_sets = ["PRICE_ONLY", "PRICE + DXY", "PRICE + US10Y", "PRICE + VIX", "PRICE + ALL"]
+    results = {
+        feature_set: {
+            "outcome": "BLOCKED",
+            "metadata": {
+                "feature_set": feature_set,
+                "blocked_reason": "insufficient prepared observations",
+                "holdout_predictions_present": False,
+                "holdout_metrics_present": False,
+            },
+        }
+        for feature_set in feature_sets
+    }
+    return {
+        "schema": "researchos/phase52/evidence/v3",
+        "repository_commit": "a07dad913e06b1eff812ce1bd4efd550db43e5c6",
+        "execution_status": "BLOCKED",
+        "blocking": {"stage": "prepared_execution_gate", "reason": "insufficient prepared observations", "holdout_scoring_executed": False},
+        "configuration": configuration,
+        "configuration_hash": _configuration_hash(configuration),
+        "sample_requirements": {"required_prepared_samples": 1245, "actual_prepared_samples": 1181, "common_observations": 1246},
+        "feature_set_scope": feature_sets,
+        "sources": {
+            source: {"sha256": "0" * 64, "identity": identity}
+            for source, identity in {
+                "XAUUSD": "XAUUSD 2021-2025 research series",
+                "DXY": "Dukascopy dollaridxusd; secondary DXY series",
+                "US10Y": "FRED DGS10",
+                "VIX": "FRED VIXCLS",
+            }.items()
+        },
+        "common_sample": {"count": 1246, "first": "2021-01-04", "last": "2025-12-30", "dropped_from_xauusd": 1, "timestamps_sha256": "0" * 64},
+        "holdout_contract": {
+            "holdout_size": 40, "wfo_aggregate_excludes_holdout": True,
+            "selection_excludes_holdout": True, "calibration_excludes_holdout": True,
+            "predictions_present": False, "metrics_present": False,
+        },
+        "results": results,
+        "reproducibility_hashes": {},
+        "dxy_provenance": {"provider": "Dukascopy", "instrument": "dollaridxusd", "source_type": "secondary", "ice_dxy_equivalence": "NOT PROVEN"},
+    }
+
+
+def test_phase52_blocked_evidence_audits_pass(tmp_path: Path) -> None:
+    path = tmp_path / "blocked.json"
+    path.write_text(json.dumps(_blocked_payload()), encoding="utf-8")
+    result = audit(path)
+    assert result["status"] == "PASS"
+    assert result["execution_status"] == "BLOCKED"
+    assert result["scientific_status"] == "BLOCKED"
+
+
+def test_phase52_blocked_evidence_rejects_tampering(tmp_path: Path) -> None:
+    mutations = {
+        "fabricated holdout predictions": lambda p: p["results"]["PRICE_ONLY"]["metadata"].update({"holdout": {"predictions": [{"prediction": 1}]}}),
+        "fabricated numerical metrics": lambda p: p["results"]["PRICE_ONLY"].update({"model": {"accuracy": 1.0}}),
+        "invalid repository SHA": lambda p: p.update({"repository_commit": "bad"}),
+        "inconsistent sample counts": lambda p: p["sample_requirements"].update({"actual_prepared_samples": 1245}),
+        "modified feature-set scope": lambda p: p.update({"feature_set_scope": ["PRICE_ONLY"]}),
+        "invalid source SHA-256": lambda p: p["sources"]["DXY"].update({"sha256": "not-a-sha"}),
+        "missing blocking reason": lambda p: p["blocking"].update({"reason": ""}),
+    }
+    for label, mutate in mutations.items():
+        payload = _blocked_payload()
+        mutate(payload)
+        path = tmp_path / f"{label.replace(' ', '_')}.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        result = audit(path)
+        assert result["status"] == "FAIL", label
