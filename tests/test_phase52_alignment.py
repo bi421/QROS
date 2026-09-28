@@ -134,7 +134,7 @@ def test_common_observation_sample_aligns_same_utc_calendar_day_with_different_t
     _, _, _, _, common_ts, filtered_macro, filtered_macro_ts = result
     assert common_ts == timestamps
     assert filtered_macro["DXY"] == [100.0, 101.0]
-    assert filtered_macro_timestamps["DXY"] == common_ts
+    assert filtered_macro_ts["DXY"] == common_ts
 
 
 def test_common_observation_sample_rejects_duplicate_macro_calendar_day() -> None:
