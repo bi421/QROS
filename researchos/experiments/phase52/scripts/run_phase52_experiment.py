@@ -128,3 +128,71 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--symbol", default="XAUUSD")
     parser.add_argument("--timeframe", default="1d")
     parser.add_argument("--horizon", type=int, default=5)
+    parser.add_argument("--threshold", type=float, default=0.0)
+    parser.add_argument("--train", type=int, default=1200)
+    parser.add_argument("--valid", type=int, default=200)
+    parser.add_argument("--step", type=int, default=200)
+    parser.add_argument("--neighbors", type=int, default=25)
+    parser.add_argument("--feature-set", choices=FEATURE_SET_NAMES, default="ALL")
+    parser.add_argument("--spread", default="fixed:0.0")
+    parser.add_argument("--slippage", default="fixed:0.0")
+    parser.add_argument("--commission", default="fixed:0.0")
+    parser.add_argument("--out", default="", help="Optional JSON output path")
+    args = parser.parse_args(argv)
+
+    missing_files = [name for name, path in (("XAUUSD csv", args.csv), ("DXY csv", args.dxy), ("US10Y csv", args.us10y), ("VIX csv", args.vix)) if not path or not os.path.exists(path)]
+    if missing_files:
+        print("=" * 60)
+        print("OUTCOME: BLOCKED")
+        print("REASON:  REAL XAUUSD + MACRO DATA REQUIRED")
+        print(f"MISSING FILES: {', '.join(missing_files)}")
+        print("=" * 60)
+        return 2
+    try:
+        close, high, low, volume, timestamps = _load_candles(args.csv, args.format, args.symbol, args.timeframe)
+        macro, macro_timestamps = {}, {}
+        for symbol, path in (("DXY", args.dxy), ("US10Y", args.us10y), ("VIX", args.vix)):
+            values, factor_timestamps = _load_macro_series(path, args.format, symbol, args.timeframe)
+            macro[symbol], macro_timestamps[symbol] = values, factor_timestamps
+        close, high, low, volume, timestamps, macro, macro_timestamps = _build_common_observation_sample(close, high, low, volume, timestamps, macro, macro_timestamps, ("DXY", "US10Y", "VIX"))
+    except Exception as e:  # noqa: BLE001
+        print(f"BLOCKED — common observation sample construction failed: {e}")
+        return 2
+
+    cfg = Phase52Config(symbol=args.symbol, timeframe=args.timeframe, horizon=args.horizon, threshold=args.threshold, train_size=args.train, validation_size=args.valid, step_size=args.step, n_neighbors=args.neighbors, spread_spec=args.spread, slippage_spec=args.slippage, commission_spec=args.commission)
+    if args.feature_set == "ALL":
+        results = run_phase52_comparison(close, high, low, volume, macro, config=cfg, timestamps=timestamps, macro_timestamps=macro_timestamps)
+        print("=" * 100)
+        print("PHASE 5.2 FEATURE-SET ISOLATION")
+        print("PRICE_ONLY / PRICE + DXY / PRICE + US10Y / PRICE + VIX / PRICE + ALL")
+        print("=" * 100)
+        for result in results.values():
+            _print_result(result)
+        print("=" * 100)
+        if args.out:
+            with open(args.out, "w", encoding="utf-8") as f:
+                json.dump({k: v.to_dict() for k, v in results.items()}, f, indent=2, default=str)
+            print(f"Results written to {args.out}")
+        return 0 if all(r.outcome != "BLOCKED" for r in results.values()) else 2
+
+    result = run_phase52(close, high, low, volume, macro, cfg, timestamps=timestamps, macro_timestamps=macro_timestamps)
+    print("=" * 60)
+    print(f"FEATURE SET:         {args.feature_set}")
+    print(f"BARS:                {len(close)}")
+    print(f"FOLDS:               {result.num_folds}")
+    print(f"OUTCOME:             {result.outcome}")
+    print(f"REPRODUCIBILITY_HASH:{result.reproducibility_hash}")
+    if result.model is not None:
+        print(f"MODEL ACCURACY:      {result.model.accuracy:.4f}")
+        print(f"MODEL BRIER:         {result.model.brier_score:.4f}")
+    if result.cost is not None:
+        print(f"NET ACCURACY:        {result.cost.net_accuracy_all:.4f}")
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as f:
+            json.dump(result.to_dict(), f, indent=2, default=str)
+        print(f"Result written to {args.out}")
+    return 0 if result.outcome != "BLOCKED" else 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
