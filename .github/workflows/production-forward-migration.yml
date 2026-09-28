@@ -41,7 +41,8 @@ jobs:
           SUPABASE_PROJECT_ID: ${{ secrets.PRODUCTION_PROJECT_ID }}
         run: |
           set -euo pipefail
-          test -n "${SUPABASE_ACCESS_TOKEN}" || { echo "::error::SUPABASE_ACCESS_TOKEN is not configured"; exit 1; }\n          test -n "${SUPABASE_DB_PASSWORD}" || { echo "::error::PRODUCTION_DB_PASSWORD is not configured"; exit 1; }
+          test -n "${SUPABASE_ACCESS_TOKEN}" || { echo "::error::SUPABASE_ACCESS_TOKEN is not configured"; exit 1; }
+          test -n "${SUPABASE_DB_PASSWORD}" || { echo "::error::PRODUCTION_DB_PASSWORD is not configured"; exit 1; }
           test -n "${SUPABASE_PROJECT_ID}" || { echo "::error::PRODUCTION_PROJECT_ID is not configured"; exit 1; }
           test "${SUPABASE_PROJECT_ID}" = "pvhdsngxyoiqhqwujfjt" || {
             echo "::error::production project ref does not match the governed QROS target"
