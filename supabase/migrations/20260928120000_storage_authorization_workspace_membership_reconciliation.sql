@@ -5,8 +5,7 @@
 do $$
 declare
     p record;
-    expected_qual constant text :=
-        '(bucket_id = ''qros-datasets''::text) AND ((storage.foldername(name))[1] = ''tenant''::text) AND ((storage.foldername(name))[2] IS NOT NULL) AND ((storage.foldername(name))[2] <> ''''::text)';
+    canonical_count integer;
 begin
     if not exists (
         select 1
@@ -15,6 +14,32 @@ begin
           and public = false
     ) then
         raise exception 'Storage reconciliation precondition failed: qros-datasets bucket is missing or public';
+    end if;
+
+    select count(*)
+      into canonical_count
+      from pg_policies
+     where schemaname = 'storage'
+       and tablename = 'objects'
+       and policyname in (
+           'qros_datasets_tenant_select',
+           'qros_datasets_tenant_insert',
+           'qros_datasets_tenant_update',
+           'qros_datasets_tenant_delete'
+       )
+       and roles::text = '{authenticated}'
+       and permissive = 'PERMISSIVE'
+       and (
+           coalesce(qual, '') like '%private.is_workspace_member%'
+           or coalesce(with_check, '') like '%private.is_workspace_member%'
+       )
+       and coalesce(qual, '') not like '%auth.jwt()%'
+       and coalesce(with_check, '') not like '%auth.jwt()%'
+       and coalesce(qual, '') not like '%tenant_id%'
+       and coalesce(with_check, '') not like '%tenant_id%';
+
+    if canonical_count = 4 then
+        return;
     end if;
 
     if (select count(*)
