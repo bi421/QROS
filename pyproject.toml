@@ -79,6 +79,7 @@ test = [
 
 [project.scripts]
 researchos-health = "scripts.final_health_check:main"
+qros-worker = "researchos.saas.worker_runtime:main"
 
 [project.urls]
 Homepage = "https://github.com/bi421/QROS"
