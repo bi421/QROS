@@ -46,7 +46,7 @@ jobs:
           set -euo pipefail
           docker run --rm qros-security:${GITHUB_SHA} python -c '
           from importlib.metadata import version
-          assert numeric(version("setuptools")) >= numeric("78.1.1")
+          assert tuple(int(x) for x in version("setuptools").split(".")[:2]) >= (78, 1)
           '
       - name: Scan release container
         run: |
