@@ -6,12 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /build
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
+RUN apk add --no-cache \
         build-base \
         cmake \
-        ninja \
-    && rm -rf /var/lib/apt/lists/*
+        ninja
 
 COPY pyproject.toml README.md ./
 COPY researchos ./researchos
