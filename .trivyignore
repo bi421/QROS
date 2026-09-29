@@ -1,0 +1,7 @@
+# Trivy 0.74 reports these two IDs from pip's embedded vendored SBOM.
+# They are not the installed runtime distributions. The container audit still
+# scans the installed Python packages, and pip-audit independently resolves
+# project dependencies. See pip's vendoring policy and the pinned runtime
+# version check in the supply-chain workflow.
+GHSA-6v7p-g79w-8964
+CVE-2025-47273
