@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Callable, Protocol
 from uuid import UUID, uuid4
 import hashlib
 import json
@@ -216,6 +216,7 @@ def create_app(
     billing_webhook_secret: str | None = None,
     rate_limiter: RateLimiter | None = None,
     metrics_token: str | None = None,
+    readiness_probe: Callable[[], None] | None = None,
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
@@ -388,6 +389,14 @@ def create_app(
     def readyz() -> dict[str, str]:
         if store is None or datasets is None or storage is None or queue is None:
             raise HTTPException(status_code=503, detail="SaaS persistence is not configured")
+        if readiness_probe is not None:
+            try:
+                readiness_probe()
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail="SaaS dependency readiness check failed",
+                ) from exc
         return {"status": "ready"}
 
     @app.post("/v1/billing/webhook", status_code=200, tags=["billing"])

@@ -424,3 +424,27 @@ def test_dataset_versions_reject_invalid_sort_and_filter() -> None:
     bad_filter = client.get(f"/v1/datasets/{dataset_id}/versions?filter[status]=completed", headers={"Authorization": "Bearer test"})
     assert bad_filter.status_code == 400
     assert bad_filter.json()["code"] == "INVALID_FILTER"
+
+def test_readiness_probe_failure_fails_closed() -> None:
+    def probe() -> None:
+        raise RuntimeError("database unavailable")
+
+    client = TestClient(create_app(readiness_probe=probe))
+    response = client.get("/readyz")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "SaaS dependency readiness check failed"
+
+
+def test_readiness_probe_success_keeps_endpoint_ready() -> None:
+    calls = []
+
+    def probe() -> None:
+        calls.append("checked")
+
+    client = TestClient(create_app(readiness_probe=probe))
+    response = client.get("/readyz")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}
+    assert calls == ["checked"]
