@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12.14-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -19,7 +19,7 @@ COPY financial_research_lab ./financial_research_lab
 COPY scripts ./scripts
 COPY docs ./docs
 
-RUN python -m pip install --upgrade pip \
+RUN python -m pip install --upgrade pip "setuptools>=78.1.1" \
     && python -m pip install ".[saas]"
 
 EXPOSE 8000
