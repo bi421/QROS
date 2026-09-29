@@ -65,7 +65,7 @@ jobs:
 
       - name: Install pgtap extension
         run: |
-          PGPASSWORD=postgres psql -h 127.0.0.1 -p 54332 -U postgres -d postgres -c "create extension if not exists pgtap;" || true
+          set -euo pipefail\n          PGPASSWORD=postgres psql -h 127.0.0.1 -p 54332 -U postgres -d postgres -v ON_ERROR_STOP=1 -c "create extension if not exists pgtap;"
 
       - name: Run database security tests
         run: supabase test db supabase/tests/tenant_isolation_test.sql
