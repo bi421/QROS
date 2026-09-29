@@ -15,7 +15,7 @@ COPY scripts ./scripts
 COPY docs ./docs
 
 RUN python -m pip install --upgrade pip "setuptools>=78.1.1" \
-    && python -m pip wheel --no-deps --wheel-dir /wheels ".[saas]"
+    && python -m pip wheel --wheel-dir /wheels ".[saas]"
 
 FROM python:3.12.14-alpine3.24
 
@@ -25,6 +25,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+COPY pyproject.toml README.md ./
 COPY --from=builder /wheels /wheels
 RUN python -m pip install --upgrade pip "setuptools>=78.1.1" \
     && python -m pip install --no-index --find-links=/wheels ".[saas]" \
