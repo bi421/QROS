@@ -36,7 +36,7 @@ COPY scripts ./scripts
 COPY docs ./docs
 COPY --from=builder /wheels /wheels
 
-RUN python -m pip install --upgrade pip "setuptools>=78.1.1" \
+RUN python -m pip install --upgrade --force-reinstall pip "setuptools>=78.1.1" \
     && python -m pip install --no-cache-dir /wheels/researchos-*.whl \
     && rm -rf /wheels
 
