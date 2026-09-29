@@ -38,6 +38,7 @@ COPY --from=builder /wheels /wheels
 
 RUN python -m pip install --upgrade --force-reinstall pip "setuptools>=78.1.1" \
     && python -m pip install --no-cache-dir /wheels/researchos-*.whl \
+    && python -m pip install --no-cache-dir "msgpack>=1.2.1,<2" \
     && rm -rf /wheels
 
 EXPOSE 8000
