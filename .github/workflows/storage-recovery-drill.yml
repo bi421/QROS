@@ -155,4 +155,4 @@ jobs:
           OBJECT_NAME: ${{ inputs.object_name }}
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error -X DELETE "$SUPABASE_URL/storage/v1/object/qros-datasets/$OBJECT_NAME" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "apikey: $SERVICE_ROLE_KEY" || true
+          curl --fail --silent --show-error -X DELETE "$SUPABASE_URL/storage/v1/object/qros-datasets/$OBJECT_NAME" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "apikey: $SERVICE_ROLE_KEY"
