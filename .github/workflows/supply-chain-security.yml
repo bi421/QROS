@@ -46,9 +46,13 @@ jobs:
           set -euo pipefail
           docker run --rm qros-security:${GITHUB_SHA} python -c '
           from importlib.metadata import version
-          from packaging.version import Version
-          assert Version(version("msgpack")) >= Version("1.2.1")
-          assert Version(version("setuptools")) >= Version("78.1.1")
+          from re import match
+          def numeric(v):
+              m = match(r"^(\\d+(?:\\.\\d+)+)", v)
+              assert m, v
+              return tuple(int(x) for x in m.group(1).split("."))
+          assert numeric(version("msgpack")) >= numeric("1.2.1")
+          assert numeric(version("setuptools")) >= numeric("78.1.1")
           '
       - name: Scan release container
         run: |
