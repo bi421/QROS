@@ -28,7 +28,7 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY --from=builder /wheels /wheels
 RUN python -m pip install --upgrade pip "setuptools>=78.1.1" \
-    && python -m pip install --no-index --find-links=/wheels ".[saas]" \
+    && python -m pip install --no-index --find-links=/wheels /wheels/researchos-*.whl \
     && rm -rf /wheels
 
 COPY pyproject.toml README.md ./
