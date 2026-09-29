@@ -14,6 +14,7 @@ REQUIRED_FILES = (
     ".github/workflows/staging-release-gate.yml",
     ".github/workflows/staging-performance-gate.yml",
     ".github/workflows/storage-recovery-drill.yml",
+    ".github/workflows/supabase-db-tests.yml",
     ".github/workflows/release.yml",
     "docs/operations/PRODUCTION_RECOVERY_CONTROLS_V1.md",
     "scripts/ci/production_schema_parity.sh",
@@ -47,6 +48,11 @@ REQUIRED_MARKERS = {
         "workflow_dispatch",
         "p95",
         "max-error-rate",
+    ),
+    ".github/workflows/supabase-db-tests.yml": (
+        "workflow_dispatch",
+        "supabase test db",
+        "ON_ERROR_STOP=1",
     ),
     ".github/workflows/storage-recovery-drill.yml": (
         "workflow_dispatch",
@@ -109,6 +115,7 @@ FAIL_OPEN_PATTERNS = (
     re.compile(r"\bruff\s+check\b.*\|\|\s*true\b", re.IGNORECASE),
     re.compile(r"\b(?:pytest|ruff\s+check)\b.*--exit-zero\b", re.IGNORECASE),
     re.compile(r"\bpython(?:3)?\s+\S+.*\|\|\s*true\b", re.IGNORECASE),
+    re.compile(r"\b(?:aws\s+s3|supabase)\b.*\|\|\s*true\b", re.IGNORECASE),
     re.compile(r"^\s*continue-on-error\s*:\s*true\s*$", re.IGNORECASE),
 )
 
