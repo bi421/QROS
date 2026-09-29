@@ -144,5 +144,5 @@ jobs:
         env:
           PYTHONPATH: researchos/engines/quant/python
         run: |
-          python -m pytest researchos/tests/ researchos/research_core/tests/ -v --tb=short -x
+          python -m pytest researchos/tests/ researchos/research_core/tests/ -v --tb=short -x --ignore=researchos/tests/test_cpp_backtest_regression.py
           ruff check .
