@@ -25,6 +25,7 @@ REQUIRED_FILES = (
 REQUIRED_MARKERS = {
     ".github/workflows/production-db-backup.yml": (
         "workflow_dispatch",
+        "environment: production",
         "pg_dump",
         "aws s3 cp",
         "head-object",
