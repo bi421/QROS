@@ -94,3 +94,15 @@ def test_exact_release_workflow_is_governed():
         marker in audit.REQUIRED_MARKERS[".github/workflows/release.yml"]
         for marker in ("mypy", "backup_verify.py", "final_health_check.py")
     )
+
+
+def test_backup_verifier_is_real_and_fail_closed() -> None:
+    root = Path(__file__).resolve().parents[2]
+    source = (root / "scripts" / "backup_verify.py").read_text(encoding="utf-8")
+
+    assert "mock://test" not in source
+    assert 'status": "success"' not in source
+    assert "pg_dump" in source
+    assert "pg_restore" in source
+    assert "database_snapshot" in source
+    assert "migration/security verification failed" in source
