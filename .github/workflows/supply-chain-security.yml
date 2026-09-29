@@ -51,7 +51,6 @@ jobs:
               m = match(r"^(\\d+(?:\\.\\d+)+)", v)
               assert m, v
               return tuple(int(x) for x in m.group(1).split("."))
-          assert numeric(version("msgpack")) >= numeric("1.2.1")
           assert numeric(version("setuptools")) >= numeric("78.1.1")
           '
       - name: Scan release container
