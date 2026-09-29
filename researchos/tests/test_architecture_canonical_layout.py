@@ -42,8 +42,8 @@ def _imported_modules(path: Path) -> set[str]:
     return modules
 
 
-def test_no_python_consumer_imports_legacy_data_engine() -> None:
-    for path in _iter_source_python_files(ROOT):
+def _assert_no_forbidden_imports(root: Path) -> None:
+    for path in _iter_source_python_files(root):
         if path == Path(__file__).resolve():
             continue
         assert not any(
@@ -51,6 +51,10 @@ def test_no_python_consumer_imports_legacy_data_engine() -> None:
             or module.startswith("researchos.engines.data.")
             for module in _imported_modules(path)
         ), path
+
+
+def test_no_python_consumer_imports_legacy_data_engine() -> None:
+    _assert_no_forbidden_imports(ROOT)
 
 
 def test_source_scanner_rejects_forbidden_import_in_relevant_source(tmp_path: Path) -> None:
@@ -61,14 +65,8 @@ def test_source_scanner_rejects_forbidden_import_in_relevant_source(tmp_path: Pa
         encoding="utf-8",
     )
 
-    files = list(_iter_source_python_files(tmp_path))
-
-    assert files == [source]
-    assert any(
-        module == "researchos.engines.data"
-        or module.startswith("researchos.engines.data.")
-        for module in _imported_modules(files[0])
-    )
+    with pytest.raises(AssertionError):
+        _assert_no_forbidden_imports(tmp_path)
 
 
 def test_source_scanner_ignores_known_generated_tree(tmp_path: Path) -> None:
