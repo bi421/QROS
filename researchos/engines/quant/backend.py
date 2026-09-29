@@ -170,7 +170,9 @@ class PythonQuantBackend(QuantComputationInterface):
         elif method == "change":
             return volatility_change(returns)
         else:
-            raise ValueError(f"Unrecognized method '{method}'. Expected 'standard_deviation', 'rolling', or 'change'.")
+            raise ValueError(
+                f"Unrecognized method '{method}'. Expected 'standard_deviation', 'rolling', or 'change'."
+            )
 
     def calculate_drawdown(
         self,
@@ -204,7 +206,9 @@ class PythonQuantBackend(QuantComputationInterface):
         if "max_drawdown" in metrics:
             metrics["max_drawdown"] = round(float(metrics["max_drawdown"]), 8)
             if metrics["max_drawdown"] != 0.0 and "mean_return" in metrics:
-                metrics["calmar_ratio"] = float(metrics["mean_return"]) * 252 / abs(metrics["max_drawdown"])
+                metrics["calmar_ratio"] = (
+                    float(metrics["mean_return"]) * 252 / abs(metrics["max_drawdown"])
+                )
         return metrics
 
     def calculate_performance_analytics(
@@ -231,27 +235,14 @@ class PythonQuantBackend(QuantComputationInterface):
         prices = self._extract_prices(dataset)
 
         if len(prices) < 2:
-            return SimulationResult(
-                simulation_id=request.compute_input_hash(),
-                dataset_reference=request.dataset_reference,
-                result_hash="empty",
-                metrics={
-                    "total_return": 0.0,
-                    "sharpe_ratio": 0.0,
-                    "max_drawdown": 0.0,
-                    "winrate": 0.0,
-                    "num_trades": 0,
-                },
-                trades=[],
-                input_hash=request.compute_input_hash(),
-                calculation_version=calculation_version,
-                execution_timestamp=utc_now().isoformat(),
-            )
+            raise ValueError("Simulation requires at least 2 prices")
 
         input_hash = request.compute_input_hash()
         sim_id = f"sim_{input_hash[:16]}"
 
-        returns = self.calculate_returns(prices, return_type="percentage", calculation_version=calculation_version)
+        returns = self.calculate_returns(
+            prices, return_type="percentage", calculation_version=calculation_version
+        )
 
         initial_capital = request.parameters.get("initial_capital", 100000.0)
         equity_curve = [initial_capital]

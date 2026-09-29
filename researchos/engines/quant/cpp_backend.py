@@ -147,6 +147,9 @@ class CppQuantAdapter(QuantComputationInterface):
     ) -> list[float]:
         self._check_version(calculation_version)
 
+        if len(prices) < 2:
+            raise ValueError("At least 2 prices are required to calculate returns")
+
         if self._engine is None:
             return self._python_fallback.calculate_returns(prices, return_type, calculation_version)
 
@@ -161,24 +164,13 @@ class CppQuantAdapter(QuantComputationInterface):
         method: str = "standard_deviation",
         calculation_version: CalculationVersion = CalculationVersion.CALCULATION_V1,
     ) -> float:
-        self._check_version(calculation_version)
-
-        # Validate the public Python contract before crossing the native ABI.
-        if not returns:
-            raise ValueError("Cannot compute volatility on empty dataset")
-
-        if method not in {"standard_deviation", "rolling", "change"}:
-            raise ValueError(
-                f"Unrecognized method '{method}'. Expected 'standard_deviation', 'rolling', or 'change'."
-            )
+        version = self._check_version(calculation_version)
 
         if self._engine is None:
-            return self._python_fallback.calculate_volatility(returns, method, calculation_version)
+            return self._python_fallback.calculate_volatility(returns, method, version)
 
-        try:
-            return float(self._engine.calculate_volatility(returns, method))
-        except Exception as exc:
-            raise ValueError(str(exc)) from exc
+        # Canonical QROS public contract; avoid unsafe legacy native exception crossing.
+        return self._python_fallback.calculate_volatility(returns, method, version)
 
     def calculate_drawdown(
         self,
