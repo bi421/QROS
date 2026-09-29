@@ -110,6 +110,12 @@ jobs:
         env:
           PYTHONPATH: researchos/engines/quant/python
         run: python -m pytest researchos/engines/quant/tests/ -v -x
+      - name: Verify C++ regression backend
+        env:
+          PYTHONPATH: researchos/engines/quant/python
+        run: |
+          python -c "from researchos.engines.quant.cpp_backend import CppQuantAdapter; e=CppQuantAdapter(); assert e.is_cpp, 'compiled C++ backend is not active'; print(e.get_version())"
+          python -m pytest researchos/tests/test_cpp_backtest_regression.py -v --tb=short
 
   health-evidence:
     name: Health Evidence
