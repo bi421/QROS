@@ -1,0 +1,43 @@
+---
+name: Supply Chain Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-audit:
+    name: Python Dependency Audit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install application dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -e ".[saas]"
+      - name: Audit resolved Python environment
+        run: |
+          python -m pip install "pip-audit==2.10.1"
+          python -m pip_audit --strict
+
+  container-audit:
+    name: Container Vulnerability and Secret Audit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build release container
+        run: docker build --tag qros-security:${GITHUB_SHA} .
+      - name: Scan release container
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/trivy-cache"
+          docker run --rm             -v /var/run/docker.sock:/var/run/docker.sock             -v "${RUNNER_TEMP}/trivy-cache:/root/.cache/"             ghcr.io/aquasecurity/trivy:0.74.0@sha256:ee940acbf1f58ebadb42d01434ce4609530bf1b52536afbd1eee66cd7123c5c9             image             --scanners vuln,secret             --severity HIGH,CRITICAL             --ignore-unfixed=false             --exit-code 1             qros-security:${GITHUB_SHA}
