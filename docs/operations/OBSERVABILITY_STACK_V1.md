@@ -8,10 +8,15 @@ Core metrics:
 - `qros_http_requests_total`
 - `qros_http_errors_total`
 - `qros_http_request_duration_ms`
+- `jobs_retries_total`
 
 Health:
 - `/healthz`
 - `/readyz`
+
+## Worker lifecycle
+
+`jobs_retries_total` increments when a worker successfully reclaims a job after a prior leased attempt. This distinguishes ordinary execution from recovery/retry activity; the counter is software telemetry and still requires deployment-backed scraping before it is an operational metric.
 
 ## Prometheus
 
