@@ -1,10 +1,10 @@
-FROM python:3.12.14-slim-bookworm
+FROM python:3.12.14-slim-trixie AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-WORKDIR /app
+WORKDIR /build
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -19,8 +19,28 @@ COPY financial_research_lab ./financial_research_lab
 COPY scripts ./scripts
 COPY docs ./docs
 
+RUN python -m pip install --upgrade pip setuptools wheel \
+    && python -m pip wheel --no-cache-dir ".[saas]" --wheel-dir /wheels
+
+
+FROM python:3.12.14-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+COPY pyproject.toml README.md ./
+COPY researchos ./researchos
+COPY financial_research_lab ./financial_research_lab
+COPY scripts ./scripts
+COPY docs ./docs
+COPY --from=builder /wheels /wheels
+
 RUN python -m pip install --upgrade pip "setuptools>=78.1.1" \
-    && python -m pip install ".[saas]"
+    && python -m pip install --no-cache-dir /wheels/researchos-*.whl \
+    && rm -rf /wheels
 
 EXPOSE 8000
 
