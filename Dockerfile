@@ -36,7 +36,9 @@ COPY scripts ./scripts
 COPY docs ./docs
 COPY --from=builder /wheels /wheels
 
-RUN python -m pip install --upgrade --force-reinstall pip "setuptools>=78.1.1" \
+RUN python -m pip install --upgrade --force-reinstall pip \
+    && python -m pip uninstall --yes setuptools \
+    && python -m pip install --no-cache-dir "setuptools>=78.1.1" \
     && python -m pip install --no-cache-dir /wheels/researchos-*.whl \
     && python -m pip install --no-cache-dir "msgpack>=1.2.1,<2" \
     && rm -rf /wheels
