@@ -307,7 +307,6 @@ def test_recovered_worker_reuses_idempotent_result_after_lease_loss():
     assert store.get(workspace_id, job.id).status == ResearchJobStatus.SUCCEEDED
     assert store.get(workspace_id, job.id).attempt_count == 2
 
- 
 def test_worker_records_retry_observability_on_reclaimed_attempt(monkeypatch) -> None:
     now = [datetime(2026, 9, 30, tzinfo=timezone.utc)]
     store = InMemoryResearchJobStore(clock=lambda: now[0])
