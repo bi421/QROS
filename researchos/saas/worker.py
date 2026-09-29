@@ -11,6 +11,7 @@ from researchos.saas.contracts import ResearchJobStatus
 from researchos.saas.observability import (
     jobs_duration_seconds,
     jobs_failed_total,
+    jobs_retries_total,
     job_id_var,
     tenant_id_var,
 )
@@ -58,6 +59,8 @@ class ResearchWorker:
             owner=str(uuid4()),
             lease_seconds=self._lease_seconds,
         )
+        if lease.job.attempt_count > 1:
+            jobs_retries_total.inc()
         tenant_token = tenant_id_var.set(str(workspace_id))
         job_token = job_id_var.set(str(job_id))
         started = perf_counter()
