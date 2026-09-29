@@ -33,7 +33,9 @@ def _load_native():
     ):
         return None
     try:
-        return importlib.import_module("cpp_quant_backend")
+        module = importlib.import_module("cpp_quant_backend")
+        if hasattr(module, "CppQuantBackend"):
+            return module
     except ImportError:
         pass
 
@@ -54,7 +56,9 @@ def _load_native():
             sys.path.insert(0, candidate_str)
 
         try:
-            return importlib.import_module("cpp_quant_backend")
+            module = importlib.import_module("cpp_quant_backend")
+            if hasattr(module, "CppQuantBackend"):
+                return module
         except ImportError:
             continue
 
