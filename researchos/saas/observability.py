@@ -95,6 +95,10 @@ jobs_failed_total = PrometheusCounter(
     "jobs_failed_total",
     "Research jobs failed",
 )
+jobs_retries_total = PrometheusCounter(
+    "jobs_retries_total",
+    "Research jobs reclaimed after an earlier attempt",
+)
 jobs_duration_seconds = Histogram(
     "jobs_duration_seconds",
     "Research job duration",
