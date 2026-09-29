@@ -28,6 +28,27 @@ This controlled use of `--include-all` is intentionally different from running `
 
 The Supabase Management API `POST /v1/projects/{ref}/database/migrations` is not the QROS production transport for these repository migrations. That endpoint creates a migration with a server-generated version and therefore cannot be used here to preserve the exact repository migration timestamp. This avoids creating new remote-only history entries.
 
+## Current migration ledger recheck — 2026-09-30
+
+A fresh read-only recheck against the current repository and target projects found a
+new repository-to-environment delta after the earlier staging baseline:
+
+- Repository `supabase/migrations/`: **48** canonical SQL files.
+- Staging: **45** migration rows.
+- Staging contains execution version `20260928103556` for the worker migration, but
+  the remote display name remains the historical
+  `20260928103225_saas_worker_queue_consumer`; this is preserved and not rewritten.
+- Staging does not yet contain the three newer reconciliation migrations:
+  `20260928120000_storage_authorization_workspace_membership_reconciliation.sql`,
+  `20260928123000_dataset_version_storage_path_reconciliation.sql`, and
+  `20260928124500_workspace_billing_admin_role_reconciliation.sql`.
+- Production remains on its independently audited older migration history and has not
+  received those late M1 reconciliation migrations or the worker migration.
+
+This is a **new current delta**, not a reopening of the earlier historical-name
+issue. No staging or production mutation was performed by this audit. The governed
+forward-migration workflow remains the only authorized production transport.
+
 ## Current migration ledger state — 2026-09-28
 
 The current production project contains seven live-only migration-history entries after `202609210001`. This later audit supersedes the older 2026-09-21 parity snapshot below. The historical entries are retained as historical evidence and must not be reconstructed or repaired as part of the current forward deployment.
