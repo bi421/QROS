@@ -36,6 +36,11 @@ jobs:
       - uses: actions/checkout@v5
       - name: Build release container
         run: docker build --tag qros-security:${GITHUB_SHA} .
+      # pip 26.2+ ships a vendored dependency SBOM whose versions describe
+      # pip's private copies, not the installed distributions. Trivy's SBOM
+      # analyzer reports those entries separately and can flag false positives.
+      # The installed packages remain covered by the python-pkg analyzer and
+      # the Python dependency audit above.
       - name: Scan release container
         run: |
           set -euo pipefail
