@@ -31,7 +31,6 @@ bundle="$(mktemp -d)"
 trap 'rm -rf "${bundle}"' EXIT
 
 mkdir -p "${bundle}/supabase/migrations"
-cp supabase/config.toml "${bundle}/supabase/config.toml"
 cp "${migration_path}" "${bundle}/supabase/migrations/${MIGRATION_FILE}"
 
 echo "== isolated migration bundle =="

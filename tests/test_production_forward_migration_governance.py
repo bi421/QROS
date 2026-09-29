@@ -31,6 +31,8 @@ def test_forward_migration_uses_isolated_single_file_bundle() -> None:
     assert 'cp "${migration_path}" "${bundle}/supabase/migrations/${MIGRATION_FILE}"' in text
     assert "cp -r" not in text
     assert "cp supabase/migrations" not in text
+    assert "cp supabase/config.toml" not in text
+    assert "config.toml" not in text
     assert "--include-all" in text
     assert "--dry-run" in text
     assert "unexpected" in text
