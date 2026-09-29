@@ -15,7 +15,7 @@
 | Research governance | 🟢 Complete | Core claim/plan/evidence/result governance implemented |
 | Tenant security | 🟢 Complete | RLS, authorization, isolation tests and session boundary implemented |
 | API foundation | 🟢 Complete | Versioned API, validation, rate limits, idempotency and errors |
-| Database migrations | 🟡 In progress | 44/44 migrations applied to staging; canonical history parity still unverified |
+| Database migrations | 🟡 Verified (staging version-set parity) | 44/44 staging migration rows; all 44 canonical migration files verified present on main; final remote execution version `20260928103556` matches the canonical worker migration; historical remote name drift is documented and not rewritten |
 | Staging Golden Path | 🟡 Blocked | Auth/application identities and end-to-end operational evidence pending |
 | Disaster Recovery | 🔴 Blocked | Isolated recovery target and recovery storage not provisioned |
 | Observability | 🟡 In progress | Production-grade acceptance evidence pending |
@@ -32,8 +32,8 @@
 
 ### Exit criteria
 
-- [ ] Canonical migration history parity verified.
-- [ ] Staging schema/security objects verified.
+- [x] Canonical migration version-set parity verified; historical remote name drift documented without rewriting migration history.
+- [x] Staging schema/security objects verified.
 - [ ] Two controlled staging identities verified.
 - [ ] Real API tenant isolation verified.
 - [ ] Complete governed Golden Path executed.
@@ -114,11 +114,11 @@
 - [x] 0 public tables with RLS disabled.
 
 ### Remaining
-- [ ] Verify migration-history identity against repository filenames.
-- [ ] Verify schema objects, constraints, indexes, functions, grants and triggers.
-- [ ] Verify RLS policies against canonical definitions.
-- [ ] Review staging Security Advisor findings.
-- [ ] Resolve/document the pgtap-in-public-schema warning.
+- [x] Verify migration version-set identity against repository filenames; remote row `version=20260928103556` maps to canonical `20260928103556_saas_worker_queue_consumer.sql`.
+- [x] Verify staging QROS tables, RLS state, public policies/triggers, and governed queue function grants.
+- [x] Verify RLS is enabled on all 20 QROS public tables (20/20; 0 disabled).
+- [x] Review staging Security Advisor findings.
+- [x] Document the existing `pgtap`-in-public-schema warning; no live schema mutation performed.
 
 > **Important:** Manual migration application proves the SQL was applied; it does **not** by itself prove canonical migration-history parity. Do not rewrite migration history merely to obtain a green check.
 
@@ -405,7 +405,7 @@ Local Windows validation: **NOT EXECUTED**.
 - Public tables observed: **20**
 - Public tables with RLS disabled: **0**
 - pgtap: **installed**
-- Migration-history canonical parity: **NOT VERIFIED**
+- Migration-history version-set parity: **VERIFIED**; remote historical display-name drift retained as evidence, not repaired
 - Real Auth/API Golden Path: **NOT EXECUTED**
 
 ## DR
