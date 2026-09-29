@@ -1356,3 +1356,27 @@ class TestDatasetStatus:
         assert DatasetStatus.READY.value == "Ready"
         assert DatasetStatus.VALIDATED.value == "Validated"
         assert DatasetStatus.FAILED.value == "Failed"
+
+ 
+def test_historical_dataset_deserialization_fails_on_corrupt_record(sample_dataset) -> None:
+    data = sample_dataset.to_dict()
+    data["records"][0]["timestamp"] = "not-a-timestamp"
+
+    with pytest.raises(ValueError, match="failed candle deserialization"):
+        HistoricalDataset.from_dict(data)
+
+
+def test_historical_dataset_deserialization_rejects_record_count_mismatch(sample_dataset) -> None:
+    data = sample_dataset.to_dict()
+    data["record_count"] = data["record_count"] + 1
+
+    with pytest.raises(ValueError, match="record_count"):
+        HistoricalDataset.from_dict(data)
+
+
+def test_historical_dataset_deserialization_rejects_content_hash_tampering(sample_dataset) -> None:
+    data = sample_dataset.to_dict()
+    data["dataset_content_hash"] = "f" * 64
+
+    with pytest.raises(ValueError, match="dataset_content_hash"):
+        HistoricalDataset.from_dict(data)
