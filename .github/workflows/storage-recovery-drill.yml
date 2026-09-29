@@ -146,7 +146,7 @@ jobs:
           OBJECT_NAME: ${{ inputs.object_name }}
         run: |
           set -euo pipefail
-          aws s3 rm "s3://$S3_BUCKET/qros-storage-drill/$OBJECT_NAME" --region "$AWS_REGION" || true
+          aws s3 rm "s3://$S3_BUCKET/qros-storage-drill/$OBJECT_NAME" --region "$AWS_REGION"
       - name: Cleanup drill object
         if: always()
         env:

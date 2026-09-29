@@ -53,13 +53,13 @@ dry_run="$(
 )"
 printf '%s\n' "${dry_run}"
 
-count="$(printf '%s\n' "${dry_run}" | grep -F -c "${MIGRATION_FILE}" || true)"
+count="$(printf '%s\n' "${dry_run}" | awk -v m="${MIGRATION_FILE}" 'index($0,m)>0 {n++} END {print n+0}')"
 test "${count}" -eq 1 || {
   echo "::error::controlled dry-run did not identify exactly one approved migration; count=${count}"
   exit 1
 }
 
-unexpected="$(printf '%s\n' "${dry_run}" | grep -E 'Would push migration [0-9]{14}_[^ ]+\.sql' | grep -F -v "${MIGRATION_FILE}" || true)"
+unexpected="$(printf '%s\n' "${dry_run}" | awk -v m="${MIGRATION_FILE}" '/Would push migration [0-9]{14}_[^ ]+\.sql/ && index($0,m)==0 {print}')"
 test -z "${unexpected}" || {
   echo "::error::controlled bundle would apply an unexpected migration:"
   printf '%s\n' "${unexpected}"
