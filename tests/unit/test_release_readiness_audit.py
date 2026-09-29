@@ -60,6 +60,20 @@ def test_storage_cleanup_suppression_is_rejected():
     assert "fail-open" in failures[0]
 
 
+def test_storage_api_cleanup_suppression_is_rejected():
+    audit = load_audit()
+    failures: list[str] = []
+
+    audit.check_workflow_fail_open(
+        ".github/workflows/storage-recovery-drill.yml",
+        "curl --fail https://example.invalid/object || true\n",
+        failures,
+    )
+
+    assert len(failures) == 1
+    assert "fail-open" in failures[0]
+
+
 def test_governed_workflow_with_clean_commands_passes():
     audit = load_audit()
     failures: list[str] = []
