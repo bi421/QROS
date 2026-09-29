@@ -306,3 +306,14 @@ def test_recovered_worker_reuses_idempotent_result_after_lease_loss():
     assert store.get_result(workspace_id, job.id) == first_record
     assert store.get(workspace_id, job.id).status == ResearchJobStatus.SUCCEEDED
     assert store.get(workspace_id, job.id).attempt_count == 2
+
+def test_in_memory_monthly_usage_rolls_over_at_month_boundary() -> None:
+    now = [datetime(2026, 9, 30, 23, 59, tzinfo=timezone.utc)]
+    store = InMemoryResearchJobStore(clock=lambda: now[0])
+    workspace_id = uuid4()
+
+    store.create(workspace_id, _job(workspace_id))
+    assert store.count_monthly(workspace_id) == 1
+
+    now[0] = datetime(2026, 10, 1, 0, 0, tzinfo=timezone.utc)
+    assert store.count_monthly(workspace_id) == 0
