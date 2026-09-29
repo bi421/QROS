@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 
+
 from supabase import create_client
 
 from researchos.saas.api import create_app
@@ -33,6 +34,11 @@ def build_production_app():
         expected_issuer=f"{url.rstrip('/')}/auth/v1",
         session_validator=session_validator,
     )
+    def readiness_probe() -> None:
+        response = client.table("workspace").select("id").limit(1).execute()
+        if response.data is None:
+            raise RuntimeError("Supabase readiness query returned no data")
+
     return create_app(
         auth_provider=auth,
         job_store=SupabaseResearchJobStore(client),
@@ -48,6 +54,7 @@ def build_production_app():
         billing_webhook_secret=os.environ.get("BILLING_WEBHOOK_SECRET"),
         metrics_token=os.environ.get("QROS_METRICS_TOKEN"),
         rate_limiter=SupabaseRateLimiter(client, limit=120, window_seconds=60),
+        readiness_probe=readiness_probe,
     )
 
 
