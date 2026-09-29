@@ -72,3 +72,16 @@ A passing container build is not a deployment.
 ## Release rule
 
 Do not mark production-ready from repository tests alone. The exact release commit must have CI success and an observed end-to-end workflow in the target environment.
+
+## Legacy public-table access audit — 2026-09-29
+
+A direct production privilege audit reviewed the nine legacy public tables that have RLS disabled: `User`, `Like`, `Dislike`, `Referral`, `users`, `avatars`, `albums`, `album_consents`, and `face_embeddings`.
+
+Observed on production project `pvhdsngxyoiqhqwujfjt`:
+
+- RLS is disabled on all nine legacy tables.
+- `anon`, `authenticated`, and `service_role` have **no SELECT privilege** on any of the nine tables.
+- The table ACLs expose only the database `postgres` owner privileges.
+- The current Supabase Security Advisor did not report these tables; its observed security finding is the separate Auth leaked-password-protection warning.
+
+Conclusion: these nine tables are not reachable through the Supabase Data API roles by the observed privilege state. They remain legacy schema-hardening debt, not a basis for blindly enabling RLS. Any future RLS enablement or policy design must first identify a legitimate legacy application access path and preserve its authorization contract. No production mutation was performed.
