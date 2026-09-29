@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12.14-alpine3.24 AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -6,12 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        build-essential \
-        cmake \
-        ninja-build \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache build-base cmake ninja
 
 COPY pyproject.toml README.md ./
 COPY researchos ./researchos
@@ -20,7 +15,26 @@ COPY scripts ./scripts
 COPY docs ./docs
 
 RUN python -m pip install --upgrade pip "setuptools>=78.1.1" \
-    && python -m pip install ".[saas]"
+    && python -m pip wheel --no-deps --wheel-dir /wheels ".[saas]"
+
+FROM python:3.12.14-alpine3.24
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+COPY --from=builder /wheels /wheels
+RUN python -m pip install --upgrade pip "setuptools>=78.1.1" \
+    && python -m pip install --no-index --find-links=/wheels ".[saas]" \
+    && rm -rf /wheels
+
+COPY pyproject.toml README.md ./
+COPY researchos ./researchos
+COPY financial_research_lab ./financial_research_lab
+COPY scripts ./scripts
+COPY docs ./docs
 
 EXPOSE 8000
 
