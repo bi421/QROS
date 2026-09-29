@@ -339,3 +339,38 @@ def test_worker_records_retry_observability_on_reclaimed_attempt(monkeypatch) ->
     assert result.status == "SUCCEEDED"
     assert retries == [True]
     assert store.get(workspace_id, job.id).attempt_count == 2
+
+
+def test_worker_emits_safe_execution_span(monkeypatch) -> None:
+    workspace_id = uuid4()
+    store = InMemoryResearchJobStore()
+    job = store.create(workspace_id, _job(workspace_id))
+    executor = StubExecutor(_result())
+    spans = []
+
+    class Span:
+        def set_attribute(self, key, value):
+            spans.append((key, value))
+
+    class Tracer:
+        def start_as_current_span(self, name):
+            assert name == "qros.research_job"
+
+            class Context:
+                def __enter__(self):
+                    return Span()
+
+                def __exit__(self, exc_type, exc, tb):
+                    return False
+
+            return Context()
+
+    monkeypatch.setattr("researchos.saas.worker.tracer", Tracer())
+
+    ResearchWorker(store, executor).run_once(workspace_id, job.id)
+
+    assert spans == [
+        ("qros.workspace_id", str(workspace_id)),
+        ("qros.job_id", str(job.id)),
+        ("qros.attempt", 1),
+    ]
