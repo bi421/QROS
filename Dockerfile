@@ -1,4 +1,4 @@
-FROM python:3.12.14-slim-trixie AS builder
+FROM python:3.12.14-alpine3.24 AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -8,9 +8,9 @@ WORKDIR /build
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        build-essential \
+        build-base \
         cmake \
-        ninja-build \
+        ninja \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md ./
@@ -23,7 +23,7 @@ RUN python -m pip install --upgrade pip setuptools wheel \
     && python -m pip wheel --no-cache-dir ".[saas]" --wheel-dir /wheels
 
 
-FROM python:3.12.14-slim-bookworm
+FROM python:3.12.14-alpine3.24
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
