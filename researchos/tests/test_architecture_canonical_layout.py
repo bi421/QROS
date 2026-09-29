@@ -63,7 +63,7 @@ def test_source_scanner_rejects_forbidden_import_in_relevant_source(tmp_path: Pa
     source = tmp_path / "researchos" / "feature.py"
     source.parent.mkdir(parents=True)
     source.write_text(
-        "from researchos.engines.data import DataEngine\\n",
+        "from researchos.engines.data import DataEngine\n",
         encoding="utf-8",
     )
 
