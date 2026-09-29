@@ -41,6 +41,15 @@ jobs:
       # analyzer reports those entries separately and can flag false positives.
       # The installed packages remain covered by the python-pkg analyzer and
       # the Python dependency audit above.
+      - name: Verify installed Python security versions
+        run: |
+          set -euo pipefail
+          docker run --rm qros-security:${GITHUB_SHA} python -c '
+          from importlib.metadata import version
+          from packaging.version import Version
+          assert Version(version("msgpack")) >= Version("1.2.1")
+          assert Version(version("setuptools")) >= Version("78.1.1")
+          '
       - name: Scan release container
         run: |
           set -euo pipefail
