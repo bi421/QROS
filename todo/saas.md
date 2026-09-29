@@ -15,7 +15,7 @@
 | Research governance | 🟢 Complete | Core claim/plan/evidence/result governance implemented |
 | Tenant security | 🟢 Complete | RLS, authorization, isolation tests and session boundary implemented |
 | API foundation | 🟢 Complete | Versioned API, validation, rate limits, idempotency and errors |
-| Database migrations | 🟡 Verified (staging version-set parity) | 44/44 staging migration rows; all 44 canonical migration files verified present on main; final remote execution version `20260928103556` matches the canonical worker migration; historical remote name drift is documented and not rewritten |
+| Database migrations | 🟡 Verified (staging version-set parity) | 45 staging migration rows; 48 canonical migration files are currently present on main; staging contains the worker execution version `20260928103556` under the historical remote display name `20260928103225_saas_worker_queue_consumer`; the three current M1 reconciliation migrations are not yet applied to staging |
 | Staging Golden Path | 🟡 Blocked | Auth/application identities and end-to-end operational evidence pending |
 | Disaster Recovery | 🔴 Blocked | Isolated recovery target and recovery storage not provisioned |
 | Observability | 🟡 In progress | Production-grade acceptance evidence pending |
@@ -101,20 +101,21 @@
 - [x] Canonical migrations under `supabase/migrations/`.
 - [x] Migration filename/order validation.
 - [x] Migration security invariants.
-- [x] 44 canonical migration files at current baseline.
+- [x] 48 canonical migration files at current baseline.
 
 ### QROS Staging
 - [x] Staging project exists.
 - [x] Project ref: `yebwhcntiockckhdvawt`.
 - [x] Region: `ap-northeast-1`.
 - [x] PostgreSQL 17.6 / engine 17.
-- [x] 44/44 repository migration SQL files applied.
-- [x] 44 migration rows observed.
+- [x] 45 migration rows observed; the worker migration is present under its historical remote display name.
+- [ ] Current 48-file repository migration set fully applied to staging.
 - [x] 20 public tables observed.
 - [x] 0 public tables with RLS disabled.
 
 ### Remaining
-- [x] Verify migration version-set identity against repository filenames; remote row `version=20260928103556` maps to canonical `20260928103556_saas_worker_queue_consumer.sql`.
+- [x] Verify the worker execution version `20260928103556` is present; its historical remote display name remains `20260928103225_saas_worker_queue_consumer` and is not rewritten.
+- [ ] Apply/verify the three current M1 reconciliation migrations in staging when the staging deployment gate is provisioned.
 - [x] Verify staging QROS tables, RLS state, public policies/triggers, and governed queue function grants.
 - [x] Verify RLS is enabled on all 20 QROS public tables (20/20; 0 disabled).
 - [x] Review staging Security Advisor findings.
