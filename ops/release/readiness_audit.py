@@ -50,7 +50,7 @@ REQUIRED_MARKERS = {
         "max-error-rate",
     ),
     ".github/workflows/supabase-db-tests.yml": (
-        "workflow_dispatch",
+        "Run database security tests",
         "supabase test db",
         "ON_ERROR_STOP=1",
     ),
