@@ -75,7 +75,7 @@ def test_source_scanner_ignores_known_generated_tree(tmp_path: Path) -> None:
     generated = tmp_path / "build" / "generated.py"
     generated.parent.mkdir(parents=True)
     generated.write_text(
-        "from researchos.engines.data import DataEngine\\n",
+        "from researchos.engines.data import DataEngine\n",
         encoding="utf-8",
     )
 
@@ -85,11 +85,11 @@ def test_source_scanner_ignores_known_generated_tree(tmp_path: Path) -> None:
 def test_source_scanner_is_unchanged_by_generated_residue(tmp_path: Path) -> None:
     source = tmp_path / "researchos" / "feature.py"
     source.parent.mkdir(parents=True)
-    source.write_text("import researchos\\n", encoding="utf-8")
+    source.write_text("import researchos\n", encoding="utf-8")
     generated = tmp_path / ".healthcheck" / "generated.py"
     generated.parent.mkdir(parents=True)
     generated.write_text(
-        "from researchos.engines.data import DataEngine\\n",
+        "from researchos.engines.data import DataEngine\n",
         encoding="utf-8",
     )
 
