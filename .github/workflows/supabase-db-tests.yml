@@ -53,7 +53,7 @@ jobs:
               exit 0
             fi
             echo "::warning::supabase start failed on attempt $attempt/$max_attempts; retrying after registry backoff"
-            supabase stop || true
+            supabase stop
             if [ "$attempt" -lt "$max_attempts" ]; then
               sleep_seconds=$((30 * attempt))
               echo "Sleeping ${sleep_seconds}s before retry."
