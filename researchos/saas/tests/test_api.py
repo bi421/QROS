@@ -425,7 +425,6 @@ def test_dataset_versions_reject_invalid_sort_and_filter() -> None:
     assert bad_filter.status_code == 400
     assert bad_filter.json()["code"] == "INVALID_FILTER"
 
- 
 def test_readiness_probe_failure_fails_closed() -> None:
     def probe() -> None:
         raise RuntimeError("database unavailable")
