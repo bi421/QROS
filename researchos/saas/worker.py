@@ -14,6 +14,7 @@ from researchos.saas.observability import (
     jobs_retries_total,
     job_id_var,
     tenant_id_var,
+    tracer,
 )
 from researchos.saas.store import ResearchJobStore
 
