@@ -650,6 +650,88 @@ CUSTOMER JOURNEY = BLOCKED
 
 ---
 
+
+# 19A. LIVE EXTERNAL VALIDATION SNAPSHOT — 2026-10-01
+
+This section records evidence obtained from the currently connected GitHub and Supabase environments during autonomous execution.
+
+## GitHub
+
+Verified:
+
+- Repository: `bi421/QROS`
+- Default branch: `main`
+- Current `main` SHA: `b584a10d7853f9d5d4297c5202ef130b19c3faa5`
+- Roadmap branch: `docs/current-state-completion-roadmap`
+- Roadmap branch HEAD: `a9d269dbb0d8613db568b83bf935ddf82dbe2d79`
+- Roadmap PR: `#417`
+- PR #417 base: `main`
+- PR #417 head: `a9d269dbb0d8613db568b83bf935ddf82dbe2d79`
+- PR #417: OPEN / NOT MERGED
+
+The PR-triggered Release Readiness Static Gate for the roadmap commit completed successfully as run #888. CI #2871, Supply Chain Security #41, and Supabase Database Security Tests #1009 were still running at the time of this snapshot.
+
+## Production Supabase
+
+Read-only verification was performed against the connected Supabase project:
+
+- Project ref: `pvhdsngxyoiqhqwujfjt`
+- Project status: `ACTIVE_HEALTHY`
+- PostgreSQL: 17.6.1.084
+- Project API URL is configured and reachable through the connected Supabase integration.
+- Production migration rows: **45**
+- First recorded migration: `202609170001`
+- Latest recorded production migration:
+  `20260930013114` — `saas_workspace_provisioning`
+
+The live production migration history therefore contains a workspace-provisioning migration version that was not located as a matching migration filename/name in the current `main` repository search.
+
+This creates a real **CLASS D — SUPABASE / RELEASE REPRODUCIBILITY** gap:
+
+LIVE PRODUCTION SCHEMA HISTORY
+≠
+PROVEN REPOSITORY MIGRATION HISTORY
+
+Do NOT silently repair this by editing or applying SQL.
+
+Before declaring an exact-release production deployment safe, the migration provenance must be reconciled and the governed forward-only migration rules must be followed.
+
+## Current Supabase security evidence
+
+The current Supabase Security Advisor reports:
+
+- `auth_leaked_password_protection` — WARN
+
+The remediation is external Auth configuration, not application-code evidence.
+
+The current database also reports 9 legacy public tables with RLS disabled. A direct read-only privilege query independently verified that `anon`, `authenticated`, and `service_role` do not have SELECT privilege on those 9 tables.
+
+Therefore:
+
+- do NOT automatically enable RLS on those legacy tables;
+- the advisor warning must not be treated as proof of Data API exposure;
+- any future remediation requires an identified legitimate application access path and explicit policy design.
+
+This is a security-hardening item, but it is not currently proven to block the QROS customer path.
+
+## Deployment remains independently blocked
+
+No QROS production container host or public QROS HTTPS endpoint was discovered through the connected GitHub/Supabase state.
+
+Therefore the deployment-provider blocker remains:
+
+**CLASS E — DEPLOYMENT PROVIDER**
+
+The correct sequence is now:
+
+1. reconcile/verify production migration provenance;
+2. verify the exact-release schema gate;
+3. obtain a real production container host;
+4. deploy the exact verified release SHA;
+5. verify HTTPS and `/healthz` / `/readyz`;
+6. configure Auth redirect;
+7. execute the real customer journey.
+
 # 20. CURRENT FIRST BLOCKER
 
 The first remaining blocker is:
@@ -1048,6 +1130,10 @@ DO NOT MERGE PR #416.
 DO NOT FABRICATE CUSTOMER EVIDENCE.
 
 NEXT ACTION:
+
+RECONCILE / VERIFY PRODUCTION MIGRATION PROVENANCE AGAINST THE EXACT RELEASE.
+
+Then:
 
 CONNECT A REAL PRODUCTION CONTAINER HOST.
 
