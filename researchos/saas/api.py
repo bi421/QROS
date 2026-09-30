@@ -22,8 +22,9 @@ from fastapi import (
 )
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
-from starlette.responses import JSONResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, Response
 from researchos.saas.api_middleware import RequestContextMiddleware
+from researchos.saas.onboarding import ONBOARDING_HTML, ONBOARDING_JS
 from researchos.saas.observability import (
     StructuredRequestObserver,
     actor_user_id_var,
@@ -241,6 +242,8 @@ def create_app(
     metrics_token: str | None = None,
     readiness_probe: Callable[[], None] | None = None,
     workspace_provisioner: WorkspaceProvisioner | None = None,
+    supabase_url: str | None = None,
+    supabase_publishable_key: str | None = None,
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
@@ -384,6 +387,26 @@ def create_app(
             raise
         except Exception as exc:
             raise RuntimeError("dataset version persistence failed") from exc
+
+    @app.get("/onboarding", include_in_schema=False, response_class=HTMLResponse)
+    def onboarding() -> HTMLResponse:
+        return HTMLResponse(ONBOARDING_HTML)
+
+    @app.get("/onboarding/app.js", include_in_schema=False, response_class=Response)
+    def onboarding_app_js() -> Response:
+        return Response(ONBOARDING_JS, media_type="application/javascript")
+
+    @app.get("/onboarding/config", include_in_schema=False, tags=["identity"])
+    def onboarding_config() -> dict[str, str]:
+        if not supabase_url or not supabase_publishable_key:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="customer onboarding is not configured",
+            )
+        return {
+            "supabase_url": supabase_url.rstrip("/"),
+            "supabase_publishable_key": supabase_publishable_key,
+        }
 
     @app.get("/healthz", tags=["system"])
     def healthz() -> dict[str, str]:

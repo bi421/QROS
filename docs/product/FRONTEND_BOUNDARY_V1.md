@@ -2,6 +2,14 @@
 
 Status: implementation-ready boundary; framework and visual design intentionally undecided.
 
+## Customer self-service onboarding
+
+The supported customer entry is the same-origin `/onboarding` surface served by the QROS API. It uses Supabase Auth directly from the browser with the project publishable key; the server-only service-role key is never exposed. The browser keeps the access token in memory and sends it as a bearer token to the existing `/v1/workspaces` and `/v1/me` boundaries.
+
+The signup flow handles both Supabase Auth modes: when email confirmation is required, signup returns without a session and the user is instructed to confirm the email and sign in; when a session is returned, onboarding continues immediately. The repository does not currently expose a Supabase Auth configuration contract that proves the production `Confirm Email` setting, so the client deliberately supports both states rather than assuming one.
+
+`SUPABASE_PUBLISHABLE_KEY` is required for the onboarding config endpoint. `SUPABASE_SERVICE_ROLE_KEY` remains server-only. Because the onboarding page and QROS API are same-origin, no new QROS CORS policy is required.
+
 ## Existing server boundary
 
 The frontend can target the versioned API without inventing a new backend contract:

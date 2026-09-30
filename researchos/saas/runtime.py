@@ -57,6 +57,8 @@ def build_production_app():
         rate_limiter=SupabaseRateLimiter(client, limit=120, window_seconds=60),
         readiness_probe=readiness_probe,
         workspace_provisioner=SupabaseWorkspaceProvisioner(client),
+        supabase_url=url,
+        supabase_publishable_key=os.environ.get("SUPABASE_PUBLISHABLE_KEY"),
     )
 
 

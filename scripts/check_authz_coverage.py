@@ -15,6 +15,7 @@ def main() -> int:
     route_count = 0
     missing: list[str] = []
     public_prefixes = ("/healthz", "/readyz", "/metrics", "/v1/me", "/v1/billing/webhook")
+    public_routes = {"/onboarding", "/onboarding/app.js", "/onboarding/config"}
     identity_only_routes = {"/v1/workspaces"}
 
     for node in ast.walk(tree):
@@ -45,7 +46,7 @@ def main() -> int:
                 break
         for route in route_paths:
             route_count += 1
-            if route.startswith(public_prefixes):
+            if route in public_routes or route.startswith(public_prefixes):
                 continue
             if route in identity_only_routes and has_identity_auth:
                 continue
