@@ -1,6 +1,8 @@
 # QROS — CURRENT STATE, COMPLETION ROADMAP & PRODUCTION CHECKLIST
 
-Last verified: 2026-09-30
+Last verified snapshot: 2026-09-30
+
+IMPORTANT: This date is a historical verification timestamp, not a substitute for live-state verification.
 Repository: bi421/QROS
 Production branch: main
 Production SHA: b584a10d7853f9d5d4297c5202ef130b19c3faa5
@@ -32,6 +34,34 @@ REAL IMPLEMENTATION
 → CUSTOMER-READY PRODUCT
 
 ---
+
+
+# 1A. AI EXECUTION CONTRACT
+
+This roadmap is an AI-executable project-state contract, not merely a planning document.
+
+Any future AI agent working on QROS MUST:
+
+1. Read this document before making changes.
+2. Verify the live repository state before trusting any statement in this document.
+3. Verify the actual `origin/main` SHA before starting work.
+4. Treat this document as guidance and state memory, NOT as evidence.
+5. If the live repository contradicts this document, report:
+   - DOCUMENTED STATE
+   - ACTUAL STATE
+   - EXACT CONTRADICTION
+   - REQUIRED RESOLUTION
+6. Never silently overwrite, reset, rebase, delete, or discard unrelated user work.
+7. Never force-push without explicit human authorization.
+8. Never merge a pull request automatically unless explicitly authorized.
+9. Never fabricate deployment, authentication, customer, billing, scientific, or production evidence.
+10. Before changing code, identify the concrete blocker and the evidence that the change is expected to produce.
+11. After each completed task, report:
+    FACT → COMMAND/TOOL → RESULT → EVIDENCE → NEXT ACTION
+12. Continue autonomously through repository-accessible work.
+13. Stop and request human action only when the remaining blocker genuinely requires external access, credentials, approval, payment, account configuration, or another action unavailable to the agent.
+
+The agent must prefer verified repository facts over remembered conversation state.
 
 # 2. CURRENT PRODUCTION TRUTH
 
@@ -80,6 +110,28 @@ Therefore:
 PRODUCTION CI = PASS
 
 ---
+
+
+# EVIDENCE HIERARCHY
+
+Use the following evidence levels when describing QROS state:
+
+- LEVEL 0 — CLAIM: stated intent, plan, or expectation only.
+- LEVEL 1 — CODE: implementation exists in a repository revision.
+- LEVEL 2 — LOCAL TEST: implementation passes a reproducible local test.
+- LEVEL 3 — CI: implementation is verified by the relevant GitHub CI workflow.
+- LEVEL 4 — PRODUCTION: the exact production SHA is verified running in the real production environment.
+- LEVEL 5 — REAL EXTERNAL: a real external/customer-facing flow has been successfully exercised and independently evidenced.
+
+Rules:
+
+- Never describe LEVEL 0 as implementation.
+- Never describe LEVEL 1 as tested.
+- Never describe LEVEL 2 as production verified.
+- Never describe LEVEL 3 as deployed.
+- Never describe LEVEL 4 as a successful customer journey unless the customer journey itself was tested.
+- Never describe LEVEL 5 evidence using weaker or ambiguous wording.
+- Always identify the highest evidence level actually achieved.
 
 # 4. PHASE 5.2 STATUS
 
@@ -524,6 +576,28 @@ A successful Docker image build is NOT a production deployment.
 
 ---
 
+
+# BLOCKER CLASSIFICATION
+
+Every remaining blocker MUST be classified before deciding how to respond.
+
+- CLASS A — REPOSITORY: code, tests, configuration, migrations, or documentation that the agent can modify.
+- CLASS B — CI: workflow, runner, permissions, or CI-only failure that can be diagnosed through repository/GitHub evidence.
+- CLASS C — GITHUB: repository settings, branch protection, PR state, Actions permissions, or other GitHub-side configuration.
+- CLASS D — SUPABASE: database, Auth, Storage, RLS, project settings, or other Supabase-side configuration.
+- CLASS E — DEPLOYMENT PROVIDER: VPS, Render, Railway, managed container host, DNS, HTTPS, runtime environment, or provider-side configuration.
+- CLASS F — HUMAN-ONLY EXTERNAL ACTION: credential entry, account ownership, billing/payment approval, secret creation unavailable to the agent, or an action that explicitly requires the human.
+
+Do not write repository code to compensate for a CLASS C/D/E/F blocker unless new evidence proves that repository code is the actual root cause.
+
+When a blocker is found, record:
+
+BLOCKER CLASS
+→ EXACT BLOCKER
+→ EVIDENCE
+→ WHAT THE AGENT CAN DO NOW
+→ WHAT REQUIRES HUMAN ACTION
+
 # 19. CURRENT DEPLOYMENT STATUS
 
 DEPLOYMENT ACCESS:
@@ -582,7 +656,7 @@ The first remaining blocker is:
 
 ACTUAL PRODUCTION HOSTING / DEPLOYMENT ACCESS
 
-The connected environment currently has:
+At the time this roadmap was last verified, the connected environment had:
 
 - GitHub access
 - Supabase access
@@ -876,6 +950,25 @@ Only address it if there is a concrete production backup requirement.
 
 ---
 
+
+# FROZEN WORK RULE
+
+A frozen or closed item may be reopened only when ALL of the following are true:
+
+1. New evidence contradicts the recorded state.
+2. The contradiction is reproducible or independently verifiable.
+3. The exact affected production SHA or artifact is identified.
+4. Reopening the item is necessary for the current customer-ready milestone or a concrete production requirement.
+
+If these conditions are not met:
+
+- do not reopen the item,
+- do not rerun it merely for another green result,
+- do not alter its frozen evidence,
+- do not create replacement evidence just to improve presentation.
+
+A new question, curiosity, code preference, or desire for additional confidence is not by itself sufficient reason to reopen frozen work.
+
 # 33. DO NOT REOPEN
 
 The following are CLOSED and should not be reopened without new evidence:
@@ -1029,6 +1122,32 @@ REAL PRODUCTION HOSTING ACCESS
 
 ---
 
+
+# CHANGE AUTHORIZATION MATRIX
+
+The AI agent may autonomously:
+
+- inspect the repository and Git history,
+- run local tests and audits,
+- inspect GitHub state and CI evidence,
+- create isolated feature branches,
+- modify repository files required by the roadmap,
+- commit changes,
+- push feature branches,
+- create pull requests when the workflow permits.
+
+Human authorization is required for:
+
+- merging a pull request unless explicitly authorized,
+- force-pushing or destructive Git operations,
+- entering or exposing production secrets,
+- changing external account ownership/security settings when unavailable to the agent,
+- spending money or activating paid infrastructure,
+- production actions that require credentials or account approval unavailable to the agent,
+- real customer actions that the agent cannot legitimately perform.
+
+The agent must never treat the existence of a tool connection as proof that an external production action has succeeded.
+
 # 38. OPERATING RULE FOR FUTURE WORK
 
 Every future QROS session should begin by verifying:
@@ -1061,6 +1180,37 @@ ASSUMPTION
 → MORE CODE
 
 ---
+
+
+# ROADMAP SELF-VALIDATION
+
+The roadmap contains a dated snapshot, but the live repository and connected systems are authoritative for current state.
+
+At the beginning of each execution session, verify at minimum:
+
+1. `origin/main` exact SHA
+2. current HEAD and branch
+3. clean/dirty working tree
+4. ahead/behind relationship
+5. open PRs affecting the production baseline
+6. relevant production CI status
+7. frozen Phase 5.2 artifact hashes
+8. deployment availability/status
+9. public HTTPS availability
+10. Supabase Auth configuration relevant to the deployed URL
+11. real customer journey status
+12. whether any external blocker has changed.
+
+If this document conflicts with live state:
+
+- do NOT silently rewrite the roadmap first;
+- record the documented state;
+- record the actual state;
+- identify the contradiction;
+- determine whether the contradiction is stale documentation or an actual project regression;
+- resolve the underlying state before updating the roadmap.
+
+The latest verified live state always takes precedence over an older timestamp in this document.
 
 # 39. DEFINITION OF "CUSTOMER-READY"
 
