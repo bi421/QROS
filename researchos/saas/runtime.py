@@ -20,6 +20,7 @@ from researchos.saas.supabase_finding_store import SupabaseResearchFindingStore
 from researchos.saas.idempotency import SupabaseIdempotencyStore
 from researchos.saas.billing import SupabaseBillingEventStore
 from researchos.saas.rate_limit import SupabaseRateLimiter
+from researchos.saas.workspace import SupabaseWorkspaceProvisioner
 
 
 def build_production_app():
@@ -55,6 +56,7 @@ def build_production_app():
         metrics_token=os.environ.get("QROS_METRICS_TOKEN"),
         rate_limiter=SupabaseRateLimiter(client, limit=120, window_seconds=60),
         readiness_probe=readiness_probe,
+        workspace_provisioner=SupabaseWorkspaceProvisioner(client),
     )
 
 

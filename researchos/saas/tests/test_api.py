@@ -19,6 +19,10 @@ class StaticAuth:
     def __init__(self, context: TenantContext) -> None:
         self.context = context
 
+    def authenticate_user(self, authorization: str | None) -> UUID:
+        assert authorization == "Bearer test"
+        return self.context.user_id
+
     def authenticate(self, authorization: str | None) -> TenantContext:
         assert authorization == "Bearer test"
         return self.context

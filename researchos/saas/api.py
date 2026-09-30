@@ -74,6 +74,10 @@ from researchos.saas.idempotency import (
 from researchos.saas.rate_limit import FixedWindowRateLimiter, RateLimiter
 from researchos.saas.pagination import paginate, validate_filter_tenant_id
 from researchos.saas.research_report import build_research_report
+from researchos.saas.workspace import (
+    WorkspaceProvisioningConflict,
+    WorkspaceProvisioner,
+)
 from researchos.saas.billing import (
     BillingEventConflict,
     BillingEventStore,
@@ -156,12 +160,19 @@ class AuthProvider(Protocol):
     """Authenticate a request and resolve its authorized workspace."""
 
     def authenticate(self, authorization: str | None) -> TenantContext: ...
+    def authenticate_user(self, authorization: str | None) -> UUID: ...
 
 
 class UnconfiguredAuthProvider:
     """Fail-closed default; production must install a real identity provider."""
 
     def authenticate(self, authorization: str | None) -> TenantContext:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="SaaS authentication provider is not configured",
+        )
+
+    def authenticate_user(self, authorization: str | None) -> UUID:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="SaaS authentication provider is not configured",
@@ -179,6 +190,18 @@ class ResearchJobResponse(BaseModel):
     dataset_version_id: UUID
     workflow_id: str
     status: ResearchJobStatus
+
+
+class WorkspaceCreateRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    name: str = Field(min_length=1, max_length=256)
+
+
+class WorkspaceProvisioningResponse(BaseModel):
+    workspace_id: UUID
+    role: str
+    plan: str
 
 
 class DatasetResponse(BaseModel):
@@ -217,6 +240,7 @@ def create_app(
     rate_limiter: RateLimiter | None = None,
     metrics_token: str | None = None,
     readiness_probe: Callable[[], None] | None = None,
+    workspace_provisioner: WorkspaceProvisioner | None = None,
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
@@ -227,6 +251,7 @@ def create_app(
     queue = job_queue or InMemoryResearchJobQueue()
     limiter = rate_limiter or FixedWindowRateLimiter(limit=120, window_seconds=60)
     billing = billing_store
+    workspaces = workspace_provisioner
     app = FastAPI(
         title="QROS SaaS API",
         version="1.0.0",
@@ -429,6 +454,39 @@ def create_app(
         except Exception as exc:
             raise RuntimeError("billing event processing failed") from exc
         return {"status": "processed" if processed else "replayed"}
+
+    @app.post(
+        "/v1/workspaces",
+        response_model=WorkspaceProvisioningResponse,
+        status_code=201,
+        tags=["identity"],
+    )
+    def provision_workspace(
+        request: WorkspaceCreateRequest,
+        authorization: str | None = Header(default=None),
+    ) -> WorkspaceProvisioningResponse:
+        if workspaces is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="workspace provisioning is not configured",
+            )
+        user_id = auth.authenticate_user(authorization)
+        try:
+            provisioned = workspaces.provision(user_id, request.name)
+        except WorkspaceProvisioningConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="workspace provisioning unavailable",
+            ) from exc
+        return WorkspaceProvisioningResponse(
+            workspace_id=provisioned.workspace_id,
+            role=provisioned.role.value,
+            plan=provisioned.plan.value,
+        )
 
     @app.get("/v1/me", response_model=dict[str, str], tags=["identity"])
     def me(tenant: TenantContext = Depends(current_tenant)) -> dict[str, str]:
