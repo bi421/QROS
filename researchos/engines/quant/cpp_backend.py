@@ -7,9 +7,7 @@ preserves the QuantComputationInterface and QROS result/provenance contracts.
 from __future__ import annotations
 
 import importlib
-import sys
 import warnings
-from pathlib import Path
 from typing import Any
 
 from researchos.engines.quant.backend import PythonQuantBackend
@@ -26,42 +24,13 @@ from researchos.engines.quant.models import (
 
 
 def _load_native():
-    """Load the compiled nanobind extension from the source-tree build output."""
-    if (
-        "cpp_quant_engine.cpp_quant_backend" in sys.modules
-        and sys.modules["cpp_quant_engine.cpp_quant_backend"] is None
-    ):
-        return None
+    """Load the canonical compiled nanobind extension."""
     try:
-        module = importlib.import_module("cpp_quant_backend")
+        module = importlib.import_module("cpp_quant_engine.cpp_quant_backend")
         if hasattr(module, "CppQuantBackend"):
             return module
     except ImportError:
-        pass
-
-    package_root = Path(__file__).resolve().parent / "python" / "cpp_quant_engine"
-
-    candidates = [
-        package_root,
-        package_root / "Release",
-        package_root / "Debug",
-    ]
-
-    for candidate in candidates:
-        if not candidate.exists():
-            continue
-
-        candidate_str = str(candidate)
-        if candidate_str not in sys.path:
-            sys.path.insert(0, candidate_str)
-
-        try:
-            module = importlib.import_module("cpp_quant_backend")
-            if hasattr(module, "CppQuantBackend"):
-                return module
-        except ImportError:
-            continue
-
+        return None
     return None
 
 
