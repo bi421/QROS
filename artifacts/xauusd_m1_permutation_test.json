@@ -1,0 +1,41 @@
+{
+  "status": "PASS",
+  "permutations": 1000,
+  "real": {
+    "delta_brier": -0.0010344996,
+    "delta_logloss": -0.0020706827
+  },
+  "permutation": {
+    "brier_mean": 0.000029349833,
+    "brier_min": -0.000048273266,
+    "brier_max": 0.000166008111,
+    "brier_extreme": 0,
+    "brier_empirical_p": 0.000999000999000999,
+    "logloss_mean": 0.000058748893,
+    "logloss_min": -0.000096448967,
+    "logloss_max": 0.000332423677,
+    "logloss_extreme": 0,
+    "logloss_empirical_p": 0.000999000999000999
+  },
+  "contract": {
+    "train": 2000,
+    "validation": 500,
+    "step": 500,
+    "holdout": 500,
+    "folds": 44,
+    "oos_events": 22000,
+    "complete_events": 24850,
+    "production_estimator_equivalent": true,
+    "production_score_equivalent": true,
+    "permutation_type": "label_shuffle",
+    "seed_base": 20260910
+  },
+  "source": {
+    "event_outcomes_artifact": "artifacts/xauusd_m1_real_events_outcomes.json",
+    "event_outcomes_sha256": "8a2ba847da994dc0f570b7d63bdae3ff7d976d87260ff0f533a83b26079843e4",
+    "walkforward_artifact": "artifacts/xauusd_m1_walkforward.json",
+    "walkforward_sha256": "e08786bfe8b944823b1f20087e58112fb8d920f394979ecf5fd79d6cc7a49cc2",
+    "dataset_sha256": "632950ee767eb8968a00331e6f8da35d3bc73e937bc3ceb5c1b15f596939da9"
+  },
+  "scientific_status": "OOS_STATISTICAL_SUPPORT_ONLY_NO_TRADING_EDGE_CLAIM"
+}
