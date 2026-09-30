@@ -1,4 +1,4 @@
-""""Deterministic multivariate empirical probability estimator for Phase 5.2.
+"""Deterministic multivariate empirical probability estimator for Phase 5.2.
 
 This estimator is intentionally small: each selected feature is normalized using
 training-window min/max bounds, validation rows are ranked by deterministic
