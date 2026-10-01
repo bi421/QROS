@@ -73,6 +73,7 @@ dev = [
     "nanobind>=1.5.0",
     "cmake>=3.27",
     "ninja>=1.11",
+    "yfinance>=0.2",
 ]
 test = [
     "yfinance>=0.2",
