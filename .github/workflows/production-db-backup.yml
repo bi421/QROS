@@ -5,139 +5,108 @@ on:
     - cron: '0 2 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: production-db-backup
+  cancel-in-progress: false
+
 jobs:
   backup:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest migrates to Ubuntu 26 on 2026-10-19
     environment: production
+    timeout-minutes: 30
+    env:
+      BUCKET: qros-backups
+      EXPECTED_PROJECT_REF: pvhdsngxyoiqhqwujfjt   # production Supabase project ref
+      AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ secrets.BACKUP_AWS_REGION }}
 
+    # No checkout step: nothing here reads repository files.
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install pg_dump
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
-
-      - name: Verify tools
-        run: |
-          set -euo pipefail
-          command -v pg_dump
-          pg_dump --version
-          command -v aws
-          aws --version
-
-      - name: Dump production database with pg_dump
+      - name: Verify tools and secrets
         env:
           PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
         run: |
           set -euo pipefail
-
+          command -v docker && command -v aws
+          aws --version
           test -n "$PROD_DATABASE_URL"
+          test -n "$AWS_ACCESS_KEY_ID"
+          test -n "$AWS_SECRET_ACCESS_KEY"
+          test -n "$AWS_DEFAULT_REGION"
 
-          pg_dump \
-            --no-password \
-            "$PROD_DATABASE_URL" \
-            > /tmp/qros-backup.sql
-
-          test -s /tmp/qros-backup.sql
-
-      - name: Generate checksum
-        run: |
-          set -euo pipefail
-          sha256sum /tmp/qros-backup.sql > /tmp/backup.sha256
-          cat /tmp/backup.sha256
-
-      - name: Configure AWS credentials
+      - name: Guard - correct project and IPv4-reachable host (no secrets printed)
         env:
-          BACKUP_AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
-          BACKUP_AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
-          BACKUP_AWS_REGION: ${{ secrets.BACKUP_AWS_REGION }}
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
         run: |
           set -euo pipefail
+          HOST="$(echo "$PROD_DATABASE_URL" | sed -E 's#^[a-z]+://[^@]*@([^:/?]+).*#\1#')"
+          PORT="$(echo "$PROD_DATABASE_URL" | sed -E 's#^[a-z]+://[^@]*@[^:/?]+:([0-9]+).*#\1#')"
+          echo "host=$HOST port=$PORT"
+          if ! echo "$PROD_DATABASE_URL" | grep -q "$EXPECTED_PROJECT_REF"; then
+            echo "::error::PROD_DATABASE_URL does not point to production project $EXPECTED_PROJECT_REF"
+            exit 1
+          fi
+          if echo "$HOST" | grep -Eq '^db\..*\.supabase\.co$'; then
+            echo "::error::Direct host is IPv6-only and unreachable from GitHub runners. Use the Session pooler string (port 5432)."
+            exit 1
+          fi
+          if [ "$PORT" = "6543" ]; then
+            echo "::error::Port 6543 is transaction mode; pg_dump needs session mode (5432)."
+            exit 1
+          fi
 
-          test -n "$BACKUP_AWS_ACCESS_KEY_ID"
-          test -n "$BACKUP_AWS_SECRET_ACCESS_KEY"
-          test -n "$BACKUP_AWS_REGION"
-
-          aws configure set aws_access_key_id \
-            "$BACKUP_AWS_ACCESS_KEY_ID"
-
-          aws configure set aws_secret_access_key \
-            "$BACKUP_AWS_SECRET_ACCESS_KEY"
-
-          aws configure set region \
-            "$BACKUP_AWS_REGION"
-
-      - name: Upload backup to S3
+      - name: Dump production database (pg_dump 17) and compress
+        env:
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
         run: |
           set -euo pipefail
+          TS="$(date -u +%Y%m%dT%H%M%SZ)"
+          FILE="qros-backup-${TS}.sql.gz"
+          mkdir -p /tmp/backup
+          echo "FILE=$FILE" >> "$GITHUB_ENV"
 
-          aws s3 cp \
-            /tmp/qros-backup.sql \
-            s3://qros-backups/qros-backup.sql
+          docker run --rm -e PGURL="$PROD_DATABASE_URL" postgres:17 \
+            sh -c 'pg_dump --no-password "$PGURL"' \
+            | gzip -9 > "/tmp/backup/$FILE"
 
-          aws s3 cp \
-            /tmp/backup.sha256 \
-            s3://qros-backups/backup.sha256
+          gzip -t "/tmp/backup/$FILE"
+          test -s "/tmp/backup/$FILE"
+          ls -l "/tmp/backup/$FILE"
 
-      - name: Verify backup exists with head-object
+      - name: Generate checksum (relative path)
         run: |
           set -euo pipefail
+          cd /tmp/backup
+          sha256sum "$FILE" > "$FILE.sha256"
+          cat "$FILE.sha256"
 
-          aws s3api head-object \
-            --bucket qros-backups \
-            --key qros-backup.sql
-
-          aws s3api head-object \
-            --bucket qros-backups \
-            --key backup.sha256
-
-      - name: Download uploaded backup for integrity verification
+      - name: Upload to S3
         run: |
           set -euo pipefail
+          aws s3 cp "/tmp/backup/$FILE"        "s3://$BUCKET/daily/$FILE"
+          aws s3 cp "/tmp/backup/$FILE.sha256" "s3://$BUCKET/daily/$FILE.sha256"
 
-          aws s3 cp \
-            s3://qros-backups/qros-backup.sql \
-            /tmp/qros-backup.remote.sql
-
-          aws s3 cp \
-            s3://qros-backups/backup.sha256 \
-            /tmp/backup.remote.sha256
-
-          test -s /tmp/qros-backup.remote.sql
-          test -s /tmp/backup.remote.sha256
-
-      - name: Verify uploaded backup checksum
+      - name: Verify objects exist (head-object)
         run: |
           set -euo pipefail
+          aws s3api head-object --bucket "$BUCKET" --key "daily/$FILE"
+          aws s3api head-object --bucket "$BUCKET" --key "daily/$FILE.sha256"
 
-          EXPECTED="$(
-            cut -d' ' -f1 /tmp/backup.remote.sha256
-          )"
-
-          ACTUAL="$(
-            sha256sum /tmp/qros-backup.remote.sql |
-            cut -d' ' -f1
-          )"
-
-          echo "Expected SHA256: $EXPECTED"
-          echo "Actual SHA256:   $ACTUAL"
-
-          test "$EXPECTED" = "$ACTUAL"
-
-      - name: Verify checksum manifest
+      - name: Download from S3 and verify integrity
         run: |
           set -euo pipefail
-
-          cd /tmp
-          sha256sum --check backup.remote.sha256
+          mkdir -p /tmp/verify
+          aws s3 cp "s3://$BUCKET/daily/$FILE"        "/tmp/verify/$FILE"
+          aws s3 cp "s3://$BUCKET/daily/$FILE.sha256" "/tmp/verify/$FILE.sha256"
+          cd /tmp/verify
+          sha256sum --check "$FILE.sha256"
+          gzip -t "$FILE"
+          echo "BACKUP VERIFIED: s3://$BUCKET/daily/$FILE"
 
       - name: Cleanup
         if: always()
-        run: |
-          rm -f \
-            /tmp/qros-backup.sql \
-            /tmp/backup.sha256 \
-            /tmp/qros-backup.remote.sql \
-            /tmp/backup.remote.sha256
+        run: rm -rf /tmp/backup /tmp/verify
