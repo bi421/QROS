@@ -44,7 +44,7 @@ from .metadata import (
     MODEL_METADATA_VERSION,
     ModelMetadata,
 )
-from .registry import (
+from .runtime import (\n    MODEL_RUNTIME_VERSION,\n    BatchResultCountMismatchError,\n    InferenceRequest,\n    InferenceResult,\n    ModelAdapter,\n    ModelAdapterAlreadyExistsError,\n    ModelAdapterNotFoundError,\n    ModelNotReadyError,\n    ModelResultMismatchError,\n    ModelRuntime,\n    ModelRuntimeError,\n)\nfrom .registry import (
     MODEL_REGISTRY_VERSION,
     ModelAlreadyExistsError,
     ModelNotFoundError,
