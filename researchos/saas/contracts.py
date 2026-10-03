@@ -62,6 +62,7 @@ class TenantContext:
     workspace_id: UUID
     plan: Plan
     role: WorkspaceRole = WorkspaceRole.VIEWER
+    access_token: str | None = None
 
 
 @dataclass(frozen=True)

@@ -5,10 +5,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import hashlib
 import json
-import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -19,14 +16,25 @@ TENANT_TEST = ROOT / "supabase" / "tests" / "tenant_isolation_test.sql"
 REQUIRED_RLS_TABLES = (
     "workspace",
     "workspace_member",
+    "subscription",
     "dataset",
     "dataset_version",
     "research_run",
     "artifact",
     "evidence",
+    "usage_event",
+    "audit_log",
+    "billing_event",
+    "api_idempotency",
     "research_claim",
+    "research_validation",
+    "research_finding",
+    "research_run_result",
+    "research_run_artifact",
     "audit_event",
     "retention_deletion_operation",
+    "workspace_retention_policy",
+    "tenant_deletion_tombstone",
 )
 
 
@@ -139,6 +147,11 @@ def main() -> int:
                 coverage["status"] = "PASS"
     else:
         coverage = {"status": "FAIL", "source": ".health/coverage.json"}
+
+    checks["observability"] = run_check(
+        "observability",
+        [sys.executable, "-m", "pytest", "researchos/saas/tests/test_observability.py", "researchos/saas/tests/test_worker.py", "-q"],
+    )
 
     checks["authz_matrix"] = run_check(
         "authz_matrix", [sys.executable, "scripts/verify_authz_routes.py"]

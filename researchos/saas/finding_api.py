@@ -4,12 +4,11 @@ from __future__ import annotations
 from typing import Protocol
 from uuid import UUID, uuid4
 
-from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
 from researchos.saas.finding import ResearchFindingRecord, VALIDATED_STATUS
-from researchos.saas.pagination import PaginationParameterError, pagination_envelope, parse_list_query
-from researchos.saas.auth.authorization import require_permission
+from researchos.saas.pagination import PaginationParameterError, pagination_envelope, parse_list_query, validate_filter_keys
 from researchos.saas.auth.authorization import require_permission
 
 
@@ -75,7 +74,6 @@ def register_research_finding_routes(
 ) -> None:
     @app.post("/v1/research-runs/{job_id}/finding", status_code=status.HTTP_201_CREATED, tags=["research"])
     @require_permission("finding", "create")
-    @require_permission("finding", "create")
     def create_finding(
         job_id: UUID,
         request: ResearchFindingRequest,
@@ -119,27 +117,34 @@ def register_research_finding_routes(
         sort_by: str = "created_at",
         sort_order: str = "desc",
         status_filter: str | None = Query(default=None, alias="filter[status]"),
+        tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
         tenant=Depends(tenant_dependency),
     ) -> dict[str, object]:
-        if finding_store is None:
-            raise HTTPException(status_code=503, detail="research finding persistence is not configured")
         try:
+            validate_filter_keys(
+                {key.removeprefix("filter[").removesuffix("]"): value for key, value in request.query_params.items() if key.startswith("filter[")},
+                allowed=frozenset({"status", "tenant_id"}),
+            )
             query = parse_list_query(
                 page=page,
                 page_size=page_size,
                 sort_by=sort_by,
                 sort_order=sort_order,
                 status=status_filter,
+                tenant_id=tenant_filter,
                 allowed_sort_fields=frozenset({"created_at", "status"}),
             )
-            records, total = finding_store.list(
-                tenant.workspace_id,
+            if tenant_filter is not None and tenant_filter != str(tenant.workspace_id):
+                records, total = [], 0
+            else:
+                records, total = finding_store.list(
+                    tenant.workspace_id,
                 limit=query.page_size,
                 offset=query.offset,
                 sort_by=query.sort_by,
                 sort_order=query.sort_order,
-                status=query.status,
-            )
+                    status=query.status,
+                )
         except PaginationParameterError as exc:
             raise HTTPException(
                 status_code=400,
@@ -155,10 +160,10 @@ def register_research_finding_routes(
             page=query.page,
             page_size=query.page_size,
             total=total,
+            request_id=request.state.request_id,
         )
 
     @app.get("/v1/research-runs/{job_id}/finding", tags=["research"])
-    @require_permission("finding", "read")
     @require_permission("finding", "read")
     def get_finding(job_id: UUID, tenant=Depends(tenant_dependency)) -> dict[str, object]:
         if finding_store is None:
