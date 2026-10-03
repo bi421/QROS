@@ -74,7 +74,9 @@ def build_pre_trade_report(
 
     limitations = tuple(research_limitations)
     execution_allowed = (
-        risk_gate.execution_allowed if risk_gate is not None else False
+        risk_gate.execution_allowed and research_valid and risk_valid
+        if risk_gate is not None
+        else False
     )
     hard_failures = risk_gate.hard_failures if risk_gate is not None else ()
     warnings = risk_gate.warnings if risk_gate is not None else ()
