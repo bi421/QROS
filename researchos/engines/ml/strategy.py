@@ -3,7 +3,8 @@ ML-based strategy that integrates with BacktestEngine.
 """
 
 from dataclasses import dataclass
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import pandas as pd
 
@@ -26,6 +27,7 @@ class MLStrategy:
         self.threshold = threshold
 
     def generate_signals(self, prices: Sequence[float]) -> list[Signal]:
+
         if len(prices) < 50:
             return []
 

@@ -13,7 +13,7 @@ Architecture:
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import Any, Literal, cast
 
 import numpy as np
 
@@ -23,20 +23,20 @@ import numpy as np
 
 
 def sigmoid(x: np.ndarray) -> np.ndarray:
-    return 1.0 / (1.0 + np.exp(-np.clip(x, -500, 500)))
+    return cast(np.ndarray, 1.0 / (1.0 + np.exp(-np.clip(x, -500, 500))))
 
 
 def tanh(x: np.ndarray) -> np.ndarray:
-    return np.tanh(x)
+    return cast(np.ndarray, np.tanh(x))
 
 
 def relu(x: np.ndarray) -> np.ndarray:
-    return np.maximum(0, x)
+    return cast(np.ndarray, np.maximum(0, x))
 
 
 def softmax(x: np.ndarray, axis: int = -1) -> np.ndarray:
     e = np.exp(x - np.max(x, axis=axis, keepdims=True))
-    return e / np.sum(e, axis=axis, keepdims=True)
+    return cast(np.ndarray, e / np.sum(e, axis=axis, keepdims=True))
 
 
 def dropout(x: np.ndarray, rate: float, rng: np.random.Generator, training: bool = True) -> np.ndarray:
@@ -153,7 +153,7 @@ class GRUCell:
         r = sigmoid(x @ self.W_r + h_prev @ self.U_r + self.b_r)
         h_tilde = tanh(x @ self.W_h + (r * h_prev) @ self.U_h + self.b_h)
         h = (1 - z) * h_prev + z * h_tilde
-        return h
+        return cast(np.ndarray, h)
 
 
 class GRU:
@@ -204,7 +204,7 @@ class SelfAttention:
         attn = dropout(attn, 0.1, self.rng, True)
         context = attn @ V
         context = context.transpose(0, 2, 1, 3).reshape(batch_size, seq_len, self.d_model)
-        return context @ self.W_o
+        return cast(np.ndarray, context @ self.W_o)
 
 
 class FeedForward:
@@ -218,7 +218,7 @@ class FeedForward:
     def forward(self, x: np.ndarray, training: bool = True, dropout_rate: float = 0.0) -> np.ndarray:
         x = relu(x @ self.W1 + self.b1)
         x = dropout(x, dropout_rate, self.rng, training)
-        return x @ self.W2 + self.b2
+        return cast(np.ndarray, x @ self.W2 + self.b2)
 
 
 class TransformerBlock:
@@ -234,7 +234,7 @@ class TransformerBlock:
     def _layer_norm(self, x: np.ndarray, gain: np.ndarray, bias: np.ndarray) -> np.ndarray:
         mean = np.mean(x, axis=-1, keepdims=True)
         var = np.var(x, axis=-1, keepdims=True)
-        return gain * (x - mean) / np.sqrt(var + 1e-6) + bias
+        return cast(np.ndarray, gain * (x - mean) / np.sqrt(var + 1e-6) + bias)
 
     def forward(self, x: np.ndarray, training: bool = True, dropout_rate: float = 0.0) -> np.ndarray:
         attn_out = self.attn.forward(x)
@@ -296,7 +296,7 @@ class TCNBlock:
     def _layer_norm(self, x: np.ndarray, gain: np.ndarray, bias: np.ndarray) -> np.ndarray:
         mean = np.mean(x, axis=-1, keepdims=True)
         var = np.var(x, axis=-1, keepdims=True)
-        return gain * (x - mean) / np.sqrt(var + 1e-6) + bias
+        return np.asarray(gain * (x - mean) / np.sqrt(var + 1e-6) + bias)
 
     def forward(self, x: np.ndarray, training: bool = True, dropout_rate: float = 0.0) -> np.ndarray:
         res = x
@@ -308,7 +308,7 @@ class TCNBlock:
         x = self._layer_norm(x, self.ln2_gain, self.ln2_bias)
         if res.shape[-1] != x.shape[-1]:
             res = res @ xavier_init((res.shape[-1], x.shape[-1]), self.rng)
-        return x + res
+        return cast(np.ndarray, x + res)
 
 
 class TCN:
@@ -328,7 +328,7 @@ class TCN:
             x = block.forward(x, training, dropout_rate)
         mean = np.mean(x, axis=-1, keepdims=True)
         var = np.var(x, axis=-1, keepdims=True)
-        return self.final_gain * (x - mean) / np.sqrt(var + 1e-6) + self.final_bias
+        return cast(np.ndarray, self.final_gain * (x - mean) / np.sqrt(var + 1e-6) + self.final_bias)
 
 
 # ──────────────────────────────────────────────────────────────
@@ -342,7 +342,7 @@ class RegressionHead:
         self.b = np.zeros(output_dim, dtype=np.float32)
 
     def forward(self, x: np.ndarray) -> np.ndarray:
-        return x @ self.W + self.b
+        return cast(np.ndarray, x @ self.W + self.b)
 
 
 class ClassificationHead:
@@ -369,7 +369,7 @@ class SequenceModel:
         self.hidden_dim = hidden_dim
 
         if model_type == "lstm":
-            self.backbone = LSTM(input_dim, hidden_dim, self.rng)
+            self.backbone: Any = LSTM(input_dim, hidden_dim, self.rng)
         elif model_type == "gru":
             self.backbone = GRU(input_dim, hidden_dim, self.rng)
         elif model_type == "transformer":
@@ -391,13 +391,13 @@ class SequenceModel:
 
     def predict_with_uncertainty(self, x: np.ndarray, n_samples: int = 100) -> tuple[np.ndarray, np.ndarray]:
         """Monte Carlo dropout for uncertainty quantification."""
-        preds = []
+        preds: list[np.ndarray] = []
         for _ in range(n_samples):
             pred = self.forward(x, training=False, mc_dropout=True)
             preds.append(pred)
-        preds = np.stack(preds)
-        mean = np.mean(preds, axis=0)
-        std = np.std(preds, axis=0)
+        preds_array = np.stack(preds)
+        mean = np.mean(preds_array, axis=0)
+        std = np.std(preds_array, axis=0)
         return mean, std
 
 
@@ -479,7 +479,7 @@ class SimpleTrainer:
             eps = 1e-4
             for p in params:
                 grad = np.zeros_like(p)
-                it = np.nditer(p, flags=["multi_index"], op_flags=["readwrite"])
+                it = np.nditer(p, flags=["multi_index"], op_flags=cast(list[Literal["readwrite"]], ["readwrite"]))
                 while not it.finished:
                     ix = it.multi_index
                     old_val = p[ix]

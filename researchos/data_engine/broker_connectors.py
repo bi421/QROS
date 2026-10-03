@@ -45,7 +45,7 @@ class MT5Connector:
         "1d": mt5.TIMEFRAME_D1 if MT5_AVAILABLE else None,
     }
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.initialized = False
         if MT5_AVAILABLE:
             try:

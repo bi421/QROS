@@ -10,7 +10,7 @@ Implements:
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, cast
 
 import numpy as np
 
@@ -111,7 +111,7 @@ def integrated_gradients(
         attributions += grad
 
     attributions = attributions * (X - baseline) / n_steps
-    return attributions
+    return cast(np.ndarray, attributions)
 
 
 def monte_carlo_dropout(
@@ -134,11 +134,11 @@ def monte_carlo_dropout(
     if rng is None:
         rng = np.random.default_rng(42)
 
-    preds: list[np.ndarray] = []
+    samples: list[np.ndarray] = []
     for _ in range(n_samples):
         pred = model.forward(X, training=False, mc_dropout=True)
-        preds.append(pred)
-    preds = np.stack(preds, axis=0)
+        samples.append(pred)
+    preds = np.stack(samples, axis=0)
 
     mean = np.mean(preds, axis=0)
     std = np.std(preds, axis=0)

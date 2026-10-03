@@ -185,7 +185,7 @@ class ResearchEvaluator:
         pipeline_id: str,
         *,
         created_at: str = "",
-        metadata: Mapping[str, Any] = None,
+        metadata: Mapping[str, Any] | None = None,
     ) -> EvaluationReport:
         """Evaluate a single pipeline by its id.
 
@@ -240,7 +240,7 @@ class ResearchEvaluator:
         self,
         *,
         created_at: str = "",
-        metadata: Mapping[str, Any] = None,
+        metadata: Mapping[str, Any] | None = None,
     ) -> tuple[EvaluationReport, ...]:
         """Evaluate all pipelines in the repository.
 
