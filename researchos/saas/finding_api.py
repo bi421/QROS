@@ -48,6 +48,7 @@ def register_research_finding_routes(
     validation_store: ResearchValidationStore,
 ) -> None:
     @app.post("/v1/research-runs/{job_id}/finding", status_code=status.HTTP_201_CREATED, tags=["research"])
+    @require_permission("finding", "create")
     def create_finding(
         job_id: UUID,
         request: ResearchFindingRequest,

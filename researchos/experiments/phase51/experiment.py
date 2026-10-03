@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from researchos.quant_engine.machine_learning.dataset_builder import DatasetBuilder
 from researchos.quant_engine.machine_learning.labels import multiclass_label
@@ -45,7 +46,10 @@ class Phase51Config:
     estimator_feature: int | None = None
 
 
-def _build_dataset(close, high, low, volume, horizon: int, threshold: float):
+def _build_dataset(
+    close: Sequence[float], high: Sequence[float], low: Sequence[float], volume: Sequence[float],
+    horizon: int, threshold: float,
+):
     """Build an aligned ResearchDataset with multiclass labels."""
     labels = multiclass_label(close, horizon, threshold)
     builder = DatasetBuilder(close, high, low, volume)
@@ -62,7 +66,11 @@ def _feature_index(config: Phase51Config, dataset_feature_names: Sequence[str]) 
     return 0
 
 
-def _evaluate_model(est: EmpiricalProbabilityEstimator, val_features, val_labels: Sequence[float]) -> tuple[ModelResult, list[int], list[dict[int, float]]]:
+def _evaluate_model(
+    est: EmpiricalProbabilityEstimator,
+    val_features: Sequence[Sequence[float]],
+    val_labels: Sequence[float],
+) -> tuple[ModelResult, list[int], list[dict[int, float]]]:
     preds: list[int] = []
     probs: list[dict[int, float]] = []
     for row in val_features:
@@ -85,7 +93,10 @@ def _evaluate_model(est: EmpiricalProbabilityEstimator, val_features, val_labels
     return ModelResult(accuracy=acc, precision_up=_prec(1), precision_down=_prec(-1), recall_up=_rec(1), recall_down=_rec(-1), brier_score=brier, sample_count=len(val_labels)), preds, probs
 
 
-def run_phase51(close, high, low, volume, config: Phase51Config | None = None) -> Phase51Result:
+def run_phase51(
+    close: Sequence[float], high: Sequence[float], low: Sequence[float], volume: Sequence[float],
+    config: Phase51Config | None = None,
+) -> Phase51Result:
     """Run the Phase 5.1 scientific primitive on aligned OHLCV series."""
     cfg = config or Phase51Config()
     if len(close) < cfg.train_size + cfg.validation_size:
@@ -137,7 +148,7 @@ def run_phase51_research(research_input: ResearchInput, resolver: ResearchDataRe
     """Production Phase 5.1 entrypoint bound to ``ResearchInput`` provenance."""
     cfg = config or Phase51Config()
 
-    def _execute(series, operation_config):
+    def _execute(series: Any, operation_config: Phase51Config) -> Phase51Result:
         return run_phase51(series.close, series.high, series.low, series.volume, operation_config)
 
     return ResearchExecutor(resolver).execute(research_input, _execute, cfg)

@@ -63,6 +63,10 @@ class ValidatedDatasetRef:
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> ValidatedDatasetRef:
+        raw_errors = data.get("validation_errors", ())
+        raw_warnings = data.get("validation_warnings", ())
+        if not isinstance(raw_errors, (list, tuple)) or not isinstance(raw_warnings, (list, tuple)):
+            raise TypeError("validation_errors and validation_warnings must be sequences")
         return cls(
             schema_version=str(data["schema_version"]),
             dataset_id=str(data["dataset_id"]),

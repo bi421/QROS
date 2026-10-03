@@ -130,7 +130,7 @@ def _build_common_observation_sample(close, high, low, volume, timestamps, macro
     )
 
 
-def _print_result(result):
+def _print_result(result: Any) -> None:
     print(f"{result.metadata.get('feature_set', '(legacy)'):18} | {result.outcome:10} | folds={result.num_folds:3d} | accuracy={result.model.accuracy:.4f} | brier={result.model.brier_score:.4f} | hash={result.reproducibility_hash}")
 
 

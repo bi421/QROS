@@ -24,7 +24,7 @@ class ResearchExecutor(Protocol):
 
 
 class ResearchWorker:
-    """Fenced coordinator: only the worker holding the lease token may finalize a run."""
+    """Fenced coordinator with request/tenant/job correlation across execution."""
 
     def __init__(
         self,
@@ -32,27 +32,43 @@ class ResearchWorker:
         executor: ResearchExecutor,
         *,
         lease_seconds: int = 900,
+        observability: StructuredRequestObserver | None = None,
     ) -> None:
         if lease_seconds < 1:
             raise ValueError("lease_seconds must be positive")
+        configure_tracing()
         self._store = store
         self._executor = executor
         self._lease_seconds = lease_seconds
+        self._observability = observability or StructuredRequestObserver()
 
-    def _heartbeat(self, workspace_id, job_id, token, stop):
+    def _heartbeat(self, workspace_id: UUID, job_id: UUID, token: UUID, stop: Event) -> None:
         interval = max(1.0, self._lease_seconds / 3)
         while not stop.wait(interval):
             try:
-                self._store.renew(
-                    workspace_id, job_id, token, self._lease_seconds
-                )
+                self._store.renew(workspace_id, job_id, token, self._lease_seconds)
             except Exception:
                 return
+
+    def run_queued_message(self, message: Mapping[str, object]) -> ResearchResult:
+        """Consume a durable queue payload while preserving its correlation ID."""
+        try:
+            workspace_id = UUID(str(message["workspace_id"]))
+            job_id = UUID(str(message["research_run_id"]))
+        except (KeyError, ValueError) as exc:
+            raise ValueError("invalid research queue message") from exc
+        request_id_value = message.get("request_id")
+        request_id = str(request_id_value) if request_id_value is not None else None
+        if request_id is not None and len(request_id) > 128:
+            raise ValueError("request_id exceeds 128 characters")
+        return self.run_once(workspace_id, job_id, request_id=request_id)
 
     def run_once(
         self,
         workspace_id: UUID,
         job_id: UUID,
+        *,
+        request_id: str | None = None,
     ) -> ResearchResult:
         lease = self._store.claim(
             workspace_id,
