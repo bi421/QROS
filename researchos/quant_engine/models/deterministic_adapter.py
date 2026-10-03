@@ -7,6 +7,7 @@ or trading decisions.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from ..machine_learning.dataset_contracts import ResearchDataset
