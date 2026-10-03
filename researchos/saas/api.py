@@ -22,7 +22,7 @@ from fastapi import (
 )
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
-from starlette.responses import HTMLResponse, JSONResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from researchos.saas.api_middleware import RequestContextMiddleware
 from researchos.saas.onboarding import ONBOARDING_HTML, ONBOARDING_JS
 from researchos.saas.observability import (
@@ -33,6 +33,7 @@ from researchos.saas.observability import (
     jobs_failed_total,
     observe_error,
     tenant_id_var,
+    configure_tracing,
 )
 from researchos.saas.auth.permissions import Action, Resource, require_permission
 
@@ -42,6 +43,7 @@ from researchos.saas.contracts import (
     ResearchJob,
     ResearchJobStatus,
     TenantContext,
+    WorkspaceRole,
 )
 from researchos.saas.claim_api import ResearchClaimStore, register_research_claim_routes
 from researchos.saas.evidence_api import ResearchEvidenceStore, register_research_evidence_routes
@@ -75,6 +77,12 @@ from researchos.saas.idempotency import (
     MAX_IDEMPOTENCY_KEY_LENGTH,
 )
 from researchos.saas.rate_limit import FixedWindowRateLimiter, RateLimiter
+from researchos.saas.persistence import (
+    DEFAULT_RETENTION_DAYS,
+    InMemoryTenantPersistence,
+    RetentionConfig,
+    TenantPersistenceError,
+)
 from researchos.saas.pagination import paginate, validate_filter_tenant_id
 from researchos.saas.research_report import build_research_report
 from researchos.saas.workspace import (
@@ -140,11 +148,6 @@ def _error_payload(
         "request_id": getattr(request.state, "request_id", None),
         "error": error,
     }
-    if isinstance(detail, dict) and "details" in detail:
-        payload["details"] = detail["details"]
-    elif isinstance(detail, list):
-        payload["details"] = detail
-    return payload
 
 
 def _safe_validation_details(exc: RequestValidationError) -> list[dict[str, object]]:
@@ -215,6 +218,27 @@ class WorkspaceProvisioningResponse(BaseModel):
     plan: str
 
 
+class PaginationResponse(BaseModel):
+    page: int
+    page_size: int
+    total: int
+    total_pages: int
+
+
+class PageResponse(BaseModel):
+    data: list[object]
+    pagination: PaginationResponse
+    request_id: str
+
+
+class DeletionReceiptResponse(BaseModel):
+    workspace_id: UUID
+    deleted_at: str
+    scheduled_purge_date: str
+    retention_days: int
+    receipt_id: UUID
+
+
 class DatasetResponse(BaseModel):
     id: UUID
     workspace_id: UUID
@@ -273,7 +297,10 @@ def create_app(
     queue = job_queue or InMemoryResearchJobQueue()
     limiter = rate_limiter or FixedWindowRateLimiter(limit=120, window_seconds=60)
     billing = billing_store
+    entitlements: EntitlementStore = InMemoryEntitlementStore()
     workspaces = workspace_provisioner
+    persistence = InMemoryTenantPersistence()
+    retention = RetentionConfig(DEFAULT_RETENTION_DAYS)
     app = FastAPI(
         title="QROS SaaS API",
         version="1.0.0",
@@ -348,10 +375,17 @@ def create_app(
         actor_user_id_var.set(str(tenant.user_id))
         return tenant
 
+    def require_role(tenant: TenantContext, *allowed: WorkspaceRole) -> None:
+        if tenant.role not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="workspace role is not authorized",
+            )
+
     def require_rate_limit(tenant: TenantContext) -> None:
         principal = hashlib.sha256(f"workspace:{tenant.workspace_id}".encode()).hexdigest()
         try:
-            allowed = selected.allow(principal)
+            allowed = limiter.allow(principal)
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -483,7 +517,8 @@ def create_app(
     ) -> dict[str, str]:
         if billing is None or not billing_webhook_secret:
             raise HTTPException(status_code=503, detail="billing webhook is not configured")
-        if not x_billing_signature or not x_billing_provider:
+        signature = stripe_signature or x_billing_signature
+        if not signature or not x_billing_provider:
             raise HTTPException(
                 status_code=400, detail="billing signature and provider are required"
             )
@@ -688,7 +723,7 @@ def create_app(
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         persisted_dataset = None
         try:
-            _, size = stream_sha256(file.file, policy.max_dataset_bytes)
+            digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
             storage_path = storage_path_for(tenant.workspace_id, digest, 1)
@@ -802,7 +837,7 @@ def create_app(
             }
         )
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
-        if not policy.allows_monthly_runs(monthly_jobs):
+        if not policy.allows_monthly_runs(store.count_monthly(tenant.workspace_id)):
             raise HTTPException(
                 status_code=402,
                 detail={
