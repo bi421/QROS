@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Callable, Sequence
+from typing import Callable, Protocol, Sequence, TypeVar
+
+
+class _TimestampedEvent(Protocol):
+    @property
+    def timestamp(self) -> datetime: ...
+
+
+EventT = TypeVar("EventT", bound=_TimestampedEvent)
 
 
 @dataclass(frozen=True)
@@ -23,8 +31,8 @@ class LabelOverlapAudit:
 
 
 def audit_label_overlap(
-    events: Sequence[object],
-    label_end_getter: Callable[[object], datetime | None],
+    events: Sequence[EventT],
+    label_end_getter: Callable[[EventT], datetime | None],
 ) -> LabelOverlapAudit:
     """Measure dependence caused by overlapping realized outcome windows.
 

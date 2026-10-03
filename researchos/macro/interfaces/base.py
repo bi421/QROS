@@ -3,7 +3,7 @@ ResearchOS Macro Intelligence Layer - Base Interface
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, TypeVar
+from typing import Any, Callable, TypeVar
 
 T = TypeVar("T")
 
@@ -51,7 +51,7 @@ class EventInterface(BaseInterface):
     """Base event interface."""
 
     @abstractmethod
-    def subscribe(self, event_type: str, handler: callable) -> str:
+    def subscribe(self, event_type: str, handler: Callable[..., Any]) -> str:
         """Subscribe to events."""
         pass
 

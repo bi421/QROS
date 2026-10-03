@@ -20,13 +20,13 @@ class InstrumentMetadataRegistry:
     _instance = None
     _metadata: dict[str, InstrumentMetadata] = {}
 
-    def __new__(cls):
+    def __new__(cls) -> "InstrumentMetadataRegistry":
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialize()
         return cls._instance
 
-    def _initialize(self):
+    def _initialize(self) -> None:
         # Pre-populate with common symbols
         self._metadata = {
             "XAUUSD": InstrumentMetadata(

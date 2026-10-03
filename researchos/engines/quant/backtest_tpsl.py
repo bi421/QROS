@@ -10,16 +10,16 @@ def vectorized_backtest_with_tpsl(
     stop_loss_pct: float = 0.02,
     take_profit_pct: float = 0.04,
     trailing_stop: bool = True,
-) -> dict:
+) -> dict[str, object]:
     capital = initial_capital
     position = 0.0
     entry_price = 0.0
-    trades = []
-    equity_curve = [capital]
+    trades: list[tuple[str, float, float, float]] = []
+    equity_curve: list[float] = [capital]
 
-    sl_price = None
-    tp_price = None
-    trailing_high = None
+    sl_price: float | None = None
+    tp_price: float | None = None
+    trailing_high: float | None = None
 
     for action, price in signals:
         if action == "BUY" and position == 0:
@@ -44,7 +44,7 @@ def vectorized_backtest_with_tpsl(
             sl_price = tp_price = trailing_high = None
 
         if position > 0:
-            if trailing_stop and price > trailing_high:
+            if trailing_stop and trailing_high is not None and price > trailing_high:
                 trailing_high = price
                 sl_price = trailing_high * (1 - stop_loss_pct)
 
@@ -77,8 +77,8 @@ def vectorized_backtest_with_tpsl(
         trades.append(("CLOSE", closing_price, position, pnl))
         equity_curve.append(capital)
 
-    equity = np.array(equity_curve)
-    returns = np.diff(equity) / equity[:-1]
+    equity_array = np.array(equity_curve)
+    returns = np.diff(equity_array) / equity_array[:-1]
     total_return = (capital - initial_capital) / initial_capital
 
     if len(returns) > 1:
@@ -86,7 +86,7 @@ def vectorized_backtest_with_tpsl(
     else:
         sharpe = 0.0
 
-    peak = np.maximum.accumulate(equity)
+    peak = np.maximum.accumulate(equity_array)
     drawdown = (peak - equity) / peak
     max_drawdown = -np.max(drawdown) if len(drawdown) > 0 else 0.0
 
