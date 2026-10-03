@@ -19,7 +19,7 @@ import json
 import os
 import sqlite3
 from datetime import datetime, timezone
-from typing import TypeVar
+from typing import Protocol
 
 from researchos.memory.models import (
     HistoricalScenario,
@@ -29,7 +29,10 @@ from researchos.memory.models import (
 )
 from researchos.repository.memory import MemoryRepository
 
-T = TypeVar("T")
+class _PersistableMarketObject(Protocol):
+    id: str
+    def to_dict(self) -> dict[str, object]: ...
+
 
 
 class MarketMemoryRepository:
@@ -63,8 +66,11 @@ class MarketMemoryRepository:
 
     def _init_sqlite(self) -> None:
         """Initialize SQLite database and create tables if needed."""
-        os.makedirs(os.path.dirname(self._sqlite_path) or ".", exist_ok=True)
-        self._sqlite_conn = sqlite3.connect(self._sqlite_path)
+        sqlite_path = self._sqlite_path
+        if sqlite_path is None:
+            raise RuntimeError("SQLite path is not configured")
+        os.makedirs(os.path.dirname(sqlite_path) or ".", exist_ok=True)
+        self._sqlite_conn = sqlite3.connect(sqlite_path)
         self._sqlite_conn.execute("""
             CREATE TABLE IF NOT EXISTS market_memory_objects (
                 id TEXT PRIMARY KEY,
@@ -84,12 +90,12 @@ class MarketMemoryRepository:
         """)
         self._sqlite_conn.commit()
 
-    def _save_to_sqlite(self, obj: object, object_type: str) -> None:
+    def _save_to_sqlite(self, obj: _PersistableMarketObject, object_type: str) -> None:
         """Save an object to SQLite."""
         if not self._sqlite_conn:
             return
         data = json.dumps(obj.to_dict(), sort_keys=True, default=str)
-        dataset_source = getattr(obj, "dataset_source", "")
+        dataset_source = str(getattr(obj, "dataset_source", ""))
         self._sqlite_conn.execute(
             "INSERT OR REPLACE INTO market_memory_objects (id, object_type, data, dataset_source, saved_at) VALUES (?, ?, ?, ?, ?)",
             (obj.id, object_type, data, dataset_source, datetime.now(timezone.utc).isoformat()),
@@ -114,19 +120,19 @@ class MarketMemoryRepository:
         if not self._sqlite_conn:
             return
         for data in self._load_from_sqlite("MarketSnapshot"):
-            obj = MarketSnapshot.from_dict(data)
-            self.snapshots.save(obj)
+            snapshot = MarketSnapshot.from_dict(data)
+            self.snapshots.save(snapshot)
         for data in self._load_from_sqlite("MarketRegime"):
-            obj = MarketRegime.from_dict(data)
-            self.regimes.save(obj)
+            regime = MarketRegime.from_dict(data)
+            self.regimes.save(regime)
         for data in self._load_from_sqlite("MacroState"):
-            obj = MacroContextSnapshot.from_dict(data)
-            self.macro_states.save(obj)
+            macro_state = MacroContextSnapshot.from_dict(data)
+            self.macro_states.save(macro_state)
         for data in self._load_from_sqlite("HistoricalScenario"):
-            obj = HistoricalScenario.from_dict(data)
-            self.scenarios.save(obj)
-            if obj.dataset_source:
-                self.dataset_sources.add(obj.dataset_source)
+            scenario = HistoricalScenario.from_dict(data)
+            self.scenarios.save(scenario)
+            if scenario.dataset_source:
+                self.dataset_sources.add(scenario.dataset_source)
 
     def close(self) -> None:
         """Close SQLite connection if open."""

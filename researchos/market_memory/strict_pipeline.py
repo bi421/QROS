@@ -11,7 +11,7 @@ import hashlib
 from typing import Any
 
 from researchos.data_engine.candle import Candle
-from researchos.data_engine.dataset import HistoricalDataset
+from researchos.data_engine.dataset import DataRecord, HistoricalDataset
 from researchos.market_memory.evidence import create_evidence_record
 from researchos.market_memory.event_schema import EvidenceRecord, MarketMemoryReport
 from researchos.market_memory.pipeline_v1 import run_market_memory_pipeline
@@ -37,7 +37,7 @@ def _build_dataset_identity(
     timeframe: str,
 ) -> DatasetIdentity:
     """Build canonical record/content and metadata hashes from validated D1 data."""
-    candles: list[Candle] = []
+    candles: list[DataRecord] = []
     for row in df.iter_rows(named=True):
         candles.append(
             Candle(

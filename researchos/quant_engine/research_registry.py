@@ -29,7 +29,7 @@ from researchos.quant_engine.backend import PythonQuantBackend
 from researchos.quant_engine.interface import QuantComputationInterface
 from researchos.quant_engine.research_cpp_backend import ResearchCppBackend
 from researchos.quant_engine.research_engine import PythonResearchBackend, ResearchEngine
-from researchos.quant_engine.research_interface import RESEARCH_OPERATIONS
+from researchos.quant_engine.research_interface import RESEARCH_OPERATIONS, ResearchComputationInterface
 from researchos.quant_engine.router import BackendRouter
 
 
@@ -65,7 +65,7 @@ def create_research_router(
 
 
 def create_research_engine(
-    backend: QuantComputationInterface | None = None,
+    backend: ResearchComputationInterface | None = None,
     use_cpp: bool = False,
 ) -> ResearchEngine:
     """Create a ``ResearchEngine`` over a research backend.
