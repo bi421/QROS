@@ -1,100 +1,72 @@
-# QROS Disaster Recovery Runbook
+# QROS SaaS Disaster Recovery
 
-## Recovery objectives
+## Verification state
 
-| Objective | Target | Verification |
-|---|---:|---|
-| RPO | **< 24 hours** (operational target: 12 hours) | Backup cadence/PITR monitoring plus `scripts/backup_verify.py` |
-| RTO | **< 4 hours** | Quarterly restore drill measured from incident declaration to service readiness |
-| Backup integrity | 100% of scheduled verification runs | `backup_verify.py` must exit 0 |
-| Tenant isolation | Required before recovery is accepted | Restored database must pass `supabase/tests/tenant_isolation_test.sql` |
-| Dataset object integrity | 100% hash match for restored objects | SHA-256 comparison in `backup_verify.py` |
+| Surface | Repository implementation | Executable prerequisites | Verified |
+|---|---|---|---|
+| PostgreSQL logical backup | `scripts/backup_verify.py` + production backup workflow | DB URL + PostgreSQL clients | **Not executed** |
+| PostgreSQL restore | Disposable matching-major PostgreSQL container | Docker + source DB + clients | **Not executed** |
+| Migration/security verification | `scripts/verify_migrations.py` + migration history | Restored DB + `psql` | **Not executed against a restored DB** |
+| Tenant isolation | pgTAP + real Supabase integration tests | Real Supabase target + credentials | **Not executed as a recovery drill** |
+| Dataset integrity | `dataset_version.content_sha256` source/restore comparison | Source + restored DB | **Not executed** |
+| Storage recovery | `storage-recovery-drill.yml` + `storage_recovery_verify.py` | Staging Supabase + independent S3 | **Not executed** |
+| Queue/job recovery | Durable leases, heartbeat, bounded retry, idempotency | Real worker-loss drill | **Not executed** |
+| Application recovery | Health/readiness and governed API gates | Recovered environment | **Not executed** |
+| RPO/RTO | Measurement procedure is documented | Real recovery drill | **Not verified** |
 
-The RPO/RTO values are QROS operational targets, not a guarantee of the underlying managed platform. Supabase daily backups can leave up to a day's worth of changes at risk; PITR provides finer-grained recovery points and should be enabled when the 12-hour target cannot be met by the selected backup schedule.
+## Boundary
 
-## What is backed up
+Documentation is not execution. CI is not production recovery.
 
-QROS has two independent recovery domains:
+A successful `pg_dump` proves only that a logical backup was produced. A successful `pg_restore` proves only that the dump can be loaded into the selected PostgreSQL target. The recovery gate additionally requires schema/security checks, immutable dataset identity checks, governed-record integrity checks, and an environment-backed application/security drill.
 
-1. **PostgreSQL** — tenant/workspace metadata, datasets, dataset versions, research jobs/runs, evidence and lineage metadata, claims/findings/validation records, retention/deletion audit state, and supported Supabase metadata.
-2. **Object storage** — dataset files and other content addressed by `storage_path`.
+Supabase database backups do not include objects stored through the Storage API, so Storage recovery is a separate recovery surface. citeturn0search0turn0search3
 
-The database backup does not contain Supabase Storage object bytes; object storage must therefore be replicated/backed up independently.
+## Database recovery procedure
 
-## Backup verification procedure
+### Prerequisites
 
-Run:
+- `QROS_BACKUP_DATABASE_URL` or `--database-url`
+- `pg_dump`, `pg_restore`, and `psql`
+- Docker with access to the source PostgreSQL major image
+- network access from the runner to the source database
+- sufficient disk for the dump and disposable restore
 
-    python scripts/backup_verify.py \
-      --source-url "$SOURCE_DATABASE_URL" \
-      --target-admin-url "$TARGET_ADMIN_DATABASE_URL" \
-      --object-root-before /path/to/source-object-mirror \
-      --object-root-after /path/to/restored-object-mirror
+### Deterministic verifier
 
-The verifier:
+```bash
+python scripts/backup_verify.py --database-url "$QROS_BACKUP_DATABASE_URL"
+```
 
-1. creates a custom-format `pg_dump`;
-2. creates a fresh PostgreSQL database;
-3. applies every repository migration with `supabase migration up --include-all`;
-4. runs `scripts/verify_migrations.py` against the restored target schema;
-5. restores source public data with `pg_restore --data-only`;
-6. compares every `dataset_version.content_sha256` before/after restore;
-7. executes the tenant-isolation pgTAP suite against the restored database;
-8. computes SHA-256 for every supplied object-storage file and requires exact before/after equality;
-9. removes the temporary restore database unless `--keep-target` is supplied.
+The verifier fails closed when prerequisites are missing and emits `backup/qros_restore_report.json`. It verifies:
 
-`pg_restore` is designed to restore PostgreSQL archives created by `pg_dump`, including custom-format archives.
+1. non-empty custom-format `pg_dump`;
+2. source immutable dataset-version IDs, version numbers, and SHA-256 identities;
+3. restore into a fresh PostgreSQL container using the source PostgreSQL major version;
+4. required QROS tables;
+5. RLS enabled on required tenant/governed tables;
+6. critical governed-record counts;
+7. restored dataset-version identities;
+8. repository migration/security invariants against the restored database.
 
-## Required pass conditions
+`--skip-restore` is explicitly **BACKUP_ONLY** and never reports restore verification.
 
-- `pg_dump` succeeds.
-- A new database can be created.
-- `pg_restore` completes without error.
-- migration integrity verification passes.
-- all tenant-isolation tests pass on the restored database.
-- every replicated dataset object has the same SHA-256 hash before and after restore.
-- no expected object is missing and no unexpected object appears in the verified object set.
+### Not proven by this script
 
-## Restore procedure
+Supabase Auth/Data API behavior, Storage objects, worker-loss recovery, and RPO/RTO still require their environment-backed drills.
 
-### 1. Declare incident
+## Full recovery drill
 
-Record incident start time, desired recovery point, last known good backup/PITR point, affected services, and database/object-storage replication status.
+1. Freeze writes and record the incident/change identifier.
+2. Record source release commit, migration version, and recovery point.
+3. Restore the database into an isolated recovery target.
+4. Run the database verifier.
+5. Run real tenant-isolation/security tests against the recovery target.
+6. Restore independent Storage objects and verify byte-for-byte SHA-256 identity.
+7. Verify durable job leases, idempotency, retry state, and provenance after simulated worker loss.
+8. Deploy the exact release commit and run health/readiness and governed Golden Path checks.
+9. Record restore completion time and calculate observed RTO.
+10. Compare the recoverable timestamp with the simulated failure timestamp and calculate observed RPO.
+11. Preserve the evidence package and operator sign-off before traffic is re-enabled.
 
-### 2. Recover PostgreSQL
-
-Restore the selected backup/PITR point into a new database/project where practical. Do not overwrite production until verification succeeds.
-
-Supabase supports restoring backups and PITR recovery points; actual restoration duration depends on database size and WAL activity, so the <4h RTO must be measured in QROS restore drills rather than assumed.
-
-### 3. Recover object storage
-
-Restore the independently replicated object set. For every dataset version/object, locate `storage_path`, calculate SHA-256 over the restored bytes, compare with the source/recorded `content_sha256`, and reject recovery if any hash differs.
-
-Supabase documents that restoring a database backup does not restore Storage object bytes; those files must be restored separately.
-
-### 4. Verify security and lineage
-
-Run `python scripts/check_migrations.py` and `python scripts/backup_verify.py ...`.
-
-Then verify tenant isolation, deleted/tombstoned evidence non-resurrection, historical evidence hashes, and application health/readiness.
-
-### 5. Cut over
-
-Only after all verification gates pass: switch application/database configuration, verify health/readiness, run a read-only tenant smoke test, monitor errors/database activity, and record recovery completion time.
-
-## Backup schedule and monitoring
-
-To maintain RPO <24h, production must have a successful backup point at least once per 24-hour interval, with operational margin. The recommended target is 12 hours or better.
-
-If the required recovery point cannot be guaranteed by scheduled backups, enable PITR. Supabase documents PITR as providing much finer recovery granularity than daily backups.
-
-A failed backup verification is a production reliability incident. The next scheduled run is not considered sufficient until the failed path is diagnosed and a successful restore verification completes.
-
-## Restore-drill cadence
-
-Run a full restore drill before production launch, after major schema/retention changes, at least quarterly thereafter, and after any backup-platform or object-storage migration.
-
-Record backup identifier, database size, dump/restore durations, migration and tenant-test durations, object count, hash mismatches, total RTO, achieved RPO, and final PASS/FAIL.
-
-The measured drill result is the authoritative evidence for whether QROS currently meets the stated RPO/RTO targets.
+Do not assign an RPO/RTO target from documentation before a drill measures it.

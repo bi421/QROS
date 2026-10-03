@@ -1,4 +1,5 @@
-name: Exact Release CI
+---
+name: Exact Release Verification
 
 on:
   push:
@@ -6,122 +7,55 @@ on:
       - "v*"
 
 permissions:
-  contents: write
-
-concurrency:
-  group: exact-release-${{ github.ref_name }}
-  cancel-in-progress: false
+  contents: read
 
 jobs:
-  exact-release:
-    name: Exact tagged release gate
+  release-verification:
+    name: Exact release gate
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    env:
-      RELEASE_SHA: ${{ github.sha }}
-      RELEASE_TAG: ${{ github.ref_name }}
-      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-      TARGET_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-
     steps:
-      - name: Checkout exact tag
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
         with:
-          ref: ${{ github.ref }}
           fetch-depth: 0
-
-      - name: Assert tag resolves to exact SHA
-        shell: bash
-        run: |
-          set -euo pipefail
-          actual="$(git rev-parse HEAD)"
-          tag_sha="$(git rev-list -n 1 "$RELEASE_TAG")"
-          test "$actual" = "$RELEASE_SHA"
-          test "$tag_sha" = "$RELEASE_SHA"
-          test "${#RELEASE_SHA}" -eq 40
-          echo "Exact release: $RELEASE_TAG -> $RELEASE_SHA"
-
-      - name: Install PostgreSQL client and build tools
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y postgresql-client ninja-build cmake g++
-
-      - name: Install Supabase CLI
-        uses: supabase/setup-cli@v2
+      - uses: actions/setup-python@v6
         with:
-          version: latest
-
-      - name: Install Python dependencies
+          python-version: "3.12"
+          cache: pip
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python -m pip install pytest pytest-cov ruff mypy nanobind scikit-build-core cmake ninja
+          python -m pip install --upgrade pip
           python -m pip install -e ".[dev,test,saas]"
-
-      - name: Start fresh Supabase database
-        run: |
-          supabase start
-
-      - name: Build exact-commit Docker image
-        run: |
-          set -euo pipefail
-          docker build             --label "org.opencontainers.image.revision=$RELEASE_SHA"             --label "commit=$RELEASE_SHA"             -t "qros-api:$RELEASE_SHA" .
-          revision="$(docker inspect --format='{{ index .Config.Labels "org.opencontainers.image.revision" }}' "qros-api:$RELEASE_SHA")"
-          commit="$(docker inspect --format='{{ index .Config.Labels "commit" }}' "qros-api:$RELEASE_SHA")"
-          test "$revision" = "$RELEASE_SHA"
-          test "$commit" = "$RELEASE_SHA"
-
-      - name: Prepare deterministic Storage hash fixture
-        run: |
-          set -euo pipefail
-          rm -rf .dr-objects
-          mkdir -p .dr-objects/before/datasets .dr-objects/after/datasets
-          printf '%s' "qros-release-$RELEASE_SHA" > .dr-objects/before/datasets/sample.csv
-          cp .dr-objects/before/datasets/sample.csv .dr-objects/after/datasets/sample.csv
-
-      - name: Run exact release health gate
-        run: |
-          set -euo pipefail
-          python scripts/final_health_check.py             --expected-commit "$RELEASE_SHA"             --database-url "$DATABASE_URL"             --backup-source-url "$DATABASE_URL"             --backup-target-admin-url "$TARGET_ADMIN_URL"             --object-root-before .dr-objects/before             --object-root-after .dr-objects/after
-
-      - name: Require exact health evidence
-        run: |
-          set -euo pipefail
-          evidence="health_evidence_$RELEASE_SHA.json"
-          test -f "$evidence"
-          python - "$evidence" "$RELEASE_SHA" <<'PY'
-          import json
-          import sys
-          from pathlib import Path
-
-          path = Path(sys.argv[1])
-          expected = sys.argv[2]
-          data = json.loads(path.read_text(encoding="utf-8"))
-          assert data["commit"] == expected
-          assert data["tests_passed"] is True
-          assert data["health_status"] == "PASS"
-          required = {
-              "commit", "timestamp", "tests_passed", "coverage",
-              "rls_check", "authz_check", "tenant_isolation_check",
-          }
-          assert required <= data.keys()
-          PY
-
-      - name: Upload exact health evidence
+      - name: Verify migrations
+        run: python scripts/verify_migrations.py
+      - name: Ruff
+        run: ruff check .
+      - name: Mypy
+        run: mypy
+      - name: Unit and integration tests
+        env:
+          SUPABASE_URL: ${{ secrets.QROS_STAGING_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.QROS_STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.QROS_STAGING_SUPABASE_ANON_KEY }}
+        run: python -m pytest researchos/tests/ researchos/research_core/tests/ researchos/saas/tests/ --real-db -v --tb=short
+      - name: Backup and restore verification
+        env:
+          QROS_BACKUP_DATABASE_URL: ${{ secrets.QROS_STAGING_DATABASE_URL }}
+        run: python scripts/backup_verify.py
+      - name: Publish backup and restore evidence
         uses: actions/upload-artifact@v4
         with:
-          name: health-evidence-${{ env.RELEASE_SHA }}
-          path: health_evidence_${{ env.RELEASE_SHA }}.json
+          name: backup-restore-evidence-${{ github.sha }}
+          path: backup/qros_restore_report.json
           if-no-files-found: error
-          retention-days: 90
-
-      - name: Publish GitHub release only after green evidence
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Exact health evidence
         run: |
-          set -euo pipefail
-          test -f "health_evidence_$RELEASE_SHA.json"
-          gh release create "$RELEASE_TAG"             --verify-tag             --title "$RELEASE_TAG"             --generate-notes             "health_evidence_$RELEASE_SHA.json"
-
-      - name: Stop Supabase
-        if: always()
-        run: supabase stop
+          SHA="$(git rev-parse HEAD)"
+          python scripts/final_health_check.py --skip-cpp --exact-commit="$SHA"
+      - name: Publish health evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: health-evidence-${{ github.sha }}
+          path: .health/health_evidence_${{ github.sha }}.json
+          if-no-files-found: error

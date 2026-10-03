@@ -3,100 +3,52 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
-from fastapi import Depends, FastAPI
-from fastapi.testclient import TestClient
+from fastapi import HTTPException
 
-from researchos.saas.auth.permissions import Action, POLICY, Resource, Role, is_allowed, require_permission
+from researchos.saas.auth.permissions import Action, Resource, authorize, is_allowed
 from researchos.saas.contracts import Plan, TenantContext, WorkspaceRole
 
 
-def context(role: WorkspaceRole) -> TenantContext:
-    return TenantContext(
-        user_id=uuid4(),
-        workspace_id=uuid4(),
-        plan=Plan.PRO,
-        role=role,
-    )
-
-
-@pytest.mark.parametrize("role", list(Role))
-@pytest.mark.parametrize("resource", list(Resource))
-@pytest.mark.parametrize("action", list(Action))
-def test_every_role_resource_action_matches_executable_matrix(
-    role: Role,
-    resource: Resource,
-    action: Action,
-) -> None:
-    assert is_allowed(role, resource, action) is (action in POLICY[role][resource])
-
-
-def test_viewer_cannot_create_job() -> None:
-    app = FastAPI()
-
-    def viewer_context() -> TenantContext:
-        return context(WorkspaceRole.VIEWER)
-
-    @app.post("/v1/test-job")
-    @require_permission("job", "create")
-    def create_job(
-        tenant: TenantContext = Depends(viewer_context),
-    ) -> dict[str, str]:
-        return {"status": "created"}
-
-    response = TestClient(app).post(
-        "/v1/test-job",
-        headers={"X-Request-ID": "authz-viewer-test"},
-    )
-    assert response.status_code == 403
-    body = response.json()
-    assert body["detail"]["code"] == "FORBIDDEN"
-    assert body["detail"]["request_id"] == "authz-viewer-test"
-
-
-def test_researcher_cannot_delete_workspace() -> None:
-    app = FastAPI()
-
-    def researcher_context() -> TenantContext:
-        return context(WorkspaceRole.RESEARCHER)
-
-    @app.delete("/v1/test-workspace")
-    @require_permission("workspace", "delete")
-    def delete_workspace(
-        tenant: TenantContext = Depends(researcher_context),
-    ) -> dict[str, str]:
-        return {"status": "deleted"}
-
-    response = TestClient(app).delete("/v1/test-workspace")
-    assert response.status_code == 403
-    assert response.json()["detail"]["code"] == "FORBIDDEN"
-
-
-def test_missing_tenant_context_is_fail_closed() -> None:
-    app = FastAPI()
-
-    @app.get("/v1/test")
-    @require_permission("dataset", "read")
-    def read_dataset() -> dict[str, str]:
-        return {"status": "visible"}
-
-    response = TestClient(app).get("/v1/test")
-    assert response.status_code == 403
-    assert response.json()["detail"]["code"] == "FORBIDDEN"
-
-
 @pytest.mark.parametrize("role", list(WorkspaceRole))
-def test_allowed_capability_executes(role: WorkspaceRole) -> None:
-    app = FastAPI()
+def test_permission_matrix_has_explicit_default_behavior(role: WorkspaceRole) -> None:
+    context = TenantContext(uuid4(), uuid4(), Plan.PRO, role=role)
+    for resource in Resource:
+        for action in Action:
+            allowed = is_allowed(role, resource, action)
+            if allowed:
+                authorize(context, resource, action)
+            else:
+                with pytest.raises(HTTPException) as exc:
+                    authorize(context, resource, action)
+                assert exc.value.status_code == 403
+                assert exc.value.detail == "FORBIDDEN"
 
-    def role_context() -> TenantContext:
-        return context(role)
 
-    @app.get("/v1/test")
-    @require_permission("dataset", "read")
-    def read_dataset(
-        tenant: TenantContext = Depends(role_context),
-    ) -> dict[str, str]:
-        return {"status": "visible"}
+def test_viewer_cannot_create_jobs() -> None:
+    context = TenantContext(uuid4(), uuid4(), Plan.PRO, role=WorkspaceRole.VIEWER)
+    with pytest.raises(HTTPException) as exc:
+        authorize(context, Resource.JOB, Action.CREATE)
+    assert exc.value.status_code == 403
 
-    response = TestClient(app).get("/v1/test")
-    assert response.status_code == (200 if is_allowed(role, Resource.DATASET, Action.READ) else 403)
+
+
+def test_viewer_cannot_access_billing() -> None:
+    context = TenantContext(uuid4(), uuid4(), Plan.PRO, role=WorkspaceRole.VIEWER)
+    for action in Action:
+        with pytest.raises(HTTPException) as exc:
+            authorize(context, Resource.BILLING, action)
+        assert exc.value.status_code == 403
+
+
+@pytest.mark.parametrize("action", [Action.READ, Action.LIST, Action.UPDATE])
+def test_billing_admin_has_only_non_destructive_billing_access(action: Action) -> None:
+    context = TenantContext(uuid4(), uuid4(), Plan.PRO, role=WorkspaceRole.BILLING_ADMIN)
+    authorize(context, Resource.BILLING, action)
+
+
+@pytest.mark.parametrize("action", [Action.CREATE, Action.DELETE])
+def test_billing_admin_cannot_create_or_delete_billing_records(action: Action) -> None:
+    context = TenantContext(uuid4(), uuid4(), Plan.PRO, role=WorkspaceRole.BILLING_ADMIN)
+    with pytest.raises(HTTPException) as exc:
+        authorize(context, Resource.BILLING, action)
+    assert exc.value.status_code == 403

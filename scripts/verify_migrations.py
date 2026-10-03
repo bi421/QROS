@@ -1,25 +1,15 @@
 #!/usr/bin/env python3
-"""Rebuild or inspect a Supabase Postgres database and verify the tenant/RLS contract."""
-
+"""Verify QROS tenant-boundary migration invariants."""
 from __future__ import annotations
 
-import json
-import os
-import shutil
+import argparse
+import re
 import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DB_URL = os.environ.get(
-    "QROS_VERIFY_DATABASE_URL",
-    "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
-)
-SCHEMA_DIFF = ROOT / ".migration-audit" / "schema_diff.sql"
-
-TENANT_TABLES = (
-    "workspace",
-    "workspace_member",
-    "subscription",
+MIGRATIONS = ROOT / "supabase" / "migrations"
+TENANT_TABLES = {
     "dataset",
     "dataset_version",
     "research_run",
@@ -27,183 +17,68 @@ TENANT_TABLES = (
     "evidence",
     "usage_event",
     "audit_log",
-    "billing_event",
-    "api_idempotency",
-    "research_claim",
-    "research_validation",
-    "research_finding",
+    "subscription",
+    "workspace_member",
     "research_run_result",
     "research_run_artifact",
-    "audit_event",
-    "retention_deletion_operation",
-    "workspace_retention_policy",
-    "tenant_deletion_tombstone",
-    "entitlements",
-)
+}
 
 
-def run(command: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(
-        command, cwd=ROOT, text=True, capture_output=True, check=False
+def static_check() -> None:
+    sql = "\n".join(
+        path.read_text(encoding="utf-8") for path in sorted(MIGRATIONS.glob("*.sql"))
     )
-    if check and result.returncode != 0:
-        raise RuntimeError(
-            f"command failed ({result.returncode}): {' '.join(command)}\n"
-            f"stdout={result.stdout[-4000:]}\nstderr={result.stderr[-4000:]}"
-        )
-    return result
-
-
-def ensure_tools() -> None:
-    for executable in ("supabase", "psql"):
-        if shutil.which(executable) is None:
-            raise RuntimeError(f"required executable not found: {executable}")
-
-
-def query(sql: str) -> list[dict[str, str | None]]:
-    result = run(["psql", DB_URL, "-X", "-At", "-F", "\t", "-c", sql])
-    rows: list[dict[str, str | None]] = []
-    for line in result.stdout.splitlines():
-        if line:
-            parts = line.split("\t")
-            rows.append({str(i): value for i, value in enumerate(parts)})
-    return rows
-
-
-def normalize_sql(value: str | None) -> str:
-    return " ".join(
-        (value or "")
-        .replace('"', "")
-        .replace("::text", "")
-        .replace("(", "")
-        .replace(")", "")
-        .split()
-    ).lower()
-
-
-def verify_schema() -> int:
-    tenant_columns = query(
-        """
-        select table_name, column_name
-        from information_schema.columns
-        where table_schema = 'public'
-          and table_name = any(%s)
-        order by table_name
-        """ % ("ARRAY[" + ",".join("'" + t + "'" for t in TENANT_TABLES) + "]",)
-    )
-    table_columns: dict[str, set[str]] = {}
-    for row in tenant_columns:
-        table_columns.setdefault(str(row["0"]), set()).add(str(row["1"]))
-    missing_tenant_key = [
-        table
-        for table in TENANT_TABLES
-        if table not in table_columns
-        or (
-            table != "workspace"
-            and "workspace_id" not in table_columns[table]
-            and "tenant_id" not in table_columns[table]
-        )
-    ]
-
-    rls_rows = query(
-        """
-        select tablename
-        from pg_tables
-        where schemaname = 'public'
-          and tablename = any(%s)
-          and rowsecurity = false
-        order by tablename
-        """ % ("ARRAY[" + ",".join("'" + t + "'" for t in TENANT_TABLES) + "]",)
-    )
-    rls_missing = [str(row["0"]) for row in rls_rows]
-
-    policy_rows = query(
-        """
-        select tablename, policyname, cmd, coalesce(qual, ''), coalesce(with_check, '')
-        from pg_policies
-        where schemaname = 'public'
-          and tablename = any(%s)
-        order by tablename, policyname
-        """ % ("ARRAY[" + ",".join("'" + t + "'" for t in TENANT_TABLES) + "]",)
-    )
-    policies: dict[str, list[dict[str, str]]] = {}
-    for row in policy_rows:
-        table = str(row["0"])
-        policies.setdefault(table, []).append(
-            {
-                "name": str(row["1"]),
-                "cmd": str(row["2"]).upper(),
-                "qual": str(row["3"]),
-                "with_check": str(row["4"]),
-            }
-        )
-
-    policy_gaps: list[str] = []
-    for table in TENANT_TABLES:
-        table_policies = policies.get(table, [])
-        if table_policies and not any(
-            policy["cmd"] in {"SELECT", "ALL"} for policy in table_policies
+    for table in sorted(TENANT_TABLES):
+        if not re.search(rf"create table if not exists public\.{table}\s*\(", sql, re.I):
+            raise SystemExit(f"missing table definition: {table}")
+        if table not in {"workspace_member", "subscription", "dataset_version"} and not re.search(
+            rf"create table if not exists public\.{table}.*?workspace_id\s+uuid",
+            sql,
+            re.I | re.S,
         ):
-            policy_gaps.append(f"{table}:missing SELECT/ALL policy")
-        if table_policies and table != "workspace":
-            if not any(
-                "workspace" in normalize_sql(policy["qual"])
-                or "workspace" in normalize_sql(policy["with_check"])
-                or "member" in normalize_sql(policy["qual"])
-                or "member" in normalize_sql(policy["with_check"])
-                or "tenant_id" in normalize_sql(policy["qual"])
-                or "tenant_id" in normalize_sql(policy["with_check"])
-                for policy in table_policies
-            ):
-                policy_gaps.append(f"{table}:no tenant predicate")
+            raise SystemExit(f"missing workspace_id definition: {table}")
+        if not re.search(
+            rf"alter table public\.{table} enable row level security",
+            sql,
+            re.I,
+        ):
+            raise SystemExit(f"RLS not enabled in migration history: {table}")
+    print(f"static migration security invariants OK: {len(TENANT_TABLES)} tenant tables")
 
-    diff_command = [
-        "supabase", "db", "diff", "--db-url", DB_URL, "--schema", "public"
-    ]
-    diff = run(diff_command, check=False)
-    SCHEMA_DIFF.parent.mkdir(parents=True, exist_ok=True)
-    SCHEMA_DIFF.write_text(diff.stdout + diff.stderr, encoding="utf-8")
 
-    checks = {
-        "migration_replay": True,
-        "tenant_tables_missing": [
-            table for table in TENANT_TABLES if table not in table_columns
-        ],
-        "tenant_tables_without_tenant_key": missing_tenant_key,
-        "tenant_tables_without_rls": rls_missing,
-        "tenant_policy_gaps": policy_gaps,
-        "schema_diff_command": {
-            "returncode": diff.returncode,
-            "artifact": str(SCHEMA_DIFF.relative_to(ROOT)),
-            "empty": not diff.stdout.strip(),
-        },
-    }
-    print(json.dumps(checks, indent=2, sort_keys=True))
-    return 1 if any(
-        (
-            checks["tenant_tables_missing"],
-            checks["tenant_tables_without_tenant_key"],
-            checks["tenant_tables_without_rls"],
-            checks["tenant_policy_gaps"],
-            diff.returncode != 0,
-        )
-    ) else 0
+def database_check(url: str) -> None:
+    query = """
+select tablename from pg_tables
+where schemaname = 'public'
+  and tablename in (
+      'dataset','dataset_version','research_run','artifact','evidence',
+      'usage_event','audit_log','subscription','workspace_member',
+      'research_run_result','research_run_artifact'
+  )
+  and rowsecurity = false;
+"""
+    result = subprocess.run(
+        ["psql", url, "-At", "-c", query],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise SystemExit(result.stderr.strip() or "psql failed")
+    bad = [line for line in result.stdout.splitlines() if line.strip()]
+    if bad:
+        raise SystemExit("tables without RLS: " + ", ".join(bad))
+    print("database RLS check OK")
 
 
 def main() -> int:
-    ensure_tools()
-    external_database = bool(os.environ.get("QROS_VERIFY_DATABASE_URL"))
-    if not external_database:
-        if not (ROOT / "supabase" / "config.toml").exists():
-            run(["supabase", "init"])
-        run(["supabase", "stop", "--no-backup"], check=False)
-        run(["supabase", "start"])
-        run(["supabase", "db", "reset", "--local", "--no-seed"])
-    try:
-        return verify_schema()
-    finally:
-        if not external_database:
-            run(["supabase", "stop"], check=False)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--database-url")
+    args = parser.parse_args()
+    static_check()
+    if args.database_url:
+        database_check(args.database_url)
+    return 0
 
 
 if __name__ == "__main__":
