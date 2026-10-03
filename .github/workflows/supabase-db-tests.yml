@@ -53,7 +53,7 @@ jobs:
               exit 0
             fi
             echo "::warning::supabase start failed on attempt $attempt/$max_attempts; retrying after registry backoff"
-            supabase stop || true
+            supabase stop
             if [ "$attempt" -lt "$max_attempts" ]; then
               sleep_seconds=$((30 * attempt))
               echo "Sleeping ${sleep_seconds}s before retry."
@@ -65,7 +65,8 @@ jobs:
 
       - name: Install pgtap extension
         run: |
-          PGPASSWORD=postgres psql -h 127.0.0.1 -p 54332 -U postgres -d postgres -c "create extension if not exists pgtap;" || true
+          set -euo pipefail
+          PGPASSWORD=postgres psql -h 127.0.0.1 -p 54332 -U postgres -d postgres -v ON_ERROR_STOP=1 -c "create extension if not exists pgtap;"
 
       - name: Run database security tests
         run: supabase test db supabase/tests/tenant_isolation_test.sql
