@@ -139,7 +139,7 @@ class TestDeterministicResearchModelAdapter(unittest.TestCase):
         result = adapter.predict(_request(dataset))
 
         self.assertEqual(result.dataset_hash, dataset_hash(dataset))
-        self.assertEqual(result.dataset_hash, _model().dataset_hash) if result.dataset_hash == _model().dataset_hash else self.assertNotEqual(result.dataset_hash, model.dataset_hash)
+        self.assertNotEqual(result.dataset_hash, model.dataset_hash)
 
     def test_rejects_schema_mismatch(self) -> None:
         model = _model()
