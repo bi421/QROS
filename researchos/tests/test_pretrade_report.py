@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from researchos.action import build_pre_trade_report
 from researchos.risk import RiskInput, TradeStatistics, calculate_risk
-from researchos.risk.contracts import RiskCalculation
+from researchos.risk.contracts import RiskCalculation, RiskPolicy
 from researchos.risk.governance import RiskAccountState, RiskDecision, StrategyRiskState, evaluate_pretrade_risk
 
 
@@ -14,6 +14,7 @@ def _risk() -> object:
             probability=0.60,
             account_equity=10_000.0,
             trade_statistics=TradeStatistics(150.0, 100.0, 200),
+            risk_policy=RiskPolicy(max_risk_fraction=0.0025),
             research_id="R-001",
         )
     )
