@@ -1,87 +1,44 @@
-# ResearchOS Decision/Risk Boundary v1
+# ResearchOS Decision / Risk Boundary
 
-## Purpose
+**Status:** Superseded by `docs/RISK_MANAGEMENT_ARCHITECTURE_V2.md`
+**Legacy sizing schema:** `risk.v1`
+**Current governed schema:** `risk.v2`
 
-This boundary turns a validated research probability into a deterministic,
-research-only risk calculation. It does **not** place orders, connect to a
-broker, or decide that a trade must be opened.
+The original boundary defined deterministic fractional-Kelly sizing from a validated
+probability. That sizing contract remains readable for backward compatibility.
 
-## Pipeline
+The production-facing risk boundary is now the governed V2 layer, which adds:
 
-```text
-ResearchOS
-    |
-    | validated probability + research provenance
-    v
-RiskInput (risk.v1)
-    |
-    | historical payoff statistics + account + explicit policy
-    v
+- immutable account/equity accounting;
+- daily-loss and high-water-mark drawdown gates;
+- strategy-loss and per-trade limits;
+- portfolio open-risk and exposure limits;
+- stale-data/session/permission/duplicate/order-rate/fat-finger controls;
+- available-margin checks;
+- explicit calibration and strategy-state gates;
+- kill-switch state;
+- immutable risk audit events;
+- mandatory risk-context enforcement in the decision pipeline.
+
+Canonical flow:
+
+```
+ProbabilityAssessment
+      ↓
+RiskInput (risk.v2)
+      ↓
 calculate_risk()
-    |
-    v
-RiskCalculation (risk.v1)
+      ↓
+RiskAccountSnapshot + RiskOrderIntent
+      ↓
+evaluate_risk_gate()
+      ↓
+RiskGateResult
+      ↓
+PreTradeReport + RiskAuditEvent
 ```
 
-## Contract
+No broker connection, order placement, autonomous trading, or silent risk reduction
+is implemented by this boundary.
 
-Required research input:
-
-- `asset`
-- `direction`
-- `probability` — probability of the explicitly defined research event
-- `account_equity`
-- `trade_statistics.average_win`
-- `trade_statistics.average_loss`
-
-Optional:
-
-- `risk_per_unit` — monetary loss for one position unit at the defined stop
-- `research_id`
-- probability method/calibration status
-
-Policy inputs are explicit and versionable:
-
-- `fractional_kelly` (default 0.25)
-- `max_risk_fraction` (default 0.01)
-- `max_position_fraction` (default 1.0)
-
-## Mathematics
-
-Let `p` be the supplied event probability and `b` be
-`average_win / average_loss`.
-
-```text
-full_kelly = max(0, p - (1-p)/b)
-fractional_kelly = full_kelly * fractional_kelly_policy
-final_risk = min(fractional_kelly, max_risk_fraction)
-risk_amount = account_equity * final_risk
-```
-
-If `risk_per_unit` is available:
-
-```text
-position_size = risk_amount / risk_per_unit
-```
-
-The result is capped by `max_position_fraction` of account equity.
-
-## Scientific boundary
-
-The risk layer does not reinterpret the research probability. The research
-layer must define what the probability means, its horizon, evidence, and
-validation/calibration state. A probability value alone is not evidence of
-profitability.
-
-The existing portfolio analytics already contains a pure `kelly_fraction`
-primitive; this boundary provides the missing cross-block contract and policy
-layer rather than creating a second mathematical definition of Kelly.
-
-## Non-responsibilities
-
-- No broker integration.
-- No order creation.
-- No autonomous trading.
-- No modification of ResearchOS evidence or experiment semantics.
-- No probability generation.
-- No hidden risk limits.
+See `docs/RISK_MANAGEMENT_ARCHITECTURE_V2.md` for the current contract and control set.
