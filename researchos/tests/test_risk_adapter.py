@@ -24,7 +24,11 @@ def test_probability_assessment_maps_to_risk_input() -> None:
         asset="XAUUSD",
         direction="bullish",
         account_equity=10_000,
-        trade_statistics=TradeStatistics(average_win=150, average_loss=100, sample_size=100),
+        trade_statistics=TradeStatistics(
+            average_win=150,
+            average_loss=100,
+            sample_size=100,
+        ),
     )
 
     assert request.probability == 0.60
@@ -32,7 +36,7 @@ def test_probability_assessment_maps_to_risk_input() -> None:
     assert request.research_id == "ctx-xauusd-001"
     assert request.probability_method == "WeightedEvidence"
     assert request.probability_calibration_status is None
-    assert request.to_dict()["schema_version"] == "risk.v1"
+    assert request.to_dict()["schema_version"] == "risk.v2"
 
 
 def test_serialized_probability_assessment_crosses_same_boundary() -> None:
@@ -41,7 +45,11 @@ def test_serialized_probability_assessment_crosses_same_boundary() -> None:
         asset="XAUUSD",
         direction="bearish",
         account_equity=10_000,
-        trade_statistics=TradeStatistics(average_win=100, average_loss=100, sample_size=100),
+        trade_statistics=TradeStatistics(
+            average_win=100,
+            average_loss=100,
+            sample_size=100,
+        ),
         risk_policy=RiskPolicy(fractional_kelly=0.25, max_risk_fraction=0.01),
     )
 
@@ -56,7 +64,11 @@ def test_explicit_calibration_status_crosses_probability_to_risk_boundary() -> N
         asset="XAUUSD",
         direction="bullish",
         account_equity=10_000,
-        trade_statistics=TradeStatistics(average_win=150, average_loss=100, sample_size=100),
+        trade_statistics=TradeStatistics(
+            average_win=150,
+            average_loss=100,
+            sample_size=100,
+        ),
         probability_calibration_status="Well-Calibrated",
     )
 
@@ -93,4 +105,6 @@ def test_neutral_probability_cannot_be_silently_traded() -> None:
         assert "bullish" in str(exc)
         assert "bearish" in str(exc)
     else:
-        raise AssertionError("neutral direction must not cross the trading risk boundary")
+        raise AssertionError(
+            "neutral direction must not cross the trading risk boundary"
+        )
