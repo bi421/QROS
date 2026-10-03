@@ -140,7 +140,7 @@ def momentum(
     Returns:
         List of momentum values
     """
-    result = []
+    result: list[float | None] = []
     for i in range(len(values)):
         if i < period:
             result.append(None)
@@ -164,7 +164,7 @@ def rate_of_change(
     Returns:
         List of ROC values
     """
-    result = []
+    result: list[float | None] = []
     for i in range(len(values)):
         if i < period or values[i - period] == 0:
             result.append(None)

@@ -78,8 +78,8 @@ def vectorized_backtest_with_tpsl(
         trades.append(("CLOSE", closing_price, position, pnl))
         equity_curve.append(capital)
 
-    equity = np.array(equity_curve)
-    returns = np.diff(equity) / equity[:-1]
+    equity_array = np.asarray(equity_curve, dtype=float)
+    returns = np.diff(equity_array) / equity_array[:-1]
     total_return = (capital - initial_capital) / initial_capital
 
     if len(returns) > 1:
@@ -87,8 +87,8 @@ def vectorized_backtest_with_tpsl(
     else:
         sharpe = 0.0
 
-    peak = np.maximum.accumulate(equity)
-    drawdown = (peak - equity) / peak
+    peak = np.maximum.accumulate(equity_array)
+    drawdown = (peak - equity_array) / peak
     max_drawdown = -np.max(drawdown) if len(drawdown) > 0 else 0.0
 
     closed_trades = [t for t in trades if t[0] in ("SELL", "SL", "TP", "CLOSE")]
