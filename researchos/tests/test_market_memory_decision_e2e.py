@@ -66,6 +66,15 @@ def test_market_memory_to_probability_to_risk_to_pretrade_is_end_to_end() -> Non
             research_valid=True,
             research_limitations=(),
             risk_per_unit=20,
+            risk_policy=RiskPolicy(max_risk_fraction=0.0025),
+            risk_account=RiskAccountState(
+                day_start_equity=10_000,
+                current_equity=10_000,
+                high_water_mark=10_000,
+                strategy_reference_equity=10_000,
+            ),
+            proposed_notional=1_000,
+            strategy_state=StrategyRiskState.RISK_REVIEW,
         )
     )
 
