@@ -5,6 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from hashlib import sha256
 from typing import Any, BinaryIO, Protocol
+from urllib.error import HTTPError
+from urllib.parse import quote
+from urllib.request import Request, urlopen
 from uuid import UUID
 
 
@@ -43,13 +46,15 @@ class DatasetStore(Protocol):
     def get_dataset(self, workspace_id: UUID, dataset_id: UUID) -> Dataset | None: ...
     def get_version(self, workspace_id: UUID, version_id: UUID) -> DatasetVersion | None: ...
     def list_versions(self, workspace_id: UUID, dataset_id: UUID) -> list[DatasetVersion]: ...
+    def count_datasets(self, workspace_id: UUID) -> int: ...
+    def storage_bytes(self, workspace_id: UUID) -> int: ...
 
 
 class DatasetStorage(Protocol):
-    def put(self, storage_path: str, file: BinaryIO) -> None: ...
-    def remove(self, storage_path: str) -> None: ...
-    def create_signed_download_url(self, storage_path: str, expires_in: int) -> str: ...
-    def verify_sha256(self, storage_path: str, expected_sha256: str) -> bool: ...
+    def put(self, storage_path: str, file: BinaryIO, *, tenant_id: UUID | None = None, access_token: str | None = None) -> None: ...
+    def remove(self, storage_path: str, *, tenant_id: UUID | None = None, access_token: str | None = None) -> None: ...
+    def create_signed_download_url(self, storage_path: str, expires_in: int, *, tenant_id: UUID | None = None, access_token: str | None = None) -> str: ...
+    def verify_sha256(self, storage_path: str, expected_sha256: str, *, tenant_id: UUID | None = None, access_token: str | None = None) -> bool: ...
 
 
 class InMemoryDatasetStore:
@@ -134,11 +139,19 @@ class InMemoryDatasetStore:
         return sorted((v for v in self._versions.values() if v.dataset_id == dataset_id), key=lambda v: v.version_no)
 
 
+    def count_datasets(self, workspace_id: UUID) -> int:
+        return sum(dataset.workspace_id == workspace_id for dataset in self._datasets.values())
+
+    def storage_bytes(self, workspace_id: UUID) -> int:
+        return sum(version.byte_size for version in self._versions.values() if self.get_dataset(workspace_id, version.dataset_id) is not None)
+
 class InMemoryDatasetStorage:
     def __init__(self) -> None:
         self._objects: dict[str, bytes] = {}
 
-    def put(self, storage_path: str, file: BinaryIO) -> None:
+    def put(self, storage_path: str, file: BinaryIO, *, tenant_id: UUID | None = None, access_token: str | None = None) -> None:
+        if tenant_id is not None and not storage_path.startswith(f"tenant/{tenant_id}/"):
+            raise PermissionError("storage path is outside tenant context")
         payload = file.read()
         existing = self._objects.get(storage_path)
         if existing is not None:
@@ -149,22 +162,28 @@ class InMemoryDatasetStorage:
         self._objects[storage_path] = payload
         file.seek(0)
 
-    def remove(self, storage_path: str) -> None:
+    def remove(self, storage_path: str, *, tenant_id: UUID | None = None, access_token: str | None = None) -> None:
+        if tenant_id is not None and not storage_path.startswith(f"tenant/{tenant_id}/"):
+            raise PermissionError("storage path is outside tenant context")
         self._objects.pop(storage_path, None)
 
     def get(self, storage_path: str) -> bytes | None:
         return self._objects.get(storage_path)
 
-    def verify_sha256(self, storage_path: str, expected_sha256: str) -> bool:
+    def verify_sha256(self, storage_path: str, expected_sha256: str, *, tenant_id: UUID | None = None, access_token: str | None = None) -> bool:
+        if tenant_id is not None and not storage_path.startswith(f"tenant/{tenant_id}/"):
+            raise PermissionError("storage path is outside tenant context")
         payload = self._objects.get(storage_path)
         return payload is not None and sha256(payload).hexdigest() == expected_sha256.lower()
 
-    def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
+    def create_signed_download_url(self, storage_path: str, expires_in: int, *, tenant_id: UUID | None = None, access_token: str | None = None) -> str:
+        if tenant_id is not None and not storage_path.startswith(f"tenant/{tenant_id}/"):
+            raise PermissionError("storage path is outside tenant context")
         if storage_path not in self._objects:
             raise FileNotFoundError(storage_path)
-        if not 1 <= expires_in <= 900:
-            raise ValueError("signed URL expiry must be between 1 and 900 seconds")
-        return f"memory://{storage_path}?expires_in={expires_in}"
+        if expires_in != 3600:
+            raise ValueError("dataset signed URL expiry must be exactly 3600 seconds")
+        return f"memory://{storage_path}?expires_in=3600"
 
 
 class SupabaseDatasetStore:
@@ -285,32 +304,112 @@ class SupabaseDatasetStore:
         return [self._version(row) for row in (result.data or [])]
 
 
-class SupabaseDatasetStorage:
-    def __init__(self, supabase_client: object, bucket: str = "qros-datasets") -> None:
-        self._client = supabase_client
-        self._bucket = bucket
+    def count_datasets(self, workspace_id: UUID) -> int:
+        _, total = self.list_datasets(workspace_id, limit=1, offset=0)
+        return total
 
-    def put(self, storage_path: str, file: BinaryIO) -> None:
-        self._client.storage.from_(self._bucket).upload(
-            path=storage_path, file=file, file_options={"upsert": "false"}
+    def storage_bytes(self, workspace_id: UUID) -> int:
+        result = self._client.table("dataset_version").select("dataset_id,byte_size").execute()
+        rows = result.data or []
+        return sum(
+            int(row["byte_size"])
+            for row in rows
+            if self.get_dataset(workspace_id, UUID(str(row["dataset_id"]))) is not None
         )
 
-    def remove(self, storage_path: str) -> None:
-        self._client.storage.from_(self._bucket).remove([storage_path])
+class SupabaseDatasetStorage:
+    """Tenant-scoped Supabase Storage adapter.
 
-    def verify_sha256(self, storage_path: str, expected_sha256: str) -> bool:
-        response = self._client.storage.from_(self._bucket).download(storage_path)
-        payload = response if isinstance(response, bytes) else bytes(response)
+    Production calls require a verified tenant bearer token so Storage RLS,
+    rather than service_role, authorizes object access.
+    """
+
+    def __init__(
+        self,
+        supabase_client: object,
+        bucket: str = "qros-datasets",
+        *,
+        supabase_url: str | None = None,
+        publishable_key: str | None = None,
+    ) -> None:
+        self._client = supabase_client
+        self._bucket = bucket
+        self._supabase_url = supabase_url
+        self._publishable_key = publishable_key
+
+    @staticmethod
+    def _tenant_path(tenant_id: UUID, storage_path: str) -> str:
+        expected = f"tenant/{tenant_id}/"
+        if not storage_path.startswith(expected):
+            raise PermissionError("storage path is outside tenant context")
+        return storage_path
+
+    def _request(self, method: str, path: str, *, tenant_id: UUID, access_token: str, body: bytes | None = None) -> bytes:
+        if not access_token:
+            raise PermissionError("tenant access token is required for storage access")
+        if not self._supabase_url or not self._publishable_key:
+            raise RuntimeError("tenant-scoped Supabase Storage requires SUPABASE_URL and SUPABASE_ANON_KEY")
+        self._tenant_path(tenant_id, path)
+        url = f"{self._supabase_url.rstrip('/')}/storage/v1/object/{self._bucket}/{quote(path, safe='')}"
+        headers = {
+            "apikey": self._publishable_key,
+            "Authorization": f"Bearer {access_token}",
+        }
+        if body is not None:
+            headers["Content-Type"] = "application/octet-stream"
+        request = Request(url, data=body, headers=headers, method=method)
+        with urlopen(request, timeout=30) as response:
+            return response.read()
+
+    def put(self, storage_path: str, file: BinaryIO, *, tenant_id: UUID | None = None, access_token: str | None = None) -> None:
+        if tenant_id is not None and access_token is not None:
+            self._request("POST", storage_path, tenant_id=tenant_id, access_token=access_token, body=file.read())
+            file.seek(0)
+            return
+        raise PermissionError("tenant context is required for production storage writes")
+
+    def remove(self, storage_path: str, *, tenant_id: UUID | None = None, access_token: str | None = None) -> None:
+        if tenant_id is None or access_token is None:
+            raise PermissionError("tenant context is required for production storage deletes")
+        self._request("DELETE", storage_path, tenant_id=tenant_id, access_token=access_token)
+
+    def verify_sha256(self, storage_path: str, expected_sha256: str, *, tenant_id: UUID | None = None, access_token: str | None = None) -> bool:
+        if tenant_id is None or access_token is None:
+            raise PermissionError("tenant context is required for production storage reads")
+        payload = self._request("GET", storage_path, tenant_id=tenant_id, access_token=access_token)
         return sha256(payload).hexdigest() == expected_sha256.lower()
 
-    def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
-        if not 1 <= expires_in <= 900:
-            raise ValueError("signed URL expiry must be between 1 and 900 seconds")
-        response = self._client.storage.from_(self._bucket).create_signed_url(storage_path, expires_in)
-        if isinstance(response, dict):
-            signed_url = response.get("signedURL") or response.get("signedUrl")
-        else:
-            signed_url = getattr(response, "signedURL", None) or getattr(response, "signedUrl", None)
+    def create_signed_download_url(
+        self,
+        storage_path: str,
+        expires_in: int,
+        *,
+        tenant_id: UUID | None = None,
+        access_token: str | None = None,
+    ) -> str:
+        if expires_in != 3600:
+            raise ValueError("dataset signed URL expiry must be exactly 3600 seconds")
+        if tenant_id is None or access_token is None:
+            raise PermissionError("tenant context is required for signed URLs")
+        self._tenant_path(tenant_id, storage_path)
+        if not self._supabase_url or not self._publishable_key:
+            raise RuntimeError("tenant-scoped Supabase Storage requires SUPABASE_URL and SUPABASE_ANON_KEY")
+        url = f"{self._supabase_url.rstrip('/')}/storage/v1/object/sign/{self._bucket}/{quote(storage_path, safe='')}"
+        request = Request(
+            url,
+            data=b'{"expiresIn":3600}',
+            headers={
+                "apikey": self._publishable_key,
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with urlopen(request, timeout=30) as response:
+            payload = response.read()
+        import json
+        data = json.loads(payload.decode("utf-8"))
+        signed_url = data.get("signedURL") or data.get("signedUrl")
         if not signed_url:
             raise RuntimeError("storage provider returned no signed download URL")
         return str(signed_url)

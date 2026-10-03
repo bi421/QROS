@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 import hashlib
 import hmac
 import json
+import logging
 import time
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
@@ -40,7 +41,7 @@ from researchos.saas.evidence_api import ResearchEvidenceStore, register_researc
 from researchos.saas.validation_api import InMemoryResearchValidationStore, ResearchValidationStore, register_research_validation_routes
 from researchos.saas.finding_api import InMemoryResearchFindingStore, register_research_finding_routes
 from researchos.saas.research_report import build_research_report
-from researchos.saas.observability import StructuredRequestObserver, observe_request
+from researchos.saas.observability import StructuredRequestObserver, configure_tracing, emit_log, observe_request, span
 from researchos.saas.auth.authorization import require_permission
 from researchos.saas.billing import (
     BillingEventConflict,
@@ -48,6 +49,9 @@ from researchos.saas.billing import (
     BillingSignatureError,
     parse_billing_event,
     verify_hmac_signature,
+    verify_stripe_signature,
+    EntitlementStore,
+    InMemoryEntitlementStore,
 )
 
 REQUEST_ID_HEADER = "X-Request-ID"
@@ -94,7 +98,8 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
         request.state.correlation_id = request_id
         started_at = time.perf_counter()
         try:
-            response = await call_next(request)
+            with span("qros.api", request_id=request_id, http_method=request.method, http_path=request.url.path):
+                response = await call_next(request)
         except Exception:
             observer = getattr(request.app.state, "observability", None)
             if isinstance(observer, StructuredRequestObserver):
@@ -107,6 +112,8 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
                     path=path,
                     status_code=500,
                     started_at=started_at,
+                    tenant_id=getattr(request.state, "tenant_id", None),
+                    job_id=getattr(request.state, "job_id", None),
                 )
             raise
         response.headers[REQUEST_ID_HEADER] = request_id
@@ -121,6 +128,8 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
                 path=path,
                 status_code=response.status_code,
                 started_at=started_at,
+                tenant_id=getattr(request.state, "tenant_id", None),
+                job_id=getattr(request.state, "job_id", None),
             )
         return response
 
@@ -214,6 +223,8 @@ def create_app(
     idempotency_store: IdempotencyStore | None = None,
     billing_store: BillingEventStore | None = None,
     billing_webhook_secret: str | None = None,
+    entitlement_store: EntitlementStore | None = None,
+    plan_rate_limiters: dict[object, RateLimiter] | None = None,
     metrics_token: str | None = None,
     rate_limiter: RateLimiter | None = None,
     claim_store: ResearchClaimStore | None = None,
@@ -223,6 +234,7 @@ def create_app(
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
+    configure_tracing()
     auth = auth_provider or UnconfiguredAuthProvider()
     store = job_store or InMemoryResearchJobStore()
     datasets = dataset_store or InMemoryDatasetStore()
@@ -230,6 +242,8 @@ def create_app(
     queue = job_queue or InMemoryResearchJobQueue()
     limiter = rate_limiter or FixedWindowRateLimiter(limit=120, window_seconds=60)
     billing = billing_store
+    entitlements = entitlement_store or InMemoryEntitlementStore()
+    plan_limiters = plan_rate_limiters or {}
     app = FastAPI(
         title="QROS SaaS API",
         version="1.0.0",
@@ -240,6 +254,10 @@ def create_app(
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+        if isinstance(exc.detail, dict) and exc.detail.get("code") == "ENTITLEMENT_EXCEEDED":
+            detail = dict(exc.detail)
+            detail["request_id"] = getattr(request.state, "request_id", None)
+            return JSONResponse(status_code=402, headers=exc.headers, content=detail)
         return JSONResponse(
             status_code=exc.status_code,
             headers=exc.headers,
@@ -262,6 +280,7 @@ def create_app(
         )
 
     def current_tenant(
+        request: Request,
         authorization: str | None = Header(default=None),
         workspace_header: str | None = Header(default=None, alias=WORKSPACE_HEADER),
     ) -> TenantContext:
@@ -271,7 +290,10 @@ def create_app(
                 requested_workspace_id = UUID(workspace_header.strip())
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail="invalid X-Workspace-ID") from exc
-        return auth.authenticate(authorization, requested_workspace_id)
+        with span("qros.api.auth", request_id=getattr(request.state, "request_id", None)):
+            tenant = auth.authenticate(authorization, requested_workspace_id)
+        request.state.tenant_id = str(tenant.workspace_id)
+        return tenant
 
     def require_role(tenant: TenantContext, *allowed: WorkspaceRole) -> None:
         """Enforce server-resolved membership roles; never trust request data."""
@@ -279,11 +301,10 @@ def create_app(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="workspace role is not authorized")
 
     def require_rate_limit(tenant: TenantContext) -> None:
-        principal = hashlib.sha256(
-            f"workspace:{tenant.workspace_id}".encode()
-        ).hexdigest()
+        principal = hashlib.sha256(f"workspace:{tenant.workspace_id}".encode()).hexdigest()
+        selected = plan_limiters.get(tenant.plan, limiter)
         try:
-            allowed = limiter.allow(principal)
+            allowed = selected.allow(principal)
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -299,19 +320,25 @@ def create_app(
     def persist_version(*, dataset_id: UUID, tenant: TenantContext, file: UploadFile) -> DatasetVersion:
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         try:
+            entitlement = entitlements.get(tenant.workspace_id, tenant.plan.value)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="entitlement service unavailable") from exc
+        try:
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
             existing = datasets.find_version_by_content(tenant.workspace_id, dataset_id, digest)
             if existing is not None:
-                if not storage.verify_sha256(existing.storage_path, existing.content_sha256):
+                if not storage.verify_sha256(existing.storage_path, existing.content_sha256, tenant_id=tenant.workspace_id, access_token=tenant.access_token):
                     raise HTTPException(status_code=503, detail="dataset object integrity check failed")
                 return existing
+            if entitlement.max_storage_mb > 0 and datasets.storage_bytes(tenant.workspace_id) + size > entitlement.max_storage_mb * 1_000_000:
+                raise HTTPException(status_code=402, detail={"code": "ENTITLEMENT_EXCEEDED", "message": "storage entitlement exceeded", "upgrade_url": "https://qros.ai/upgrade"})
             version_no = datasets.next_version_no(tenant.workspace_id, dataset_id)
             storage_path = storage_path_for(tenant.workspace_id, digest, version_no)
-            storage.put(storage_path, file.file)
-            if not storage.verify_sha256(storage_path, digest):
-                storage.remove(storage_path)
+            storage.put(storage_path, file.file, tenant_id=tenant.workspace_id, access_token=tenant.access_token)
+            if not storage.verify_sha256(storage_path, digest, tenant_id=tenant.workspace_id, access_token=tenant.access_token):
+                storage.remove(storage_path, tenant_id=tenant.workspace_id, access_token=tenant.access_token)
                 raise HTTPException(status_code=503, detail="dataset upload integrity verification failed")
             try:
                 version = datasets.create_version(
@@ -327,14 +354,17 @@ def create_app(
                     )
                 )
             except Exception:
-                storage.remove(storage_path)
+                storage.remove(storage_path, tenant_id=tenant.workspace_id, access_token=tenant.access_token)
                 existing = datasets.find_version_by_content(tenant.workspace_id, dataset_id, digest)
                 if existing is not None:
-                    if not storage.verify_sha256(existing.storage_path, existing.content_sha256):
+                    if not storage.verify_sha256(existing.storage_path, existing.content_sha256, tenant_id=tenant.workspace_id, access_token=tenant.access_token):
                         raise HTTPException(status_code=503, detail="dataset object integrity check failed")
                     return existing
                 raise
             return version
+        except PermissionError as exc:
+            app.state.observability.metrics.inc_tenant_isolation_violation()
+            raise HTTPException(status_code=403, detail="tenant storage authorization failed") from exc
         except ValueError as exc:
             raise HTTPException(status_code=413, detail=str(exc)) from exc
         except HTTPException:
@@ -367,15 +397,20 @@ def create_app(
     async def billing_webhook(
         request: Request,
         x_billing_signature: str | None = Header(default=None, alias="X-Billing-Signature"),
+        stripe_signature: str | None = Header(default=None, alias="Stripe-Signature"),
         x_billing_provider: str | None = Header(default=None, alias="X-Billing-Provider"),
     ) -> dict[str, str]:
         if billing is None or not billing_webhook_secret:
             raise HTTPException(status_code=503, detail="billing webhook is not configured")
-        if not x_billing_signature or not x_billing_provider:
+        signature = stripe_signature or x_billing_signature
+        if not signature or not x_billing_provider:
             raise HTTPException(status_code=400, detail="billing signature and provider are required")
         payload = await request.body()
         try:
-            verify_hmac_signature(payload, x_billing_signature, billing_webhook_secret)
+            if signature.startswith("t="):
+                verify_stripe_signature(payload, signature, billing_webhook_secret)
+            else:
+                verify_hmac_signature(payload, signature, billing_webhook_secret)
             event = parse_billing_event(payload)
         except BillingSignatureError as exc:
             raise HTTPException(status_code=401, detail="invalid billing webhook signature") from exc
@@ -437,6 +472,15 @@ def create_app(
     ) -> DatasetResponse:
         require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.RESEARCHER)
         dataset = Dataset(id=uuid4(), workspace_id=tenant.workspace_id, name=name.strip(), created_by=tenant.user_id)
+        try:
+            entitlement = entitlements.get(tenant.workspace_id, tenant.plan.value)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="entitlement service unavailable") from exc
+        if entitlement.max_datasets > 0 and datasets.count_datasets(tenant.workspace_id) >= entitlement.max_datasets:
+            raise HTTPException(
+                status_code=402,
+                detail={"code": "ENTITLEMENT_EXCEEDED", "message": "dataset entitlement exceeded", "upgrade_url": "https://qros.ai/upgrade"},
+            )
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         persisted_dataset = None
         try:
@@ -537,16 +581,16 @@ def create_app(
         if version is None or version.dataset_id != dataset_id:
             raise HTTPException(status_code=404, detail="dataset version not found")
         try:
-            if not storage.verify_sha256(version.storage_path, version.content_sha256):
+            if not storage.verify_sha256(version.storage_path, version.content_sha256, tenant_id=tenant.workspace_id, access_token=tenant.access_token):
                 raise HTTPException(status_code=503, detail="dataset object integrity check failed")
-            url = storage.create_signed_download_url(version.storage_path, 300)
+            url = storage.create_signed_download_url(version.storage_path, 3600, tenant_id=tenant.workspace_id, access_token=tenant.access_token)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="dataset object not found") from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
             raise HTTPException(status_code=503, detail="dataset download service unavailable") from exc
-        return {"url": url, "expires_in": "300"}
+        return {"url": url, "expires_in": "3600"}
 
     @app.post("/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"])
     @require_permission("job", "create")
@@ -570,9 +614,30 @@ def create_app(
             "claim_id": request.claim_id,
             "plan_hash": request.plan_hash,
         })
+        try:
+            entitlement = entitlements.get(tenant.workspace_id, tenant.plan.value)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="entitlement service unavailable") from exc
+        monthly_jobs = store.count_monthly(tenant.workspace_id)
+        if not entitlement.allows_jobs(monthly_jobs):
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "code": "ENTITLEMENT_EXCEEDED",
+                    "message": "monthly job entitlement exceeded",
+                    "upgrade_url": "https://qros.ai/upgrade",
+                },
+            )
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
-        if not policy.allows_monthly_runs(store.count_monthly(tenant.workspace_id)):
-            raise HTTPException(status_code=402, detail="research run limit reached")
+        if not policy.allows_monthly_runs(monthly_jobs):
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "code": "ENTITLEMENT_EXCEEDED",
+                    "message": "monthly job entitlement exceeded",
+                    "upgrade_url": "https://qros.ai/upgrade",
+                },
+            )
         if not policy.allows_concurrency(store.count_active(tenant.workspace_id)):
             raise HTTPException(status_code=429, detail="concurrent research run limit reached")
         version = datasets.get_version(tenant.workspace_id, request.dataset_version_id)
@@ -615,19 +680,46 @@ def create_app(
             raise
         if replayed:
             return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
-        try:
-            queue.enqueue(tenant.workspace_id, created.id)
-        except Exception as exc:
+        request.state.job_id = str(created.id)
+        with span(
+            "qros.job",
+            request_id=getattr(request.state, "request_id", None),
+            tenant_id=tenant.workspace_id,
+            job_id=created.id,
+        ):
             try:
-                store.transition(
+                queue.enqueue(
                     tenant.workspace_id,
                     created.id,
-                    ResearchJobStatus.QUEUED,
-                    ResearchJobStatus.FAILED,
+                    request_id=getattr(request.state, "request_id", None),
                 )
-            except Exception:
-                pass
-            raise HTTPException(status_code=503, detail="research job queue unavailable") from exc
+            except Exception as exc:
+                try:
+                    store.transition(
+                        tenant.workspace_id,
+                        created.id,
+                        ResearchJobStatus.QUEUED,
+                        ResearchJobStatus.FAILED,
+                    )
+                except Exception:
+                    pass
+                app.state.observability.metrics.inc_job_failed()
+                emit_log(
+                    level=logging.ERROR,
+                    message="research job enqueue failed",
+                    request_id=getattr(request.state, "request_id", None),
+                    tenant_id=tenant.workspace_id,
+                    job_id=created.id,
+                )
+                raise HTTPException(status_code=503, detail="research job queue unavailable") from exc
+        app.state.observability.metrics.inc_job_created()
+        emit_log(
+            level=logging.INFO,
+            message="research job created",
+            request_id=getattr(request.state, "request_id", None),
+            tenant_id=tenant.workspace_id,
+            job_id=created.id,
+        )
         return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
 
     @app.get("/v1/research-runs", response_model=PageResponse, tags=["research"])

@@ -100,7 +100,7 @@ class SupabaseJwtAuthProvider:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="workspace access denied")
 
         workspace_id, plan, role = resolved
-        return TenantContext(user_id=user_id, workspace_id=workspace_id, plan=plan, role=role)
+        return TenantContext(user_id=user_id, workspace_id=workspace_id, plan=plan, role=role, access_token=token)
 
 
 __all__ = ["SupabaseJwtAuthProvider", "WorkspaceMembershipResolver"]
