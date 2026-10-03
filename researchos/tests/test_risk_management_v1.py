@@ -211,8 +211,9 @@ def test_zero_risk_budget_blocks() -> None:
 
 
 def test_equity_ledger_requires_reconciliation() -> None:
+    account = _account(equity=9_999.0)
     with pytest.raises(ValueError, match="reconcile"):
-        _account(equity=9_999.0)
+        account.validate()
 
 
 def test_warning_is_emitted_before_hard_limit() -> None:
