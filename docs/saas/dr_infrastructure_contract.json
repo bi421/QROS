@@ -1,0 +1,84 @@
+{
+  "contract_version": "1",
+  "status_semantics": {
+    "CONFIGURED": "Repository declares a concrete non-secret value and its provenance is documented.",
+    "REQUIRED": "Required for the DR gate but no value is committed.",
+    "UNKNOWN": "Required identity or value is not known from repository evidence.",
+    "EXTERNALLY_PROVISIONED": "Must be supplied and independently verified outside Git."
+  },
+  "release": {
+    "release_sha": "9d4b9fb7efac26bfff4346c5590443142627bcf8",
+    "drill_id": "qros-dr-20260925T181504Z-ed375f3d"
+  },
+  "source": {
+    "environment": "staging",
+    "environment_status": "REQUIRED",
+    "supabase_project_ref": null,
+    "supabase_project_ref_status": "EXTERNALLY_PROVISIONED",
+    "region": null,
+    "region_status": "EXTERNALLY_PROVISIONED",
+    "postgres_major": null,
+    "postgres_major_status": "EXTERNALLY_PROVISIONED",
+    "database_identity": null,
+    "database_identity_status": "EXTERNALLY_PROVISIONED",
+    "migration_schema_identity": null,
+    "migration_schema_identity_status": "EXTERNALLY_PROVISIONED"
+  },
+  "recovery_target": {
+    "id": null,
+    "id_status": "EXTERNALLY_PROVISIONED",
+    "type": null,
+    "type_allowed_values": ["supabase_project", "postgres_database"],
+    "type_status": "EXTERNALLY_PROVISIONED",
+    "project_ref": null,
+    "project_ref_status": "EXTERNALLY_PROVISIONED",
+    "region": null,
+    "region_status": "EXTERNALLY_PROVISIONED",
+    "postgres_major": null,
+    "postgres_major_status": "EXTERNALLY_PROVISIONED",
+    "restore_capable_status": "REQUIRED",
+    "migration_verification_capable_status": "REQUIRED",
+    "security_rls_verification_capable_status": "REQUIRED",
+    "tenant_isolation_verification_capable_status": "REQUIRED",
+    "isolation_from_source_status": "REQUIRED",
+    "isolation_from_production_status": "REQUIRED"
+  },
+  "recovery_storage": {
+    "bucket": null,
+    "bucket_status": "EXTERNALLY_PROVISIONED",
+    "region": null,
+    "region_status": "EXTERNALLY_PROVISIONED",
+    "namespace": null,
+    "namespace_status": "EXTERNALLY_PROVISIONED",
+    "purpose_status": "REQUIRED",
+    "not_production_status": "REQUIRED",
+    "credential_scope_status": "REQUIRED"
+  },
+  "staging_application": {
+    "base_url": null,
+    "base_url_status": "EXTERNALLY_PROVISIONED",
+    "application_identity_status": "REQUIRED",
+    "endpoint_health_status": "REQUIRED",
+    "auth_identity_status": "REQUIRED",
+    "tenant_isolation_identity_status": "REQUIRED"
+  },
+  "evidence": {
+    "location": null,
+    "location_status": "EXTERNALLY_PROVISIONED"
+  },
+  "operator": {
+    "identity": null,
+    "identity_status": "EXTERNALLY_PROVISIONED",
+    "authorization_status": "REQUIRED"
+  },
+  "safety_invariants": [
+    "source != recovery_target",
+    "source != production",
+    "recovery_target != production",
+    "production is never a recovery target",
+    "repository contract contains no secret values",
+    "repository contract does not prove external infrastructure exists"
+  ],
+  "external_provisioning_required": true,
+  "dr_infrastructure_gate": "BLOCKED"
+}
