@@ -144,6 +144,7 @@ def test_decision_pipeline_preserves_missing_notional_governance_violation() -> 
             account_equity=10_000,
             trade_statistics=TradeStatistics(average_win=30, average_loss=20),
             research_valid=True,
+            risk_policy=RiskPolicy(max_risk_fraction=0.0025),
             risk_account=RiskAccountState(
                 day_start_equity=10_000,
                 current_equity=10_000,
