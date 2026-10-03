@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
+from datetime import datetime
 from hashlib import sha256
 from typing import Any, BinaryIO, Protocol
 from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 from uuid import UUID
+
+from researchos.core.timestamp import utc_now
 
 
 @dataclass(frozen=True)
@@ -17,6 +20,7 @@ class Dataset:
     workspace_id: UUID
     name: str
     created_by: UUID
+    created_at: datetime = dataclass_field(default_factory=utc_now)
 
 
 @dataclass(frozen=True)
@@ -35,6 +39,10 @@ class DatasetReferencedError(RuntimeError):
     """Raised when retention policy prevents dataset deletion."""
 
 
+class DatasetReferencedError(RuntimeError):
+    """Raised when an immutable dataset version is still part of research lineage."""
+
+
 class DatasetStore(Protocol):
     def list_datasets(self, workspace_id: UUID, *, limit: int = 50, offset: int = 0, name_filter: str | None = None) -> tuple[list[Dataset], int]: ...
     def create_dataset(self, workspace_id: UUID, dataset: Dataset) -> Dataset: ...
@@ -49,6 +57,12 @@ class DatasetStore(Protocol):
     def count_datasets(self, workspace_id: UUID) -> int: ...
     def storage_bytes(self, workspace_id: UUID) -> int: ...
 
+    def find_version_by_hash(self, workspace_id: UUID, dataset_id: UUID, content_sha256: str) -> DatasetVersion | None:
+        ...
+
+    def delete_version(self, workspace_id: UUID, dataset_id: UUID, version_id: UUID) -> None:
+        ...
+
 
 class DatasetStorage(Protocol):
     def exists(self, storage_path: str) -> bool:
@@ -58,6 +72,9 @@ class DatasetStorage(Protocol):
         ...
 
     def remove(self, storage_path: str) -> None:
+        ...
+
+    def download_verified(self, storage_path: str, expected_sha256: str) -> bytes:
         ...
 
     def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
@@ -108,8 +125,6 @@ class InMemoryDatasetStore:
         existing = [v for v in self._versions.values() if v.dataset_id == version.dataset_id]
         if any(v.version_no == version.version_no for v in existing):
             raise ValueError("dataset version number already exists")
-        if any(v.content_sha256 == version.content_sha256 for v in existing):
-            raise ValueError("dataset content already exists")
         self._versions[version.id] = version
         return version
 
@@ -174,6 +189,14 @@ class InMemoryDatasetStorage:
             raise PermissionError("storage path is outside tenant context")
         self._objects.pop(storage_path, None)
 
+    def download_verified(self, storage_path: str, expected_sha256: str) -> bytes:
+        data = self._objects.get(storage_path)
+        if data is None:
+            raise FileNotFoundError(storage_path)
+        if sha256(data).hexdigest() != expected_sha256:
+            raise ValueError("dataset SHA-256 verification failed")
+        return data
+
     def get(self, storage_path: str) -> bytes | None:
         return self._objects.get(storage_path)
 
@@ -227,10 +250,19 @@ class SupabaseDatasetStore:
             raise RuntimeError("dataset insert returned no unique row")
         return self._dataset(rows[0])
 
-    def list_datasets(self, workspace_id: UUID, *, limit: int = 50, offset: int = 0, name_filter: str | None = None) -> tuple[list[Dataset], int]:
+    def list_datasets(self, workspace_id: UUID, *, limit: int = 50, offset: int = 0, name_filter: str | None = None, sort_by: str = "created_at", sort_order: str = "desc") -> tuple[list[Dataset], int]:
         if not 1 <= limit <= 100 or offset < 0:
             raise ValueError("invalid pagination")
-        query = self._client.table("dataset").select("id,workspace_id,name,created_by", count="exact").eq("workspace_id", str(workspace_id))
+        if sort_by not in {"created_at", "name"}:
+            raise ValueError("invalid sort field")
+        if sort_order not in {"asc", "desc"}:
+            raise ValueError("invalid sort order")
+        query = (
+            self._client.table("dataset")
+            .select("id,workspace_id,name,created_by,created_at", count="exact")
+            .eq("workspace_id", str(workspace_id))
+            .is_("deleted_at", "null")
+        )
         if name_filter:
             query = query.ilike("name", f"%{name_filter.strip()}%")
         result = query.order("id").range(offset, offset + limit - 1).execute()
@@ -315,6 +347,22 @@ class SupabaseDatasetStore:
             "id,dataset_id,version_no,content_sha256,storage_path,byte_size,created_by"
         ).eq("dataset_id", str(dataset_id)).order("version_no").execute()
         return [self._version(row) for row in (result.data or [])]
+
+    def find_version_by_hash(self, workspace_id: UUID, dataset_id: UUID, content_sha256: str) -> DatasetVersion | None:
+        result = (self._client.table("dataset_version").select("id,dataset_id,version_no,content_sha256,storage_path,byte_size,created_by").eq("dataset_id", str(dataset_id)).eq("content_sha256", content_sha256).limit(1).execute())
+        rows = result.data or []
+        if not rows or self.get_dataset(workspace_id, dataset_id) is None:
+            return None
+        return self._version(rows[0])
+
+    def delete_version(self, workspace_id: UUID, dataset_id: UUID, version_id: UUID) -> None:
+        version = self.get_version(workspace_id, version_id)
+        if version is None or version.dataset_id != dataset_id:
+            return
+        refs = (self._client.table("research_run").select("id", count="exact").eq("workspace_id", str(workspace_id)).eq("dataset_version_id", str(version_id)).limit(1).execute())
+        if int(refs.count or 0) > 0 or bool(refs.data):
+            raise DatasetReferencedError("DATASET_REFERENCED")
+        self._client.table("dataset_version").delete().eq("id", str(version_id)).eq("dataset_id", str(dataset_id)).execute()
 
 
     def count_datasets(self, workspace_id: UUID) -> int:
