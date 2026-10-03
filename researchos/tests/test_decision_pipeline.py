@@ -86,6 +86,7 @@ def test_pipeline_blocks_invalid_research() -> None:
     )
     assert report.status == "BLOCKED_RESEARCH_VALIDATION"
     assert report.risk_valid is True
+    assert report.execution_allowed is False
     assert report.limitations == ("validation pending",)
 
 
