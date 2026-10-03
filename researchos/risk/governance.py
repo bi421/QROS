@@ -366,6 +366,10 @@ def evaluate_pretrade_risk(
     """Evaluate hard account and portfolio controls around one proposed trade."""
     account.validate()
     limits.validate()
+    for name in ("risk_amount", "final_risk_fraction"):
+        value = getattr(risk, name)
+        if not math.isfinite(value):
+            raise ValueError(f"{name} must be finite")
     state = _coerce_strategy_state(strategy_state)
     violations: list[RiskViolation] = []
     warnings: list[str] = []
