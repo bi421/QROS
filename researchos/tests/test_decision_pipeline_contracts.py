@@ -6,6 +6,7 @@ from researchos.decision_pipeline import DecisionPipelineInput, run_decision_pip
 from researchos.risk.adapters import risk_input_from_probability
 from researchos.risk.contracts import RiskPolicy, TradeStatistics
 from researchos.risk.engine import calculate_risk
+from researchos.risk.governance import RiskAccountState, StrategyRiskState
 
 
 def _assessment(status: str | None = None) -> ProbabilityAssessment:
@@ -44,6 +45,14 @@ def test_calibration_status_survives_probability_risk_pretrade_boundary() -> Non
             account_equity=10_000,
             trade_statistics=TradeStatistics(average_win=150, average_loss=100, sample_size=100),
             research_valid=True,
+            risk_account=RiskAccountState(
+                day_start_equity=10_000,
+                current_equity=10_000,
+                high_water_mark=10_000,
+                strategy_reference_equity=10_000,
+            ),
+            proposed_notional=1_000,
+            strategy_state=StrategyRiskState.RISK_REVIEW,
         )
     )
     assert report.status == "READY_FOR_HUMAN_REVIEW"
