@@ -142,7 +142,7 @@ def role_from_tenant(tenant: TenantContext) -> Role:
         WorkspaceRole.ADMIN: Role.ADMIN,
         WorkspaceRole.RESEARCHER: Role.RESEARCHER,
         WorkspaceRole.VIEWER: Role.VIEWER,
-        WorkspaceRole.BILLING: Role.BILLING_ADMIN,
+        WorkspaceRole.BILLING_ADMIN: Role.BILLING_ADMIN,
     }
     try:
         return mapping[tenant.role]
@@ -154,7 +154,7 @@ def is_allowed(role: Role | WorkspaceRole, resource: Resource | str, action: Act
     normalized_role = (
         role
         if isinstance(role, Role)
-        else Role.BILLING_ADMIN if role == WorkspaceRole.BILLING
+        else Role.BILLING_ADMIN if role == WorkspaceRole.BILLING_ADMIN
         else Role(role.value)
     )
     return _action(action) in POLICY[normalized_role][_resource(resource)]
