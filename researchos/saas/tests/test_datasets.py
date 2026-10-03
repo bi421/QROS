@@ -41,36 +41,18 @@ def test_storage_path_is_tenant_scoped_and_content_addressed() -> None:
     assert "sha256" not in path
 
 
-def test_storage_path_for_accepts_numeric_string_version() -> None:
-    workspace_id = uuid4()
-    digest = "b" * 64
-
-    assert storage_path_for(workspace_id, digest, "7") == (
-        f"tenant/{workspace_id}/datasets/{digest}/7/"
-    )
-
-
-def test_storage_path_for_rejects_non_numeric_version() -> None:
-    with pytest.raises(ValueError, match="version_no must be a valid integer"):
-        storage_path_for(uuid4(), "c" * 64, "not-an-integer")
-
-
-def test_storage_path_for_rejects_version_below_one() -> None:
-    with pytest.raises(ValueError, match="version_no must be positive"):
-        storage_path_for(uuid4(), "d" * 64, 0)
-
-
-def test_in_memory_store_rejects_duplicate_content() -> None:
+def test_in_memory_store_rejects_duplicate_version_identity() -> None:
     store = InMemoryDatasetStore()
     dataset = Dataset(uuid4(), uuid4(), "sample", uuid4())
     store.create_dataset(dataset.workspace_id, dataset)
     first = DatasetVersion(uuid4(), dataset.id, 1, "a" * 64, "path/a", 1, dataset.created_by)
-    second = DatasetVersion(uuid4(), dataset.id, 2, "a" * 64, "path/b", 1, dataset.created_by)
+    second = DatasetVersion(uuid4(), dataset.id, 2, "b" * 64, "path/b", 1, dataset.created_by)
 
     store.create_version(dataset.workspace_id, first)
+    store.create_version(dataset.workspace_id, second)
 
-    with pytest.raises(ValueError, match="dataset content already exists"):
-        store.create_version(dataset.workspace_id, second)
+    assert store.find_version_by_content(dataset.workspace_id, dataset.id, "a" * 64) == first
+    assert store.list_versions(dataset.workspace_id, dataset.id) == [first, second]
 
 
 def test_in_memory_store_rejects_version_write_from_other_workspace() -> None:
@@ -103,11 +85,108 @@ def test_in_memory_store_rejects_dataset_write_from_other_workspace() -> None:
 def test_in_memory_signed_download_url_requires_existing_object_and_bounded_expiry() -> None:
     storage = InMemoryDatasetStorage()
     with pytest.raises(FileNotFoundError):
-        storage.create_signed_download_url("missing", 300)
+        storage.create_signed_download_url("missing", 3600)
 
     storage.put("tenant/object", BytesIO(b"data"))
-    assert storage.create_signed_download_url("tenant/object", 300).endswith("?expires_in=300")
+    assert storage.create_signed_download_url("tenant/object", 3600).endswith("?expires_in=3600")
 
-    for expires_in in (0, 901):
+    for expires_in in (0, 3599, 3601):
         with pytest.raises(ValueError, match="signed URL expiry"):
             storage.create_signed_download_url("tenant/object", expires_in)
+
+
+def test_same_content_is_deduplicated_to_the_existing_version_path() -> None:
+    store = InMemoryDatasetStore()
+    dataset = Dataset(uuid4(), uuid4(), "sample", uuid4())
+    store.create_dataset(dataset.workspace_id, dataset)
+    digest = "c" * 64
+    first = DatasetVersion(uuid4(), dataset.id, 1, digest, storage_path_for(dataset.workspace_id, digest, 1), 3, dataset.created_by)
+    store.create_version(dataset.workspace_id, first)
+
+    assert store.find_version_by_content(dataset.workspace_id, dataset.id, digest) is first
+    assert storage_path_for(dataset.workspace_id, digest, 1) == first.storage_path
+
+
+def test_old_versions_remain_readable_after_new_version() -> None:
+    store = InMemoryDatasetStore()
+    dataset = Dataset(uuid4(), uuid4(), "sample", uuid4())
+    store.create_dataset(dataset.workspace_id, dataset)
+    first = DatasetVersion(uuid4(), dataset.id, 1, "d" * 64, storage_path_for(dataset.workspace_id, "d" * 64, 1), 1, dataset.created_by)
+    second = DatasetVersion(uuid4(), dataset.id, 2, "e" * 64, storage_path_for(dataset.workspace_id, "e" * 64, 2), 1, dataset.created_by)
+    store.create_version(dataset.workspace_id, first)
+    store.create_version(dataset.workspace_id, second)
+
+    assert store.get_version(dataset.workspace_id, first.id) == first
+    assert store.get_version(dataset.workspace_id, second.id) == second
+
+
+def test_storage_path_rejects_noncanonical_digest() -> None:
+    workspace_id = uuid4()
+
+    with pytest.raises(ValueError, match="SHA-256 digest"):
+        storage_path_for(workspace_id, "A" * 64, 1)
+
+    with pytest.raises(ValueError, match="SHA-256 digest"):
+        storage_path_for(workspace_id, "not-a-digest", 1)
+
+
+def test_version_storage_path_is_immutable_and_canonical() -> None:
+    store = InMemoryDatasetStore()
+    dataset = Dataset(uuid4(), uuid4(), "sample", uuid4())
+    store.create_dataset(dataset.workspace_id, dataset)
+    digest = "f" * 64
+
+    valid = DatasetVersion(
+        uuid4(), dataset.id, 1, digest,
+        storage_path_for(dataset.workspace_id, digest, 1),
+        1, dataset.created_by,
+    )
+    store.create_version(dataset.workspace_id, valid)
+
+    invalid = DatasetVersion(
+        uuid4(), dataset.id, 2, digest,
+        "tenant/other/datasets/" + digest + "/2/",
+        1, dataset.created_by,
+    )
+    with pytest.raises(ValueError, match="canonical content-addressed path"):
+        store.create_version(dataset.workspace_id, invalid)
+
+
+def test_storage_sha256_verification_detects_tampering() -> None:
+    storage = InMemoryDatasetStorage()
+    path = "tenant/example/datasets/" + "a" * 64 + "/1/"
+    storage.put(path, BytesIO(b"original"))
+
+    assert storage.verify_sha256(path, "0" * 64) is False
+
+
+def test_tenant_b_cannot_generate_signed_url_for_tenant_a_file() -> None:
+    storage = InMemoryDatasetStorage()
+    tenant_a = uuid4()
+    tenant_b = uuid4()
+    digest = "a" * 64
+    path = storage_path_for(tenant_a, digest, 1)
+    storage.put(path, BytesIO(b"tenant-a"), tenant_id=tenant_a)
+
+    with pytest.raises(PermissionError, match="outside tenant context"):
+        storage.create_signed_download_url(
+            path,
+            3600,
+            tenant_id=tenant_b,
+            access_token="tenant-b-token",
+        )
+
+    assert storage.create_signed_download_url(
+        path,
+        3600,
+        tenant_id=tenant_a,
+        access_token="tenant-a-token",
+    ).startswith(f"memory://tenant/{tenant_a}/datasets/{digest}/1/")
+
+
+def test_direct_storage_path_without_tenant_prefix_is_rejected() -> None:
+    storage = InMemoryDatasetStorage()
+    tenant = uuid4()
+
+    with pytest.raises(PermissionError, match="outside tenant context"):
+        storage.put("datasets/" + "a" * 64 + "/1/", BytesIO(b"bad"), tenant_id=tenant)
