@@ -1,9 +1,3 @@
-[build-system]
-requires = [
-    "scikit-build-core>=0.9.0",
-    "nanobind>=1.5.0",
-]
-build-backend = "scikit_build_core.build"
 
 [project]
 name = "researchos"
@@ -154,9 +148,12 @@ ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/**" = ["E402"]
-"src/**" = ["E402"]
 "researchos/tests/**" = ["E402"]
 
 [tool.ruff.format]
 quote-style = "double"
 line-ending = "auto"
+
+[tool.bandit]
+exclude_dirs = ["tests", "archive", "build-nanobind", ".venv", "venv"]
+skips = []
