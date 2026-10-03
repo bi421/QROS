@@ -38,6 +38,7 @@ class ReplayBar:
 
     close: float
     timestamp: datetime | None = None
+    open: float | None = None
 
 
 def _iso(dt: datetime | None) -> str:
@@ -134,22 +135,32 @@ class ReplayEngine:
             raise ValueError(f"Need at least 2 bars for replay, got {len(bars)}")
 
         history: list[Any] = []
+        pending_signal: tuple[Signal, str] | None = None
         for i, bar in enumerate(bars):
             ts = getattr(bar, "timestamp", None)
+            # Signals are observed at bar close and become market orders at the
+            # next bar open. This is the canonical no-lookahead execution boundary.
+            if pending_signal is not None:
+                pending_signal_value, pending_timestamp = pending_signal
+                self.execution.process_signal(
+                    pending_signal_value,
+                    float(getattr(bar, "open", None) or getattr(bar, "close")),
+                    i,
+                    pending_timestamp,
+                )
+                pending_signal = None
+
             signal = self.strategy.evaluate(bar, list(history), i)
             if signal is not None:
-                self.execution.process_signal(
-                    signal,
-                    float(getattr(bar, "close")),
-                    i,
-                    _iso(ts),
-                )
+                pending_signal = (signal, _iso(ts))
             self.execution.mark_to_market(
                 float(getattr(bar, "close")),
                 i,
                 _iso(ts),
             )
             history.append(bar)
+
+        # A signal emitted on the final bar has no future open and is intentionally unfilled.
 
         # End-of-data liquidation (no lookahead — uses last known close).
         if self.execution.position_qty != 0:
@@ -186,6 +197,7 @@ class ReplayEngine:
             "equity_curve": self.execution.equity_curve,
             "execution_stats": stats,
             "num_bars": len(bars),
+            "signal_fill_timing": "next_bar_open",
             "start_time": _iso(getattr(bars[0], "timestamp", None)),
             "end_time": _iso(getattr(bars[-1], "timestamp", None)),
         }
