@@ -48,7 +48,10 @@ The authenticated context contains:
 
 ### Identity
 
+- `POST /v1/workspaces` — provision the authenticated user's first workspace as owner with the default FREE entitlement.
 - `GET /v1/me` — returns the authenticated user, workspace, and effective plan.
+
+Workspace provisioning derives the owner from the verified authentication context and creates the workspace, owner membership, and initial subscription atomically. The request body cannot supply an owner identity. A user who already has a workspace receives HTTP 409; multi-workspace management remains outside this onboarding endpoint.
 
 ### Datasets
 

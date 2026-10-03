@@ -242,8 +242,8 @@ double size_quantity(const Context& ctx, const StrategySignal& sig, const StopPl
                           : (tc.risk_amount > 0.0
                                  ? tc.risk_amount
                                  : ctx.current_equity * tc.risk_percent / 100.0);
-  if (plan.stop_distance > 0.0) return risk / plan.stop_distance;
-  return tc.default_quantity;
+  if (plan.stop_distance <= 0.0) return 0.0;
+  return risk > 0.0 ? risk / plan.stop_distance : 0.0;
 }
 
 // ── Signal execution ───────────────────────────────────────────────────────
@@ -261,7 +261,7 @@ void execute_signal(Context& ctx, const StrategySignal& sig, const OHLCV& bar,
       const double raw = bar.open;
       const double reference = ctx.bars[static_cast<size_t>(sig.bar_index)].close;
       const StopPlan plan = build_stop_plan(sig, tc, ctx.atr, reference);
-      const double qty = sig.quantity > 0.0 ? sig.quantity : size_quantity(ctx, sig, plan);
+      const double qty = size_quantity(ctx, sig, plan);
       if (qty <= 0.0) { ++ctx.signals_ignored; return; }
 
       const double dir = sig.side == TradeSide::Long ? 1.0 : -1.0;
