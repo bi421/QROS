@@ -26,6 +26,7 @@ import os
 import sys
 from typing import Any
 
+from researchos.data_engine.candle import Candle
 from researchos.data_engine.loader import CsvLoader
 from researchos.experiments.phase51 import Phase51Config, run_phase51
 

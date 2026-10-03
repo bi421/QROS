@@ -86,18 +86,31 @@ class SupabaseResearchClaimStore:
         *,
         limit: int = 100,
         offset: int = 0,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        status: str | None = None,
     ) -> tuple[list[ResearchClaim], int]:
         if not 1 <= limit <= 100 or offset < 0:
             raise ValueError("invalid pagination")
-        result = (
+        if sort_by not in {"created_at", "status", "statement"}:
+            raise ValueError("invalid sort field")
+        if sort_order not in {"asc", "desc"}:
+            raise ValueError("invalid sort order")
+        query = (
             self._client.table("research_claim")
             .select("id,workspace_id,claim_hash,payload", count="exact")
             .eq("workspace_id", str(workspace_id))
-            .order("id")
-            .range(offset, offset + limit - 1)
-            .execute()
+            .is_("deleted_at", "null")
         )
+        if status:
+            query = query.eq("evidence_state", status)
+        query = query.order(
+            "evidence_state" if sort_by == "status" else sort_by,
+            desc=sort_order == "desc",
+        ).range(offset, offset + limit - 1)
+        result = query.execute()
         return [self._claim(row) for row in (result.data or [])], int(result.count or 0)
+
 
 
 __all__ = ["SupabaseResearchClaimStore"]

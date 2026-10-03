@@ -6,13 +6,15 @@ result manifest, claim, and research plan lineage.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Mapping
 from uuid import UUID
 import hashlib
 import json
 
 from researchos.research_core.contracts import _validate_sha256
+from researchos.core.timestamp import utc_now
 
 FINDING_CONTRACT_VERSION = "1.0.0"
 VALIDATED_STATUS = "VALIDATED"
@@ -36,6 +38,7 @@ class ResearchFindingRecord:
     status: str
     payload: Mapping[str, Any]
     contract_version: str = FINDING_CONTRACT_VERSION
+    created_at: datetime = field(default_factory=utc_now)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "result_manifest_sha256", _validate_sha256(self.result_manifest_sha256, "result_manifest_sha256"))
