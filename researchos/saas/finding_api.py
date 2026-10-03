@@ -1,15 +1,15 @@
 """HTTP boundary for recording an already-validated research finding."""
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Callable, Protocol
 from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
 from researchos.saas.finding import ResearchFindingRecord, VALIDATED_STATUS
-from researchos.saas.pagination import PaginationParameterError, pagination_envelope, parse_list_query, validate_filter_keys
-from researchos.saas.auth.authorization import require_permission
+from researchos.saas.contracts import TenantContext
+from researchos.saas.validation_api import ResearchValidationStore
 
 
 class ResearchFindingStore(Protocol):
@@ -68,16 +68,16 @@ class ResearchFindingRequest(BaseModel):
 def register_research_finding_routes(
     app: FastAPI,
     *,
-    tenant_dependency,
+    tenant_dependency: Callable[..., TenantContext],
     finding_store: ResearchFindingStore | None,
-    validation_store,
+    validation_store: ResearchValidationStore,
 ) -> None:
     @app.post("/v1/research-runs/{job_id}/finding", status_code=status.HTTP_201_CREATED, tags=["research"])
     @require_permission("finding", "create")
     def create_finding(
         job_id: UUID,
         request: ResearchFindingRequest,
-        tenant=Depends(tenant_dependency),
+        tenant: TenantContext = Depends(tenant_dependency),
     ) -> dict[str, object]:
         if finding_store is None:
             raise HTTPException(status_code=503, detail="research finding persistence is not configured")
@@ -164,8 +164,7 @@ def register_research_finding_routes(
         )
 
     @app.get("/v1/research-runs/{job_id}/finding", tags=["research"])
-    @require_permission("finding", "read")
-    def get_finding(job_id: UUID, tenant=Depends(tenant_dependency)) -> dict[str, object]:
+    def get_finding(job_id: UUID, tenant: TenantContext = Depends(tenant_dependency)) -> dict[str, object]:
         if finding_store is None:
             raise HTTPException(status_code=503, detail="research finding persistence is not configured")
         record = finding_store.get(tenant.workspace_id, job_id)

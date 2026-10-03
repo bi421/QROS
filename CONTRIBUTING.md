@@ -28,7 +28,7 @@ researchos-health
 
 If the command was not run, the status is **UNVERIFIED**. AI-generated summaries are proposals, not evidence.
 
-Do not create one-off files such as `FORENSIC_AUDIT*`, `run_full_analysis*.py`, `pytest_*.txt`, `ruff_*.txt`, or scratch scripts at the repository root. Retained historical material belongs under `archive/reports/YYYY-MM/`.
+Do not create one-off files such as `FORENSIC_AUDIT*`, `run_full_analysis*.py`, `pytest_*.txt`, `ruff_*.txt`, or scratch scripts at the repository root. Retained historical material belongs under `reports/YYYY-MM/`.
 
 ---
 
@@ -84,4 +84,4 @@ Walk-forward validation and out-of-sample holdout are mandatory for research cla
 
 ### 6. Cleanup
 
-Run a short cleanup pass weekly. Remove or archive stale one-off artifacts; do not delete historical evidence that may be useful for audit. Preserve it under `archive/reports/YYYY-MM/`.
+Run a short cleanup pass weekly. Remove or archive stale one-off artifacts; do not delete historical evidence that may be useful for audit. Preserve it under `reports/YYYY-MM/`.
