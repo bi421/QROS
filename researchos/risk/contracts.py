@@ -513,7 +513,7 @@ class RiskGateResult:
 
     @property
     def blocked(self) -> bool:
-        return not self.execution_allowed
+        return self.status == "BLOCKED"
 
     def to_dict(self) -> dict[str, Any]:
         return {
