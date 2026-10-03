@@ -49,6 +49,8 @@ def test_pipeline_produces_human_review_report_with_risk_gate() -> None:
     assert report.risk_amount > 0
     assert report.position_size is not None
     assert report.research_id == "research-001"
+    assert report.risk_audit_event is not None
+    assert report.risk_audit_event.asset == "XAUUSD"
 
 
 def test_pipeline_fails_closed_when_risk_account_context_is_missing() -> None:
