@@ -35,26 +35,16 @@ class DatasetVersion:
     created_by: UUID
 
 
+class DatasetReferencedError(RuntimeError):
+    """Raised when an immutable dataset version is still part of research lineage."""
+
+
 class DatasetStore(Protocol):
     def list_datasets(self, workspace_id: UUID, *, limit: int = 50, offset: int = 0, name_filter: str | None = None, sort_by: str = "created_at", sort_order: str = "desc") -> tuple[list[Dataset], int]:
         ...
 
     def create_dataset(self, workspace_id: UUID, dataset: Dataset) -> Dataset:
-        """Create a dataset only when its tenant identity matches the boundary."""
         ...
-
-    def list_datasets(self, workspace_id: UUID, *, limit: int = 50, offset: int = 0, name_filter: str | None = None, sort_by: str = "created_at", sort_order: str = "desc") -> tuple[list[Dataset], int]:
-        if not 1 <= limit <= 100 or offset < 0:
-            raise ValueError("invalid pagination")
-        needle = name_filter.strip().lower() if name_filter else None
-        rows = [d for d in self._datasets.values() if d.workspace_id == workspace_id and (needle is None or needle in d.name.lower())]
-        if sort_by not in {"created_at", "name"}:
-            raise ValueError("invalid sort field")
-        if sort_order not in {"asc", "desc"}:
-            raise ValueError("invalid sort order")
-        reverse = sort_order == "desc"
-        rows.sort(key=lambda item: item.created_at if sort_by == "created_at" else item.name.lower(), reverse=reverse)
-        return rows[offset:offset + limit], len(rows)
 
     def delete_dataset(self, workspace_id: UUID, dataset_id: UUID) -> None:
         ...
@@ -71,12 +61,21 @@ class DatasetStore(Protocol):
     def list_versions(self, workspace_id: UUID, dataset_id: UUID) -> list[DatasetVersion]:
         ...
 
+    def find_version_by_hash(self, workspace_id: UUID, dataset_id: UUID, content_sha256: str) -> DatasetVersion | None:
+        ...
+
+    def delete_version(self, workspace_id: UUID, dataset_id: UUID, version_id: UUID) -> None:
+        ...
+
 
 class DatasetStorage(Protocol):
     def put(self, storage_path: str, file: BinaryIO) -> None:
         ...
 
     def remove(self, storage_path: str) -> None:
+        ...
+
+    def download_verified(self, storage_path: str, expected_sha256: str) -> bytes:
         ...
 
     def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
@@ -115,8 +114,6 @@ class InMemoryDatasetStore:
         existing = [v for v in self._versions.values() if v.dataset_id == version.dataset_id]
         if any(v.version_no == version.version_no for v in existing):
             raise ValueError("dataset version number already exists")
-        if any(v.content_sha256 == version.content_sha256 for v in existing):
-            raise ValueError("dataset content already exists")
         self._versions[version.id] = version
         return version
 
@@ -135,10 +132,16 @@ class InMemoryDatasetStore:
     def list_versions(self, workspace_id: UUID, dataset_id: UUID) -> list[DatasetVersion]:
         if self.get_dataset(workspace_id, dataset_id) is None:
             return []
-        return sorted(
-            (v for v in self._versions.values() if v.dataset_id == dataset_id),
-            key=lambda v: v.version_no,
-        )
+        return sorted((v for v in self._versions.values() if v.dataset_id == dataset_id), key=lambda v: v.version_no)
+
+    def find_version_by_hash(self, workspace_id: UUID, dataset_id: UUID, content_sha256: str) -> DatasetVersion | None:
+        return next((v for v in self.list_versions(workspace_id, dataset_id) if v.content_sha256 == content_sha256), None)
+
+    def delete_version(self, workspace_id: UUID, dataset_id: UUID, version_id: UUID) -> None:
+        version = self.get_version(workspace_id, version_id)
+        if version is None or version.dataset_id != dataset_id:
+            return
+        self._versions.pop(version_id, None)
 
 
 class InMemoryDatasetStorage:
@@ -154,6 +157,14 @@ class InMemoryDatasetStorage:
 
     def remove(self, storage_path: str) -> None:
         self._objects.pop(storage_path, None)
+
+    def download_verified(self, storage_path: str, expected_sha256: str) -> bytes:
+        data = self._objects.get(storage_path)
+        if data is None:
+            raise FileNotFoundError(storage_path)
+        if sha256(data).hexdigest() != expected_sha256:
+            raise ValueError("dataset SHA-256 verification failed")
+        return data
 
     def get(self, storage_path: str) -> bytes | None:
         return self._objects.get(storage_path)
@@ -218,12 +229,20 @@ class SupabaseDatasetStore:
     def list_datasets(self, workspace_id: UUID, *, limit: int = 50, offset: int = 0, name_filter: str | None = None, sort_by: str = "created_at", sort_order: str = "desc") -> tuple[list[Dataset], int]:
         if not 1 <= limit <= 100 or offset < 0:
             raise ValueError("invalid pagination")
-        query = self._client.table("dataset").select("id,workspace_id,name,created_by,created_at", count="exact").eq("workspace_id", str(workspace_id))
+        if sort_by not in {"created_at", "name"}:
+            raise ValueError("invalid sort field")
+        if sort_order not in {"asc", "desc"}:
+            raise ValueError("invalid sort order")
+        query = (
+            self._client.table("dataset")
+            .select("id,workspace_id,name,created_by,created_at", count="exact")
+            .eq("workspace_id", str(workspace_id))
+            .is_("deleted_at", "null")
+        )
         if name_filter:
             query = query.ilike("name", f"%{name_filter.strip()}%")
         result = query.order(sort_by, desc=sort_order == "desc").range(offset, offset + limit - 1).execute()
-        rows = [self._dataset(row) for row in (result.data or [])]
-        return rows, int(result.count or 0)
+        return [self._dataset(row) for row in (result.data or [])], int(result.count or 0)
 
     def delete_dataset(self, workspace_id: UUID, dataset_id: UUID) -> None:
         self._client.table("dataset").delete().eq("id", str(dataset_id)).eq(
@@ -260,6 +279,7 @@ class SupabaseDatasetStore:
             .select("id,workspace_id,name,created_by,created_at")
             .eq("id", str(dataset_id))
             .eq("workspace_id", str(workspace_id))
+            .is_("deleted_at", "null")
             .limit(1)
             .execute()
         )
@@ -292,6 +312,22 @@ class SupabaseDatasetStore:
         )
         return [self._version(row) for row in (result.data or [])]
 
+    def find_version_by_hash(self, workspace_id: UUID, dataset_id: UUID, content_sha256: str) -> DatasetVersion | None:
+        result = (self._client.table("dataset_version").select("id,dataset_id,version_no,content_sha256,storage_path,byte_size,created_by").eq("dataset_id", str(dataset_id)).eq("content_sha256", content_sha256).limit(1).execute())
+        rows = result.data or []
+        if not rows or self.get_dataset(workspace_id, dataset_id) is None:
+            return None
+        return self._version(rows[0])
+
+    def delete_version(self, workspace_id: UUID, dataset_id: UUID, version_id: UUID) -> None:
+        version = self.get_version(workspace_id, version_id)
+        if version is None or version.dataset_id != dataset_id:
+            return
+        refs = (self._client.table("research_run").select("id", count="exact").eq("workspace_id", str(workspace_id)).eq("dataset_version_id", str(version_id)).limit(1).execute())
+        if int(refs.count or 0) > 0 or bool(refs.data):
+            raise DatasetReferencedError("DATASET_REFERENCED")
+        self._client.table("dataset_version").delete().eq("id", str(version_id)).eq("dataset_id", str(dataset_id)).execute()
+
 
 class SupabaseDatasetStorage:
     """Server-side Supabase Storage adapter for private dataset objects."""
@@ -309,6 +345,13 @@ class SupabaseDatasetStorage:
 
     def remove(self, storage_path: str) -> None:
         self._client.storage.from_(self._bucket).remove([storage_path])
+
+    def download_verified(self, storage_path: str, expected_sha256: str) -> bytes:
+        response = self._client.storage.from_(self._bucket).download(storage_path)
+        data = response if isinstance(response, bytes) else bytes(response)
+        if sha256(data).hexdigest() != expected_sha256:
+            raise ValueError("dataset SHA-256 verification failed")
+        return data
 
     def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
         if not 1 <= expires_in <= 900:
@@ -342,12 +385,15 @@ def stream_sha256(file: BinaryIO, max_bytes: int) -> tuple[str, int]:
     return digest.hexdigest(), size
 
 
-def storage_path_for(workspace_id: UUID, dataset_id: UUID, digest: str) -> str:
-    """Return a tenant-scoped content-addressed object path."""
-    return f"{workspace_id}/datasets/{dataset_id}/sha256/{digest}"
+def storage_path_for(workspace_id: UUID, dataset_id: UUID, digest: str, version_no: int) -> str:
+    """Return the canonical tenant/content/version object path."""
+    if version_no < 1:
+        raise ValueError("version_no must be positive")
+    return f"tenant/{workspace_id}/datasets/{digest}/{version_no}"
 
 
 __all__ = [
+    "DatasetReferencedError",
     "Dataset",
     "DatasetStorage",
     "DatasetStore",

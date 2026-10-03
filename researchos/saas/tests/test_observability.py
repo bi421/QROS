@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import json
 
 from fastapi.testclient import TestClient
 
@@ -143,3 +144,28 @@ def test_unhandled_exception_is_counted_as_5xx() -> None:
     assert snapshot["requests_total"] == 1
     assert snapshot["errors_total"] == 1
     assert snapshot["status_counts"] == {500: 1}
+
+
+def test_required_job_metrics_are_exposed() -> None:
+    app = create_app(metrics_token="scrape-secret")
+    client = TestClient(app)
+    response = client.get("/metrics", headers={"X-Metrics-Token": "scrape-secret"})
+    assert response.status_code == 200
+    assert "jobs_created_total 0" in response.text
+    assert "jobs_failed_total 0" in response.text
+    assert "tenant_isolation_violations_total 0" in response.text
+    assert "rls_violations_total 0" in response.text
+
+
+def test_structured_log_is_json_parseable(caplog) -> None:
+    app = create_app(metrics_token="scrape-secret")
+    client = TestClient(app)
+    caplog.set_level(logging.INFO, logger="qros.saas")
+    response = client.get("/healthz", headers={"X-Request-ID": "json-log-123"})
+    assert response.status_code == 200
+    events = [json.loads(record.message) for record in caplog.records if record.name == "qros.saas"]
+    event = next(item for item in events if item.get("event") == "http_request_completed")
+    assert event["request_id"] == "json-log-123"
+    assert event["level"] == "info"
+    assert event["timestamp"]
+    assert "duration_ms" in event

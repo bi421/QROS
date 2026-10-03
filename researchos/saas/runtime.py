@@ -19,6 +19,7 @@ from researchos.saas.supabase_finding_store import SupabaseResearchFindingStore
 from researchos.saas.idempotency import SupabaseIdempotencyStore
 from researchos.saas.billing import SupabaseBillingEventStore
 from researchos.saas.rate_limit import SupabaseRateLimiter
+from researchos.saas.persistence.supabase import SupabaseTenantPersistence
 
 
 def build_production_app():
@@ -48,6 +49,8 @@ def build_production_app():
         billing_webhook_secret=os.environ.get("BILLING_WEBHOOK_SECRET"),
         metrics_token=os.environ.get("QROS_METRICS_TOKEN"),
         rate_limiter=SupabaseRateLimiter(client, limit=120, window_seconds=60),
+        tenant_persistence=SupabaseTenantPersistence(client),
+        retention_days=int(os.environ.get("QROS_RETENTION_DAYS", "30")),
     )
 
 
