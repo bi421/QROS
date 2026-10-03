@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from researchos.quant_engine.cpp_backend import CppQuantAdapter
-from researchos.quant_engine.router import BackendRouter
+from researchos.quant_engine.router import BackendExecutionMetadata, BackendRouter
 
 
 @dataclass(frozen=True)
@@ -29,17 +29,16 @@ class ProductionQuantBackendAudit:
         }
 
 
-def _metadata_dict(metadata: Any) -> dict[str, Any]:
-    value = metadata.to_dict()
+def _metadata_dict(metadata: BackendExecutionMetadata) -> dict[str, Any]:
     return {
-        "operation": value["operation"],
-        "backend": value["backend"],
-        "version": value["version"],
-        "fallback_used": bool(value["fallback_used"]),
-        "validation_status": value["validation_status"],
-        "result_hash": value["result_hash"],
-        "error_code": value["error_code"],
-        "attempted_backends": list(value.get("attempted_backends", [])),
+        "operation": metadata.operation,
+        "backend": metadata.backend,
+        "version": metadata.version,
+        "fallback_used": metadata.fallback_used,
+        "validation_status": metadata.validation_status,
+        "result_hash": metadata.result_hash,
+        "error_code": metadata.error_code,
+        "attempted_backends": list(metadata.attempted_backends),
     }
 
 
