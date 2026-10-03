@@ -2,6 +2,7 @@
 -- The fixture is fully transactional. Grants are temporarily widened inside
 -- the transaction so the tests exercise RLS independently of the production
 -- server-only Data API boundary; the transaction rolls back all changes.
+create extension if not exists pgtap;
 begin;
 
 select plan(23);
@@ -30,9 +31,9 @@ insert into public.dataset_version
   (id, dataset_id, version_no, content_sha256, storage_path, byte_size, created_by)
 values
   ('aaaaaaaa-1000-0000-0000-aaaaaaaaaaaa', 'aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa', 1,
-   repeat('a', 64), 'qros/a.csv', 1, '11111111-1111-1111-1111-111111111111'),
+   repeat('a', 64), 'tenant/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/datasets/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/1/', 1, '11111111-1111-1111-1111-111111111111'),
   ('bbbbbbbb-1000-0000-0000-bbbbbbbbbbbb', 'bbbbbbbb-0000-0000-0000-bbbbbbbbbbbb', 1,
-   repeat('b', 64), 'qros/b.csv', 1, '22222222-2222-2222-2222-222222222222');
+   repeat('b', 64), 'tenant/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/datasets/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/1/', 1, '22222222-2222-2222-2222-222222222222');
 
 insert into public.research_run
   (id, workspace_id, dataset_version_id, workflow_id, status, created_by, source_dataset_sha256)
@@ -268,3 +269,5 @@ select results_eq(
 
 select * from finish();
 rollback;
+
+

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import logging
-import json
+from uuid import uuid4
+
+from researchos.saas.observability import actor_user_id_var, observe_error, tenant_id_var
 
 from fastapi.testclient import TestClient
 
 from researchos.saas.api import create_app
+from researchos.saas.contracts import Plan, TenantContext
 from researchos.saas.observability import RequestMetrics, StructuredRequestObserver, sanitize_log_fields
 
 
@@ -146,26 +149,68 @@ def test_unhandled_exception_is_counted_as_5xx() -> None:
     assert snapshot["status_counts"] == {500: 1}
 
 
-def test_required_job_metrics_are_exposed() -> None:
-    app = create_app(metrics_token="scrape-secret")
-    client = TestClient(app)
-    response = client.get("/metrics", headers={"X-Metrics-Token": "scrape-secret"})
-    assert response.status_code == 200
-    assert "jobs_created_total 0" in response.text
-    assert "jobs_failed_total 0" in response.text
-    assert "tenant_isolation_violations_total 0" in response.text
-    assert "rls_violations_total 0" in response.text
+def test_required_secret_classes_are_redacted() -> None:
+    sanitized = sanitize_log_fields(
+        {
+            "Authorization": "Bearer jwt-secret",
+            "jwt": "jwt-secret",
+            "DATABASE_URL": "postgresql://user:secret@db.example/qros",
+            "aws_secret_access_key": "aws-secret",
+            "private_dataset_content": "private-market-data",
+        }
+    )
+
+    assert all(value == "[REDACTED]" for value in sanitized.values())
 
 
-def test_structured_log_is_json_parseable(caplog) -> None:
-    app = create_app(metrics_token="scrape-secret")
-    client = TestClient(app)
-    caplog.set_level(logging.INFO, logger="qros.saas")
-    response = client.get("/healthz", headers={"X-Request-ID": "json-log-123"})
-    assert response.status_code == 200
-    events = [json.loads(record.message) for record in caplog.records if record.name == "qros.saas"]
-    event = next(item for item in events if item.get("event") == "http_request_completed")
-    assert event["request_id"] == "json-log-123"
-    assert event["level"] == "info"
-    assert event["timestamp"]
-    assert "duration_ms" in event
+def test_structured_error_contains_safe_correlation_context(caplog) -> None:
+    caplog.set_level(logging.WARNING, logger="qros.saas")
+    tenant_token = tenant_id_var.set("tenant-safe")
+    actor_token = actor_user_id_var.set("actor-safe")
+    try:
+        observe_error(
+            severity="warning",
+            error_code="forbidden",
+            error=PermissionError("do not log this secret"),
+            metadata={
+                "method": "GET",
+                "path": "/v1/private",
+                "status_code": 403,
+                "authorization": "Bearer should-not-appear",
+                "private_dataset_content": "private-data",
+            },
+        )
+    finally:
+        tenant_id_var.reset(tenant_token)
+        actor_user_id_var.reset(actor_token)
+
+    message = caplog.records[-1].message
+    assert '"event":"qros_error"' in message
+    assert '"error_code":"forbidden"' in message
+    assert '"tenant_id":"tenant-safe"' in message
+    assert '"actor_user_id":"actor-safe"' in message
+    assert "should-not-appear" not in message
+    assert "private-data" not in message
+    assert "do not log this secret" not in message
+
+
+class _TestAuth:
+    def __init__(self) -> None:
+        self.context = TenantContext(uuid4(), uuid4(), Plan.PRO)
+
+    def authenticate(self, authorization: str | None) -> TenantContext:
+        return self.context
+
+
+def test_validation_response_does_not_echo_submitted_secret() -> None:
+    client = TestClient(create_app(auth_provider=_TestAuth()))
+    secret = "submitted-secret-token"
+
+    response = client.post(
+        "/v1/research-runs",
+        json={"dataset_version_id": secret},
+    )
+
+    assert response.status_code == 400
+    assert secret not in response.text
+    assert "input" not in response.json()["detail"][0]

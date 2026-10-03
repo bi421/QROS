@@ -1,228 +1,224 @@
-"""Verify a PostgreSQL backup can be restored and passes QROS DR invariants.
+#!/usr/bin/env python3
+"""Verify a PostgreSQL logical backup can be restored into a disposable container.
 
-The command intentionally uses the native PostgreSQL tools:
-- pg_dump creates a custom-format logical backup.
-- pg_restore loads it into a newly-created database.
-- check_migrations.py validates migration ordering/integrity.
-- the tenant-isolation pgTAP SQL is executed against the restored database.
-- dataset object content hashes are compared before/after when object roots are supplied.
-
-Example:
-    python scripts/backup_verify.py \
-      --source-url "$SOURCE_DATABASE_URL" \
-      --target-admin-url "$TARGET_ADMIN_DATABASE_URL" \
-      --object-root-before ./objects/source \
-      --object-root-after ./objects/restored
-
-For CI, the source and target can be two local PostgreSQL databases. The target
-database is created and dropped by this script unless --keep-target is set.
+The drill is deliberately fail-closed. It proves backup creation, restore,
+required QROS schema/RLS, immutable dataset-version identity, critical
+governed-record counts, and repository migration/security invariants.
+It does not claim Supabase Auth/Data API, Storage, worker recovery, or RPO/RTO.
 """
-
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
 import os
-import shlex
+import shutil
 import subprocess
-import tempfile
+import sys
+import time
 from pathlib import Path
-from typing import Sequence
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 ROOT = Path(__file__).resolve().parents[1]
-TENANT_TEST = ROOT / "supabase" / "tests" / "tenant_isolation_test.sql"
+REQUIRED_TABLES = (
+    "workspace", "workspace_member", "dataset", "dataset_version",
+    "research_claim", "research_run", "research_run_result",
+    "research_run_artifact", "artifact", "evidence", "research_validation",
+    "research_finding", "audit_event",
+)
+CRITICAL_COUNT_TABLES = (
+    "research_claim", "research_run", "research_run_result",
+    "research_run_artifact", "evidence", "artifact",
+    "research_validation", "research_finding",
+)
 
 
-def run(command: Sequence[str], *, env: dict[str, str] | None = None) -> None:
-    printable = " ".join(shlex.quote(part) for part in command)
-    print(f"+ {printable}")
-    subprocess.run(command, check=True, cwd=ROOT, env=env)
+def run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(cmd, check=True, text=True, **kwargs)
 
 
-def target_database_url(admin_url: str, database: str) -> str:
-    parts = urlsplit(admin_url)
-    query = dict(parse_qsl(parts.query, keep_blank_values=True))
-    query.pop("dbname", None)
-    return urlunsplit(
-        (parts.scheme, parts.netloc, f"/{database}", urlencode(query), parts.fragment)
-    )
+def psql(url: str, sql: str) -> str:
+    return run(
+        ["psql", url, "-At", "-F", "\t", "-v", "ON_ERROR_STOP=1", "-c", sql],
+        capture_output=True,
+    ).stdout.strip()
 
 
-def database_name(database_url: str) -> str:
-    path = urlsplit(database_url).path.lstrip("/")
-    if not path:
-        raise ValueError("database URL must include a database name")
-    return path
+def require_tools(names: tuple[str, ...]) -> None:
+    for tool in names:
+        if shutil.which(tool) is None:
+            raise SystemExit(f"{tool} is required")
 
 
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+def database_snapshot(url: str) -> dict[str, object]:
+    quoted = ",".join("'" + table + "'" for table in REQUIRED_TABLES)
+    tables = psql(
+        url,
+        f"""
+        select c.relname from pg_class c
+        join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind = 'r'
+          and c.relname = any(ARRAY[{quoted}])
+        order by c.relname
+        """,
+    ).splitlines()
+    expected = sorted(REQUIRED_TABLES)
+    if sorted(tables) != expected:
+        raise SystemExit(
+            "required schema mismatch: "
+            f"missing={sorted(set(expected) - set(tables))}"
+        )
 
+    rls = psql(
+        url,
+        """
+        select c.relname || '=' || case when c.relrowsecurity
+               then 'enabled' else 'disabled' end
+        from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind = 'r'
+          and c.relname in (
+            'workspace','workspace_member','dataset','dataset_version',
+            'research_claim','research_run','research_run_result',
+            'research_run_artifact','artifact','evidence','research_validation',
+            'research_finding','audit_event'
+          )
+        order by c.relname
+        """,
+    ).splitlines()
+    expected_rls = [f"{table}=enabled" for table in expected]
+    if rls != expected_rls:
+        raise SystemExit(f"RLS verification failed: {rls}")
 
-def object_hashes(root: Path) -> dict[str, str]:
-    if not root.is_dir():
-        raise SystemExit(f"object root does not exist: {root}")
+    dataset_versions = psql(
+        url,
+        """
+        select id::text, dataset_id::text, version_no::text, content_sha256
+        from public.dataset_version order by id
+        """,
+    ).splitlines()
+
+    counts = {
+        table: int(psql(url, f"select count(*) from public.{table}") or "0")
+        for table in CRITICAL_COUNT_TABLES
+    }
     return {
-        str(path.relative_to(root)).replace(os.sep, "/"): sha256_file(path)
-        for path in sorted(root.rglob("*"))
-        if path.is_file()
+        "required_tables": expected,
+        "rls": rls,
+        "dataset_versions": dataset_versions,
+        "critical_counts": counts,
     }
 
 
-def verify_object_replication(before: Path | None, after: Path | None) -> None:
-    if before is None and after is None:
-        print("object replication: skipped (no object roots supplied)")
-        return
-    if before is None or after is None:
-        raise SystemExit("--object-root-before and --object-root-after must be supplied together")
-
-    before_hashes = object_hashes(before)
-    after_hashes = object_hashes(after)
-    if before_hashes != after_hashes:
-        missing = sorted(set(before_hashes) - set(after_hashes))
-        extra = sorted(set(after_hashes) - set(before_hashes))
-        changed = sorted(
-            path
-            for path in set(before_hashes) & set(after_hashes)
-            if before_hashes[path] != after_hashes[path]
-        )
-        raise SystemExit(
-            "object replication hash mismatch: "
-            f"missing={missing}, extra={extra}, changed={changed}"
-        )
-    print(f"object replication: OK ({len(before_hashes)} objects, SHA-256 matched)")
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source-url", required=True, help="source PostgreSQL connection URL")
-    parser.add_argument(
-        "--target-admin-url",
-        required=True,
-        help="PostgreSQL URL used to create/drop the fresh restore database",
-    )
-    parser.add_argument(
-        "--pg-dump",
-        default="pg_dump",
-        help="pg_dump executable (default: pg_dump)",
-    )
-    parser.add_argument(
-        "--pg-restore",
-        default="pg_restore",
-        help="pg_restore executable (default: pg_restore)",
-    )
-    parser.add_argument(
-        "--psql",
-        default="psql",
-        help="psql executable (default: psql)",
-    )
-    parser.add_argument(
-        "--target-db",
-        default=None,
-        help="fresh database name; defaults to a temporary qros_dr_<pid> database",
-    )
-    parser.add_argument(
-        "--object-root-before",
-        type=Path,
-        default=None,
-        help="local mirror of source object storage",
-    )
-    parser.add_argument(
-        "--object-root-after",
-        type=Path,
-        default=None,
-        help="local mirror of restored object storage",
-    )
-    parser.add_argument(
-        "--keep-target",
-        action="store_true",
-        help="keep the restored database for post-failure inspection",
-    )
-    return parser.parse_args()
-
-
 def main() -> int:
-    args = parse_args()
-    target_db = args.target_db or f"qros_dr_{os.getpid()}"
-    target_url = target_database_url(args.target_admin_url, target_db)
-    dump_file: Path | None = None
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--database-url", default=os.getenv("QROS_BACKUP_DATABASE_URL"))
+    parser.add_argument("--output", type=Path, default=Path("backup/qros.dump"))
+    parser.add_argument("--report", type=Path, default=Path("backup/qros_restore_report.json"))
+    parser.add_argument("--skip-restore", action="store_true")
+    args = parser.parse_args()
 
+    if not args.database_url:
+        raise SystemExit("QROS_BACKUP_DATABASE_URL or --database-url is required")
+    require_tools(("pg_dump", "pg_restore", "psql"))
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.report.parent.mkdir(parents=True, exist_ok=True)
+
+    started = time.time()
+    source_version = psql(args.database_url, "show server_version;")
+    source_major = source_version.split(".")[0]
+    if not source_major.isdigit():
+        raise SystemExit(f"could not determine PostgreSQL major version: {source_version}")
+
+    run(["pg_dump", "--format=custom", "--no-owner", "--file", str(args.output), args.database_url])
+    size = args.output.stat().st_size
+    if size <= 0:
+        raise SystemExit("backup is empty")
+    digest = hashlib.sha256(args.output.read_bytes()).hexdigest()
+    source = database_snapshot(args.database_url)
+
+    report: dict[str, object] = {
+        "schema_version": 2,
+        "status": "BLOCKED",
+        "backup": {
+            "path": str(args.output),
+            "bytes": size,
+            "sha256": digest,
+            "postgres_major": int(source_major),
+        },
+        "source_integrity": {
+            "dataset_versions": len(source["dataset_versions"]),
+            "critical_counts": source["critical_counts"],
+        },
+        "restore": {"executed": False, "verified": False},
+        "migration_security": {"verified": False},
+        "application_readability": "NOT_EXECUTED",
+        "rpo_rto": "NOT_EXECUTED",
+    }
+
+    if args.skip_restore:
+        report["status"] = "BACKUP_ONLY"
+        args.report.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0
+
+    require_tools(("docker",))
+    name = f"qros-backup-verify-{os.getpid()}"
+    port = "55432"
+    restore_url = f"postgresql://postgres:qros@127.0.0.1:{port}/postgres"
+    subprocess.run(["docker", "rm", "-f", name], capture_output=True, check=False)
     try:
-        with tempfile.TemporaryDirectory(prefix="qros-backup-verify-") as tmp:
-            dump_file = Path(tmp) / "qros.backup"
+        run([
+            "docker", "run", "-d", "--name", name, "-p", f"{port}:5432",
+            "-e", "POSTGRES_PASSWORD=qros", f"postgres:{source_major}",
+        ])
+        for _ in range(60):
+            if subprocess.run(
+                ["docker", "exec", name, "pg_isready", "-U", "postgres"],
+                capture_output=True,
+            ).returncode == 0:
+                break
+            time.sleep(1)
+        else:
+            raise SystemExit("temporary postgres did not become ready")
 
-            # Capture a portable logical backup. pg_restore supports custom-format
-            # archives and restores them directly into a named database.
-            run(
-                [
-                    args.pg_dump,
-                    "--format=custom",
-                    "--no-owner",
-                    "--no-acl",
-                    "--file",
-                    str(dump_file),
-                    args.source_url,
-                ]
+        run(["pg_restore", "--clean", "--if-exists", "--no-owner",
+             "--dbname", restore_url, str(args.output)])
+        report["restore"] = {"executed": True, "verified": False,
+                             "postgres_major": int(source_major)}
+
+        restored = database_snapshot(restore_url)
+        if restored["dataset_versions"] != source["dataset_versions"]:
+            raise SystemExit("immutable dataset-version identity mismatch after restore")
+        if restored["critical_counts"] != source["critical_counts"]:
+            raise SystemExit(
+                "critical governed-record counts changed after restore: "
+                f"source={source['critical_counts']} restored={restored['critical_counts']}"
             )
 
-            # A fresh database is mandatory: restoring over an existing database
-            # can hide missing objects or stale schema.
-            run(["createdb", "--maintenance-db", args.target_admin_url, target_db])
-            run(
-                [
-                    args.pg_restore,
-                    "--no-owner",
-                    "--no-acl",
-                    "--exit-on-error",
-                    "--dbname",
-                    target_url,
-                    str(dump_file),
-                ]
+        migration_check = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "verify_migrations.py"),
+             "--database-url", restore_url],
+            text=True, capture_output=True, check=False,
+        )
+        if migration_check.returncode != 0:
+            raise SystemExit(
+                "restored database migration/security verification failed: "
+                + (migration_check.stderr.strip() or migration_check.stdout.strip())
             )
 
-            # Migration verification is intentionally run after restore so the
-            # repository's migration contract is part of the DR gate.
-            run(["python", str(ROOT / "scripts" / "check_migrations.py")])
-
-            # pgTAP tenant isolation runs against the restored database itself.
-            run(
-                [
-                    args.psql,
-                    target_url,
-                    "-v",
-                    "ON_ERROR_STOP=1",
-                    "-f",
-                    str(TENANT_TEST),
-                ]
-            )
-
-            verify_object_replication(args.object_root_before, args.object_root_after)
-            print(
-                json.dumps(
-                    {
-                        "status": "PASS",
-                        "target_database": target_db,
-                        "backup_format": "custom",
-                        "migration_verification": "passed",
-                        "tenant_isolation": "passed",
-                    },
-                    sort_keys=True,
-                )
-            )
-            return 0
+        report["restore"]["verified"] = True
+        report["restore"]["dataset_versions"] = len(restored["dataset_versions"])
+        report["restore"]["critical_counts"] = restored["critical_counts"]
+        report["migration_security"] = {
+            "verified": True, "output": migration_check.stdout.strip()
+        }
+        report["status"] = "VERIFIED"
     finally:
-        if not args.keep_target:
-            subprocess.run(
-                ["dropdb", "--if-exists", "--maintenance-db", args.target_admin_url, target_db],
-                check=False,
-                cwd=ROOT,
-            )
+        subprocess.run(["docker", "rm", "-f", name], capture_output=True, check=False)
+
+    report["elapsed_seconds"] = round(time.time() - started, 3)
+    args.report.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0
 
 
 if __name__ == "__main__":

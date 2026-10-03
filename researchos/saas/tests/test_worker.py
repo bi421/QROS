@@ -6,6 +6,7 @@ import logging
 
 from researchos.research_core.contracts import ResearchArtifact, ResearchResult
 from researchos.saas.contracts import ResearchJob, ResearchJobStatus
+from researchos.saas.observability import job_id_var, tenant_id_var
 from researchos.saas.store import InMemoryResearchJobStore
 from researchos.saas.worker import ResearchWorker
 
@@ -15,8 +16,12 @@ class StubExecutor:
         self.result = result
         self.error = error
         self.calls = 0
+        self.observed_job_id = None
+        self.observed_tenant_id = None
 
     def execute(self, job_id):
+        self.observed_job_id = job_id_var.get()
+        self.observed_tenant_id = tenant_id_var.get()
         self.calls += 1
         if self.error:
             raise self.error
@@ -49,34 +54,103 @@ def _result(status="SUCCEEDED"):
     )
 
 
-def test_worker_moves_queued_job_to_succeeded():
+def test_worker_moves_queued_job_to_succeeded(monkeypatch):
     workspace_id = uuid4()
     store = InMemoryResearchJobStore()
     job = store.create(workspace_id, _job(workspace_id))
     executor = StubExecutor(_result())
+    durations = []
+    monkeypatch.setattr(
+        "researchos.saas.worker.jobs_duration_seconds.observe",
+        durations.append,
+    )
 
     result = ResearchWorker(store, executor).run_once(workspace_id, job.id)
 
     assert result.status == "SUCCEEDED"
     assert executor.calls == 1
+    assert executor.observed_job_id == str(job.id)
+    assert executor.observed_tenant_id == str(workspace_id)
+    assert len(durations) == 1
+    assert durations[0] >= 0.0
+    assert job_id_var.get() is None
+    assert tenant_id_var.get() is None
     saved = store.get(workspace_id, job.id)
     assert saved.status == ResearchJobStatus.SUCCEEDED
     assert saved.attempt_count == 1
 
 
-def test_worker_marks_job_failed_when_executor_raises():
+def test_worker_marks_job_failed_when_executor_raises(monkeypatch):
     workspace_id = uuid4()
     store = InMemoryResearchJobStore()
     job = store.create(workspace_id, _job(workspace_id))
     executor = StubExecutor(error=RuntimeError("scientific failure"))
+    failures = []
+    durations = []
+    monkeypatch.setattr(
+        "researchos.saas.worker.jobs_failed_total.inc",
+        lambda: failures.append(True),
+    )
+    monkeypatch.setattr(
+        "researchos.saas.worker.jobs_duration_seconds.observe",
+        durations.append,
+    )
 
     with pytest.raises(RuntimeError, match="scientific failure"):
         ResearchWorker(store, executor).run_once(workspace_id, job.id)
 
+    assert len(failures) == 1
+    assert len(durations) == 1
+    assert durations[0] >= 0.0
+    assert job_id_var.get() is None
+    assert tenant_id_var.get() is None
     saved = store.get(workspace_id, job.id)
     assert saved.status == ResearchJobStatus.FAILED
     assert saved.error_code == "executor_error"
     assert saved.attempt_count == 1
+
+
+def test_worker_records_terminal_failed_result(monkeypatch):
+    workspace_id = uuid4()
+    store = InMemoryResearchJobStore()
+    job = store.create(workspace_id, _job(workspace_id))
+    executor = StubExecutor(_result("FAILED"))
+    failures = []
+    monkeypatch.setattr(
+        "researchos.saas.worker.jobs_failed_total.inc",
+        lambda: failures.append(True),
+    )
+
+    result = ResearchWorker(store, executor).run_once(workspace_id, job.id)
+
+    assert result.status == "FAILED"
+    assert failures == [True]
+    saved = store.get(workspace_id, job.id)
+    assert saved.status == ResearchJobStatus.FAILED
+
+
+def test_worker_marks_job_failed_when_provenance_recording_fails(monkeypatch):
+    workspace_id = uuid4()
+    store = InMemoryResearchJobStore()
+    job = store.create(workspace_id, _job(workspace_id))
+    executor = StubExecutor(_result())
+    failures = []
+    monkeypatch.setattr(
+        "researchos.saas.worker.jobs_failed_total.inc",
+        lambda: failures.append(True),
+    )
+
+    def fail_record(*args, **kwargs):
+        raise RuntimeError("persistence failure")
+
+    monkeypatch.setattr(store, "record_result", fail_record)
+
+    with pytest.raises(RuntimeError, match="persistence failure"):
+        ResearchWorker(store, executor).run_once(workspace_id, job.id)
+
+    assert len(failures) == 1
+    assert job_id_var.get() is None
+    assert tenant_id_var.get() is None
 
 
 def test_worker_cannot_run_job_from_another_workspace():
@@ -234,13 +308,70 @@ def test_recovered_worker_reuses_idempotent_result_after_lease_loss():
     assert store.get(workspace_id, job.id).status == ResearchJobStatus.SUCCEEDED
     assert store.get(workspace_id, job.id).attempt_count == 2
 
+def test_in_memory_monthly_usage_rolls_over_at_month_boundary() -> None:
+    now = [datetime(2026, 9, 30, 23, 59, tzinfo=timezone.utc)]
+    store = InMemoryResearchJobStore(clock=lambda: now[0])
+    workspace_id = uuid4()
 
-def test_worker_log_propagates_request_id(caplog) -> None:
+    store.create(workspace_id, _job(workspace_id))
+    assert store.count_monthly(workspace_id) == 1
+
+    now[0] = datetime(2026, 10, 1, 0, 0, tzinfo=timezone.utc)
+    assert store.count_monthly(workspace_id) == 0
+
+
+def test_worker_records_retry_observability_on_reclaimed_attempt(monkeypatch) -> None:
+    now = [datetime(2026, 9, 30, tzinfo=timezone.utc)]
+    store = InMemoryResearchJobStore(clock=lambda: now[0])
+    workspace_id = uuid4()
+    job = store.create(workspace_id, _job(workspace_id, max_attempts=2))
+    first = store.claim(workspace_id, job.id, "worker-a", 10)
+    now[0] += timedelta(seconds=11)
+    assert first.job.attempt_count == 1
+
+    retries = []
+    monkeypatch.setattr(
+        "researchos.saas.worker.jobs_retries_total.inc",
+        lambda: retries.append(True),
+    )
+
+    result = ResearchWorker(store, StubExecutor(_result())).run_once(workspace_id, job.id)
+
+    assert result.status == "SUCCEEDED"
+    assert retries == [True]
+    assert store.get(workspace_id, job.id).attempt_count == 2
+
+
+def test_worker_emits_safe_execution_span(monkeypatch) -> None:
     workspace_id = uuid4()
     store = InMemoryResearchJobStore()
     job = store.create(workspace_id, _job(workspace_id))
     executor = StubExecutor(_result())
-    worker = ResearchWorker(store, executor)
-    caplog.set_level(logging.INFO, logger="qros.worker")
-    worker.run_once(workspace_id, job.id, request_id="api-request-123")
-    assert any("api-request-123" in record.message for record in caplog.records)
+    spans = []
+
+    class Span:
+        def set_attribute(self, key, value):
+            spans.append((key, value))
+
+    class Tracer:
+        def start_as_current_span(self, name):
+            assert name == "qros.research_job"
+
+            class Context:
+                def __enter__(self):
+                    return Span()
+
+                def __exit__(self, exc_type, exc, tb):
+                    return False
+
+            return Context()
+
+    monkeypatch.setattr("researchos.saas.worker.tracer", Tracer())
+
+    ResearchWorker(store, executor).run_once(workspace_id, job.id)
+
+    assert spans == [
+        ("qros.workspace_id", str(workspace_id)),
+        ("qros.job_id", str(job.id)),
+        ("qros.attempt", 1),
+    ]

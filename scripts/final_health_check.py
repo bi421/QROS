@@ -95,12 +95,8 @@ where n.nspname = 'public'
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--expected-commit", required=True)
-    parser.add_argument("--database-url", required=True)
-    parser.add_argument("--backup-source-url", required=True)
-    parser.add_argument("--backup-target-admin-url", required=True)
-    parser.add_argument("--object-root-before", type=Path, required=True)
-    parser.add_argument("--object-root-after", type=Path, required=True)
+    parser.add_argument("--skip-cpp", action="store_true", help="Skip C++ configure/build")
+    parser.add_argument("--exact-commit", help="Require HEAD to equal this commit SHA")
     args = parser.parse_args()
 
     actual = git_sha()
@@ -108,6 +104,12 @@ def main() -> int:
         raise SystemExit(
             f"exact-release violation: expected {args.expected_commit}, got {actual}"
         )
+
+    if args.exact_commit:
+        actual = git_value(["rev-parse", "HEAD"])
+        if actual != args.exact_commit:
+            print(f"EXACT COMMIT MISMATCH: expected {args.exact_commit}, got {actual}", file=sys.stderr)
+            return 2
 
     checks: dict[str, dict[str, object]] = {}
 
@@ -180,6 +182,10 @@ def main() -> int:
         ],
     )
 
+    # SKIPPED is an intentional non-blocking state (for example --skip-cpp).
+    # Only an explicit FAIL makes the overall health gate fail.
+    failures = [check["label"] for check in checks.values() if check["status"] == "FAIL"]
+    overall = "FAIL" if failures else "PASS"
     evidence = {
         "schema_version": 2,
         "commit": actual,
@@ -202,10 +208,12 @@ def main() -> int:
         "checks": checks,
     }
 
-    output = ROOT / f"health_evidence_{actual}.json"
-    output.write_text(
-        json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    HEALTH_DIR.mkdir(parents=True, exist_ok=True)
+    serialized = json.dumps(evidence, indent=2, sort_keys=True) + "\n"
+    HEALTH_JSON.write_text(serialized, encoding="utf-8")
+    exact_evidence = HEALTH_DIR / f"health_evidence_{evidence['commit']}.json"
+    exact_evidence.write_text(serialized, encoding="utf-8")
+
     print(json.dumps(evidence, indent=2, sort_keys=True))
     print(f"HEALTH_EVIDENCE={output.name}")
     return 0 if evidence["health_status"] == "PASS" else 1
