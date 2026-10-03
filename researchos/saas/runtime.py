@@ -23,7 +23,7 @@ from researchos.saas.rate_limit import SupabaseRateLimiter
 from researchos.saas.workspace import SupabaseWorkspaceProvisioner
 
 
-def build_production_app():
+def build_production_app() -> FastAPI:
     url = os.environ["SUPABASE_URL"]
     key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
     client = create_client(url, key)
