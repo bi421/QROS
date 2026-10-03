@@ -2,13 +2,20 @@
 from __future__ import annotations
 
 from threading import Event, Thread
-import time
-from typing import Mapping, Protocol
+from time import perf_counter
+from typing import Protocol
 from uuid import UUID, uuid4
 
 from researchos.research_core.contracts import ResearchResult
 from researchos.saas.contracts import ResearchJobStatus
-from researchos.saas.observability import StructuredRequestObserver, configure_tracing, emit_log, span
+from researchos.saas.observability import (
+    jobs_duration_seconds,
+    jobs_failed_total,
+    jobs_retries_total,
+    job_id_var,
+    tenant_id_var,
+    tracer,
+)
 from researchos.saas.store import ResearchJobStore
 
 
@@ -63,65 +70,55 @@ class ResearchWorker:
         *,
         request_id: str | None = None,
     ) -> ResearchResult:
-        with span("qros.job", request_id=request_id, tenant_id=workspace_id, job_id=job_id):
-            lease = self._store.claim(
-                workspace_id,
-                job_id,
-                owner=str(uuid4()),
-                lease_seconds=self._lease_seconds,
-            )
-            emit_log(
-                level=20,
-                message="research job claimed by worker",
-                request_id=request_id,
-                tenant_id=workspace_id,
-                job_id=job_id,
-            )
-            stop = Event()
-            heartbeat = Thread(
-                target=self._heartbeat,
-                args=(workspace_id, job_id, lease.token, stop),
-                daemon=True,
-            )
-            heartbeat.start()
-            started_at = time.perf_counter()
+        lease = self._store.claim(
+            workspace_id,
+            job_id,
+            owner=str(uuid4()),
+            lease_seconds=self._lease_seconds,
+        )
+        if lease.job.attempt_count > 1:
+            jobs_retries_total.inc()
+        tenant_token = tenant_id_var.set(str(workspace_id))
+        job_token = job_id_var.set(str(job_id))
+        started = perf_counter()
+        stop = Event()
+        heartbeat = Thread(
+            target=self._heartbeat,
+            args=(workspace_id, job_id, lease.token, stop),
+            daemon=True,
+        )
+        heartbeat.start()
+        try:
             try:
-                with span(
-                    "qros.execution",
-                    request_id=request_id,
-                    tenant_id=workspace_id,
-                    job_id=job_id,
-                ):
+                with tracer.start_as_current_span("qros.research_job") as span:
+                    span.set_attribute("qros.workspace_id", str(workspace_id))
+                    span.set_attribute("qros.job_id", str(job_id))
+                    span.set_attribute("qros.attempt", lease.job.attempt_count)
                     result = self._executor.execute(job_id)
             except Exception:
-                self._store.finish(
-                    workspace_id,
-                    job_id,
-                    lease.token,
-                    ResearchJobStatus.FAILED,
-                    error_code="executor_error",
-                )
-                self._observability.metrics.inc_job_failed()
-                emit_log(
-                    level=40,
-                    message="research job execution failed",
-                    request_id=request_id,
-                    tenant_id=workspace_id,
-                    job_id=job_id,
-                    duration_ms=(__import__("time").perf_counter() - started_at) * 1000.0,
-                )
+                try:
+                    self._store.finish(
+                        workspace_id,
+                        job_id,
+                        lease.token,
+                        ResearchJobStatus.FAILED,
+                        error_code="executor_error",
+                    )
+                finally:
+                    jobs_failed_total.inc()
                 raise
-            finally:
-                stop.set()
-                heartbeat.join(timeout=1.0)
 
             target = (
                 ResearchJobStatus.SUCCEEDED
                 if result.status == "SUCCEEDED"
                 else ResearchJobStatus.FAILED
             )
+            if target is ResearchJobStatus.FAILED:
+                jobs_failed_total.inc()
             try:
-                self._store.record_result(workspace_id, job_id, lease.token, result)
+                self._store.record_result(
+                    workspace_id, job_id, lease.token, result
+                )
             except Exception:
                 try:
                     self._store.finish(
@@ -131,29 +128,25 @@ class ResearchWorker:
                         ResearchJobStatus.FAILED,
                         error_code="provenance_error",
                     )
-                except Exception:
-                    pass
-                self._observability.metrics.inc_job_failed()
-                emit_log(
-                    level=40,
-                    message="research job provenance persistence failed",
-                    request_id=request_id,
-                    tenant_id=workspace_id,
-                    job_id=job_id,
-                )
+                finally:
+                    if target is not ResearchJobStatus.FAILED:
+                        jobs_failed_total.inc()
                 raise
-            self._store.finish(workspace_id, job_id, lease.token, target)
-            if target == ResearchJobStatus.FAILED:
-                self._observability.metrics.inc_job_failed()
-            emit_log(
-                level=20 if target == ResearchJobStatus.SUCCEEDED else 40,
-                message=f"research job {target.value}",
-                request_id=request_id,
-                tenant_id=workspace_id,
-                job_id=job_id,
-                duration_ms=(__import__("time").perf_counter() - started_at) * 1000.0,
-            )
+            try:
+                self._store.finish(workspace_id, job_id, lease.token, target)
+            except Exception:
+                if target is not ResearchJobStatus.FAILED:
+                    jobs_failed_total.inc()
+                raise
             return result
+        finally:
+            stop.set()
+            heartbeat.join(timeout=1.0)
+            jobs_duration_seconds.observe(
+                max(0.0, perf_counter() - started)
+            )
+            job_id_var.reset(job_token)
+            tenant_id_var.reset(tenant_token)
 
 
 __all__ = ["ResearchExecutor", "ResearchWorker"]

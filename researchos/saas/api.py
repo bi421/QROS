@@ -2,22 +2,60 @@
 
 from __future__ import annotations
 
-from typing import Protocol, Sequence
+from typing import Callable, Protocol
 from uuid import UUID, uuid4
 import hashlib
-import hmac
 import json
 import logging
-import time
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, Response
+from researchos.saas.api_middleware import RequestContextMiddleware
+from researchos.saas.onboarding import ONBOARDING_HTML, ONBOARDING_JS
+from researchos.saas.observability import (
+    StructuredRequestObserver,
+    actor_user_id_var,
+    configure_logging,
+    jobs_created_total,
+    jobs_failed_total,
+    observe_error,
+    tenant_id_var,
+)
+from researchos.saas.auth.permissions import Action, Resource, require_permission
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
-from researchos.saas.contracts import DEFAULT_USAGE_POLICIES, PageRequest, ResearchJob, ResearchJobStatus, TenantContext, WorkspaceRole
+from researchos.saas.contracts import (
+    DEFAULT_USAGE_POLICIES,
+    ResearchJob,
+    ResearchJobStatus,
+    TenantContext,
+)
+from researchos.saas.claim_api import ResearchClaimStore, register_research_claim_routes
+from researchos.saas.evidence_api import ResearchEvidenceStore, register_research_evidence_routes
+from researchos.saas.finding_api import (
+    InMemoryResearchFindingStore,
+    ResearchFindingStore,
+    register_research_finding_routes,
+)
+from researchos.saas.validation_api import (
+    InMemoryResearchValidationStore,
+    ResearchValidationStore,
+    register_research_validation_routes,
+)
+
 from researchos.saas.datasets import (
     Dataset,
     DatasetReferencedError,
@@ -36,13 +74,12 @@ from researchos.saas.idempotency import (
     MAX_IDEMPOTENCY_KEY_LENGTH,
 )
 from researchos.saas.rate_limit import FixedWindowRateLimiter, RateLimiter
-from researchos.saas.claim_api import ResearchClaimStore, register_research_claim_routes
-from researchos.saas.evidence_api import ResearchEvidenceStore, register_research_evidence_routes
-from researchos.saas.validation_api import InMemoryResearchValidationStore, ResearchValidationStore, register_research_validation_routes
-from researchos.saas.finding_api import InMemoryResearchFindingStore, register_research_finding_routes
+from researchos.saas.pagination import paginate, validate_filter_tenant_id
 from researchos.saas.research_report import build_research_report
-from researchos.saas.observability import StructuredRequestObserver, configure_tracing, emit_log, observe_request, span
-from researchos.saas.auth.authorization import require_permission
+from researchos.saas.workspace import (
+    WorkspaceProvisioningConflict,
+    WorkspaceProvisioner,
+)
 from researchos.saas.billing import (
     BillingEventConflict,
     BillingEventStore,
@@ -55,9 +92,11 @@ from researchos.saas.billing import (
 )
 
 REQUEST_ID_HEADER = "X-Request-ID"
-WORKSPACE_HEADER = "X-Workspace-ID"
 IDEMPOTENCY_HEADER = "Idempotency-Key"
 MAX_REQUEST_ID_LENGTH = 128
+
+logger = logging.getLogger(__name__)
+configure_logging()
 
 
 def _error_code(status_code: int) -> str:
@@ -76,83 +115,69 @@ def _error_code(status_code: int) -> str:
     }.get(status_code, "http_error")
 
 
-def _error_payload(request: Request, status_code: int, detail: object) -> dict[str, object]:
+def _error_payload(
+    request: Request, status_code: int, detail: object, details: object | None = None
+) -> dict[str, object]:
     message = detail if isinstance(detail, str) else "request failed"
-    request_id = getattr(request.state, "request_id", None)
-    return {
-        "code": _error_code(status_code),
+    code = (
+        detail
+        if isinstance(detail, str) and detail.startswith("INVALID_")
+        else _error_code(status_code)
+    )
+    error: dict[str, object] = {
+        "code": code,
         "message": message,
-        "request_id": request_id,
-        "correlation_id": request_id,
+        "request_id": getattr(request.state, "request_id", None),
+        "correlation_id": request.headers.get("X-Correlation-ID")
+        or getattr(request.state, "request_id", None),
+    }
+    if details is not None:
+        error["details"] = details
+    return {
+        "detail": detail,
+        "code": code,
+        "request_id": getattr(request.state, "request_id", None),
+        "error": error,
     }
 
 
-class RequestCorrelationMiddleware(BaseHTTPMiddleware):
-    """Attach one bounded correlation ID to every HTTP request and response."""
+def _safe_validation_details(exc: RequestValidationError) -> list[dict[str, object]]:
+    """Return client-safe validation details without echoing submitted values."""
+    return [
+        {
+            "loc": error.get("loc", ()),
+            "msg": str(error.get("msg", "validation error")),
+            "type": str(error.get("type", "validation_error")),
+        }
+        for error in exc.errors()
+    ]
 
-    async def dispatch(self, request: Request, call_next) -> Response:
-        supplied = request.headers.get(REQUEST_ID_HEADER, "").strip()
-        request_id = supplied[:MAX_REQUEST_ID_LENGTH] if supplied else str(uuid4())
-        request_id = "".join(char if ord(char) >= 32 and ord(char) != 127 else "-" for char in request_id)
-        request.state.request_id = request_id
-        request.state.correlation_id = request_id
-        started_at = time.perf_counter()
-        try:
-            with span("qros.api", request_id=request_id, http_method=request.method, http_path=request.url.path):
-                response = await call_next(request)
-        except Exception:
-            observer = getattr(request.app.state, "observability", None)
-            if isinstance(observer, StructuredRequestObserver):
-                route = request.scope.get("route")
-                path = getattr(route, "path", request.url.path)
-                observe_request(
-                    observer,
-                    request_id=request_id,
-                    method=request.method,
-                    path=path,
-                    status_code=500,
-                    started_at=started_at,
-                    tenant_id=getattr(request.state, "tenant_id", None),
-                    job_id=getattr(request.state, "job_id", None),
-                )
-            raise
-        response.headers[REQUEST_ID_HEADER] = request_id
-        observer = getattr(request.app.state, "observability", None)
-        if isinstance(observer, StructuredRequestObserver):
-            route = request.scope.get("route")
-            path = getattr(route, "path", request.url.path)
-            observe_request(
-                observer,
-                request_id=request_id,
-                method=request.method,
-                path=path,
-                status_code=response.status_code,
-                started_at=started_at,
-                tenant_id=getattr(request.state, "tenant_id", None),
-                job_id=getattr(request.state, "job_id", None),
-            )
-        return response
+
+def _validate_dataset_name(name: str) -> str:
+    """Reject path-like dataset names before they cross any storage boundary."""
+    normalized = name.strip()
+    if not normalized or "/" in normalized or "\\" in normalized or ".." in normalized:
+        raise HTTPException(status_code=400, detail="INVALID_PATH")
+    return normalized
 
 
 class AuthProvider(Protocol):
     """Authenticate a request and resolve its authorized workspace."""
 
-    def authenticate(
-        self,
-        authorization: str | None,
-        requested_workspace_id: UUID | None = None,
-    ) -> TenantContext:
-        ...
+    def authenticate(self, authorization: str | None) -> TenantContext: ...
+    def authenticate_user(self, authorization: str | None) -> UUID: ...
 
 
 class UnconfiguredAuthProvider:
     """Fail-closed default; production must install a real identity provider."""
 
-    def authenticate(
-        self,
-        authorization: str | None,
-        requested_workspace_id: UUID | None = None,
-    ) -> TenantContext:
+    def authenticate(self, authorization: str | None) -> TenantContext:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="SaaS authentication provider is not configured",
+        )
+
+    def authenticate_user(self, authorization: str | None) -> UUID:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="SaaS authentication provider is not configured",
@@ -162,16 +187,6 @@ class UnconfiguredAuthProvider:
 class ResearchCreateRequest(BaseModel):
     dataset_version_id: UUID
     workflow_id: str = Field(default=FROZEN_XAUUSD_M1_WORKFLOW, min_length=1, max_length=128)
-    claim_id: str | None = Field(default=None, min_length=1, max_length=256)
-    plan_hash: str | None = Field(default=None, min_length=64, max_length=64)
-
-
-class PageResponse(BaseModel):
-    items: Sequence[object]
-    total: int
-    limit: int
-    offset: int
-    has_more: bool
 
 
 class ResearchJobResponse(BaseModel):
@@ -180,8 +195,18 @@ class ResearchJobResponse(BaseModel):
     dataset_version_id: UUID
     workflow_id: str
     status: ResearchJobStatus
-    claim_id: str | None = None
-    plan_hash: str | None = None
+
+
+class WorkspaceCreateRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    name: str = Field(min_length=1, max_length=256)
+
+
+class WorkspaceProvisioningResponse(BaseModel):
+    workspace_id: UUID
+    role: str
+    plan: str
 
 
 class DatasetResponse(BaseModel):
@@ -208,8 +233,6 @@ def _research_job_response(job: ResearchJob) -> ResearchJobResponse:
         dataset_version_id=job.dataset_version_id,
         workflow_id=job.workflow_id,
         status=job.status,
-        claim_id=job.claim_id,
-        plan_hash=job.plan_hash,
     )
 
 
@@ -222,15 +245,17 @@ def create_app(
     job_queue: ResearchJobQueue | None = None,
     idempotency_store: IdempotencyStore | None = None,
     billing_store: BillingEventStore | None = None,
-    billing_webhook_secret: str | None = None,
-    entitlement_store: EntitlementStore | None = None,
-    plan_rate_limiters: dict[object, RateLimiter] | None = None,
-    metrics_token: str | None = None,
-    rate_limiter: RateLimiter | None = None,
     claim_store: ResearchClaimStore | None = None,
     evidence_store: ResearchEvidenceStore | None = None,
     validation_store: ResearchValidationStore | None = None,
-    finding_store=None,
+    finding_store: ResearchFindingStore | None = None,
+    billing_webhook_secret: str | None = None,
+    rate_limiter: RateLimiter | None = None,
+    metrics_token: str | None = None,
+    readiness_probe: Callable[[], None] | None = None,
+    workspace_provisioner: WorkspaceProvisioner | None = None,
+    supabase_url: str | None = None,
+    supabase_publishable_key: str | None = None,
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
@@ -242,22 +267,27 @@ def create_app(
     queue = job_queue or InMemoryResearchJobQueue()
     limiter = rate_limiter or FixedWindowRateLimiter(limit=120, window_seconds=60)
     billing = billing_store
-    entitlements = entitlement_store or InMemoryEntitlementStore()
-    plan_limiters = plan_rate_limiters or {}
+    workspaces = workspace_provisioner
     app = FastAPI(
         title="QROS SaaS API",
         version="1.0.0",
         description="Multi-tenant delivery API for auditable financial research.",
     )
-    app.add_middleware(RequestCorrelationMiddleware)
+    app.add_middleware(RequestContextMiddleware)
     app.state.observability = StructuredRequestObserver()
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
-        if isinstance(exc.detail, dict) and exc.detail.get("code") == "ENTITLEMENT_EXCEEDED":
-            detail = dict(exc.detail)
-            detail["request_id"] = getattr(request.state, "request_id", None)
-            return JSONResponse(status_code=402, headers=exc.headers, content=detail)
+        observe_error(
+            severity="warning",
+            error_code=_error_code(exc.status_code),
+            error=exc,
+            metadata={
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": exc.status_code,
+            },
+        )
         return JSONResponse(
             status_code=exc.status_code,
             headers=exc.headers,
@@ -265,44 +295,55 @@ def create_app(
         )
 
     @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-        return JSONResponse(
-            status_code=422,
-            content=_error_payload(request, 422, exc.errors()),
+    async def validation_exception_handler(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        observe_error(
+            severity="warning",
+            error_code="validation_error",
+            error=exc,
+            metadata={
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": 400,
+            },
         )
+        payload = _error_payload(request, 400, _safe_validation_details(exc))
+        payload["code"] = "validation_error"
+        error = payload["error"]
+        if isinstance(error, dict):
+            error["code"] = "validation_error"
+            error["message"] = "Request validation failed"
+        return JSONResponse(status_code=400, content=payload)
 
     @app.exception_handler(Exception)
-    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-        del exc
+    async def internal_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        request_id = getattr(request.state, "request_id", None)
+        observe_error(
+            severity="error",
+            error_code="internal_error",
+            error=exc,
+            metadata={
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": 500,
+            },
+        )
+        logger.exception("unhandled request exception request_id=%s", request_id)
         return JSONResponse(
             status_code=500,
-            content=_error_payload(request, 500, "internal server error"),
+            headers={REQUEST_ID_HEADER: request_id} if request_id else None,
+            content=_error_payload(request, 500, "Internal error"),
         )
 
-    def current_tenant(
-        request: Request,
-        authorization: str | None = Header(default=None),
-        workspace_header: str | None = Header(default=None, alias=WORKSPACE_HEADER),
-    ) -> TenantContext:
-        requested_workspace_id: UUID | None = None
-        if workspace_header is not None:
-            try:
-                requested_workspace_id = UUID(workspace_header.strip())
-            except ValueError as exc:
-                raise HTTPException(status_code=422, detail="invalid X-Workspace-ID") from exc
-        with span("qros.api.auth", request_id=getattr(request.state, "request_id", None)):
-            tenant = auth.authenticate(authorization, requested_workspace_id)
-        request.state.tenant_id = str(tenant.workspace_id)
+    def current_tenant(authorization: str | None = Header(default=None)) -> TenantContext:
+        tenant = auth.authenticate(authorization)
+        tenant_id_var.set(str(tenant.workspace_id))
+        actor_user_id_var.set(str(tenant.user_id))
         return tenant
-
-    def require_role(tenant: TenantContext, *allowed: WorkspaceRole) -> None:
-        """Enforce server-resolved membership roles; never trust request data."""
-        if tenant.role not in allowed:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="workspace role is not authorized")
 
     def require_rate_limit(tenant: TenantContext) -> None:
         principal = hashlib.sha256(f"workspace:{tenant.workspace_id}".encode()).hexdigest()
-        selected = plan_limiters.get(tenant.plan, limiter)
         try:
             allowed = selected.allow(principal)
         except Exception as exc:
@@ -317,7 +358,9 @@ def create_app(
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
         return hashlib.sha256(encoded).hexdigest()
 
-    def persist_version(*, dataset_id: UUID, tenant: TenantContext, file: UploadFile) -> DatasetVersion:
+    def persist_version(
+        *, dataset_id: UUID, tenant: TenantContext, file: UploadFile
+    ) -> DatasetVersion:
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         try:
             entitlement = entitlements.get(tenant.workspace_id, tenant.plan.value)
@@ -327,39 +370,32 @@ def create_app(
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
-            existing = datasets.find_version_by_content(tenant.workspace_id, dataset_id, digest)
-            if existing is not None:
-                if not storage.verify_sha256(existing.storage_path, existing.content_sha256, tenant_id=tenant.workspace_id, access_token=tenant.access_token):
-                    raise HTTPException(status_code=503, detail="dataset object integrity check failed")
-                return existing
-            if entitlement.max_storage_mb > 0 and datasets.storage_bytes(tenant.workspace_id) + size > entitlement.max_storage_mb * 1_000_000:
-                raise HTTPException(status_code=402, detail={"code": "ENTITLEMENT_EXCEEDED", "message": "storage entitlement exceeded", "upgrade_url": "https://qros.ai/upgrade"})
-            version_no = datasets.next_version_no(tenant.workspace_id, dataset_id)
-            storage_path = storage_path_for(tenant.workspace_id, digest, version_no)
-            storage.put(storage_path, file.file, tenant_id=tenant.workspace_id, access_token=tenant.access_token)
-            if not storage.verify_sha256(storage_path, digest, tenant_id=tenant.workspace_id, access_token=tenant.access_token):
-                storage.remove(storage_path, tenant_id=tenant.workspace_id, access_token=tenant.access_token)
-                raise HTTPException(status_code=503, detail="dataset upload integrity verification failed")
+            existing_versions = datasets.list_versions(tenant.workspace_id, dataset_id)
+            duplicate = next((v for v in existing_versions if v.content_sha256 == digest), None)
+            if duplicate is not None:
+                return duplicate
+            next_version = max((v.version_no for v in existing_versions), default=0) + 1
+            storage_path = storage_path_for(tenant.workspace_id, digest, next_version)
+            object_created = False
+            if not storage.exists(storage_path):
+                storage.put(storage_path, file.file)
+                object_created = True
             try:
                 version = datasets.create_version(
                     tenant.workspace_id,
                     DatasetVersion(
                         id=uuid4(),
                         dataset_id=dataset_id,
-                        version_no=version_no,
+                        version_no=next_version,
                         content_sha256=digest,
                         storage_path=storage_path,
                         byte_size=size,
                         created_by=tenant.user_id,
-                    )
+                    ),
                 )
             except Exception:
-                storage.remove(storage_path, tenant_id=tenant.workspace_id, access_token=tenant.access_token)
-                existing = datasets.find_version_by_content(tenant.workspace_id, dataset_id, digest)
-                if existing is not None:
-                    if not storage.verify_sha256(existing.storage_path, existing.content_sha256, tenant_id=tenant.workspace_id, access_token=tenant.access_token):
-                        raise HTTPException(status_code=503, detail="dataset object integrity check failed")
-                    return existing
+                if object_created:
+                    storage.remove(storage_path)
                 raise
             return version
         except PermissionError as exc:
@@ -370,26 +406,65 @@ def create_app(
         except HTTPException:
             raise
         except Exception as exc:
-            raise HTTPException(status_code=500, detail="dataset version persistence failed") from exc
+            raise RuntimeError("dataset version persistence failed") from exc
 
-    @app.get("/metrics", tags=["system"])
-    def metrics(metrics_header: str | None = Header(default=None, alias="X-Metrics-Token")) -> Response:
-        """Expose process metrics only when an explicit scrape credential is configured."""
-        if not metrics_token:
-            raise HTTPException(status_code=503, detail="metrics endpoint is not configured")
-        if not metrics_header or not hmac.compare_digest(metrics_header, metrics_token):
-            raise HTTPException(status_code=404, detail="metrics endpoint not found")
-        observer = app.state.observability
-        return Response(content=observer.metrics.prometheus_text(), media_type="text/plain; version=0.0.4")
+    @app.get("/onboarding", include_in_schema=False, response_class=HTMLResponse)
+    def onboarding() -> HTMLResponse:
+        return HTMLResponse(ONBOARDING_HTML)
+
+    @app.get("/onboarding/app.js", include_in_schema=False, response_class=Response)
+    def onboarding_app_js() -> Response:
+        return Response(ONBOARDING_JS, media_type="application/javascript")
+
+    @app.get("/onboarding/config", include_in_schema=False, tags=["identity"])
+    def onboarding_config() -> dict[str, str]:
+        if not supabase_url or not supabase_publishable_key:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="customer onboarding is not configured",
+            )
+        return {
+            "supabase_url": supabase_url.rstrip("/"),
+            "supabase_publishable_key": supabase_publishable_key,
+        }
 
     @app.get("/healthz", tags=["system"])
     def healthz() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/metrics", include_in_schema=False, tags=["system"])
+    def metrics(request: Request) -> Response:
+        if metrics_token is None:
+            raise HTTPException(status_code=503, detail="metrics endpoint is not configured")
+        if request.headers.get("X-Metrics-Token") != metrics_token:
+            raise HTTPException(status_code=404, detail="not found")
+        observer = request.app.state.observability
+        if not isinstance(observer, StructuredRequestObserver):
+            raise HTTPException(status_code=503, detail="observability is not configured")
+        observer.observe(
+            request_id=getattr(request.state, "request_id", ""),
+            method=request.method,
+            path=request.url.path,
+            status_code=200,
+            duration_ms=0.0,
+        )
+        return Response(
+            content=observer.metrics.prometheus_text(),
+            media_type="text/plain; version=0.0.4",
+        )
+
     @app.get("/readyz", tags=["system"])
     def readyz() -> dict[str, str]:
         if store is None or datasets is None or storage is None or queue is None:
             raise HTTPException(status_code=503, detail="SaaS persistence is not configured")
+        if readiness_probe is not None:
+            try:
+                readiness_probe()
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail="SaaS dependency readiness check failed",
+                ) from exc
         return {"status": "ready"}
 
     @app.post("/v1/billing/webhook", status_code=200, tags=["billing"])
@@ -402,9 +477,10 @@ def create_app(
     ) -> dict[str, str]:
         if billing is None or not billing_webhook_secret:
             raise HTTPException(status_code=503, detail="billing webhook is not configured")
-        signature = stripe_signature or x_billing_signature
-        if not signature or not x_billing_provider:
-            raise HTTPException(status_code=400, detail="billing signature and provider are required")
+        if not x_billing_signature or not x_billing_provider:
+            raise HTTPException(
+                status_code=400, detail="billing signature and provider are required"
+            )
         payload = await request.body()
         try:
             if signature.startswith("t="):
@@ -413,7 +489,9 @@ def create_app(
                 verify_hmac_signature(payload, signature, billing_webhook_secret)
             event = parse_billing_event(payload)
         except BillingSignatureError as exc:
-            raise HTTPException(status_code=401, detail="invalid billing webhook signature") from exc
+            raise HTTPException(
+                status_code=401, detail="invalid billing webhook signature"
+            ) from exc
         except (TypeError, ValueError, json.JSONDecodeError) as exc:
             raise HTTPException(status_code=400, detail="invalid billing event") from exc
         payload_sha256 = hashlib.sha256(payload).hexdigest()
@@ -422,13 +500,50 @@ def create_app(
         except BillingEventConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except Exception as exc:
-            raise HTTPException(status_code=500, detail="billing event processing failed") from exc
+            raise RuntimeError("billing event processing failed") from exc
         return {"status": "processed" if processed else "replayed"}
+
+    @app.post(
+        "/v1/workspaces",
+        response_model=WorkspaceProvisioningResponse,
+        status_code=201,
+        tags=["identity"],
+    )
+    def provision_workspace(
+        request: WorkspaceCreateRequest,
+        authorization: str | None = Header(default=None),
+    ) -> WorkspaceProvisioningResponse:
+        if workspaces is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="workspace provisioning is not configured",
+            )
+        user_id = auth.authenticate_user(authorization)
+        try:
+            provisioned = workspaces.provision(user_id, request.name)
+        except WorkspaceProvisioningConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="workspace provisioning unavailable",
+            ) from exc
+        return WorkspaceProvisioningResponse(
+            workspace_id=provisioned.workspace_id,
+            role=provisioned.role.value,
+            plan=provisioned.plan.value,
+        )
 
     @app.get("/v1/me", response_model=dict[str, str], tags=["identity"])
     @require_permission("workspace", "read")
     def me(tenant: TenantContext = Depends(current_tenant)) -> dict[str, str]:
-        return {"user_id": str(tenant.user_id), "workspace_id": str(tenant.workspace_id), "plan": tenant.plan.value}
+        return {
+            "user_id": str(tenant.user_id),
+            "workspace_id": str(tenant.workspace_id),
+            "plan": tenant.plan.value,
+        }
 
     @app.get("/v1/datasets", response_model=DatasetPageResponse, tags=["datasets"])
     @require_permission("dataset", "list")
@@ -464,14 +579,19 @@ def create_app(
         )
 
     @app.post("/v1/datasets", response_model=DatasetResponse, status_code=201, tags=["datasets"])
-    @require_permission("dataset", "create")
+    @require_permission(Resource.DATASET, Action.CREATE)
     def upload_dataset(
         name: str = Form(..., min_length=1, max_length=256),
         file: UploadFile = File(...),
         tenant: TenantContext = Depends(current_tenant),
     ) -> DatasetResponse:
-        require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.RESEARCHER)
-        dataset = Dataset(id=uuid4(), workspace_id=tenant.workspace_id, name=name.strip(), created_by=tenant.user_id)
+        dataset = Dataset(
+            id=uuid4(),
+            workspace_id=tenant.workspace_id,
+            name=_validate_dataset_name(name),
+            created_by=tenant.user_id,
+        )
+        policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         try:
             entitlement = entitlements.get(tenant.workspace_id, tenant.plan.value)
         except Exception as exc:
@@ -487,26 +607,36 @@ def create_app(
             _, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
-            persisted_dataset = datasets.create_dataset(tenant.workspace_id, dataset)
-            version = persist_version(dataset_id=dataset.id, tenant=tenant, file=file)
+            storage_path = storage_path_for(tenant.workspace_id, digest, 1)
+            object_created = False
+            if not storage.exists(storage_path):
+                storage.put(storage_path, file.file)
+                object_created = True
+            try:
+                persisted_dataset = datasets.create_dataset(tenant.workspace_id, dataset)
+                version = datasets.create_version(
+                    tenant.workspace_id,
+                    DatasetVersion(
+                        id=uuid4(),
+                        dataset_id=dataset.id,
+                        version_no=1,
+                        content_sha256=digest,
+                        storage_path=storage_path,
+                        byte_size=size,
+                        created_by=tenant.user_id,
+                    ),
+                )
+            except Exception:
+                try:
+                    datasets.delete_dataset(tenant.workspace_id, dataset.id)
+                finally:
+                    if object_created:
+                        storage.remove(storage_path)
+                raise
         except ValueError as exc:
-            if persisted_dataset is not None:
-                datasets.delete_dataset(tenant.workspace_id, dataset.id)
             raise HTTPException(status_code=413, detail=str(exc)) from exc
-        except HTTPException:
-            if persisted_dataset is not None:
-                try:
-                    datasets.delete_dataset(tenant.workspace_id, dataset.id)
-                except Exception:
-                    pass
-            raise
         except Exception as exc:
-            if persisted_dataset is not None:
-                try:
-                    datasets.delete_dataset(tenant.workspace_id, dataset.id)
-                except Exception:
-                    pass
-            raise HTTPException(status_code=500, detail="dataset persistence failed") from exc
+            raise RuntimeError("dataset persistence failed") from exc
 
         return DatasetResponse(
             id=persisted_dataset.id,
@@ -516,90 +646,63 @@ def create_app(
             version=version,
         )
 
-    @app.post("/v1/datasets/{dataset_id}/versions", response_model=DatasetVersion, status_code=201, tags=["datasets"])
-    @require_permission("dataset", "update")
+    @app.post(
+        "/v1/datasets/{dataset_id}/versions",
+        response_model=DatasetVersion,
+        status_code=201,
+        tags=["datasets"],
+    )
+    @require_permission(Resource.DATASET_VERSION, Action.CREATE)
     def upload_dataset_version(
         dataset_id: UUID,
         file: UploadFile = File(...),
         tenant: TenantContext = Depends(current_tenant),
     ) -> DatasetVersion:
-        require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.RESEARCHER)
         if datasets.get_dataset(tenant.workspace_id, dataset_id) is None:
             raise HTTPException(status_code=404, detail="dataset not found")
         return persist_version(dataset_id=dataset_id, tenant=tenant, file=file)
 
-    @app.delete("/v1/datasets/{dataset_id}", status_code=204, tags=["datasets"])
-    @require_permission("dataset", "delete")
-    def delete_dataset(
-        dataset_id: UUID,
-        tenant: TenantContext = Depends(current_tenant),
-    ) -> Response:
-        def has_active_finding() -> bool:
-            if finding_store is None:
-                return False
-            offset = 0
-            while True:
-                jobs, total = store.list(tenant.workspace_id, limit=100, offset=offset)
-                for job in jobs:
-                    if datasets.get_version(tenant.workspace_id, job.dataset_version_id) is None:
-                        continue
-                    version = datasets.get_version(tenant.workspace_id, job.dataset_version_id)
-                    if version is not None and version.dataset_id == dataset_id and finding_store.get(tenant.workspace_id, job.id) is not None:
-                        return True
-                offset += len(jobs)
-                if offset >= total or not jobs:
-                    return False
-        if datasets.get_dataset(tenant.workspace_id, dataset_id) is None:
-            raise HTTPException(status_code=404, detail="dataset not found")
-        if has_active_finding():
-            raise HTTPException(status_code=409, detail="DATASET_REFERENCED")
-        try:
-            datasets.delete_dataset(tenant.workspace_id, dataset_id)
-        except DatasetReferencedError as exc:
-            raise HTTPException(status_code=409, detail="DATASET_REFERENCED") from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-        return Response(status_code=204)
-
-    @app.get("/v1/datasets/{dataset_id}/versions", response_model=list[DatasetVersion], tags=["datasets"])
-    @require_permission("dataset", "list")
+    @app.get("/v1/datasets/{dataset_id}/versions", tags=["datasets"])
+    @require_permission(Resource.DATASET_VERSION, Action.LIST)
     def list_dataset_versions(
         dataset_id: UUID,
+        request: Request,
+        page: int = Query(default=1),
+        page_size: int = Query(default=20),
+        sort_by: str = Query(default="version_no"),
+        sort_order: str = Query(default="desc"),
+        filter_status: str | None = Query(default=None, alias="filter[status]"),
+        filter_tenant_id: UUID | None = Query(default=None, alias="filter[tenant_id]"),
         tenant: TenantContext = Depends(current_tenant),
-    ) -> list[DatasetVersion]:
-        return datasets.list_versions(tenant.workspace_id, dataset_id)
+    ) -> dict[str, object]:
+        if page < 1 or page_size < 1 or page_size > 100:
+            raise HTTPException(status_code=400, detail="INVALID_PAGINATION")
+        validate_filter_tenant_id(filter_tenant_id, tenant.workspace_id)
+        if filter_status is not None:
+            raise HTTPException(status_code=400, detail="INVALID_FILTER")
+        if sort_order not in {"asc", "desc"}:
+            raise HTTPException(status_code=400, detail="INVALID_SORT")
+        items = datasets.list_versions(tenant.workspace_id, dataset_id)
+        if sort_by not in {"version_no", "content_sha256", "byte_size"}:
+            raise HTTPException(status_code=400, detail="INVALID_SORT")
+        return paginate(
+            items,
+            page=page,
+            page_size=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            request_id=getattr(request.state, "request_id", None),
+        )
 
-    @app.get("/v1/datasets/{dataset_id}/versions/{version_id}/download", response_model=dict[str, str], tags=["datasets"])
-    @require_permission("dataset", "read")
-    def create_dataset_download_url(
-        dataset_id: UUID,
-        version_id: UUID,
-        tenant: TenantContext = Depends(current_tenant),
-    ) -> dict[str, str]:
-        """Authorize tenant ownership before issuing a short-lived private URL."""
-        version = datasets.get_version(tenant.workspace_id, version_id)
-        if version is None or version.dataset_id != dataset_id:
-            raise HTTPException(status_code=404, detail="dataset version not found")
-        try:
-            if not storage.verify_sha256(version.storage_path, version.content_sha256, tenant_id=tenant.workspace_id, access_token=tenant.access_token):
-                raise HTTPException(status_code=503, detail="dataset object integrity check failed")
-            url = storage.create_signed_download_url(version.storage_path, 3600, tenant_id=tenant.workspace_id, access_token=tenant.access_token)
-        except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail="dataset object not found") from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        except Exception as exc:
-            raise HTTPException(status_code=503, detail="dataset download service unavailable") from exc
-        return {"url": url, "expires_in": "3600"}
-
-    @app.post("/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"])
-    @require_permission("job", "create")
+    @app.post(
+        "/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"]
+    )
+    @require_permission(Resource.JOB, Action.CREATE)
     def create_research_run(
         request: ResearchCreateRequest,
         tenant: TenantContext = Depends(current_tenant),
         idempotency_key: str | None = Header(default=None, alias=IDEMPOTENCY_HEADER),
     ) -> Response:
-        require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.ADMIN, WorkspaceRole.RESEARCHER)
         require_rate_limit(tenant)
         if request.workflow_id != FROZEN_XAUUSD_M1_WORKFLOW:
             raise HTTPException(status_code=400, detail="unsupported workflow")
@@ -608,26 +711,12 @@ def create_app(
         idempotency_key = idempotency_key.strip()
         if not idempotency_key or len(idempotency_key) > MAX_IDEMPOTENCY_KEY_LENGTH:
             raise HTTPException(status_code=400, detail="invalid Idempotency-Key")
-        fingerprint = request_fingerprint({
-            "dataset_version_id": str(request.dataset_version_id),
-            "workflow_id": request.workflow_id,
-            "claim_id": request.claim_id,
-            "plan_hash": request.plan_hash,
-        })
-        try:
-            entitlement = entitlements.get(tenant.workspace_id, tenant.plan.value)
-        except Exception as exc:
-            raise HTTPException(status_code=503, detail="entitlement service unavailable") from exc
-        monthly_jobs = store.count_monthly(tenant.workspace_id)
-        if not entitlement.allows_jobs(monthly_jobs):
-            raise HTTPException(
-                status_code=402,
-                detail={
-                    "code": "ENTITLEMENT_EXCEEDED",
-                    "message": "monthly job entitlement exceeded",
-                    "upgrade_url": "https://qros.ai/upgrade",
-                },
-            )
+        fingerprint = request_fingerprint(
+            {
+                "dataset_version_id": str(request.dataset_version_id),
+                "workflow_id": request.workflow_id,
+            }
+        )
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         if not policy.allows_monthly_runs(monthly_jobs):
             raise HTTPException(
@@ -643,16 +732,6 @@ def create_app(
         version = datasets.get_version(tenant.workspace_id, request.dataset_version_id)
         if version is None:
             raise HTTPException(status_code=404, detail="dataset version not found")
-        if (request.claim_id is None) != (request.plan_hash is None):
-            raise HTTPException(status_code=422, detail="claim_id and plan_hash are required together")
-        if request.claim_id is not None:
-            if claim_store is None:
-                raise HTTPException(status_code=503, detail="research claim persistence is not configured")
-            claim = claim_store.get(tenant.workspace_id, request.claim_id)
-            if claim is None:
-                raise HTTPException(status_code=404, detail="research claim not found")
-            if not claim.is_plan_locked or claim.plan_hash != request.plan_hash:
-                raise HTTPException(status_code=409, detail="research claim plan is not locked or plan_hash does not match")
 
         job = ResearchJob(
             id=uuid4(),
@@ -662,8 +741,6 @@ def create_app(
             status=ResearchJobStatus.QUEUED,
             source_dataset_sha256=version.content_sha256,
             created_by=tenant.user_id,
-            claim_id=request.claim_id,
-            plan_hash=request.plan_hash,
         )
         body = _research_job_response(job).model_dump(mode="json")
         try:
@@ -679,79 +756,24 @@ def create_app(
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
             raise
         if replayed:
-            return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
-        request.state.job_id = str(created.id)
-        with span(
-            "qros.job",
-            request_id=getattr(request.state, "request_id", None),
-            tenant_id=tenant.workspace_id,
-            job_id=created.id,
-        ):
+            return JSONResponse(
+                status_code=202, content=_research_job_response(created).model_dump(mode="json")
+            )
+        jobs_created_total.inc()
+        try:
+            queue.enqueue(tenant.workspace_id, created.id)
+        except Exception as exc:
             try:
                 queue.enqueue(
                     tenant.workspace_id,
                     created.id,
                     request_id=getattr(request.state, "request_id", None),
                 )
-            except Exception as exc:
-                try:
-                    store.transition(
-                        tenant.workspace_id,
-                        created.id,
-                        ResearchJobStatus.QUEUED,
-                        ResearchJobStatus.FAILED,
-                    )
-                except Exception:
-                    pass
-                app.state.observability.metrics.inc_job_failed()
-                emit_log(
-                    level=logging.ERROR,
-                    message="research job enqueue failed",
-                    request_id=getattr(request.state, "request_id", None),
-                    tenant_id=tenant.workspace_id,
-                    job_id=created.id,
-                )
-                raise HTTPException(status_code=503, detail="research job queue unavailable") from exc
-        app.state.observability.metrics.inc_job_created()
-        emit_log(
-            level=logging.INFO,
-            message="research job created",
-            request_id=getattr(request.state, "request_id", None),
-            tenant_id=tenant.workspace_id,
-            job_id=created.id,
-        )
-        return JSONResponse(status_code=202, content=_research_job_response(created).model_dump(mode="json"))
-
-    @app.get("/v1/research-runs", response_model=PageResponse, tags=["research"])
-    @require_permission("job", "list")
-    def list_research_runs(
-        limit: int = 50,
-        offset: int = 0,
-        status_filter: ResearchJobStatus | None = None,
-        workflow_id: str | None = None,
-        tenant: TenantContext = Depends(current_tenant),
-    ) -> PageResponse:
-        try:
-            page = PageRequest(limit=limit, offset=offset)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        if workflow_id is not None and not 1 <= len(workflow_id) <= 128:
-            raise HTTPException(status_code=422, detail="workflow_id must be between 1 and 128 characters")
-        jobs, total = store.list(
-            tenant.workspace_id,
-            limit=page.limit,
-            offset=page.offset,
-            status=status_filter,
-            workflow_id=workflow_id,
-        )
-        items = [_research_job_response(job).model_dump(mode="json") for job in jobs]
-        return PageResponse(
-            items=items,
-            total=total,
-            limit=page.limit,
-            offset=page.offset,
-            has_more=page.offset + len(items) < total,
-        )
+            except Exception:
+                pass
+            jobs_failed_total.inc()
+            raise RuntimeError("research job queue unavailable") from exc
+        return JSONResponse(status_code=202, content=body)
 
     @app.get("/v1/research-runs/{job_id}/logs", response_model=list[dict[str, object]], tags=["research"])
     @require_permission("job", "read")
@@ -764,7 +786,7 @@ def create_app(
         return store.logs(tenant.workspace_id, job_id)
 
     @app.get("/v1/research-runs/{job_id}/result", tags=["research"])
-    @require_permission("job", "read")
+    @require_permission(Resource.JOB, Action.READ)
     def get_research_run_result(
         job_id: UUID,
         tenant: TenantContext = Depends(current_tenant),
@@ -792,7 +814,7 @@ def create_app(
         }
 
     @app.get("/v1/research-runs/{job_id}/report", tags=["research"])
-    @require_permission("job", "read")
+    @require_permission(Resource.JOB, Action.READ)
     def get_research_run_report(
         job_id: UUID,
         tenant: TenantContext = Depends(current_tenant),
@@ -827,8 +849,10 @@ def create_app(
         }
 
     @app.get("/v1/research-runs/{job_id}", response_model=ResearchJobResponse, tags=["research"])
-    @require_permission("job", "read")
-    def get_research_run(job_id: UUID, tenant: TenantContext = Depends(current_tenant)) -> ResearchJobResponse:
+    @require_permission(Resource.JOB, Action.READ)
+    def get_research_run(
+        job_id: UUID, tenant: TenantContext = Depends(current_tenant)
+    ) -> ResearchJobResponse:
         job = store.get(tenant.workspace_id, job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="research run not found")
@@ -912,4 +936,4 @@ def create_app(
 
 app = create_app()
 
-__all__ = ["AuthProvider", "RequestCorrelationMiddleware", "app", "create_app"]
+__all__ = ["AuthProvider", "app", "create_app"]

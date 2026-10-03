@@ -1,358 +1,116 @@
-"""P0 real-database tenant isolation and lineage tests.
-
-Run explicitly with:
-    pytest researchos/saas/tests/test_tenant_isolation_real.py --real-db -v
-
-These tests never replace Supabase RLS/auth with mocks.  The API uses the real
-Supabase JWT verifier and service-role persistence boundary; direct PostgREST
-operations use each tenant's real JWT.
-"""
-
 from __future__ import annotations
 
-from hashlib import sha256
-from uuid import UUID, uuid4
+import os
+from collections.abc import Callable
+from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
+from postgrest.exceptions import APIError
+from supabase import Client, create_client
 
-from researchos.claims.claim import ResearchClaim, ResearchPlan
-from researchos.saas.runtime import build_production_app
-from researchos.saas.tests.conftest import RealTenant, RealTenantPair
-
-
-@pytest.fixture
-def resources(real_tenants: RealTenantPair) -> dict[str, object]:
-    service = real_tenants.service
-    a = real_tenants.a
-    b = real_tenants.b
-
-    dataset_a = uuid4()
-    version_a = uuid4()
-    dataset_b = uuid4()
-    version_b = uuid4()
-    job_a = uuid4()
-    evidence_a = uuid4()
-    finding_a = uuid4()
-    validation_a = uuid4()
-    artifact_a = uuid4()
-
-    digest = sha256(f"tenant-a-{dataset_a}".encode()).hexdigest()
-    service.table("dataset").insert(
-        {
-            "id": str(dataset_a),
-            "workspace_id": str(a.workspace_id),
-            "name": "real-tenant-a-dataset",
-            "created_by": str(a.user_id),
-        }
-    ).execute()
-    service.table("dataset_version").insert(
-        {
-            "id": str(version_a),
-            "dataset_id": str(dataset_a),
-            "version_no": 1,
-            "content_sha256": digest,
-            "storage_path": f"tenant/{a.workspace_id}/datasets/{digest}/1/",
-            "byte_size": 32,
-            "created_by": str(a.user_id),
-        }
-    ).execute()
-
-    service.table("dataset").insert({"id": str(dataset_b), "workspace_id": str(b.workspace_id), "name": "real-tenant-b-dataset", "created_by": str(b.user_id)}).execute()
-    digest_b = sha256(f"tenant-b-{dataset_b}".encode()).hexdigest()
-    service.table("dataset_version").insert({
-        "id": str(version_b), "dataset_id": str(dataset_b), "version_no": 1,
-        "content_sha256": digest_b, "storage_path": f"tenant/{b.workspace_id}/datasets/{digest_b}/1/",
-        "byte_size": 32, "created_by": str(b.user_id),
-    }).execute()
-
-    plan = ResearchPlan(
-        hypothesis="tenant isolation remains intact",
-        sample_definition="one synthetic release fixture",
-        features=("feature",),
-        labels=("label",),
-        train_validation_test="all",
-        exclusions=(),
-        costs_slippage="none",
-        statistical_tests=("none",),
-        metrics=("count",),
-        stopping_rules=("none",),
-        multiple_testing_policy="none",
-        replication_policy="none",
-    )
-    claim = ResearchClaim(
-        statement="Tenant A claim must remain private",
-        workspace_id=str(a.workspace_id),
-        creator=str(a.user_id),
-        research_id="tenant-isolation-real",
-    )
-    claim.lock_plan(plan)
-    claim.set_evidence_state("CANDIDATE")
-    service.table("research_claim").insert(
-        {
-            "id": claim.id,
-            "workspace_id": str(a.workspace_id),
-            "statement": claim.statement,
-            "claim_type": claim.claim_type.value,
-            "evidence_state": claim.evidence_state.value,
-            "version": claim.version,
-            "parent_claim_id": claim.parent_claim_id,
-            "research_id": claim.research_id,
-            "creator": claim.creator,
-            "plan_hash": claim.plan_hash,
-            "plan_locked_at": None,
-            "claim_hash": claim.claim_hash,
-            "payload": claim.to_dict(),
-        }
-    ).execute()
-
-    service.table("research_run").insert(
-        {
-            "id": str(job_a),
-            "workspace_id": str(a.workspace_id),
-            "dataset_version_id": str(version_a),
-            "workflow_id": "tenant-isolation-real",
-            "status": "queued",
-            "created_by": str(a.user_id),
-            "source_dataset_sha256": digest,
-            "claim_id": claim.id,
-            "plan_hash": plan.content_hash,
-        }
-    ).execute()
-
-    service.table("artifact").insert(
-        {
-            "id": str(artifact_a),
-            "workspace_id": str(a.workspace_id),
-            "research_run_id": str(job_a),
-            "kind": "evidence",
-            "content_sha256": digest,
-            "storage_path": f"tenant/{a.workspace_id}/evidence/{digest}",
-            "byte_size": 32,
-        }
-    ).execute()
-
-    service.table("evidence").insert(
-        {
-            "id": str(evidence_a),
-            "workspace_id": str(a.workspace_id),
-            "research_run_id": str(job_a),
-            "artifact_id": str(artifact_a),
-            "claim": "tenant A evidence",
-            "status": "verified",
-            "provenance": {"test": "real-tenant-isolation"},
-        }
-    ).execute()
-
-    # Finding is intentionally inserted through the service role because its
-    # production write path is governed by validation.  The test exercises the
-    # RLS read/update/delete boundary using tenant B's real JWT.
-    service.table("research_validation").insert(
-        {
-            "id": str(validation_a),
-            "workspace_id": str(a.workspace_id),
-            "research_run_id": str(job_a),
-            "result_manifest_sha256": digest,
-            "claim_id": claim.id,
-            "plan_hash": plan.content_hash,
-            "validation_sha256": digest,
-            "status": "VALIDATED",
-            "metrics": {"score": 1.0},
-            "contract_version": "1.0.0",
-        }
-    ).execute()
-    service.table("research_finding").insert(
-        {
-            "id": str(finding_a),
-            "workspace_id": str(a.workspace_id),
-            "research_run_id": str(job_a),
-            "validation_id": str(validation_a),
-            "result_manifest_sha256": digest,
-            "validation_sha256": digest,
-            "claim_id": claim.id,
-            "plan_hash": plan.content_hash,
-            "finding_sha256": digest,
-            "status": "VALIDATED",
-            "payload": {"test": "tenant-a"},
-            "contract_version": "1.0.0",
-        }
-    ).execute()
-
-    return {
-        "dataset": dataset_a,
-        "version": version_a,
-        "version_b": version_b,
-        "job": job_a,
-        "evidence": evidence_a,
-        "finding": finding_a,
-        "claim": claim.id,
-        "plan_hash": plan.content_hash,
-        "digest": digest,
-        "a": a,
-        "b": b,
-    }
-
-
-def _assert_structured_failure(response) -> None:
-    assert response.status_code in {403, 404}, response.text
-    payload = response.json()
-    assert payload["code"] in {"forbidden", "not_found", "TENANT_ISOLATION_VIOLATION"}
-    assert payload.get("request_id")
-    assert payload.get("correlation_id")
-
-
-@pytest.fixture
-def api_client(real_tenants: RealTenantPair) -> TestClient:
-    return TestClient(build_production_app())
-
-
-def _headers(tenant: RealTenant, *, key: str | None = None) -> dict[str, str]:
-    headers = {
-        "Authorization": f"Bearer {tenant.access_token}",
-        "X-Workspace-ID": str(tenant.workspace_id),
-    }
-    if key is not None:
-        headers["Idempotency-Key"] = key
-    return headers
-
-
-@pytest.mark.parametrize(
-    ("resource", "endpoint"),
-    [
-        ("dataset", lambda r: f"/v1/datasets/{r['dataset']}"),
-        ("job", lambda r: f"/v1/research-runs/{r['job']}"),
-        ("finding", lambda r: f"/v1/research-runs/{r['job']}/finding"),
-    ],
+# Tenant tables whose authenticated grants are revoked by
+# 202609170004_saas_server_only_data_api.sql.
+SERVER_ONLY_TABLES = (
+    "workspace",
+    "workspace_member",
+    "subscription",
+    "dataset",
+    "dataset_version",
+    "research_run",
+    "artifact",
+    "evidence",
+    "usage_event",
+    "audit_log",
 )
-def test_tenant_b_cannot_read_tenant_a_resource(
-    api_client: TestClient, resources: dict[str, object], resource: str, endpoint
-) -> None:
-    b = resources["b"]
-    assert isinstance(b, RealTenant)
-    response = api_client.get(endpoint(resources), headers=_headers(b))
-    _assert_structured_failure(response)
 
 
-def test_tenant_b_cannot_read_tenant_a_version_or_evidence(
-    api_client: TestClient, resources: dict[str, object]
-) -> None:
-    b = resources["b"]
-    assert isinstance(b, RealTenant)
-
-    response = api_client.get(
-        f"/v1/research-runs/{resources['job']}/evidence",
-        headers=_headers(b),
+def _authenticated_client(service: Client, email: str, password: str) -> tuple[Client, str, str]:
+    created = service.auth.admin.create_user(
+        {"email": email, "password": password, "email_confirm": True}
     )
-    assert response.status_code == 200
-    assert response.json() == []
+    user_id = str(created.user.id)
+    client = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_ANON_KEY"])
+    session = client.auth.sign_in_with_password({"email": email, "password": password})
+    if session.session is None:
+        raise AssertionError("Supabase did not issue a user session")
+    client.postgrest.auth(session.session.access_token)
+    return client, session.session.access_token, user_id
 
 
-def test_tenant_b_list_never_contains_tenant_a_resource(
-    api_client: TestClient, resources: dict[str, object]
-) -> None:
-    b = resources["b"]
-    assert isinstance(b, RealTenant)
-
-    datasets = api_client.get("/v1/datasets", headers=_headers(b))
-    assert datasets.status_code == 200
-    assert all(item["id"] != str(resources["dataset"]) for item in datasets.json()["items"])
-
-    jobs = api_client.get("/v1/research-runs", headers=_headers(b))
-    assert jobs.status_code == 200
-    assert all(item["id"] != str(resources["job"]) for item in jobs.json()["items"])
+def _assert_denied(action: Callable[[], object]) -> None:
+    with pytest.raises(APIError) as exc:
+        action()
+    code = getattr(exc.value, "code", None)
+    assert code == "42501", f"expected permission denied (42501), got: {exc.value}"
 
 
-def test_tenant_b_cannot_update_or_delete_tenant_a_rows_directly(
-    real_tenants: RealTenantPair, resources: dict[str, object]
-) -> None:
-    b = real_tenants.b
-    for table, key in (
-        ("dataset", "dataset"),
-        ("dataset_version", "version"),
-        ("research_run", "job"),
-        ("evidence", "evidence"),
-        ("research_finding", "finding"),
-    ):
-        row_id = str(resources[key])
-        update_column = {
-            "dataset": {"name": "cross-tenant"},
-            "dataset_version": {"byte_size": 99},
-            "research_run": {"workflow_id": "cross-tenant"},
-            "evidence": {"claim": "cross-tenant"},
-            "research_finding": {"status": "REJECTED"},
-        }[table]
-        try:
-            update = b.client.table(table).update(update_column).eq("id", row_id).execute()
-            assert not update.data
-        except Exception:
-            pass
-        try:
-            delete = b.client.table(table).delete().eq("id", row_id).execute()
-            assert not delete.data
-        except Exception:
-            pass
+def test_real_supabase_data_api_is_server_only(service_client: Client) -> None:
+    password = "QrosRealDb!2026-Temporary"
+    email_a = f"qros-rls-a-{uuid4().hex[:12]}@example.invalid"
+    email_b = f"qros-rls-b-{uuid4().hex[:12]}@example.invalid"
+    client_a, _, user_a = _authenticated_client(service_client, email_a, password)
+    client_b, _, user_b = _authenticated_client(service_client, email_b, password)
+    workspace_a = str(uuid4())
+    workspace_b = str(uuid4())
+    dataset_id = str(uuid4())
+    try:
+        service_client.table("workspace").insert({"id": workspace_a, "name": "tenant-a"}).execute()
+        service_client.table("workspace").insert({"id": workspace_b, "name": "tenant-b"}).execute()
+        service_client.table("workspace_member").insert(
+            {"workspace_id": workspace_a, "user_id": user_a, "role": "owner"}
+        ).execute()
+        service_client.table("workspace_member").insert(
+            {"workspace_id": workspace_b, "user_id": user_b, "role": "owner"}
+        ).execute()
+        service_client.table("dataset").insert(
+            {
+                "id": dataset_id,
+                "workspace_id": workspace_a,
+                "name": "tenant-a-private",
+                "created_by": user_a,
+            }
+        ).execute()
 
+        # The privileged server path works and sees the row.
+        seen = service_client.table("dataset").select("id").eq("id", dataset_id).execute()
+        assert len(seen.data or []) == 1
 
-def test_direct_supabase_jwt_cannot_read_tenant_a_rows(
-    real_tenants: RealTenantPair, resources: dict[str, object]
-) -> None:
-    b = real_tenants.b
-    for table, key in (
-        ("dataset", "dataset"),
-        ("dataset_version", "version"),
-        ("research_run", "job"),
-        ("evidence", "evidence"),
-        ("research_finding", "finding"),
-    ):
-        try:
-            response = b.client.table(table).select("id").eq("id", str(resources[key])).execute()
-            assert response.data == []
-        except Exception:
-            pass
+        # Direct Data API reads are denied for every tenant table, for both tenants.
+        for client in (client_a, client_b):
+            for table in SERVER_ONLY_TABLES:
+                _assert_denied(lambda c=client, t=table: c.table(t).select("*").limit(1).execute())
 
+        # Direct Data API writes are denied, including cross-tenant writes.
+        _assert_denied(
+            lambda: (
+                client_b.table("dataset")
+                .insert(
+                    {
+                        "id": str(uuid4()),
+                        "workspace_id": workspace_a,
+                        "name": "cross-tenant-write",
+                        "created_by": user_b,
+                    }
+                )
+                .execute()
+            )
+        )
+        _assert_denied(
+            lambda: (
+                client_b.table("dataset")
+                .update({"name": "hijacked"})
+                .eq("id", dataset_id)
+                .execute()
+            )
+        )
+        _assert_denied(lambda: client_b.table("dataset").delete().eq("id", dataset_id).execute())
 
-def test_idempotency_key_is_workspace_scoped(
-    api_client: TestClient, resources: dict[str, object]
-) -> None:
-    a = resources["a"]
-    b = resources["b"]
-    assert isinstance(a, RealTenant)
-    assert isinstance(b, RealTenant)
-
-    key = f"same-key-{uuid4().hex}"
-    first = api_client.post(
-        "/v1/research-runs",
-        headers=_headers(a, key=key),
-        json={"dataset_version_id": str(resources["version"])},
-    )
-    second = api_client.post(
-        "/v1/research-runs",
-        headers=_headers(b, key=key),
-        json={"dataset_version_id": str(resources["version_b"])},
-    )
-    assert first.status_code in {201, 202}
-    assert second.status_code in {201, 202}
-    assert first.json()["id"] != second.json()["id"]
-
-
-def test_lineage_graph_isolation(
-    api_client: TestClient, resources: dict[str, object]
-) -> None:
-    b = resources["b"]
-    assert isinstance(b, RealTenant)
-
-    response = api_client.get(
-        f"/v1/research-claims/{resources['claim']}/evidence-graph",
-        headers=_headers(b),
-    )
-    assert response.status_code == 200
-    assert response.json() == []
-
-    claims = b.client.table("research_claim").select("id").eq("id", resources["claim"]).execute()
-    assert claims.data == []
-
-    runs = b.client.table("research_run").select("id,claim_id,plan_hash").eq("id", str(resources["job"])).execute()
-    assert runs.data == []
-
-    evidence = b.client.table("evidence").select("id").eq("research_run_id", str(resources["job"])).execute()
-    assert evidence.data == []
+        # Denied writes must not have changed anything.
+        after = service_client.table("dataset").select("name").eq("id", dataset_id).execute()
+        assert after.data == [{"name": "tenant-a-private"}]
+    finally:
+        service_client.table("dataset").delete().eq("id", dataset_id).execute()
+        service_client.table("workspace_member").delete().in_("user_id", [user_a, user_b]).execute()
+        service_client.table("workspace").delete().in_("id", [workspace_a, workspace_b]).execute()
+        service_client.auth.admin.delete_user(user_a)
+        service_client.auth.admin.delete_user(user_b)

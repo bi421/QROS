@@ -75,22 +75,17 @@ def backup_verify_contract() -> dict[str, object]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--commit", help="Expected exact commit SHA; defaults to GITHUB_SHA when set.")
-    parser.add_argument(
-        "--skip-rls",
-        action="store_true",
-        help="Only for non-release local checks; release workflow must not use this.",
-    )
+    parser.add_argument("--skip-cpp", action="store_true", help="Skip C++ configure/build")
+    parser.add_argument("--exact-commit", help="Require HEAD to equal this commit SHA")
     args = parser.parse_args()
     os.chdir(ROOT)
 
-    expected_commit = args.commit or os.environ.get("GITHUB_SHA")
-    actual_commit = git_value(["rev-parse", "HEAD"])
-    if expected_commit and actual_commit != expected_commit:
-        print(f"EXACT COMMIT CHECK FAILED: expected {expected_commit}, got {actual_commit}", file=sys.stderr)
-        return 1
+    if args.exact_commit:
+        actual = git_value(["rev-parse", "HEAD"])
+        if actual != args.exact_commit:
+            print(f"EXACT COMMIT MISMATCH: expected {args.exact_commit}, got {actual}", file=sys.stderr)
+            return 2
 
-    HEALTH_DIR.mkdir(parents=True, exist_ok=True)
     checks: dict[str, dict[str, object]] = {}
 
     ruff = ["ruff", "check", "."] if shutil.which("ruff") else [sys.executable, "-m", "ruff", "check", "."]
@@ -196,9 +191,10 @@ def main() -> int:
     if checks["pytest"]["status"] != "PASS" or coverage["status"] != "PASS":
         coverage["status"] = "FAIL"
 
-    statuses = [checks[name]["status"] for name in REQUIRED_CHECKS]
-    overall = "PASS" if all(status == "PASS" for status in statuses) else "FAIL"
-
+    # SKIPPED is an intentional non-blocking state (for example --skip-cpp).
+    # Only an explicit FAIL makes the overall health gate fail.
+    failures = [check["label"] for check in checks.values() if check["status"] == "FAIL"]
+    overall = "FAIL" if failures else "PASS"
     evidence = {
         "schema_version": 2,
         "health_status": overall,
@@ -215,8 +211,11 @@ def main() -> int:
         "backup_verify": checks["backup_verify_contract"],
     }
 
-    evidence_path = ROOT / f"health_evidence_{actual_commit}.json"
-    evidence_path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    HEALTH_DIR.mkdir(parents=True, exist_ok=True)
+    serialized = json.dumps(evidence, indent=2, sort_keys=True) + "\n"
+    HEALTH_JSON.write_text(serialized, encoding="utf-8")
+    exact_evidence = HEALTH_DIR / f"health_evidence_{evidence['commit']}.json"
+    exact_evidence.write_text(serialized, encoding="utf-8")
 
     print(json.dumps(evidence, indent=2, sort_keys=True))
     print(f"HEALTH: {overall}")

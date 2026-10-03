@@ -108,6 +108,7 @@ class InMemoryResearchJobStore(ResearchJobStore):
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._idempotency: dict[tuple[UUID, str], tuple[str, ResearchJob]] = {}
         self._results: dict[UUID, ResearchRunResultRecord] = {}
+        self._created_at: dict[UUID, datetime] = {}
 
     def create(self, workspace_id: UUID, job: ResearchJob) -> ResearchJob:
         if job.workspace_id != workspace_id:
@@ -116,6 +117,7 @@ class InMemoryResearchJobStore(ResearchJobStore):
             if job.id in self._jobs:
                 raise ValueError("research job already exists")
             self._jobs[job.id] = job
+            self._created_at[job.id] = self._clock()
             return job
 
     def create_idempotent(
@@ -140,6 +142,7 @@ class InMemoryResearchJobStore(ResearchJobStore):
             if job.id in self._jobs:
                 raise ValueError("research job already exists")
             self._jobs[job.id] = job
+            self._created_at[job.id] = self._clock()
             self._idempotency[key] = (request_fingerprint, job)
             return job, False
 
@@ -204,8 +207,16 @@ class InMemoryResearchJobStore(ResearchJobStore):
             )
 
     def count_monthly(self, workspace_id: UUID) -> int:
+        now = self._clock()
+        month_start = now.replace(
+            day=1, hour=0, minute=0, second=0, microsecond=0
+        )
         with self._lock:
-            return sum(job.workspace_id == workspace_id for job in self._jobs.values())
+            return sum(
+                job.workspace_id == workspace_id
+                and self._created_at.get(job.id, now) >= month_start
+                for job in self._jobs.values()
+            )
 
     def claim(
         self,
