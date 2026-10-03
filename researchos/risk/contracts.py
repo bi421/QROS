@@ -463,6 +463,7 @@ class RiskOrderIntent:
     max_price_deviation_bps: float = 100.0
     order_id: str | None = None
     research_id: str | None = None
+    probability_calibration_status: str | None = None
 
     def validate(self) -> None:
         if not self.asset.strip():
