@@ -8,7 +8,7 @@ from typing import Any
 from researchos.action.report import PreTradeReport, build_pre_trade_report
 from researchos.decision_engine.probability import ProbabilityAssessment
 from researchos.risk.adapters import risk_input_from_probability
-from researchos.risk.contracts import RiskPolicy, TradeStatistics
+from researchos.risk.contracts import RiskCalculation, RiskPolicy, TradeStatistics
 from researchos.risk.engine import calculate_risk
 from researchos.risk.governance import (
     RiskAccountState,
@@ -50,7 +50,7 @@ def _calibration_status(request: DecisionPipelineInput) -> str | None:
 
 def _risk_decision(
     request: DecisionPipelineInput,
-    risk: Any,
+    risk: RiskCalculation,
 ) -> RiskDecision | None:
     if request.risk_account is None:
         return None
