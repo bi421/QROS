@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 from researchos.data_engine.boundary import ValidatedDatasetRef
 from researchos.research_identity import DatasetIdentity
