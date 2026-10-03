@@ -1,0 +1,65 @@
+---
+name: Production Forward Migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      migration_file:
+        description: "Exact allowlisted M1 migration filename"
+        required: true
+        type: choice
+        options:
+          - 20260928123000_dataset_version_storage_path_reconciliation.sql
+          - 20260928124500_workspace_billing_admin_role_reconciliation.sql
+          - 20260928120000_storage_authorization_workspace_membership_reconciliation.sql
+      apply:
+        description: "Apply the selected migration. Leave false for read-only preflight."
+        required: true
+        default: false
+        type: boolean
+      confirm_apply:
+        description: 'Required only when apply=true: enter APPLY'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  forward-migration:
+    name: Governed Production Forward Migration
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate required production inputs
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.PRODUCTION_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "${SUPABASE_ACCESS_TOKEN}" || { echo "::error::SUPABASE_ACCESS_TOKEN is not configured"; exit 1; }
+          test -n "${SUPABASE_DB_PASSWORD}" || { echo "::error::PRODUCTION_DB_PASSWORD is not configured"; exit 1; }
+          test -n "${SUPABASE_PROJECT_ID}" || { echo "::error::PRODUCTION_PROJECT_ID is not configured"; exit 1; }
+          test "${SUPABASE_PROJECT_ID}" = "pvhdsngxyoiqhqwujfjt" || {
+            echo "::error::production project ref does not match the governed QROS target"
+            exit 1
+          }
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.117.0
+
+      - name: Run controlled forward-migration procedure
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.PRODUCTION_PROJECT_ID }}
+          MIGRATION_FILE: ${{ inputs.migration_file }}
+          APPLY_MIGRATION: ${{ inputs.apply }}
+          CONFIRM_APPLY: ${{ inputs.confirm_apply }}
+        run: bash scripts/ci/production_forward_migration.sh

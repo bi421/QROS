@@ -62,7 +62,7 @@ class SupabaseResearchValidationStore(ResearchValidationStore):
                 "id,workspace_id,research_run_id,result_manifest_sha256,"
                 "claim_id,plan_hash,validation_sha256,status,metrics,contract_version"
             )
-            .eq("workspace_id", str(workspace_id))
+            .eq("workspace_id", str(workspace_id)).is_("deleted_at", "null")
             .eq("research_run_id", str(research_run_id))
             .limit(1)
             .execute()

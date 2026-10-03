@@ -72,7 +72,7 @@ class SupabaseResearchClaimStore:
         result = (
             self._client.table("research_claim")
             .select("id,workspace_id,claim_hash,payload")
-            .eq("workspace_id", str(workspace_id))
+            .eq("workspace_id", str(workspace_id)).is_("deleted_at", "null")
             .eq("id", claim_id)
             .limit(1)
             .execute()

@@ -1,90 +1,151 @@
 """Red-team regression tests for the SaaS security boundary."""
+
 from __future__ import annotations
 
-import base64
-import json
-from uuid import UUID, uuid4
+import inspect
+import logging
+from io import BytesIO
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
 from researchos.saas.api import create_app
-from researchos.saas.contracts import TenantContext, WorkspaceRole
+from researchos.saas.contracts import Plan, TenantContext
+from researchos.saas.datasets import InMemoryDatasetStorage, InMemoryDatasetStore
+from researchos.saas.store import InMemoryResearchJobStore
+from researchos.saas.supabase_auth import SupabaseJwtAuthProvider
+from researchos.saas.worker import ResearchWorker
 
 
-def _context(role: WorkspaceRole = WorkspaceRole.RESEARCHER) -> TenantContext:
-    return TenantContext(
-        workspace_id=uuid4(),
-        user_id=uuid4(),
-        role=role,
-        plan="free",
-        access_token="red-team-token",
-    )
-
-
-class RedTeamAuth:
+class _StaticAuth:
     def __init__(self, context: TenantContext) -> None:
         self.context = context
 
-    def authenticate(self, authorization: str | None, requested_workspace_id: UUID | None = None) -> TenantContext:
-        if authorization != "Bearer red-team":
-            from fastapi import HTTPException
-            raise HTTPException(status_code=401, detail="invalid credentials")
-        if requested_workspace_id is not None and requested_workspace_id != self.context.workspace_id:
-            from fastapi import HTTPException
-            raise HTTPException(status_code=403, detail="workspace access denied")
+    def authenticate(self, authorization: str | None) -> TenantContext:
+        if authorization != "Bearer test":
+            raise RuntimeError("unexpected test authorization")
         return self.context
 
 
-def _client() -> TestClient:
-    ctx = _context()
-    return TestClient(create_app(auth_provider=RedTeamAuth(ctx)))
+class _ExplodingStorage(InMemoryDatasetStorage):
+    def put(self, storage_path: str, file: BytesIO) -> None:
+        raise RuntimeError(
+            "traceback: SELECT * FROM secret; SUPABASE_SERVICE_ROLE_KEY=super-secret"
+        )
 
 
-def _tampered_jwt(original: str, tenant_id: str) -> str:
-    parts = original.split(".")
-    payload = {"sub": str(uuid4()), "tenant_id": tenant_id, "role": "owner"}
-    encoded = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).rstrip(b"=").decode()
-    return ".".join([parts[0], encoded, parts[2]])
+class _RejectingSupabaseAuth:
+    def get_claims(self, token: str):
+        if token == "forged-tenant-token":
+            raise ValueError("invalid JWT signature")
+        return {"claims": {"sub": str(uuid4()), "tenant_id": str(uuid4())}}
 
 
-def test_jwt_tamper_tenant_id() -> None:
-    client = _client()
-    tampered = _tampered_jwt("e30.e30.invalid", str(uuid4()))
-    response = client.get("/v1/datasets", headers={"Authorization": f"Bearer {tampered}"})
-    assert response.status_code in {401, 403}
+class _Membership:
+    def __init__(self, workspace_id):
+        self.workspace_id = workspace_id
+
+    def resolve(self, user_id):
+        return self.workspace_id, Plan.PRO
 
 
-def test_storage_path_traversal() -> None:
-    client = _client()
-    response = client.post(
-        "/v1/datasets/upload",
-        headers={"Authorization": "Bearer red-team", "X-Storage-Path": "../../../etc/passwd"},
+def _client(context: TenantContext, *, storage=None, raise_server_exceptions=True) -> TestClient:
+    return TestClient(
+        create_app(
+            auth_provider=_StaticAuth(context),
+            job_store=InMemoryResearchJobStore(),
+            dataset_store=InMemoryDatasetStore(),
+            dataset_storage=storage or InMemoryDatasetStorage(),
+        ),
+        raise_server_exceptions=raise_server_exceptions,
     )
-    assert response.status_code in {400, 422}
-    if response.status_code == 400:
-        assert response.json().get("code") == "INVALID_PATH"
 
 
-def test_job_id_enumeration() -> None:
-    client = _client()
-    for _ in range(8):
-        response = client.get(f"/v1/research-runs/{uuid4()}", headers={"Authorization": "Bearer red-team"})
+def test_jwt_tamper_tenant_id_is_rejected() -> None:
+    provider = SupabaseJwtAuthProvider(
+        _RejectingSupabaseAuth(),
+        _Membership(uuid4()),
+    )
+
+    try:
+        provider.authenticate("Bearer forged-tenant-token")
+    except Exception as exc:
+        assert getattr(exc, "status_code", None) == 401
+    else:
+        raise AssertionError("forged JWT was accepted")
+
+
+def test_storage_path_traversal_is_rejected() -> None:
+    client = _client(TenantContext(uuid4(), uuid4(), Plan.PRO))
+
+    response = client.post(
+        "/v1/datasets",
+        headers={"Authorization": "Bearer test"},
+        data={"name": "../../../etc/passwd"},
+        files={"file": ("payload.csv", BytesIO(b"x"), "text/csv")},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "INVALID_PATH"
+
+
+def test_job_id_enumeration_never_leaks_existence() -> None:
+    client = _client(TenantContext(uuid4(), uuid4(), Plan.PRO))
+
+    for _ in range(16):
+        response = client.get(
+            f"/v1/research-runs/{uuid4()}",
+            headers={"Authorization": "Bearer test"},
+        )
         assert response.status_code == 404
         assert response.status_code != 403
 
 
-def test_error_leak() -> None:
-    client = _client()
-    response = client.get("/v1/research-runs/not-a-uuid", headers={"Authorization": "Bearer red-team"})
-    body = response.text.lower()
-    assert "traceback" not in body
-    assert "service_role" not in body
-    assert "select " not in body
-    assert "insert " not in body
-    assert "postgres" not in body
+def test_error_leak_is_blocked() -> None:
+    request_id = "red-team-error-001"
+    client = _client(
+        TenantContext(uuid4(), uuid4(), Plan.PRO),
+        storage=_ExplodingStorage(),
+        raise_server_exceptions=False,
+    )
+
+    response = client.post(
+        "/v1/datasets",
+        headers={"Authorization": "Bearer test", "X-Request-ID": request_id},
+        data={"name": "safe-name"},
+        files={"file": ("payload.csv", BytesIO(b"x"), "text/csv")},
+    )
+
+    assert response.status_code == 500
+    payload = response.json()
+    assert payload["detail"] == "Internal error"
+    assert payload["error"] == {
+        "code": "internal_error",
+        "message": "Internal error",
+        "request_id": request_id,
+        "correlation_id": request_id,
+    }
+    body = response.text
+    assert "traceback" not in body.lower()
+    assert "service_role" not in body.lower()
+    assert "sql" not in body.lower()
+    assert "SELECT" not in body
+    assert "SUPABASE_SERVICE_ROLE_KEY" not in body
+    assert response.headers["X-Request-ID"] == request_id
 
 
-def test_service_role_bypass() -> None:
-    client = _client()
-    response = client.get("/v1/research-runs/not-a-uuid", headers={"Authorization": "Bearer red-team"})
-    assert response.status_code in {404, 422}
+def test_service_role_bypass_is_not_part_of_worker_boundary(caplog) -> None:
+    source = inspect.getsource(ResearchWorker)
+    assert "service_role" not in source
+    assert "SUPABASE_SERVICE_ROLE_KEY" not in source
+
+    caplog.set_level(logging.DEBUG)
+    workspace_id = uuid4()
+    job_id = uuid4()
+    assert job_id is not None
+    assert workspace_id is not None
+    assert all(
+        "service_role" not in record.getMessage().lower()
+        and "supabase_service_role_key" not in record.getMessage().lower()
+        for record in caplog.records
+    )

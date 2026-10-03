@@ -768,9 +768,11 @@ class BackendRouter:
         if not callable(getter):
             return None
         try:
-            return getter()
+            result = getter()
+            return result if isinstance(result, BackendCapabilities) else None
         except Exception:
             return None
+        return value if isinstance(value, BackendCapabilities) else None
 
     @staticmethod
     def _trust_boundary_ok(caps: BackendCapabilities) -> bool:

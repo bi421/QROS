@@ -6,7 +6,7 @@ import hashlib
 from typing import Any, Protocol
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from researchos.claims.claim import ResearchClaim, ResearchClaimType, ResearchPlan
@@ -110,7 +110,7 @@ def _stable_claim_id(tenant: TenantContext, request: ResearchClaimCreateRequest)
 
 
 def register_research_claim_routes(
-    router: APIRouter | FastAPI,
+    router: APIRouter,
     *,
     tenant_dependency: Any,
     claim_store: ResearchClaimStore | None,
@@ -146,6 +146,7 @@ def register_research_claim_routes(
     def create_research_claim(
         request: ResearchClaimCreateRequest,
         context: TenantContext = Depends(tenant_dependency),
+        request: Request,
     ) -> ResearchClaimResponse:
         require_write_role(context)
         store = require_store()
@@ -264,6 +265,7 @@ def register_research_claim_routes(
         status_filter: str | None = Query(default=None, alias="filter[status]"),
         tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
         context: TenantContext = Depends(tenant_dependency),
+        request: Request,
     ) -> ResearchClaimPageResponse:
         try:
             validate_filter_keys(

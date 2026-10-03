@@ -6,14 +6,30 @@ import argparse
 import json
 import os
 import sys
+from datetime import datetime, timezone
 
 from researchos.data_engine.loader import CsvLoader
 from researchos.experiments.phase52 import FEATURE_SET_NAMES, Phase52Config, run_phase52, run_phase52_comparison
-from researchos.experiments.phase52.alignment import validate_exact_timestamp_alignment
 from researchos.experiments.phase52.timestamp_adapter import normalize_epoch_timestamp_csv
+from researchos.experiments.phase52_rebuild.daily_dataset import load_daily_xau_from_m1
 
 
 def _load_candles(csv_path: str, fmt: str, symbol: str, timeframe: str):
+    # Phase 5.2 is a daily experiment, while the canonical XAUUSD physical
+    # source is M1. Aggregate that source through the governed daily loader
+    # before calendar-day intersection. This preserves the canonical daily
+    # OHLCV semantics and prevents M1 rows from being mistaken for duplicate
+    # daily observations.
+    if timeframe == "1d" and symbol == "XAUUSD":
+        daily = load_daily_xau_from_m1(csv_path)
+        return (
+            [c.close for c in daily],
+            [c.high for c in daily],
+            [c.low for c in daily],
+            [c.tick_volume for c in daily],
+            [c.timestamp for c in daily],
+        )
+
     loader = CsvLoader()
     if fmt == "mt5":
         candles = loader.load_mt5_candles(csv_path, symbol=symbol, timeframe=timeframe)
@@ -24,7 +40,7 @@ def _load_candles(csv_path: str, fmt: str, symbol: str, timeframe: str):
     return ([c.close for c in candles], [c.high for c in candles], [c.low for c in candles], [c.volume for c in candles], [c.timestamp for c in candles])
 
 
-def _load_macro_series(csv_path: str, fmt: str, symbol: str, timeframe: str):
+def _load_macro_series(csv_path: str, fmt: str, symbol: str, timeframe: str) -> tuple[list[float], list[datetime]]:
     """Load a macro series without repairing or fabricating observations."""
     loader = CsvLoader()
     if fmt == "mt5":
@@ -42,10 +58,36 @@ def _load_macro_series(csv_path: str, fmt: str, symbol: str, timeframe: str):
     return [c.close for c in candles], [c.timestamp for c in candles]
 
 
+def _calendar_day_key(value: object) -> str:
+    """Return the canonical UTC calendar day for a loaded timestamp."""
+    if hasattr(value, "to_pydatetime"):
+        value = value.to_pydatetime()
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc).date().isoformat()
+    text = str(value).replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return text[:10]
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).date().isoformat()
+
+
 def _build_common_observation_sample(close, high, low, volume, timestamps, macro, macro_timestamps, required_symbols):
-    """Build the explicit common-observation sample without calendar repair."""
-    if len({*timestamps}) != len(timestamps):
-        raise ValueError("XAUUSD: duplicate timestamps")
+    """Build the governed common sample by UTC calendar day without repair.
+
+    Phase 5.2 daily alignment is defined by exact common UTC calendar days, not
+    raw source timestamp equality. Source observations retain their own source
+    timestamps during loading; the aligned dataset uses the XAUUSD daily
+    timestamp as the canonical observation timestamp.
+    """
+    price_days = [_calendar_day_key(ts) for ts in timestamps]
+    if len(set(price_days)) != len(price_days):
+        raise ValueError("XAUUSD: duplicate calendar days")
+
     macro_maps = {}
     for symbol in required_symbols:
         values = macro.get(symbol)
@@ -54,42 +96,41 @@ def _build_common_observation_sample(close, high, low, volume, timestamps, macro
             raise ValueError(f"{symbol}: missing macro series")
         if len(values) != len(factor_ts):
             raise ValueError(f"{symbol}: value/timestamp length mismatch")
-        if len({*factor_ts}) != len(factor_ts):
-            raise ValueError(f"{symbol}: duplicate timestamps")
-        macro_maps[symbol] = {ts: i for i, ts in enumerate(factor_ts)}
+        factor_days = [_calendar_day_key(ts) for ts in factor_ts]
+        if len(set(factor_days)) != len(factor_days):
+            raise ValueError(f"{symbol}: duplicate calendar days")
+        macro_maps[symbol] = {day: i for i, day in enumerate(factor_days)}
 
     selected_price_indices = []
     selected_macro_indices = {s: [] for s in required_symbols}
     common_timestamps = []
-    for i, ts in enumerate(timestamps):
+    for i, day in enumerate(price_days):
         indices = []
         for symbol in required_symbols:
-            index = macro_maps[symbol].get(ts)
+            index = macro_maps[symbol].get(day)
             if index is None:
                 break
             indices.append(index)
         else:
             selected_price_indices.append(i)
-            common_timestamps.append(ts)
+            common_timestamps.append(timestamps[i])
             for symbol, index in zip(required_symbols, indices):
                 selected_macro_indices[symbol].append(index)
     if not common_timestamps:
         raise ValueError("NO COMMON OBSERVATIONS ACROSS XAUUSD AND REQUIRED MACRO SERIES")
-    filtered = (
+    filtered_macro_timestamps = {symbol: common_timestamps[:] for symbol in required_symbols}
+    return (
         [close[i] for i in selected_price_indices],
         [high[i] for i in selected_price_indices],
         [low[i] for i in selected_price_indices],
         [volume[i] for i in selected_price_indices],
         common_timestamps,
         {symbol: [macro[symbol][i] for i in selected_macro_indices[symbol]] for symbol in required_symbols},
-        {symbol: common_timestamps[:] for symbol in required_symbols},
+        filtered_macro_timestamps,
     )
-    for symbol in required_symbols:
-        validate_exact_timestamp_alignment(common_timestamps, filtered[6][symbol], symbol)
-    return filtered
 
 
-def _print_result(result):
+def _print_result(result: Any) -> None:
     print(f"{result.metadata.get('feature_set', '(legacy)'):18} | {result.outcome:10} | folds={result.num_folds:3d} | accuracy={result.model.accuracy:.4f} | brier={result.model.brier_score:.4f} | hash={result.reproducibility_hash}")
 
 

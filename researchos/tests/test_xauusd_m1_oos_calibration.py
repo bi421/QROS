@@ -59,6 +59,14 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path]:
         "contract": source["contract"],
         "dataset": source["dataset"],
         "folds": [{"predictions": predictions}],
+        "holdout": {
+            "predictions": [{
+                "event_id": "holdout-only",
+                "timestamp": "2025-02-01T00:00:00+00:00",
+                "probability": 0.99,
+                "label": 0,
+            }],
+        },
     }
     result_path = tmp_path / "result.json"
     result_path.write_text(json.dumps(result), encoding="utf-8")
@@ -110,3 +118,12 @@ def test_oos_calibration_fails_without_both_prior_classes(tmp_path: Path) -> Non
     result.write_text(json.dumps(result_data), encoding="utf-8")
     with pytest.raises(ValueError, match="No OOS predictions"):
         run(source, result, tmp_path / "calibrated.json")
+
+
+def test_oos_calibration_ignores_final_holdout_predictions(tmp_path: Path) -> None:
+    source, result = _fixture(tmp_path)
+    output = run(source, result, tmp_path / "calibrated.json")
+
+    assert output["calibration"]["total_oos_predictions"] == 12
+    assert output["calibration"]["eligible_oos_predictions"] == 2
+    assert all(record["event_id"] != "holdout-only" for record in output["predictions"])

@@ -129,6 +129,11 @@ class SupabaseTenantPersistence:
             receipt_id=UUID(str(row["receipt_id"])),
         )
 
+    def hard_purge_expired(self, *, now: datetime | None = None) -> int:
+        timestamp = (now or datetime.now(timezone.utc)).isoformat()
+        result = self._client.rpc("purge_deleted_workspaces", {"p_now": timestamp}).execute()
+        return int(result.data or 0)
+
     def _rows(self, table: str, workspace_id: UUID) -> list[dict[str, Any]]:
         result = (
             self._client.table(table)

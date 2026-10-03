@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from threading import Event, Thread
+from time import perf_counter
 from typing import Protocol
 from uuid import UUID, uuid4
 import time
@@ -14,6 +15,14 @@ from researchos.saas.observability import metrics_registry
 
 from researchos.research_core.contracts import ResearchResult
 from researchos.saas.contracts import ResearchJobStatus
+from researchos.saas.observability import (
+    jobs_duration_seconds,
+    jobs_failed_total,
+    jobs_retries_total,
+    job_id_var,
+    tenant_id_var,
+    tracer,
+)
 from researchos.saas.store import ResearchJobStore
 
 
@@ -22,7 +31,7 @@ class ResearchExecutor(Protocol):
 
 
 class ResearchWorker:
-    """Fenced coordinator: only the worker holding the lease token may finalize a run."""
+    """Fenced coordinator with request/tenant/job correlation across execution."""
 
     def __init__(
         self,
@@ -30,22 +39,36 @@ class ResearchWorker:
         executor: ResearchExecutor,
         *,
         lease_seconds: int = 900,
+        observability: StructuredRequestObserver | None = None,
     ) -> None:
         if lease_seconds < 1:
             raise ValueError("lease_seconds must be positive")
+        configure_tracing()
         self._store = store
         self._executor = executor
         self._lease_seconds = lease_seconds
+        self._observability = observability or StructuredRequestObserver()
 
-    def _heartbeat(self, workspace_id, job_id, token, stop):
+    def _heartbeat(self, workspace_id: UUID, job_id: UUID, token: UUID, stop: Event) -> None:
         interval = max(1.0, self._lease_seconds / 3)
         while not stop.wait(interval):
             try:
-                self._store.renew(
-                    workspace_id, job_id, token, self._lease_seconds
-                )
+                self._store.renew(workspace_id, job_id, token, self._lease_seconds)
             except Exception:
                 return
+
+    def run_queued_message(self, message: Mapping[str, object]) -> ResearchResult:
+        """Consume a durable queue payload while preserving its correlation ID."""
+        try:
+            workspace_id = UUID(str(message["workspace_id"]))
+            job_id = UUID(str(message["research_run_id"]))
+        except (KeyError, ValueError) as exc:
+            raise ValueError("invalid research queue message") from exc
+        request_id_value = message.get("request_id")
+        request_id = str(request_id_value) if request_id_value is not None else None
+        if request_id is not None and len(request_id) > 128:
+            raise ValueError("request_id exceeds 128 characters")
+        return self.run_once(workspace_id, job_id, request_id=request_id)
 
     def run_once(
         self,
@@ -72,6 +95,11 @@ class ResearchWorker:
             owner=str(uuid4()),
             lease_seconds=self._lease_seconds,
         )
+        if lease.job.attempt_count > 1:
+            jobs_retries_total.inc()
+        tenant_token = tenant_id_var.set(str(workspace_id))
+        job_token = job_id_var.set(str(job_id))
+        started = perf_counter()
         stop = Event()
         heartbeat = Thread(
             target=self._heartbeat,
@@ -80,51 +108,64 @@ class ResearchWorker:
         )
         heartbeat.start()
         try:
-            result = self._executor.execute(job_id)
-        except Exception:
-            metrics_registry().job_finished(time.perf_counter() - started, True)
-            self._store.finish(
-                workspace_id,
-                job_id,
-                lease.token,
-                ResearchJobStatus.FAILED,
-                error_code="executor_error",
-            )
-            raise
+            try:
+                with tracer.start_as_current_span("qros.research_job") as span:
+                    span.set_attribute("qros.workspace_id", str(workspace_id))
+                    span.set_attribute("qros.job_id", str(job_id))
+                    span.set_attribute("qros.attempt", lease.job.attempt_count)
+                    result = self._executor.execute(job_id)
+            except Exception:
+                try:
+                    self._store.finish(
+                        workspace_id,
+                        job_id,
+                        lease.token,
+                        ResearchJobStatus.FAILED,
+                        error_code="executor_error",
+                    )
+                finally:
+                    jobs_failed_total.inc()
+                raise
 
+            target = (
+                ResearchJobStatus.SUCCEEDED
+                if result.status == "SUCCEEDED"
+                else ResearchJobStatus.FAILED
+            )
+            if target is ResearchJobStatus.FAILED:
+                jobs_failed_total.inc()
+            try:
+                self._store.record_result(
+                    workspace_id, job_id, lease.token, result
+                )
+            except Exception:
+                try:
+                    self._store.finish(
+                        workspace_id,
+                        job_id,
+                        lease.token,
+                        ResearchJobStatus.FAILED,
+                        error_code="provenance_error",
+                    )
+                finally:
+                    if target is not ResearchJobStatus.FAILED:
+                        jobs_failed_total.inc()
+                raise
+            try:
+                self._store.finish(workspace_id, job_id, lease.token, target)
+            except Exception:
+                if target is not ResearchJobStatus.FAILED:
+                    jobs_failed_total.inc()
+                raise
+            return result
         finally:
             stop.set()
             heartbeat.join(timeout=1.0)
-
-        target = (
-            ResearchJobStatus.SUCCEEDED
-            if result.status == "SUCCEEDED"
-            else ResearchJobStatus.FAILED
-        )
-        try:
-            self._store.record_result(workspace_id, job_id, lease.token, result)
-        except Exception:
-            try:
-                self._store.finish(
-                    workspace_id,
-                    job_id,
-                    lease.token,
-                    ResearchJobStatus.FAILED,
-                    error_code="provenance_error",
-                )
-            except Exception:
-                pass
-            raise
-        self._store.finish(workspace_id, job_id, lease.token, target)
-        metrics_registry().job_finished(time.perf_counter() - started, target == ResearchJobStatus.FAILED)
-        log.info(
-            "job_completed",
-            timestamp=time.time(),
-            level="info" if target == ResearchJobStatus.SUCCEEDED else "error",
-            duration_ms=round((time.perf_counter() - started) * 1000.0, 3),
-            message="job execution completed",
-        )
-        return result
+            jobs_duration_seconds.observe(
+                max(0.0, perf_counter() - started)
+            )
+            job_id_var.reset(job_token)
+            tenant_id_var.reset(tenant_token)
 
 
 __all__ = ["ResearchExecutor", "ResearchWorker"]

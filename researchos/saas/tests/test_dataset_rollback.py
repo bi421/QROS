@@ -1,5 +1,5 @@
 from io import BytesIO
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 
@@ -20,7 +20,7 @@ class StaticAuth:
 
 
 class FailingVersionStore(InMemoryDatasetStore):
-    def create_version(self, workspace_id, version: DatasetVersion) -> DatasetVersion:
+    def create_version(self, workspace_id: UUID, version: DatasetVersion) -> DatasetVersion:
         raise RuntimeError("simulated version persistence failure")
 
 
@@ -33,7 +33,8 @@ def test_failed_initial_dataset_upload_rolls_back_metadata_and_object() -> None:
             auth_provider=StaticAuth(context),
             dataset_store=store,
             dataset_storage=storage,
-        )
+        ),
+        raise_server_exceptions=False,
     )
 
     response = client.post(
