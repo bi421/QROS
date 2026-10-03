@@ -79,7 +79,7 @@ def run_ml_comparison(
 
         # Split data
         X_train, X_test = X[fold.train_indices], X[fold.test_indices]
-        y_train, y_test = y[fold.train_index], y[fold.test_index]
+        y_train, y_test = y[fold.train_indices], y[fold.test_indices]
 
         # Train MLP
         model = MLPRegressor(

@@ -33,7 +33,8 @@ def test_failed_initial_dataset_upload_rolls_back_metadata_and_object() -> None:
             auth_provider=StaticAuth(context),
             dataset_store=store,
             dataset_storage=storage,
-        )
+        ),
+        raise_server_exceptions=False,
     )
 
     response = client.post(

@@ -278,8 +278,22 @@ class HistoricalDataset(BaseObject):
             DatasetStatus.ARCHIVED,
         )
 
-        # Recompute hashes from restored records so integrity holds.
+        # Recompute hashes from restored records and fail closed on any
+        # serialization truncation or identity mismatch.
         obj._compute_hash()
+        expected_count = data.get("record_count")
+        if expected_count is not None and int(expected_count) != obj.record_count:
+            raise ValueError(
+                "dataset record_count does not match restored records"
+            )
+        expected_content_hash = data.get("dataset_content_hash")
+        if expected_content_hash and expected_content_hash != obj.dataset_content_hash:
+            raise ValueError(
+                "dataset_content_hash does not match restored records"
+            )
+        expected_dataset_hash = data.get("dataset_hash")
+        if expected_dataset_hash and expected_dataset_hash != obj.dataset_hash:
+            raise ValueError("dataset_hash does not match restored dataset")
         return obj
 
     @staticmethod
@@ -298,19 +312,29 @@ class HistoricalDataset(BaseObject):
             "orderbook": OrderBook,
         }
         record_cls = record_map.get(data_type)
+        if record_cls is None:
+            raise ValueError(f"unsupported dataset data_type: {data_type!r}")
+
         restored: list[DataRecord] = []
-        for rec in records:
-            if record_cls is not None and isinstance(rec, dict):
-                try:
-                    restored.append(record_cls.from_dict(rec))
-                    continue
-                except Exception:
-                    pass
-            if isinstance(rec, dict) and "open" in rec and "close" in rec:
-                try:
-                    restored.append(Candle.from_dict(rec))
-                except Exception:
-                    pass
+        for index, rec in enumerate(records):
+            if not isinstance(rec, dict):
+                raise ValueError(
+                    f"dataset record {index} is not a serialized mapping"
+                )
+            try:
+                restored.append(record_cls.from_dict(rec))
+            except Exception as exc:
+                # A persisted dataset must never silently lose a record during
+                # deserialization; callers need an explicit integrity failure.
+                if data_type != "candle" and "open" in rec and "close" in rec:
+                    try:
+                        restored.append(Candle.from_dict(rec))
+                        continue
+                    except Exception:
+                        pass
+                raise ValueError(
+                    f"dataset record {index} failed {data_type} deserialization"
+                ) from exc
         return restored
 
     def __repr__(self) -> str:

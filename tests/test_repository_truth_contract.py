@@ -35,3 +35,16 @@ def test_repository_truth_audit_has_protocol_exemption_and_document_context() ->
     source = Path("scripts/audit_repository_truth.py").read_text(encoding="utf-8")
     assert "is_protocol_class" in source
     assert "evidence integrity notice" in source
+
+
+def test_scope_guard_covers_known_legacy_forensic_artifacts() -> None:
+    source = Path("scripts/check_scope.py").read_text(encoding="utf-8")
+    assert "qros_pybind11_forensic_audit" in source
+    assert "cpp_true_production_v[1-9]" in source
+
+
+def test_ci_installs_test_extra_and_dev_contains_live_signal_dependency() -> None:
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
+    assert 'python -m pip install -e ".[dev,test,saas]"' in workflow
+    assert '"yfinance>=0.2"' in pyproject
