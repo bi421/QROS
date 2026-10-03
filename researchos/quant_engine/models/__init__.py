@@ -64,6 +64,18 @@ __all__ = [
     "ModelAlreadyExistsError",
     "ModelNotFoundError",
     "ModelRegistryError",
+    # Executable model runtime
+    "MODEL_RUNTIME_VERSION",
+    "BatchResultCountMismatchError",
+    "InferenceRequest",
+    "InferenceResult",
+    "ModelAdapter",
+    "ModelAdapterAlreadyExistsError",
+    "ModelAdapterNotFoundError",
+    "ModelNotReadyError",
+    "ModelResultMismatchError",
+    "ModelRuntime",
+    "ModelRuntimeError",
     # Legacy quant-engine models (backward-compatible re-exports)
     "CalculationVersion",
     "Order",
