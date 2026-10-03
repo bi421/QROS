@@ -8,6 +8,7 @@ fail-closed. Never creates or submits orders.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from enum import Enum
 from hashlib import sha256
@@ -136,17 +137,23 @@ class RiskLimits:
             "max_portfolio_open_risk_fraction": self.max_portfolio_open_risk_fraction,
         }
         for name, value in bounded.items():
-            if not 0.0 < value <= 1.0:
-                raise ValueError(f"{name} must be in (0, 1]")
+            if not math.isfinite(value) or not 0.0 < value <= 1.0:
+                raise ValueError(f"{name} must be finite and in (0, 1]")
         if self.target_trade_risk_fraction > self.max_trade_loss_fraction:
             raise ValueError(
                 "target_trade_risk_fraction must not exceed max_trade_loss_fraction"
             )
-        if self.max_gross_exposure_fraction <= 0.0:
-            raise ValueError("max_gross_exposure_fraction must be positive")
-        if self.max_single_instrument_exposure_fraction <= 0.0:
+        if (
+            not math.isfinite(self.max_gross_exposure_fraction)
+            or self.max_gross_exposure_fraction <= 0.0
+        ):
+            raise ValueError("max_gross_exposure_fraction must be finite and positive")
+        if (
+            not math.isfinite(self.max_single_instrument_exposure_fraction)
+            or self.max_single_instrument_exposure_fraction <= 0.0
+        ):
             raise ValueError(
-                "max_single_instrument_exposure_fraction must be positive"
+                "max_single_instrument_exposure_fraction must be finite and positive"
             )
 
     def to_dict(self) -> dict[str, float]:
@@ -188,15 +195,16 @@ class RiskAccountState:
             "strategy_reference_equity",
         ):
             value = getattr(self, name)
-            if value <= 0.0:
-                raise ValueError(f"{name} must be positive")
+            if not math.isfinite(value) or value <= 0.0:
+                raise ValueError(f"{name} must be finite and positive")
         for name in (
             "open_risk_amount",
             "gross_exposure",
             "single_instrument_exposure",
         ):
-            if getattr(self, name) < 0.0:
-                raise ValueError(f"{name} must be non-negative")
+            value = getattr(self, name)
+            if not math.isfinite(value) or value < 0.0:
+                raise ValueError(f"{name} must be finite and non-negative")
         if self.kill_switch_active and not (
             self.kill_switch_reason and self.kill_switch_reason.strip()
         ):
