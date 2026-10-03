@@ -7,11 +7,16 @@ are explicit and use a deterministic multivariate estimator inside Phase 5.2.
 """
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
+from typing import Protocol
 
 from .contracts import Phase52Result
 from .prepared import Phase52PreparedData
+
+
+class _ProbabilityEstimator(Protocol):
+    def predict_proba(self, feature_row: Sequence[float | None]) -> dict[int, float]: ...
 
 FEATURE_SET_NAMES: tuple[str, ...] = (
     "PRICE_ONLY",
@@ -46,13 +51,16 @@ class Phase52Config:
 
 
 def _resolve_feature_indices(
-    config: Phase52Config, names: Sequence[str], metadata: dict
+    config: Phase52Config, names: Sequence[str], metadata: Mapping[str, object]
 ) -> tuple[int, ...]:
     if config.estimator_feature is not None:
         return (int(config.estimator_feature),)
     if config.feature_set not in FEATURE_SET_NAMES:
         raise ValueError(f"Unsupported Phase 5.2 feature set: {config.feature_set}")
-    price_count = int(metadata["price_feature_count"])
+    price_count_value = metadata.get("price_feature_count")
+    if not isinstance(price_count_value, int):
+        raise ValueError("Dataset metadata missing integer price_feature_count")
+    price_count = price_count_value
     if config.feature_set == "PRICE_ONLY":
         return tuple(range(price_count))
     selected_symbols = {
@@ -70,10 +78,10 @@ def _resolve_feature_indices(
 
 
 def run_phase52(
-    close,
-    high,
-    low,
-    volume,
+    close: Sequence[float],
+    high: Sequence[float],
+    low: Sequence[float],
+    volume: Sequence[float],
     macro_factor_series: dict[str, Sequence[float | None]],
     config: Phase52Config | None = None,
     *,
@@ -131,12 +139,31 @@ def run_phase52(
 
 
 def run_phase52_comparison(
-    *args, config: Phase52Config | None = None, **kwargs
+    close: Sequence[float],
+    high: Sequence[float],
+    low: Sequence[float],
+    volume: Sequence[float],
+    macro_factor_series: dict[str, Sequence[float | None]],
+    config: Phase52Config | None = None,
+    *,
+    timestamps: Sequence[object] | None = None,
+    macro_timestamps: dict[str, Sequence[object]] | None = None,
 ) -> dict[str, Phase52Result]:
     """Run all five feature sets with the governed final-holdout contract."""
     base = config or Phase52Config()
+    kwargs_without_config = dict(kwargs)
+    kwargs_without_config.pop("config", None)
     return {
-        feature_set: run_phase52(*args, config=replace(base, feature_set=feature_set), **kwargs)
+        feature_set: run_phase52(
+            close,
+            high,
+            low,
+            volume,
+            macro_factor_series,
+            config=replace(base, feature_set=feature_set),
+            timestamps=timestamps,
+            macro_timestamps=macro_timestamps,
+        )
         for feature_set in FEATURE_SET_NAMES
     }
 

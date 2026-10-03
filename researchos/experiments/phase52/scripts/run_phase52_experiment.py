@@ -40,7 +40,7 @@ def _load_candles(csv_path: str, fmt: str, symbol: str, timeframe: str):
     return ([c.close for c in candles], [c.high for c in candles], [c.low for c in candles], [c.volume for c in candles], [c.timestamp for c in candles])
 
 
-def _load_macro_series(csv_path: str, fmt: str, symbol: str, timeframe: str):
+def _load_macro_series(csv_path: str, fmt: str, symbol: str, timeframe: str) -> tuple[list[float], list[datetime]]:
     """Load a macro series without repairing or fabricating observations."""
     loader = CsvLoader()
     if fmt == "mt5":
@@ -130,7 +130,7 @@ def _build_common_observation_sample(close, high, low, volume, timestamps, macro
     )
 
 
-def _print_result(result):
+def _print_result(result: Any) -> None:
     print(f"{result.metadata.get('feature_set', '(legacy)'):18} | {result.outcome:10} | folds={result.num_folds:3d} | accuracy={result.model.accuracy:.4f} | brier={result.model.brier_score:.4f} | hash={result.reproducibility_hash}")
 
 
