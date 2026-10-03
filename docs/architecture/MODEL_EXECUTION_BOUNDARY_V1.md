@@ -1,6 +1,6 @@
 # Model Execution Boundary V1
 
-**Status:** Proposed + implementation skeleton  
+**Status:** Implemented and green  
 **Scope:** Research model execution only  
 **Design principle:** provider-neutral, provenance-first, fail-closed
 
@@ -247,9 +247,11 @@ Prove:
 - adapter errors propagate;
 - result mismatch is rejected.
 
-### Slice D — Provider adapters
+### Slice D — Concrete adapters
 
-Only after the boundary is green, implement concrete adapters behind it.
+Concrete adapters are implemented only after the boundary is green.
+
+The first concrete adapter is the deterministic research-model adapter. It executes a canonical registry ModelContract through the new runtime, using the existing deterministic training framework as the execution engine without adding an external model dependency.
 
 Each adapter must be added as a separate change with its own:
 
@@ -285,7 +287,8 @@ V1 is complete when:
 5. batch ordering is preserved;
 6. no fallback or synthetic-data behavior exists in the runtime;
 7. conformance tests pass;
-8. the architecture document and code express the same boundary.
+8. the architecture document and code express the same boundary;
+9. at least one concrete QROS model implementation runs through the boundary.
 
 ## 15. Future extension
 
@@ -304,3 +307,28 @@ The research system should remain organized around:
       -> evidence
 
 The model is a component of research, not the definition of research.
+
+
+## 16. Implemented reference adapter
+
+The `DeterministicResearchModelAdapter` binds a canonical registry ModelContract to the provider-neutral execution boundary and delegates deterministic execution to the existing training framework.
+
+The adapter:
+
+- requires an exact ResearchDataset payload;
+- verifies the dataset content hash against the request;
+- verifies feature schema and label identity against the bound model;
+- rejects request parameters or seeds that it would silently ignore;
+- returns raw deterministic predictions and model-native metadata;
+- performs no trading action and creates no evidence.
+
+This adapter is an execution integration test of the architecture, not a forecasting or trading claim.
+
+
+### Inference versus training identity
+
+The registry model contract retains the dataset identity used to establish the
+model. Inference requests carry the identity of the dataset actually being
+executed. These identities are intentionally allowed to differ so that the
+same validated model can be evaluated on later or out-of-sample datasets
+without changing the model contract.

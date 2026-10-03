@@ -57,6 +57,7 @@ from .runtime import (
     ModelRuntime,
     ModelRuntimeError,
 )
+from .deterministic_adapter import DeterministicResearchModelAdapter
 from .registry import (
     MODEL_REGISTRY_VERSION,
     ModelAlreadyExistsError,
@@ -89,6 +90,7 @@ __all__ = [
     "ModelResultMismatchError",
     "ModelRuntime",
     "ModelRuntimeError",
+    "DeterministicResearchModelAdapter",
     # Legacy quant-engine models (backward-compatible re-exports)
     "CalculationVersion",
     "Order",
