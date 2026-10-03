@@ -8,8 +8,15 @@ from typing import Any
 from researchos.action.report import PreTradeReport, build_pre_trade_report
 from researchos.decision_engine.probability import ProbabilityAssessment
 from researchos.risk.adapters import risk_input_from_probability
-from researchos.risk.contracts import RiskPolicy, TradeStatistics
+from researchos.risk.contracts import RiskCalculation, RiskPolicy, TradeStatistics
 from researchos.risk.engine import calculate_risk
+from researchos.risk.governance import (
+    RiskAccountState,
+    RiskDecision,
+    RiskLimits,
+    StrategyRiskState,
+    evaluate_pretrade_risk,
+)
 
 
 @dataclass(frozen=True)
@@ -26,14 +33,14 @@ class DecisionPipelineInput:
     risk_policy: RiskPolicy = RiskPolicy()
     risk_per_unit: float | None = None
     probability_calibration_status: str | None = None
+    risk_account: RiskAccountState | None = None
+    risk_limits: RiskLimits = RiskLimits()
+    proposed_notional: float | None = None
+    strategy_state: StrategyRiskState = StrategyRiskState.RISK_REVIEW
 
 
 def _calibration_status(request: DecisionPipelineInput) -> str | None:
-    """Resolve explicit calibration evidence without inventing a status.
-
-    A pipeline-level value has precedence. Otherwise a status already attached
-    to the ProbabilityAssessment (or its serialized form) is preserved.
-    """
+    """Resolve explicit calibration evidence without inventing a status."""
     if request.probability_calibration_status is not None:
         return request.probability_calibration_status
     if isinstance(request.assessment, ProbabilityAssessment):
@@ -41,8 +48,24 @@ def _calibration_status(request: DecisionPipelineInput) -> str | None:
     return request.assessment.get("probability_calibration_status")
 
 
+def _risk_decision(
+    request: DecisionPipelineInput,
+    risk: RiskCalculation,
+) -> RiskDecision | None:
+    if request.risk_account is None:
+        return None
+    return evaluate_pretrade_risk(
+        risk,
+        account=request.risk_account,
+        limits=request.risk_limits,
+        proposed_notional=request.proposed_notional,
+        strategy_state=request.strategy_state,
+        research_valid=request.research_valid,
+    )
+
+
 def run_decision_pipeline(request: DecisionPipelineInput) -> PreTradeReport:
-    """Run probability -> risk -> human-review report deterministically."""
+    """Run probability -> sizing -> governance -> human-review report."""
     risk_input = risk_input_from_probability(
         request.assessment,
         asset=request.asset,
@@ -54,8 +77,10 @@ def run_decision_pipeline(request: DecisionPipelineInput) -> PreTradeReport:
         probability_calibration_status=_calibration_status(request),
     )
     risk = calculate_risk(risk_input)
+    decision = _risk_decision(request, risk)
     return build_pre_trade_report(
         risk,
         research_valid=request.research_valid,
         research_limitations=request.research_limitations,
+        risk_decision=decision,
     )

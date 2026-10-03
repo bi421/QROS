@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12.14-alpine3.24 AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \\
     PYTHONUNBUFFERED=1 \\
@@ -6,25 +6,35 @@ ENV PYTHONDONTWRITEBYTECODE=1 \\
 
 WORKDIR /app
 
-RUN apt-get update \\
-    && apt-get install -y --no-install-recommends \\
-        build-essential \\
-        cmake \\
-        ninja-build \\
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache build-base cmake ninja
 
 COPY pyproject.toml README.md ./
 COPY researchos ./researchos
 COPY scripts ./scripts
 COPY docs ./docs
 
-RUN python -m pip install --upgrade pip \\
-    && python -m pip install ".[saas]" \\
-    && python -m pip freeze --all | LC_ALL=C sort > /app/pip-freeze.txt
+RUN python -m pip install --upgrade pip "setuptools>=78.1.1" \
+    && python -m pip wheel --wheel-dir /wheels ".[saas]"
 
-RUN groupadd --system --gid 10001 researchos \\
-    && useradd --system --uid 10001 --gid 10001 --home-dir /app --no-create-home researchos \\
-    && chown -R researchos:researchos /app
+FROM python:3.12.14-alpine3.24
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+COPY pyproject.toml README.md ./
+COPY --from=builder /wheels /wheels
+RUN python -m pip install --upgrade pip "setuptools>=78.1.1" \
+    && python -m pip install --no-index --find-links=/wheels /wheels/researchos-*.whl \
+    && rm -rf /wheels
+
+COPY pyproject.toml README.md ./
+COPY researchos ./researchos
+COPY financial_research_lab ./financial_research_lab
+COPY scripts ./scripts
+COPY docs ./docs
 
 EXPOSE 8000
 

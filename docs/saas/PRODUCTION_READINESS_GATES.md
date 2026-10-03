@@ -18,7 +18,44 @@ The repository includes `.github/workflows/production-schema-parity.yml`. It is 
 
 The gate must report **up to date** before a release can be called migration-compatible. A dry-run that reports pending migrations is a release blocker; it must not be bypassed by manually applying SQL outside migration history.
 
-## Current production audit — 2026-09-21
+## Divergent-history forward migration gate
+
+Production migration history may contain legacy live-only entries that are not present in the repository. The repository must not repair, delete, rename, or recreate those historical entries as part of a forward deployment.
+
+The governed forward-only reconciliation path is `.github/workflows/production-forward-migration.yml`. The workflow is manual, protected by the `production` Environment, and accepts only the explicitly allowlisted M1 reconciliation migrations. It creates a temporary Supabase CLI workdir containing exactly one selected migration file, verifies the target project ref, runs `supabase db push --linked --include-all --dry-run`, and refuses to continue unless exactly that migration is the only pending item in the isolated bundle. An apply requires the explicit `APPLY` confirmation input.
+
+This controlled use of `--include-all` is intentionally different from running `supabase db push --include-all` against the full repository: the isolated bundle prevents unrelated repository-only migrations from being selected. Supabase documents `--include-all` as applying migrations not found in the remote history table. The CLI records applied migration versions in the remote migration history, preserving the selected file's timestamp rather than creating a server-generated version.
+
+The Supabase Management API `POST /v1/projects/{ref}/database/migrations` is not the QROS production transport for these repository migrations. That endpoint creates a migration with a server-generated version and therefore cannot be used here to preserve the exact repository migration timestamp. This avoids creating new remote-only history entries.
+
+## Current migration ledger recheck — 2026-09-30
+
+A fresh read-only recheck against the current repository and target projects found a
+new repository-to-environment delta after the earlier staging baseline:
+
+- Repository `supabase/migrations/`: **48** canonical SQL files.
+- Staging: **45** migration rows.
+- Staging contains execution version `20260928103556` for the worker migration, but
+  the remote display name remains the historical
+  `20260928103225_saas_worker_queue_consumer`; this is preserved and not rewritten.
+- Staging does not yet contain the three newer reconciliation migrations:
+  `20260928120000_storage_authorization_workspace_membership_reconciliation.sql`,
+  `20260928123000_dataset_version_storage_path_reconciliation.sql`, and
+  `20260928124500_workspace_billing_admin_role_reconciliation.sql`.
+- Production remains on its independently audited older migration history and has not
+  received those late M1 reconciliation migrations or the worker migration.
+
+This is a **new current delta**, not a reopening of the earlier historical-name
+issue. No staging or production mutation was performed by this audit. The governed
+forward-migration workflow remains the only authorized production transport.
+
+## Current migration ledger state — 2026-09-28
+
+The current production project contains seven live-only migration-history entries after `202609210001`. This later audit supersedes the older 2026-09-21 parity snapshot below. The historical entries are retained as historical evidence and must not be reconstructed or repaired as part of the current forward deployment.
+
+Production forward reconciliation is governed by `.github/workflows/production-forward-migration.yml`; the workflow does not attempt to make the full repository history equal to the live history.
+
+## Historical production audit — 2026-09-21
 
 The production project was independently queried during hardening. The observed migration-history drift was repaired to the repository's canonical versions, and the durable `public.research_claim` and `public.audit_event` objects were restored using their existing repository migrations.
 
@@ -56,3 +93,16 @@ A passing container build is not a deployment.
 ## Release rule
 
 Do not mark production-ready from repository tests alone. The exact release commit must have CI success and an observed end-to-end workflow in the target environment.
+
+## Legacy public-table access audit — 2026-09-29
+
+A direct production privilege audit reviewed the nine legacy public tables that have RLS disabled: `User`, `Like`, `Dislike`, `Referral`, `users`, `avatars`, `albums`, `album_consents`, and `face_embeddings`.
+
+Observed on production project `pvhdsngxyoiqhqwujfjt`:
+
+- RLS is disabled on all nine legacy tables.
+- `anon`, `authenticated`, and `service_role` have **no SELECT privilege** on any of the nine tables.
+- The table ACLs expose only the database `postgres` owner privileges.
+- The current Supabase Security Advisor did not report these tables; its observed security finding is the separate Auth leaked-password-protection warning.
+
+Conclusion: these nine tables are not reachable through the Supabase Data API roles by the observed privilege state. They remain legacy schema-hardening debt, not a basis for blindly enabling RLS. Any future RLS enablement or policy design must first identify a legitimate legacy application access path and preserve its authorization contract. No production mutation was performed.

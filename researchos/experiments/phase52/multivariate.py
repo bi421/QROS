@@ -8,8 +8,9 @@ external ML library is used.
 """
 from __future__ import annotations
 
-from heapq import nsmallest
 from collections.abc import Sequence
+
+import numpy as np
 
 
 class MultivariateEmpiricalProbabilityEstimator:
@@ -24,7 +25,7 @@ class MultivariateEmpiricalProbabilityEstimator:
             raise ValueError("n_neighbors must be positive")
         self._mins: tuple[float, ...] = ()
         self._spans: tuple[float, ...] = ()
-        self._train_rows: tuple[tuple[float, ...], ...] = ()
+        self._train_rows = np.empty((0, len(self.feature_indices)), dtype=np.float64)
         self._labels: tuple[int, ...] = ()
         self._trained = False
 
@@ -45,12 +46,24 @@ class MultivariateEmpiricalProbabilityEstimator:
                 raise ValueError("Selected training features must be finite")
             selected_rows.append(values)
             selected_labels.append(int(label))
-        mins = tuple(min(row[j] for row in selected_rows) for j in range(len(self.feature_indices)))
-        maxs = tuple(max(row[j] for row in selected_rows) for j in range(len(self.feature_indices)))
-        spans = tuple((maxs[j] - mins[j]) if maxs[j] != mins[j] else 1.0 for j in range(len(mins)))
+        mins = tuple(
+            min(row[j] for row in selected_rows)
+            for j in range(len(self.feature_indices))
+        )
+        maxs = tuple(
+            max(row[j] for row in selected_rows)
+            for j in range(len(self.feature_indices))
+        )
+        spans = tuple(
+            (maxs[j] - mins[j]) if maxs[j] != mins[j] else 1.0
+            for j in range(len(mins))
+        )
         self._mins = mins
         self._spans = spans
-        self._train_rows = tuple(self._normalize(row) for row in selected_rows)
+        self._train_rows = np.asarray(
+            [self._normalize(row) for row in selected_rows],
+            dtype=np.float64,
+        )
         self._labels = tuple(selected_labels)
         self._trained = True
         return self
@@ -67,16 +80,17 @@ class MultivariateEmpiricalProbabilityEstimator:
         values = tuple(float(feature_row[i]) for i in self.feature_indices)
         if any(v != v for v in values):
             raise ValueError("Selected prediction features must be finite")
-        normalized = self._normalize(values)
+        normalized = np.asarray(self._normalize(values), dtype=np.float64)
         k = min(self.n_neighbors, len(self._train_rows))
 
-        def distance_key(i: int) -> tuple[float, int]:
-            distance = sum(
-                (normalized[j] - self._train_rows[i][j]) ** 2 for j in range(len(normalized))
-            )
-            return distance, i
-
-        return nsmallest(k, range(len(self._train_rows)), key=distance_key)
+        # Preserve the historical ordering contract: distance first, then
+        # original row index for deterministic ties. NumPy performs the
+        # distance calculation in native code instead of a Python inner loop.
+        deltas = self._train_rows - normalized
+        distances = np.einsum("ij,ij->i", deltas, deltas)
+        indices = np.arange(len(self._train_rows), dtype=np.int64)
+        order = np.lexsort((indices, distances))
+        return order[:k].tolist()
 
     def predict_proba(self, feature_row: Sequence[float | None]) -> dict[int, float]:
         indices = self._nearest_indices(feature_row)

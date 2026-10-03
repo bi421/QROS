@@ -1,0 +1,20 @@
+name: Mypy Production Source Diagnostic v11
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  mypy-production-diagnostic:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: python -m pip install -e ".[dev,test,saas]"
+      # Diagnostic-only: measure the full current production-source Mypy surface.
+      - run: python -m mypy researchos --exclude '(^|/)tests/' --allow-untyped-defs
