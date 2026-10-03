@@ -89,10 +89,24 @@ def build_envelope(
     if audit.get("result_artifact_sha256") != result_sha:
         raise ValueError("audit result SHA-256 does not match supplied result artifact")
 
+    if not isinstance(code_commit, str) or len(code_commit) != 40 or any(c not in "0123456789abcdef" for c in code_commit):
+        raise ValueError("code_commit must be the exact 40-character Git commit SHA")
+
     split = result.get("split")
     if not isinstance(split, dict):
         raise ValueError("walk-forward split configuration is missing")
-    split_fields = ("train_size", "validation_size", "step_size", "embargo_rule", "fit_uses_validation_labels", "validation_windows_overlap")
+    split_fields = (
+        "train_size",
+        "validation_size",
+        "step_size",
+        "holdout_size",
+        "embargo_rule",
+        "holdout_rule",
+        "fit_uses_validation_labels",
+        "fit_uses_holdout_labels",
+        "validation_windows_overlap",
+        "holdout_is_disjoint",
+    )
     split_snapshot = {key: split.get(key) for key in split_fields}
     if any(split_snapshot[key] is None for key in split_fields):
         raise ValueError("walk-forward split configuration is incomplete")
@@ -100,6 +114,47 @@ def build_envelope(
         raise ValueError("validation labels must not be used for fitting")
     if split_snapshot["validation_windows_overlap"] is not False:
         raise ValueError("validation windows must not overlap")
+    if split_snapshot["fit_uses_holdout_labels"] is not False:
+        raise ValueError("holdout labels must not be used for fitting")
+    if split_snapshot["holdout_is_disjoint"] is not True:
+        raise ValueError("final holdout must be disjoint from walk-forward validation")
+
+    methodology = result.get("methodology")
+    if not isinstance(methodology, dict):
+        raise ValueError("methodology contract is missing")
+    methodology_fields = (
+        "forecast_horizon",
+        "feature_availability_timestamp",
+        "selection_policy",
+        "multiple_testing_policy",
+        "stopping_rule",
+        "replication_rule",
+        "cost_assumptions",
+    )
+    if any(methodology.get(key) is None for key in methodology_fields):
+        raise ValueError("methodology contract is incomplete")
+
+    holdout = result.get("holdout")
+    if not isinstance(holdout, dict):
+        raise ValueError("final holdout artifact is missing")
+    holdout_fields = (
+        "start",
+        "end",
+        "holdout_events",
+        "training_events",
+        "training_end",
+        "training_max_realized_end",
+        "training_outcome_rate",
+        "predictions",
+        "model",
+        "baseline",
+    )
+    if any(holdout.get(key) is None for key in holdout_fields):
+        raise ValueError("final holdout artifact is incomplete")
+    if holdout.get("holdout_events") != split_snapshot["holdout_size"]:
+        raise ValueError("holdout event count does not match holdout_size")
+    if len(holdout.get("predictions", [])) != split_snapshot["holdout_size"]:
+        raise ValueError("holdout prediction count does not match holdout_size")
 
     contract_snapshot = {
         "asset": contract["asset"],
@@ -113,6 +168,18 @@ def build_envelope(
     }
     parameter_snapshot = {
         "split": split_snapshot,
+        "methodology": methodology,
+        "holdout": {
+            "start": holdout["start"],
+            "end": holdout["end"],
+            "holdout_events": holdout["holdout_events"],
+            "pre_holdout_events": holdout.get("pre_holdout_events"),
+            "training_events": holdout["training_events"],
+            "embargoed_training_events": holdout.get("embargoed_training_events"),
+            "training_start": holdout.get("training_start"),
+            "training_end": holdout["training_end"],
+            "training_max_realized_end": holdout["training_max_realized_end"],
+        },
         "contract": contract_snapshot,
     }
     envelope_core = {
