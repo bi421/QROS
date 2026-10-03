@@ -129,7 +129,8 @@ def test_rate_limiter_failure_fails_closed_with_503() -> None:
         json={"dataset_version_id": str(uuid4())},
     )
     assert response.status_code == 503
-    assert response.json()["detail"] == "rate limiting service unavailable"
+    assert response.json()["code"] == "service_unavailable"
+    assert response.json()["message"] == "rate limiting service unavailable"
 
 
 def test_health_bypasses_rate_limiter() -> None:
