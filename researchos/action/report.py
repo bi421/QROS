@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from researchos.risk.contracts import RiskCalculation, RiskGateResult
+from researchos.risk.contracts import RiskAuditEvent, RiskCalculation, RiskGateResult
 
 ACTION_SCHEMA_VERSION = "pretrade.v2"
 
@@ -30,6 +30,7 @@ class PreTradeReport:
     execution_allowed: bool = False
     risk_hard_failures: tuple[str, ...] = ()
     risk_warnings: tuple[str, ...] = ()
+    risk_audit_event: RiskAuditEvent | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -49,6 +50,11 @@ class PreTradeReport:
             "execution_allowed": self.execution_allowed,
             "risk_hard_failures": list(self.risk_hard_failures),
             "risk_warnings": list(self.risk_warnings),
+            "risk_audit_event": (
+                self.risk_audit_event.to_dict()
+                if self.risk_audit_event is not None
+                else None
+            ),
         }
 
 
@@ -58,6 +64,7 @@ def build_pre_trade_report(
     research_valid: bool,
     research_limitations: tuple[str, ...] = (),
     risk_gate: RiskGateResult | None = None,
+    risk_audit_event: RiskAuditEvent | None = None,
 ) -> PreTradeReport:
     """Assemble a review report without placing or authorizing an order."""
     risk_valid = risk.status == "CALCULATED"
@@ -102,4 +109,5 @@ def build_pre_trade_report(
         execution_allowed=execution_allowed,
         risk_hard_failures=hard_failures,
         risk_warnings=warnings,
+        risk_audit_event=risk_audit_event,
     )
