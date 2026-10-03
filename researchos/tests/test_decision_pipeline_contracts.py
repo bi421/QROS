@@ -142,7 +142,7 @@ def test_decision_pipeline_preserves_missing_notional_governance_violation() -> 
             asset="XAUUSD",
             direction="bullish",
             account_equity=10_000,
-            trade_statistics=TradeStatistics(average_win=150, average_loss=100),
+            trade_statistics=TradeStatistics(average_win=30, average_loss=20),
             research_valid=True,
             risk_account=RiskAccountState(
                 day_start_equity=10_000,
