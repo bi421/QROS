@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -34,10 +35,39 @@ def _write_chain(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
         "dataset": {"sha256": raw_sha},
         "contract": source_data["contract"],
         "split": {
-            "train_size": 1, "validation_size": 1, "step_size": 1,
+            "train_size": 1, "validation_size": 1, "step_size": 1, "holdout_size": 1,
             "embargo_rule": "training realized_end < validation_start",
+            "holdout_rule": "holdout training realized_end < holdout_start",
             "fit_uses_validation_labels": False,
+            "fit_uses_holdout_labels": False,
             "validation_windows_overlap": False,
+            "holdout_is_disjoint": True,
+        },
+        "methodology": {
+            "forecast_horizon": "1d",
+            "feature_availability_timestamp": "event timestamp",
+            "selection_policy": "single fixed direction_conditional estimator; no parameter selection",
+            "multiple_testing_policy": "not_applicable_single_fixed_estimator",
+            "stopping_rule": "none; evaluate the full pre-registered chronological range",
+            "replication_rule": "final independent temporal holdout",
+            "cost_assumptions": {
+                "spread": "not applicable to this probability-only stage",
+                "slippage": "not applicable to this probability-only stage",
+                "commission": "not applicable to this probability-only stage",
+            },
+        },
+        "holdout": {
+            "start": "2025-01-02T00:00:00+00:00",
+            "end": "2025-01-02T00:00:00+00:00",
+            "holdout_events": 1,
+            "pre_holdout_events": 1,
+            "training_events": 1,
+            "training_end": "2025-01-01T00:00:00+00:00",
+            "training_max_realized_end": "2025-01-01T00:30:00+00:00",
+            "training_outcome_rate": 1.0,
+            "predictions": [{"event_id": "holdout", "timestamp": "2025-01-02T00:00:00+00:00", "probability": 1.0, "label": 1}],
+            "model": {"sample_count": 1, "brier_score": 0.0, "log_loss": 0.0, "observed_rate": 1.0},
+            "baseline": {"sample_count": 1, "brier_score": 0.0, "log_loss": 0.0, "observed_rate": 1.0},
         },
     }
     result.write_text(json.dumps(result_data), encoding="utf-8")
@@ -50,11 +80,11 @@ def _write_chain(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
 
 def test_valid_chain_builds(tmp_path: Path) -> None:
     paths = _write_chain(tmp_path)
-    envelope = build_envelope(*paths, code_commit="abc123")
+    envelope = build_envelope(*paths, code_commit="03191c86cdff541ac07cfca4291e9801ffab64bc")
     assert envelope["stage"] == "XAUUSD_M1_EVIDENCE_ENVELOPE"
     assert envelope["scientific_status"] == "REPRODUCIBILITY_LINEAGE_ONLY_NO_EDGE_CLAIM"
     assert len(envelope["envelope_sha256"]) == 64
-    assert envelope["identity"]["code_commit"] == "abc123"
+    assert envelope["identity"]["code_commit"] == "03191c86cdff541ac07cfca4291e9801ffab64bc"
 
 
 @pytest.mark.parametrize("target", ["raw", "source", "result", "audit"])
@@ -64,7 +94,7 @@ def test_chain_fails_closed_when_any_artifact_changes(tmp_path: Path, target: st
     path = paths[target]
     path.write_bytes(path.read_bytes() + b"tamper")
     with pytest.raises(ValueError):
-        build_envelope(raw, source, result, audit, code_commit="abc123")
+        build_envelope(raw, source, result, audit, code_commit="03191c86cdff541ac07cfca4291e9801ffab64bc")
 
 
 def test_dataset_identity_must_bind_to_raw_bytes(tmp_path: Path) -> None:
@@ -73,4 +103,30 @@ def test_dataset_identity_must_bind_to_raw_bytes(tmp_path: Path) -> None:
     source_data["dataset"]["sha256"] = "0" * 64
     source.write_text(json.dumps(source_data), encoding="utf-8")
     with pytest.raises(ValueError, match="raw CSV bytes"):
-        build_envelope(raw, source, result, audit, code_commit="abc123")
+        build_envelope(raw, source, result, audit, code_commit="03191c86cdff541ac07cfca4291e9801ffab64bc")
+
+
+def test_holdout_is_mandatory_for_evidence_envelope(tmp_path: Path) -> None:
+    raw, source, result, audit = _write_chain(tmp_path)
+    result_data = json.loads(result.read_text(encoding="utf-8"))
+    del result_data["holdout"]
+    result.write_text(json.dumps(result_data), encoding="utf-8")
+
+    audit_data = json.loads(audit.read_text(encoding="utf-8"))
+    audit_data["result_artifact_sha256"] = hashlib.sha256(result.read_bytes()).hexdigest()
+    audit.write_text(json.dumps(audit_data), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="final holdout artifact is missing"):
+        build_envelope(
+            raw,
+            source,
+            result,
+            audit,
+            code_commit="03191c86cdff541ac07cfca4291e9801ffab64bc",
+        )
+
+
+def test_code_commit_must_be_exact_git_sha(tmp_path: Path) -> None:
+    paths = _write_chain(tmp_path)
+    with pytest.raises(ValueError, match="exact 40-character Git commit SHA"):
+        build_envelope(*paths, code_commit="abc123")

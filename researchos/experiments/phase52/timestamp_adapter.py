@@ -14,6 +14,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, cast
 
+from researchos.data_engine.candle import Candle
+from researchos.data_engine.csv_loader import CsvLoader
+
 
 @dataclass(frozen=True)
 class ScalarObservation:
@@ -112,9 +115,7 @@ def load_fred_scalar_series_from_text(text: str) -> list[ScalarObservation] | No
 # enter as value+timestamp observations while all other CSVs retain the
 # original loader path. This does not alter the raw source or repair data.
 def _install_fred_scalar_adapter() -> None:
-    from researchos.data_engine.loader import CsvLoader
-
-    original = cast(Any, CsvLoader.load_candles_auto_from_text)
+    original = CsvLoader.load_candles_auto_from_text
     if getattr(original, "_phase52_fred_scalar_adapter", False):
         return
 
@@ -124,7 +125,7 @@ def _install_fred_scalar_adapter() -> None:
         symbol: str,
         timeframe: str | None = None,
         timezone: str | None = None,
-    ) -> list[Any]:
+    ) -> list[ScalarObservation] | list[Candle]:
         observations = load_fred_scalar_series_from_text(text)
         if observations is not None:
             return observations

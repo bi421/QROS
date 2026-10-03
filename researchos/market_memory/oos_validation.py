@@ -11,7 +11,8 @@ from researchos.market_memory.statistical_evidence import wilson_proportion_ci
 
 
 class _TimestampedEvent(Protocol):
-    timestamp: datetime
+    @property
+    def timestamp(self) -> datetime: ...
 
 
 EventT = TypeVar("EventT", bound=_TimestampedEvent)

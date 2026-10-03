@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 from researchos.core.base_object import BaseObject
 from researchos.data_engine.candle import Candle
@@ -381,11 +381,11 @@ class SqliteDatasetRepository(RepositoryInterface[T]):
             cursor.execute("SELECT * FROM datasets WHERE id = ?", (id,))
             row = cursor.fetchone()
             if row:
-                return self._row_to_dataset(row)
+                return cast(T, self._row_to_dataset(row))
             cursor.execute("SELECT * FROM dataset_metadata WHERE id = ?", (id,))
             row = cursor.fetchone()
             if row:
-                return self._row_to_metadata(row)
+                return cast(T, self._row_to_metadata(row))
             return None
         finally:
             conn.close()
@@ -399,7 +399,7 @@ class SqliteDatasetRepository(RepositoryInterface[T]):
             for row in cursor.fetchall():
                 dataset = self._row_to_dataset(row)
                 if dataset is not None:
-                    results.append(dataset)
+                    results.append(cast(T, dataset))
             return results
         finally:
             conn.close()
@@ -441,7 +441,7 @@ class SqliteDatasetRepository(RepositoryInterface[T]):
         try:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM datasets")
-            return cursor.fetchone()[0]
+            return int(cursor.fetchone()[0])
         finally:
             conn.close()
 
@@ -579,7 +579,7 @@ class SqliteDatasetRepository(RepositoryInterface[T]):
     def close(self) -> None:
         pass
 
-    def _row_to_dataset(self, row) -> HistoricalDataset | None:
+    def _row_to_dataset(self, row: tuple[Any, ...]) -> HistoricalDataset | None:
         try:
             dataset = HistoricalDataset(
                 symbol=row[1],
@@ -658,7 +658,7 @@ class SqliteDatasetRepository(RepositoryInterface[T]):
         finally:
             conn.close()
 
-    def _row_to_metadata(self, row) -> DatasetMetadata | None:
+    def _row_to_metadata(self, row: tuple[Any, ...]) -> DatasetMetadata | None:
         try:
             meta = DatasetMetadata(
                 dataset_id=row[1],

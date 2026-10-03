@@ -16,13 +16,14 @@ Design rules:
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
 
 
-def _sanitize(values) -> list[float | None]:
+def _sanitize(values: Iterable[object]) -> list[float | None]:
     """Convert inputs to floats; map missing / non-finite values to ``None``."""
     out: list[float | None] = []
     for v in values:
@@ -41,7 +42,7 @@ def _sanitize(values) -> list[float | None]:
     return out
 
 
-def _check_horizon(horizon) -> None:
+def _check_horizon(horizon: int) -> None:
     """Validate that ``horizon`` is a positive integer."""
     if isinstance(horizon, bool) or not isinstance(horizon, int):
         raise ValueError("horizon must be an integer")
@@ -49,14 +50,14 @@ def _check_horizon(horizon) -> None:
         raise ValueError("horizon must be a positive integer")
 
 
-def _check_threshold(threshold) -> None:
+def _check_threshold(threshold: float) -> None:
     """Validate that ``threshold`` is a finite, non-negative number."""
     f = float(threshold)
     if math.isnan(f) or math.isinf(f) or f < 0:
         raise ValueError("threshold must be a non-negative number")
 
 
-def _check_positive(value, name: str) -> None:
+def _check_positive(value: float, name: str) -> None:
     """Validate that ``value`` is a finite, positive number."""
     f = float(value)
     if math.isnan(f) or math.isinf(f) or f <= 0:
@@ -68,7 +69,7 @@ def _check_positive(value, name: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def future_return(close, horizon) -> list[float | None]:
+def future_return(close: Iterable[object], horizon: int) -> list[float | None]:
     """Forward-return label.
 
     ``label[i] = (close[i + horizon] - close[i]) / close[i]``
@@ -96,7 +97,7 @@ def future_return(close, horizon) -> list[float | None]:
 # ---------------------------------------------------------------------------
 
 
-def binary_label(close, horizon) -> list[int | None]:
+def binary_label(close: Iterable[object], horizon: int) -> list[int | None]:
     """Binary direction label.
 
     ``1`` if future return > 0, else ``0``.
@@ -118,7 +119,7 @@ def binary_label(close, horizon) -> list[int | None]:
 # ---------------------------------------------------------------------------
 
 
-def multiclass_label(close, horizon, threshold) -> list[int | None]:
+def multiclass_label(close: Iterable[object], horizon: int, threshold: float) -> list[int | None]:
     """Multi-class direction label.
 
     ``1``  up      (future return > threshold)
@@ -145,7 +146,7 @@ def multiclass_label(close, horizon, threshold) -> list[int | None]:
 # ---------------------------------------------------------------------------
 
 
-def regression_target(close, horizon) -> list[float | None]:
+def regression_target(close: Iterable[object], horizon: int) -> list[float | None]:
     """Regression target — alias of :func:`future_return`."""
     return future_return(close, horizon)
 
@@ -156,10 +157,10 @@ def regression_target(close, horizon) -> list[float | None]:
 
 
 def triple_barrier(
-    close,
-    take_profit,
-    stop_loss,
-    max_horizon,
+    close: Iterable[object],
+    take_profit: float,
+    stop_loss: float,
+    max_horizon: int,
 ) -> list[int | None]:
     """Simplified deterministic triple-barrier label.
 
@@ -207,9 +208,9 @@ def triple_barrier(
 
 
 def vol_adjusted_return(
-    close,
-    rolling_volatility,
-    horizon,
+    close: Iterable[object],
+    rolling_volatility: Iterable[object],
+    horizon: int,
 ) -> list[float | None]:
     """Volatility-adjusted forward return.
 
