@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from researchos.saas.validation import ResearchValidationRecord
 from researchos.saas.contracts import TenantContext
+from researchos.saas.auth.permissions import require_permission
 from researchos.saas.store import ResearchJobStore
 
 
