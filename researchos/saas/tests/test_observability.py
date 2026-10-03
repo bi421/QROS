@@ -10,6 +10,9 @@ from fastapi.testclient import TestClient
 
 from researchos.research_core.contracts import ResearchArtifact, ResearchResult
 from researchos.saas.api import create_app
+from researchos.saas.queue import InMemoryResearchJobQueue
+from researchos.saas.store import InMemoryResearchJobStore
+from researchos.saas.worker import ResearchWorker
 from researchos.saas.contracts import Plan, TenantContext
 from researchos.saas.observability import RequestMetrics, StructuredRequestObserver, sanitize_log_fields
 
