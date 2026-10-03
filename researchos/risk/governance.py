@@ -274,9 +274,9 @@ class RiskDecision:
     drawdown_fraction: float
     strategy_loss_fraction: float
     proposed_trade_risk_fraction: float
-    projected_open_risk_fraction: float
-    projected_gross_exposure_fraction: float
-    projected_single_instrument_exposure_fraction: float
+    projected_open_risk_fraction: float | None
+    projected_gross_exposure_fraction: float | None
+    projected_single_instrument_exposure_fraction: float | None
     violations: tuple[RiskViolation, ...] = ()
     warnings: tuple[str, ...] = ()
     audit_hash: str = ""
@@ -390,9 +390,9 @@ def evaluate_pretrade_risk(
         violations.append(
             RiskViolation(RiskViolationCode.PROPOSED_NOTIONAL_REQUIRED)
         )
-        projected_open_risk = float("inf")
-        projected_gross = float("inf")
-        projected_single = float("inf")
+        projected_open_risk = None
+        projected_gross = None
+        projected_single = None
     else:
         projected_open_risk = (
             account.open_risk_amount + risk.risk_amount
@@ -454,11 +454,15 @@ def evaluate_pretrade_risk(
         ),
     )
     for code, observed, limit in hard_checks:
-        if observed + _RISK_TOLERANCE >= limit:
+        if observed is not None and observed + _RISK_TOLERANCE >= limit:
             violations.append(
                 RiskViolation(code, observed=observed, limit=limit)
             )
-        warning = _near_limit_warning(code.value, observed, limit)
+        warning = (
+            _near_limit_warning(code.value, observed, limit)
+            if observed is not None
+            else None
+        )
         if warning is not None:
             warnings.append(warning)
 
