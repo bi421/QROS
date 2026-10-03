@@ -11,8 +11,8 @@ from fastapi.testclient import TestClient
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.api import create_app
 from researchos.claims.claim import ResearchClaim
-from researchos.saas.billing import InMemoryBillingEventStore
-from researchos.saas.contracts import Plan, TenantContext, WorkspaceRole
+from researchos.saas.billing import InMemoryBillingEventStore, InMemoryEntitlementStore
+from researchos.saas.contracts import Plan, ResearchJob, ResearchJobStatus, TenantContext, WorkspaceRole
 from researchos.saas.datasets import InMemoryDatasetStorage, InMemoryDatasetStore
 from researchos.saas.store import InMemoryResearchJobStore
 
@@ -722,3 +722,79 @@ def test_result_endpoint_exposes_governed_claim_lineage():
     assert response.status_code == 200
     assert response.json()["claim_id"] == str(claim.id)
     assert response.json()["plan_hash"] == plan.json()["plan_hash"]
+
+
+def test_free_tenant_101st_job_is_entitlement_exceeded() -> None:
+    client, context, dataset_store, _ = _client(plan=Plan.FREE)
+    uploaded = _upload(client, "free-entitlement", b"x")
+    version_id = UUID(uploaded.json()["version"]["id"])
+    job_store = InMemoryResearchJobStore()
+    for _ in range(100):
+        job_store.create(
+            context.workspace_id,
+            ResearchJob(
+                id=uuid4(),
+                workspace_id=context.workspace_id,
+                dataset_version_id=version_id,
+                workflow_id=FROZEN_XAUUSD_M1_WORKFLOW,
+                status=ResearchJobStatus.SUCCEEDED,
+                source_dataset_sha256=uploaded.json()["version"]["content_sha256"],
+                created_by=context.user_id,
+            ),
+        )
+    entitlement_client = TestClient(create_app(
+        auth_provider=StaticAuth(context),
+        job_store=job_store,
+        dataset_store=dataset_store,
+        dataset_storage=InMemoryDatasetStorage(),
+        entitlement_store=InMemoryEntitlementStore(),
+    ))
+    response = entitlement_client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "free-101"},
+        json={"dataset_version_id": str(version_id)},
+    )
+    assert response.status_code == 402
+    assert response.json()["code"] == "ENTITLEMENT_EXCEEDED"
+    assert response.json()["upgrade_url"] == "https://qros.ai/upgrade"
+
+
+def test_stripe_webhook_replay_same_event_id_is_ignored() -> None:
+    import time
+    billing = InMemoryBillingEventStore()
+    workspace_id = str(uuid4())
+    client, _, _, _ = _client(billing_store=billing, billing_secret="secret")
+    payload = json.dumps({
+        "id": "evt_stripe_replay_1",
+        "type": "customer.subscription.updated",
+        "data": {"object": {"metadata": {"workspace_id": workspace_id, "plan": "pro"}, "status": "active"}},
+    }).encode()
+    timestamp = int(time.time())
+    signature = hmac.new(
+        b"secret",
+        f"{timestamp}.".encode() + payload,
+        hashlib.sha256,
+    ).hexdigest()
+    headers = {
+        "Stripe-Signature": f"t={timestamp},v1={signature}",
+        "X-Billing-Provider": "stripe",
+    }
+    first = client.post("/v1/billing/webhook", content=payload, headers=headers)
+    second = client.post("/v1/billing/webhook", content=payload, headers=headers)
+    assert first.status_code == 200
+    assert first.json()["status"] == "processed"
+    assert second.status_code == 200
+    assert second.json()["status"] == "replayed"
+
+
+def test_plan_rate_limiter_selects_free_workspace_limit() -> None:
+    free_limiter = StaticRateLimiter()
+    fallback = StaticRateLimiter()
+    context = TenantContext(uuid4(), uuid4(), Plan.FREE, WorkspaceRole.RESEARCHER)
+    TestClient(create_app(
+        auth_provider=StaticAuth(context),
+        rate_limiter=fallback,
+        plan_rate_limiters={Plan.FREE: free_limiter, Plan.PRO: StaticRateLimiter()},
+    )).post("/v1/research-runs", headers={"Authorization": "Bearer test", "Idempotency-Key": "plan-rate"}, json={"dataset_version_id": str(uuid4())})
+    assert len(free_limiter.keys) == 1
+    assert fallback.keys == []

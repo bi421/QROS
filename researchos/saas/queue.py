@@ -8,7 +8,7 @@ from uuid import UUID
 
 
 class ResearchJobQueue(Protocol):
-    def enqueue(self, workspace_id: UUID, job_id: UUID) -> int:
+    def enqueue(self, workspace_id: UUID, job_id: UUID, *, request_id: str | None = None) -> int:
         """Persist a queue message containing identifiers only and return its message id."""
 
 
@@ -17,10 +17,13 @@ class InMemoryResearchJobQueue:
 
     def __init__(self) -> None:
         self.messages: list[tuple[int, UUID, UUID]] = []
+        self.request_ids: dict[UUID, str] = {}
 
-    def enqueue(self, workspace_id: UUID, job_id: UUID) -> int:
+    def enqueue(self, workspace_id: UUID, job_id: UUID, *, request_id: str | None = None) -> int:
         message_id = len(self.messages) + 1
         self.messages.append((message_id, workspace_id, job_id))
+        if request_id is not None:
+            self.request_ids[job_id] = request_id
         return message_id
 
 
@@ -30,12 +33,13 @@ class SupabaseResearchJobQueue:
 
     supabase_client: object
 
-    def enqueue(self, workspace_id: UUID, job_id: UUID) -> int:
+    def enqueue(self, workspace_id: UUID, job_id: UUID, *, request_id: str | None = None) -> int:
         result = self.supabase_client.rpc(
             "enqueue_research_run",
             {
                 "p_research_run_id": str(job_id),
                 "p_workspace_id": str(workspace_id),
+                "p_request_id": request_id,
             },
         ).execute()
         data = result.data
