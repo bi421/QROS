@@ -36,6 +36,91 @@ REAL IMPLEMENTATION
 ---
 
 
+# 1B. LIVE-STATE CORRECTION — 2026-10-01
+
+The following facts supersede stale statements elsewhere in this document where they conflict.
+
+## GitHub main
+
+- Current live main SHA: 7a0d29a13b9571f149ea88a61a146b3ad4da57fb
+- Commit: docs: establish autonomous QROS execution contract and completion roadmap (#417)
+- PR #417 is MERGED.
+- The frozen Phase 5.2 release/evidence baseline remains b584a10d7853f9d5d4297c5202ef130b19c3faa5.
+- The merge of PR #417 is documentation-only and does not reopen or modify Phase 5.2.
+
+Therefore distinguish:
+
+CURRENT MAIN SHA
+→ 7a0d29a13b9571f149ea88a61a146b3ad4da57fb
+
+FROZEN PHASE 5.2 PRODUCTION BASELINE
+→ b584a10d7853f9d5d4297c5202ef130b19c3faa5
+
+## Supabase migration provenance — exact live result
+
+Read-only inspection of production project pvhdsngxyoiqhqwujfjt returned 45 migration-history rows.
+
+The migration list is not simply missing one workspace migration. It contains bidirectional history drift:
+
+### Remote-only migration versions: 8
+
+| Remote version | Remote name |
+|---|---|
+| 20260923063726 | 202609210002_saas_research_claim_run_binding |
+| 20260923063730 | 202609220003_saas_research_validation |
+| 20260923063735 | 202609220004_saas_research_finding |
+| 20260923063739 | 202609230001_saas_tenant_isolation_hardening |
+| 20260923064546 | 202609230002_fix_missing_rls_policies |
+| 20260923083904 | 202609230007_commercial_entitlements |
+| 20260923094021 | 202609231000_dataset_storage_registry_hardening |
+| 20260930013114 | saas_workspace_provisioning |
+
+### Local-only migration versions: 12
+
+202609210002, 202609220003, 202609220004, 202609230005, 202609230006, 202609240001, 202609240002, 20260928103556, 20260928120000, 20260928123000, 20260928124500, 202609300001.
+
+The first three remote-only rows preserve the names of repository migrations whose original timestamp versions existed in repository history. The remaining remote-only names also do not correspond to current main filenames.
+
+Supabase CLI documentation confirms that migration history is keyed by migration timestamp/version and that migration repair changes only the tracking table, not schema SQL.
+
+### Current dry-run evidence
+
+supabase db push --dry-run was executed against the linked production project.
+
+Result:
+
+Remote migration versions not found in local migrations directory.
+
+The CLI suggested reverting the eight remote-only versions, but no repair was executed.
+
+Therefore:
+
+- no production migration history was mutated during this investigation;
+- no production SQL was applied;
+- no local migration file was pulled or overwritten;
+- the provenance gap remains open.
+
+### Provenance conclusion
+
+This is a CLASS D — SUPABASE / RELEASE REPRODUCIBILITY blocker.
+
+The evidence proves migration-history drift. It does not by itself prove schema corruption.
+
+The production public.provision_workspace(uuid,text) implementation was separately inspected and is logically equivalent to the current 202609300001_saas_workspace_provisioning.sql implementation. This is evidence about schema behavior, not proof of byte-for-byte migration provenance.
+
+### Required next action
+
+Before any migration repair, db pull, or forward production deployment:
+
+1. preserve the current remote migration-history evidence;
+2. map each remote-only version to the exact repository commit/file that produced its SQL;
+3. verify whether the version rewrites were intentional and documented;
+4. determine the smallest forward-only reconciliation that restores release reproducibility;
+5. run the migration verifier/release gate against the reconciled state;
+6. only then proceed to the separate CLASS E hosting blocker.
+
+Do not execute the CLI-suggested migration repair --status reverted command yet.
+
 # 1A. AI EXECUTION CONTRACT
 
 This roadmap is an AI-executable project-state contract, not merely a planning document.
