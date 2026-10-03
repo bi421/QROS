@@ -245,7 +245,11 @@ def run_indicator_baseline(
 # ──────────────────────────────────────────────────────────────
 
 
-def compare_strategies(macro_results, indicator_results, metric="sharpe_ratio"):
+def compare_strategies(
+    macro_results: dict[str, Any],
+    indicator_results: dict[str, Any],
+    metric: str = "sharpe_ratio",
+) -> dict[str, Any]:
     macro_vals = [fr["metrics"].get(metric, 0.0) for fr in macro_results.get("fold_results", [])]
     ind_vals = [fr["metrics"].get(metric, 0.0) for fr in indicator_results.get("fold_results", [])]
 
@@ -288,7 +292,12 @@ def compare_strategies(macro_results, indicator_results, metric="sharpe_ratio"):
 # ──────────────────────────────────────────────────────────────
 
 
-def plot_comparison(macro_results, indicator_results, metric="sharpe_ratio", output_prefix="macro_vs_indicators"):
+def plot_comparison(
+    macro_results: dict[str, Any],
+    indicator_results: dict[str, Any],
+    metric: str = "sharpe_ratio",
+    output_prefix: str = "macro_vs_indicators",
+) -> None:
     os.makedirs("data/curated/xauusd", exist_ok=True)
 
     macro_vals = [fr["metrics"].get(metric, 0.0) for fr in macro_results.get("fold_results", [])]
@@ -315,7 +324,7 @@ def plot_comparison(macro_results, indicator_results, metric="sharpe_ratio", out
 # ──────────────────────────────────────────────────────────────
 
 
-def main():
+def main() -> None:
     np.random.seed(42)
     start_total = time.time()
 

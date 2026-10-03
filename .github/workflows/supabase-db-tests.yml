@@ -1,10 +1,10 @@
+---
 name: Supabase Database Security Tests
 
 on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main, develop]
 
 concurrency:
   group: qros-supabase-db-tests-${{ github.event.pull_request.head.ref || github.ref }}
@@ -22,16 +22,17 @@ jobs:
         uses: supabase/setup-cli@v2
         with:
           version: 2.117.0
+          github-token: ${{ github.token }}
 
-      - name: Initialize local Supabase configuration
-        run: supabase init
+      - name: Ensure Supabase config exists
+        run: |
+          if [ ! -f supabase/config.toml ]; then supabase init; fi
 
       - name: Isolate local database port
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
-
           path = Path("supabase/config.toml")
           text = path.read_text(encoding="utf-8")
           marker = "port = 54322"
@@ -41,7 +42,31 @@ jobs:
           PY
 
       - name: Start local Supabase
-        run: supabase start
+        shell: bash
+        run: |
+          set -euo pipefail
+          max_attempts=5
+          for attempt in $(seq 1 "$max_attempts"); do
+            echo "Starting local Supabase (attempt $attempt/$max_attempts)"
+            if supabase start; then
+              echo "Local Supabase started successfully."
+              exit 0
+            fi
+            echo "::warning::supabase start failed on attempt $attempt/$max_attempts; retrying after registry backoff"
+            supabase stop
+            if [ "$attempt" -lt "$max_attempts" ]; then
+              sleep_seconds=$((30 * attempt))
+              echo "Sleeping ${sleep_seconds}s before retry."
+              sleep "$sleep_seconds"
+            fi
+          done
+          echo "::error::Unable to start local Supabase after $max_attempts attempts."
+          exit 1
+
+      - name: Install pgtap extension
+        run: |
+          set -euo pipefail
+          PGPASSWORD=postgres psql -h 127.0.0.1 -p 54332 -U postgres -d postgres -v ON_ERROR_STOP=1 -c "create extension if not exists pgtap;"
 
       - name: Run database security tests
         run: supabase test db supabase/tests/tenant_isolation_test.sql
