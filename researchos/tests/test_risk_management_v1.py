@@ -72,6 +72,7 @@ def test_flat_research_gate_passes_without_execution_authorization() -> None:
 
     assert gate.status == "RESEARCH_ONLY"
     assert gate.execution_allowed is False
+    assert gate.blocked is False
     assert gate.hard_failures == ()
 
 
@@ -109,6 +110,7 @@ def test_account_loss_limits_block(
 ) -> None:
     gate = evaluate_risk_gate(_account(**kwargs), _intent(), policy=POLICY)
     assert gate.status == "BLOCKED"
+    assert gate.blocked is True
     assert failure in gate.hard_failures
 
 
