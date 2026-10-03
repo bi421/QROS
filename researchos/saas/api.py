@@ -62,6 +62,7 @@ from researchos.saas.datasets import (
     DatasetStorage,
     DatasetStore,
     DatasetVersion,
+    DatasetReferencedError,
     InMemoryDatasetStorage,
     InMemoryDatasetStore,
     storage_path_for,
@@ -139,6 +140,11 @@ def _error_payload(
         "request_id": getattr(request.state, "request_id", None),
         "error": error,
     }
+    if isinstance(detail, dict) and "details" in detail:
+        payload["details"] = detail["details"]
+    elif isinstance(detail, list):
+        payload["details"] = detail
+    return payload
 
 
 def _safe_validation_details(exc: RequestValidationError) -> list[dict[str, object]]:
@@ -545,23 +551,96 @@ def create_app(
             "plan": tenant.plan.value,
         }
 
-    @app.get("/v1/datasets", response_model=DatasetPageResponse, tags=["datasets"])
+    @app.delete("/v1/workspaces/{workspace_id}", response_model=DeletionReceiptResponse, tags=["workspace"])
+    @require_permission("workspace", "delete")
+    def delete_workspace(
+        workspace_id: UUID,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> DeletionReceiptResponse:
+        if workspace_id != tenant.workspace_id:
+            raise HTTPException(status_code=404, detail="workspace not found")
+        require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.ADMIN)
+        try:
+            receipt = persistence.soft_delete_workspace(
+                workspace_id,
+                retention=retention,
+            )
+        except TenantPersistenceError as exc:
+            raise HTTPException(status_code=503, detail="workspace deletion unavailable") from exc
+        return DeletionReceiptResponse(
+            workspace_id=receipt.workspace_id,
+            deleted_at=receipt.deleted_at.isoformat(),
+            scheduled_purge_date=receipt.scheduled_purge_at.isoformat(),
+            retention_days=receipt.retention_days,
+            receipt_id=receipt.receipt_id,
+        )
+
+    @app.get("/v1/workspaces/{workspace_id}/export", tags=["workspace"])
+    @require_permission("workspace", "read")
+    def export_workspace(
+        workspace_id: UUID,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> Response:
+        if workspace_id != tenant.workspace_id:
+            raise HTTPException(status_code=404, detail="workspace not found")
+        try:
+            archive = persistence.export_workspace(workspace_id)
+        except TenantPersistenceError as exc:
+            raise HTTPException(status_code=503, detail="workspace export unavailable") from exc
+        return StreamingResponse(
+            iter((archive,)),
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="qros-workspace-{workspace_id}.zip"',
+            },
+        )
+
+    @app.get("/v1/datasets", response_model=PageResponse, tags=["datasets"])
     @require_permission("dataset", "list")
     def list_datasets(
-        limit: int = 50,
-        offset: int = 0,
+        request: Request,
+        page: str = "1",
+        page_size: str = "20",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
         name: str | None = None,
+        tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
         tenant: TenantContext = Depends(current_tenant),
-    ) -> DatasetPageResponse:
+    ) -> PageResponse:
         try:
-            page = PageRequest(limit=limit, offset=offset)
-            if name is not None and not 1 <= len(name.strip()) <= 256:
-                raise ValueError("name filter must be between 1 and 256 characters")
-            rows, total = datasets.list_datasets(
-                tenant.workspace_id, limit=page.limit, offset=page.offset, name_filter=name
+            if request is not None:
+                validate_filter_keys(
+                    {key.removeprefix("filter[").removesuffix("]"): value for key, value in request.query_params.items() if key.startswith("filter[")},
+                    allowed=frozenset({"tenant_id"}),
+                )
+            query = parse_list_query(
+                page=page,
+                page_size=page_size,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                tenant_id=tenant_filter,
+                allowed_sort_fields=frozenset({"created_at", "name"}),
             )
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            if name is not None and not 1 <= len(name.strip()) <= 256:
+                raise PaginationParameterError(
+                    "name filter must be between 1 and 256 characters"
+                )
+            if tenant_filter is not None and tenant_filter != str(tenant.workspace_id):
+                rows, total = [], 0
+            else:
+                rows, total = datasets.list_datasets(
+                    tenant.workspace_id,
+                    limit=query.page_size,
+                    offset=query.offset,
+                    name_filter=name,
+                    sort_by=query.sort_by,
+                    sort_order=query.sort_order,
+                )
+        except PaginationParameterError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
         items = [
             DatasetResponse(
                 id=row.id, workspace_id=row.workspace_id, name=row.name,
@@ -573,9 +652,14 @@ def create_app(
             )
             for row in rows
         ]
-        return DatasetPageResponse(
-            items=items, total=total, limit=page.limit, offset=page.offset,
-            has_more=page.offset + len(items) < total,
+        return PageResponse.model_validate(
+            pagination_envelope(
+                data=[item.model_dump(mode="json") for item in items],
+                page=query.page,
+                page_size=query.page_size,
+                total=total,
+                request_id=request.state.request_id if request is not None else "",
+            )
         )
 
     @app.post("/v1/datasets", response_model=DatasetResponse, status_code=201, tags=["datasets"])

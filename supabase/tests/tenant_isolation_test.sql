@@ -55,6 +55,7 @@ to authenticated;
 
 set local role authenticated;
 set local request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+set local request.jwt.claim.tenant_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 select results_eq(
   $$select count(*)::bigint from public.workspace$$,
@@ -123,6 +124,7 @@ select is_empty(
 );
 
 set local request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
+set local request.jwt.claim.tenant_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
 select results_eq(
   $$select count(*)::bigint from public.workspace$$,

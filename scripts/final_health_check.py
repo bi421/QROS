@@ -6,11 +6,10 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
-import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 HEALTH_DIR = ROOT / ".health"
@@ -41,9 +40,45 @@ def command_result(label: str, command: list[str], *, cwd: Path = ROOT) -> dict[
     }
 
 
-def git_value(args: list[str]) -> str:
-    completed = subprocess.run(["git", *args], cwd=ROOT, text=True, capture_output=True, check=False)
-    return completed.stdout.strip()
+def db_url_for_database(admin_url: str, database: str) -> str:
+    parts = urlsplit(admin_url)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query.pop("dbname", None)
+    return urlunsplit(
+        (parts.scheme, parts.netloc, f"/{database}", urlencode(query), parts.fragment)
+    )
+
+
+def git_sha() -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=False
+    )
+    if result.returncode != 0:
+        raise SystemExit("cannot resolve git HEAD")
+    return result.stdout.strip()
+
+
+def rls_check(database_url: str) -> dict[str, object]:
+    table_list = ", ".join(f"'{name}'" for name in REQUIRED_RLS_TABLES)
+    sql = f"""
+select coalesce(string_agg(format('%I.%I', n.nspname, c.relname), ',' order by c.relname), '')
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public'
+  and c.relkind = 'r'
+  and c.relname in ({table_list})
+  and not c.relrowsecurity;
+"""
+    result = run_check(
+        "rls_check",
+        ["psql", database_url, "-Atqc", sql],
+    )
+    missing = result["stdout"].strip()
+    if result["status"] == "PASS" and missing:
+        result["status"] = "FAIL"
+        result["returncode"] = 1
+        result["stderr"] = f"RLS disabled on required tables: {missing}"
+    return result
 
 
 def backup_verify_contract() -> dict[str, object]:
@@ -78,7 +113,12 @@ def main() -> int:
     parser.add_argument("--skip-cpp", action="store_true", help="Skip C++ configure/build")
     parser.add_argument("--exact-commit", help="Require HEAD to equal this commit SHA")
     args = parser.parse_args()
-    os.chdir(ROOT)
+
+    actual = git_sha()
+    if actual != args.expected_commit:
+        raise SystemExit(
+            f"exact-release violation: expected {args.expected_commit}, got {actual}"
+        )
 
     if args.exact_commit:
         actual = git_value(["rev-parse", "HEAD"])

@@ -35,6 +35,7 @@ class SupabaseWorkspaceMembershipResolver:
             self._client.table("workspace_member")
             .select("workspace_id,role")
             .eq("user_id", str(user_id))
+            .is_("deleted_at", "null")
             .execute()
         )
         rows = membership.data or []
@@ -67,6 +68,7 @@ class SupabaseWorkspaceMembershipResolver:
             self._client.table("subscription")
             .select("plan,status")
             .eq("workspace_id", str(workspace_id))
+            .is_("deleted_at", "null")
             .execute()
         )
         subscriptions = subscription.data or []
