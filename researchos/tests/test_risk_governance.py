@@ -74,6 +74,42 @@ def _evaluate(
     )
 
 
+@pytest.mark.parametrize(
+    "field",
+    [
+        "day_start_equity",
+        "current_equity",
+        "high_water_mark",
+        "strategy_reference_equity",
+    ],
+)
+def test_account_rejects_non_finite_equity(field: str) -> None:
+    with pytest.raises(ValueError, match="finite"):
+        _account(**{field: float("nan")}).validate()
+
+
+def test_limits_reject_non_finite_values() -> None:
+    with pytest.raises(ValueError, match="finite"):
+        RiskLimits(max_daily_loss_fraction=float("nan")).validate()
+    with pytest.raises(ValueError, match="finite"):
+        RiskLimits(max_gross_exposure_fraction=float("inf")).validate()
+
+
+@pytest.mark.parametrize("field", ["risk_amount", "final_risk_fraction"])
+def test_risk_calculation_rejects_non_finite_values(field: str) -> None:
+    risk = _risk()
+    values = {**risk.__dict__, field: float("nan")}
+    with pytest.raises(ValueError, match="finite"):
+        evaluate_pretrade_risk(
+            RiskCalculation(**values),
+            account=_account(),
+            limits=RiskLimits(),
+            proposed_notional=1_000.0,
+            strategy_state=StrategyRiskState.RISK_REVIEW,
+            research_valid=True,
+        )
+
+
 def test_default_limits_match_governed_profile() -> None:
     limits = RiskLimits()
     limits.validate()
