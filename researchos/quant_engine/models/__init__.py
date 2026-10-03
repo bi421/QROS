@@ -44,6 +44,19 @@ from .metadata import (
     MODEL_METADATA_VERSION,
     ModelMetadata,
 )
+from .runtime import (
+    MODEL_RUNTIME_VERSION,
+    BatchResultCountMismatchError,
+    InferenceRequest,
+    InferenceResult,
+    ModelAdapter,
+    ModelAdapterAlreadyExistsError,
+    ModelAdapterNotFoundError,
+    ModelNotReadyError,
+    ModelResultMismatchError,
+    ModelRuntime,
+    ModelRuntimeError,
+)
 from .registry import (
     MODEL_REGISTRY_VERSION,
     ModelAlreadyExistsError,
@@ -64,6 +77,18 @@ __all__ = [
     "ModelAlreadyExistsError",
     "ModelNotFoundError",
     "ModelRegistryError",
+    # Executable model runtime
+    "MODEL_RUNTIME_VERSION",
+    "BatchResultCountMismatchError",
+    "InferenceRequest",
+    "InferenceResult",
+    "ModelAdapter",
+    "ModelAdapterAlreadyExistsError",
+    "ModelAdapterNotFoundError",
+    "ModelNotReadyError",
+    "ModelResultMismatchError",
+    "ModelRuntime",
+    "ModelRuntimeError",
     # Legacy quant-engine models (backward-compatible re-exports)
     "CalculationVersion",
     "Order",
