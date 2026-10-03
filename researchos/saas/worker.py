@@ -11,8 +11,10 @@ from researchos.saas.contracts import ResearchJobStatus
 from researchos.saas.observability import (
     jobs_duration_seconds,
     jobs_failed_total,
+    jobs_retries_total,
     job_id_var,
     tenant_id_var,
+    tracer,
 )
 from researchos.saas.store import ResearchJobStore
 
@@ -58,6 +60,8 @@ class ResearchWorker:
             owner=str(uuid4()),
             lease_seconds=self._lease_seconds,
         )
+        if lease.job.attempt_count > 1:
+            jobs_retries_total.inc()
         tenant_token = tenant_id_var.set(str(workspace_id))
         job_token = job_id_var.set(str(job_id))
         started = perf_counter()
@@ -70,7 +74,11 @@ class ResearchWorker:
         heartbeat.start()
         try:
             try:
-                result = self._executor.execute(job_id)
+                with tracer.start_as_current_span("qros.research_job") as span:
+                    span.set_attribute("qros.workspace_id", str(workspace_id))
+                    span.set_attribute("qros.job_id", str(job_id))
+                    span.set_attribute("qros.attempt", lease.job.attempt_count)
+                    result = self._executor.execute(job_id)
             except Exception:
                 try:
                     self._store.finish(

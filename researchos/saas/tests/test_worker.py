@@ -306,3 +306,71 @@ def test_recovered_worker_reuses_idempotent_result_after_lease_loss():
     assert store.get_result(workspace_id, job.id) == first_record
     assert store.get(workspace_id, job.id).status == ResearchJobStatus.SUCCEEDED
     assert store.get(workspace_id, job.id).attempt_count == 2
+
+def test_in_memory_monthly_usage_rolls_over_at_month_boundary() -> None:
+    now = [datetime(2026, 9, 30, 23, 59, tzinfo=timezone.utc)]
+    store = InMemoryResearchJobStore(clock=lambda: now[0])
+    workspace_id = uuid4()
+
+    store.create(workspace_id, _job(workspace_id))
+    assert store.count_monthly(workspace_id) == 1
+
+    now[0] = datetime(2026, 10, 1, 0, 0, tzinfo=timezone.utc)
+    assert store.count_monthly(workspace_id) == 0
+
+
+def test_worker_records_retry_observability_on_reclaimed_attempt(monkeypatch) -> None:
+    now = [datetime(2026, 9, 30, tzinfo=timezone.utc)]
+    store = InMemoryResearchJobStore(clock=lambda: now[0])
+    workspace_id = uuid4()
+    job = store.create(workspace_id, _job(workspace_id, max_attempts=2))
+    first = store.claim(workspace_id, job.id, "worker-a", 10)
+    now[0] += timedelta(seconds=11)
+    assert first.job.attempt_count == 1
+
+    retries = []
+    monkeypatch.setattr(
+        "researchos.saas.worker.jobs_retries_total.inc",
+        lambda: retries.append(True),
+    )
+
+    result = ResearchWorker(store, StubExecutor(_result())).run_once(workspace_id, job.id)
+
+    assert result.status == "SUCCEEDED"
+    assert retries == [True]
+    assert store.get(workspace_id, job.id).attempt_count == 2
+
+
+def test_worker_emits_safe_execution_span(monkeypatch) -> None:
+    workspace_id = uuid4()
+    store = InMemoryResearchJobStore()
+    job = store.create(workspace_id, _job(workspace_id))
+    executor = StubExecutor(_result())
+    spans = []
+
+    class Span:
+        def set_attribute(self, key, value):
+            spans.append((key, value))
+
+    class Tracer:
+        def start_as_current_span(self, name):
+            assert name == "qros.research_job"
+
+            class Context:
+                def __enter__(self):
+                    return Span()
+
+                def __exit__(self, exc_type, exc, tb):
+                    return False
+
+            return Context()
+
+    monkeypatch.setattr("researchos.saas.worker.tracer", Tracer())
+
+    ResearchWorker(store, executor).run_once(workspace_id, job.id)
+
+    assert spans == [
+        ("qros.workspace_id", str(workspace_id)),
+        ("qros.job_id", str(job.id)),
+        ("qros.attempt", 1),
+    ]
