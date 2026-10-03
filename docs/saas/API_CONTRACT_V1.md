@@ -57,6 +57,7 @@ Workspace provisioning derives the owner from the verified authentication contex
 ### Datasets
 
 - `POST /v1/datasets` — create a dataset and immutable version from an upload.
+- `DELETE /v1/datasets/{dataset_id}` — delete a dataset only when no non-deleted Finding references any version; referenced datasets return `409 DATASET_REFERENCED`.
 - `POST /v1/datasets/{dataset_id}/versions` — append an immutable dataset version.
 - `GET /v1/datasets` — list datasets visible to the authenticated workspace; optional `name`, `limit`, and `offset` filters.
 - `GET /v1/datasets/{dataset_id}/versions` — list versions visible to the authenticated workspace with the standard pagination envelope.
@@ -87,7 +88,7 @@ Every list endpoint uses the same query parameters and response envelope:
 
 `filter[tenant_id]` is never used to widen authorization scope; it can only constrain results to the authenticated tenant. A different tenant value produces an empty result set.
 
-Dataset bytes are streamed through a bounded SHA-256 calculation before persistence. Storage paths are tenant-scoped and content-addressed.
+Dataset bytes are streamed through a bounded SHA-256 calculation before persistence. Storage paths are exactly `tenant/{tenant_id}/datasets/{sha256(content)}/{version}/`. Dataset versions are immutable; an update appends a new version and never overwrites an old object. Re-uploading identical content returns the existing version/path. Upload and download paths are SHA-256 verified.
 
 ### Research
 
@@ -103,6 +104,10 @@ Dataset bytes are streamed through a bounded SHA-256 calculation before persiste
 - `POST /v1/research-runs/{job_id}/finding` — persist a finding only from a validated research result.
 - `GET /v1/research-runs/{job_id}/finding` — retrieve the governed finding projection.
 - `GET /v1/research-runs/{job_id}/report` — retrieve a deterministic human-readable report projection.
+- `POST /v1/research-runs/{job_id}/validation` — persist the governed validation record for a completed run.
+- `GET /v1/research-runs/{job_id}/validation` — retrieve the governed validation record.
+- `POST /v1/research-runs/{job_id}/finding` — persist the governed finding for a validated run.
+- `GET /v1/research-runs/{job_id}/finding` — retrieve the governed finding.
 - `POST /v1/research-claims` — create a tenant-scoped Research Claim.
 - `GET /v1/research-claims/{claim_id}` — retrieve a workspace-scoped Research Claim.
 - `POST /v1/research-claims/{claim_id}/plan-lock` — lock the immutable research plan for a claim.

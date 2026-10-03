@@ -13,6 +13,7 @@ EXPECTED = {
     "GET /v1/me",
     "POST /v1/billing/webhook",
     "POST /v1/datasets",
+    "DELETE /v1/datasets/{dataset_id}",
     "GET /v1/datasets",
     "POST /v1/datasets/{dataset_id}/versions",
     "GET /v1/datasets/{dataset_id}/versions",
@@ -30,6 +31,10 @@ EXPECTED = {
     "POST /v1/research-runs/{job_id}/finding",
     "GET /v1/research-runs/{job_id}/finding",
     "GET /v1/research-runs/{job_id}/report",
+    "POST /v1/research-runs/{job_id}/validation",
+    "GET /v1/research-runs/{job_id}/validation",
+    "POST /v1/research-runs/{job_id}/finding",
+    "GET /v1/research-runs/{job_id}/finding",
     "POST /v1/research-claims",
     "GET /v1/research-claims",
     "GET /v1/research-claims/{claim_id}",
@@ -83,4 +88,4 @@ def main() -> int:
     return 0
 
 if __name__ == "__main__":
-    raise SystemExit(main())\n
+    raise SystemExit(main())

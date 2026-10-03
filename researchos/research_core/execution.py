@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+from opentelemetry import trace
+
 from researchos.quant_engine.interface import QuantComputationInterface
 from researchos.quant_engine.router import BackendExecutionResult, BackendRouter
 from researchos.research_core.intelligence import ComputePlan
@@ -151,27 +153,51 @@ def execute_compute_plan(
     through BackendRouter.execute_planned(), which forbids scheduler changes,
     backend substitution, and fallback to a different implementation.
     """
+    tracer = trace.get_tracer("qros.research")
+    with tracer.start_as_current_span(
+        "qros.execution",
+        attributes={
+            "research.plan_sha256": plan.plan_sha256,
+            "research.method_count": len(plan.selected_methods),
+        },
+    ):
+        return _execute_compute_plan(
+            plan, registry, router, inputs_by_method, expected_by_method, tracer
+        )
+
+def _execute_compute_plan(
+    plan: ComputePlan,
+    registry: ExecutionRegistry,
+    router: BackendRouter,
+    inputs_by_method: Mapping[str, Mapping[str, Any]],
+    expected_by_method: Mapping[str, Any] | None,
+    tracer: trace.Tracer,
+) -> tuple[BackendExecutionResult, ...]:
     registry.verify_compute_plan(plan)
     expected = expected_by_method or {}
     results: list[BackendExecutionResult] = []
     for method_id in plan.selected_methods:
-        binding = registry.get(method_id)
-        if method_id not in inputs_by_method:
-            raise ValueError(f"missing execution inputs for planned method: {method_id}")
-        result = router.execute_planned(
-            operation=binding.operation,
-            inputs=inputs_by_method[method_id],
-            required_backend=binding.backend,
-            required_version=binding.backend_version,
-            expected=expected.get(method_id),
-        )
-        if result.metadata.backend != binding.backend or result.metadata.version != binding.backend_version:
-            raise RuntimeError(
-                f"planned execution route changed for {method_id}: "
-                f"expected {binding.backend}@{binding.backend_version}, "
-                f"got {result.metadata.backend}@{result.metadata.version}"
+        with tracer.start_as_current_span(
+            "qros.execution.method",
+            attributes={"research.method_id": method_id},
+        ):
+            binding = registry.get(method_id)
+            if method_id not in inputs_by_method:
+                raise ValueError(f"missing execution inputs for planned method: {method_id}")
+            result = router.execute_planned(
+                operation=binding.operation,
+                inputs=inputs_by_method[method_id],
+                required_backend=binding.backend,
+                required_version=binding.backend_version,
+                expected=expected.get(method_id),
             )
-        results.append(result)
+            if result.metadata.backend != binding.backend or result.metadata.version != binding.backend_version:
+                raise RuntimeError(
+                    f"planned execution route changed for {method_id}: "
+                    f"expected {binding.backend}@{binding.backend_version}, "
+                    f"got {result.metadata.backend}@{result.metadata.version}"
+                )
+            results.append(result)
     return tuple(results)
 
 __all__ = [
