@@ -48,7 +48,7 @@ def test_pipeline_blocks_invalid_research() -> None:
     report = run_decision_pipeline(
         DecisionPipelineInput(
             assessment=_assessment(), asset="XAUUSD", direction="bullish", account_equity=10_000,
-            trade_statistics=TradeStatistics(average_win=150, average_loss=100), 
+            trade_statistics=TradeStatistics(average_win=150, average_loss=100),
             research_valid=False, research_limitations=("validation pending",),
         )
     )
