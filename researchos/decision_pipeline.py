@@ -54,8 +54,6 @@ def _risk_decision(
 ) -> RiskDecision | None:
     if request.risk_account is None:
         return None
-    if request.proposed_notional is None:
-        return None
     return evaluate_pretrade_risk(
         risk,
         account=request.risk_account,
