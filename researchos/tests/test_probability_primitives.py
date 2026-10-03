@@ -6,6 +6,8 @@ import pytest
 from researchos.probability import (
     ProbabilityAnalysis,
     ProbabilityMethod,
+    brier_score,
+    wilson_interval,
     expected_value,
     historical_expected_shortfall,
     historical_var,
@@ -85,3 +87,83 @@ def test_probability_analysis_rejects_invalid_uncertainty_interval() -> None:
             data_hash="a" * 64,
             uncertainty_interval=(0.5, 0.1),
         )
+
+
+def test_probability_analysis_rejects_unknown_governance_status() -> None:
+    with pytest.raises(ValueError, match="out_of_sample_status"):
+        ProbabilityAnalysis(
+            analysis_id="pa-002",
+            claim_id="claim-001",
+            method=ProbabilityMethod.DESCRIPTIVE,
+            population_definition="sample",
+            time_window="2025",
+            data_version="v1",
+            data_hash="a" * 64,
+            out_of_sample_status="MAYBE",
+        )
+
+
+def test_probability_analysis_requires_selection_count_for_multiple_testing_context() -> None:
+    with pytest.raises(ValueError, match="selection_count"):
+        ProbabilityAnalysis(
+            analysis_id="pa-003",
+            claim_id="claim-001",
+            method=ProbabilityMethod.DESCRIPTIVE,
+            population_definition="sample",
+            time_window="2025",
+            data_version="v1",
+            data_hash="a" * 64,
+            multiple_testing_context="holm alpha=0.05",
+        )
+
+
+def test_probability_analysis_rejects_non_positive_selection_count() -> None:
+    with pytest.raises(ValueError, match="selection_count"):
+        ProbabilityAnalysis(
+            analysis_id="pa-004",
+            claim_id="claim-001",
+            method=ProbabilityMethod.DESCRIPTIVE,
+            population_definition="sample",
+            time_window="2025",
+            data_version="v1",
+            data_hash="a" * 64,
+            selection_count=0,
+        )
+
+
+def test_brier_score_returns_deterministic_calibration_diagnostics():
+    result = brier_score((0.9, 0.2, 0.7, 0.4), (1, 0, 1, 0))
+    assert result.brier_score == pytest.approx(0.075)
+    assert result.sample_size == 4
+    assert result.mean_predicted_probability == pytest.approx(0.55)
+    assert result.observed_frequency == pytest.approx(0.5)
+
+
+def test_brier_score_rejects_invalid_inputs():
+    with pytest.raises(ValueError, match="probabilities"):
+        brier_score((1.2,), (1,))
+    with pytest.raises(ValueError, match="outcomes"):
+        brier_score((0.5,), (2,))
+
+
+def test_wilson_interval_is_bounded_and_contains_observed_rate():
+    low, high = wilson_interval(50, 100)
+    assert 0.0 <= low < 0.5 < high <= 1.0
+
+
+def test_wilson_interval_rejects_invalid_counts():
+    with pytest.raises(ValueError, match="successes"):
+        wilson_interval(101, 100)
+
+
+
+def test_probability_analysis_serializes_economic_cost_context() -> None:
+    from researchos.probability import EconomicCostContext, ProbabilityAnalysis, ProbabilityMethod
+
+    analysis = ProbabilityAnalysis(
+        analysis_id="a1", claim_id="c1", method=ProbabilityMethod.DESCRIPTIVE,
+        population_definition="eligible", time_window="2026", data_version="v1",
+        data_hash="sha256:data",
+        economic_cost_context=EconomicCostContext(slippage_cost=0.02),
+    )
+    assert analysis.to_dict()["economic_cost_context"]["slippage_cost"] == 0.02

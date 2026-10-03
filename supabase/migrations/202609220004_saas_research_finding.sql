@@ -1,0 +1,106 @@
+-- Durable, tenant-scoped persistence for the governed Validation -> Finding boundary.
+create table if not exists public.research_finding (
+    id uuid primary key,
+    workspace_id uuid not null,
+    research_run_id uuid not null,
+    validation_id uuid not null,
+    result_manifest_sha256 text not null,
+    validation_sha256 text not null,
+    claim_id text,
+    plan_hash text,
+    finding_sha256 text not null,
+    status text not null,
+    payload jsonb not null,
+    contract_version text not null default '1.0.0',
+    created_at timestamptz not null default timezone('utc', now()),
+    constraint research_finding_result_manifest_sha256_format check (result_manifest_sha256 ~ '^[0-9a-f]{64}$'),
+    constraint research_finding_validation_sha256_format check (validation_sha256 ~ '^[0-9a-f]{64}$'),
+    constraint research_finding_plan_hash_format check (plan_hash is null or plan_hash ~ '^[0-9a-f]{64}$'),
+    constraint research_finding_sha256_format check (finding_sha256 ~ '^[0-9a-f]{64}$'),
+    constraint research_finding_claim_plan_pair check ((claim_id is null) = (plan_hash is null)),
+    constraint research_finding_status check (status = 'VALIDATED'),
+    constraint research_finding_payload_object check (jsonb_typeof(payload) = 'object'),
+    constraint research_finding_run_fk foreign key (research_run_id) references public.research_run(id) on delete restrict,
+    constraint research_finding_validation_fk foreign key (validation_id) references public.research_validation(id) on delete restrict,
+    constraint research_finding_workspace_unique unique (workspace_id, research_run_id)
+);
+
+create index if not exists idx_research_finding_claim on public.research_finding(workspace_id, claim_id) where claim_id is not null;
+
+alter table public.research_finding enable row level security;
+alter table public.research_finding force row level security;
+revoke all on table public.research_finding from public, anon, authenticated;
+
+create or replace function public.create_research_finding(
+    p_id uuid,
+    p_workspace_id uuid,
+    p_research_run_id uuid,
+    p_validation_id uuid,
+    p_result_manifest_sha256 text,
+    p_validation_sha256 text,
+    p_claim_id text,
+    p_plan_hash text,
+    p_finding_sha256 text,
+    p_status text,
+    p_payload jsonb,
+    p_contract_version text
+)
+returns table (record jsonb, replayed boolean)
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+    v_validation public.research_validation%rowtype;
+    v_existing public.research_finding%rowtype;
+begin
+    if p_id is null or p_workspace_id is null or p_research_run_id is null or p_validation_id is null
+       or p_result_manifest_sha256 !~ '^[0-9a-f]{64}$'
+       or p_validation_sha256 !~ '^[0-9a-f]{64}$'
+       or p_finding_sha256 !~ '^[0-9a-f]{64}$'
+       or p_plan_hash is not null and p_plan_hash !~ '^[0-9a-f]{64}$'
+       or (p_claim_id is null) <> (p_plan_hash is null)
+       or p_status <> 'VALIDATED'
+       or p_payload is null or jsonb_typeof(p_payload) <> 'object'
+       or p_contract_version is null or length(trim(p_contract_version)) < 1 or length(p_contract_version) > 32 then
+        raise exception 'invalid research finding arguments';
+    end if;
+
+    select * into v_validation
+      from public.research_validation
+     where workspace_id = p_workspace_id and research_run_id = p_research_run_id and id = p_validation_id
+     for share;
+    if not found then raise exception 'research validation not found for workspace'; end if;
+
+    if v_validation.status <> 'VALIDATED' then raise exception 'research validation is not VALIDATED'; end if;
+    if v_validation.result_manifest_sha256 <> p_result_manifest_sha256 then raise exception 'result manifest does not match validation'; end if;
+    if v_validation.validation_sha256 <> p_validation_sha256 then raise exception 'validation digest does not match validation'; end if;
+    if v_validation.claim_id is distinct from p_claim_id or v_validation.plan_hash is distinct from p_plan_hash then
+        raise exception 'finding claim lineage does not match validation';
+    end if;
+
+    select * into v_existing from public.research_finding
+     where workspace_id = p_workspace_id and research_run_id = p_research_run_id for update;
+    if found then
+        if v_existing.finding_sha256 <> p_finding_sha256 then
+            raise exception 'research finding already exists with a different digest' using errcode = '23505';
+        end if;
+        return query select to_jsonb(v_existing), true;
+        return;
+    end if;
+
+    insert into public.research_finding(
+        id,workspace_id,research_run_id,validation_id,result_manifest_sha256,validation_sha256,
+        claim_id,plan_hash,finding_sha256,status,payload,contract_version
+    ) values (
+        p_id,p_workspace_id,p_research_run_id,p_validation_id,p_result_manifest_sha256,p_validation_sha256,
+        p_claim_id,p_plan_hash,p_finding_sha256,trim(p_status),p_payload,trim(p_contract_version)
+    ) returning * into v_existing;
+
+    return query select to_jsonb(v_existing), false;
+end;
+$$;
+
+revoke all on function public.create_research_finding(uuid,uuid,uuid,uuid,text,text,text,text,text,text,jsonb,text) from public, anon, authenticated;
+grant execute on function public.create_research_finding(uuid,uuid,uuid,uuid,text,text,text,text,text,text,jsonb,text) to service_role;
+comment on table public.research_finding is 'Immutable tenant-scoped finding projection bound to a VALIDATED research validation.';

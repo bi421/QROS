@@ -1,0 +1,61 @@
+---
+name: Exact Release Verification
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  release-verification:
+    name: Exact release gate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,test,saas]"
+      - name: Verify migrations
+        run: python scripts/verify_migrations.py
+      - name: Ruff
+        run: ruff check .
+      - name: Mypy
+        run: mypy
+      - name: Unit and integration tests
+        env:
+          SUPABASE_URL: ${{ secrets.QROS_STAGING_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.QROS_STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.QROS_STAGING_SUPABASE_ANON_KEY }}
+        run: python -m pytest researchos/tests/ researchos/research_core/tests/ researchos/saas/tests/ --real-db -v --tb=short
+      - name: Backup and restore verification
+        env:
+          QROS_BACKUP_DATABASE_URL: ${{ secrets.QROS_STAGING_DATABASE_URL }}
+        run: python scripts/backup_verify.py
+      - name: Publish backup and restore evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-restore-evidence-${{ github.sha }}
+          path: backup/qros_restore_report.json
+          if-no-files-found: error
+      - name: Exact health evidence
+        run: |
+          SHA="$(git rev-parse HEAD)"
+          python scripts/final_health_check.py --skip-cpp --exact-commit="$SHA"
+      - name: Publish health evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: health-evidence-${{ github.sha }}
+          path: .health/health_evidence_${{ github.sha }}.json
+          if-no-files-found: error

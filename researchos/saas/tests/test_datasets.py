@@ -6,6 +6,7 @@ import pytest
 from researchos.saas.datasets import (
     Dataset,
     DatasetVersion,
+    InMemoryDatasetStorage,
     InMemoryDatasetStore,
     storage_path_for,
     stream_sha256,
@@ -33,10 +34,11 @@ def test_storage_path_is_tenant_scoped_and_content_addressed() -> None:
     dataset_id = uuid4()
     digest = "a" * 64
 
-    path = storage_path_for(workspace_id, dataset_id, digest)
+    path = storage_path_for(workspace_id, digest, 1)
 
-    assert path == f"{workspace_id}/datasets/{dataset_id}/sha256/{digest}"
-    assert "versions" not in path
+    assert path == f"tenant/{workspace_id}/datasets/{digest}/1/"
+    assert str(dataset_id) not in path
+    assert "sha256" not in path
 
 
 def test_in_memory_store_rejects_duplicate_content() -> None:
@@ -77,3 +79,16 @@ def test_in_memory_store_rejects_dataset_write_from_other_workspace() -> None:
         store.create_dataset(other_workspace, dataset)
 
     assert store.get_dataset(owner_workspace, dataset.id) is None
+
+
+def test_in_memory_signed_download_url_requires_existing_object_and_bounded_expiry() -> None:
+    storage = InMemoryDatasetStorage()
+    with pytest.raises(FileNotFoundError):
+        storage.create_signed_download_url("missing", 300)
+
+    storage.put("tenant/object", BytesIO(b"data"))
+    assert storage.create_signed_download_url("tenant/object", 300).endswith("?expires_in=300")
+
+    for expires_in in (0, 901):
+        with pytest.raises(ValueError, match="signed URL expiry"):
+            storage.create_signed_download_url("tenant/object", expires_in)

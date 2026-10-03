@@ -11,9 +11,9 @@ See docs/constitutional/article_II_scope.md for the full responsibility matrix.
 Load XAUUSD D1 CSV into researchos.db as a HistoricalDataset.
 """
 
-from researchos.engines.data.csv_loader import CsvLoader
-from researchos.engines.data.dataset import HistoricalDataset
-from researchos.engines.data.repository import SqliteDatasetRepository
+from researchos.data_engine.csv_loader import CsvLoader
+from researchos.data_engine.dataset import HistoricalDataset
+from researchos.data_engine.repository import SqliteDatasetRepository
 
 CSV_PATH = "data/curated/xauusd/xauusd_d1_2021_2025_mt5_final.csv"
 SYMBOL = "XAUUSD"

@@ -36,6 +36,37 @@ def audit(path: Path) -> dict:
     if report.get("scientific_status") != "OOS_RAW_PROBABILITY_ONLY_NO_EDGE_CLAIM":
         failures.append("scientific boundary changed or missing")
 
+    split = report.get("split", {})
+    required_split = (
+        "train_size",
+        "validation_size",
+        "step_size",
+        "holdout_size",
+        "embargo_rule",
+        "holdout_rule",
+        "fit_uses_validation_labels",
+        "fit_uses_holdout_labels",
+        "validation_windows_overlap",
+        "holdout_is_disjoint",
+    )
+    if not isinstance(split, dict) or any(key not in split for key in required_split):
+        failures.append("mandatory holdout split contract is missing")
+    elif split["fit_uses_holdout_labels"] is not False or split["holdout_is_disjoint"] is not True:
+        failures.append("holdout fit/disjoint contract is invalid")
+
+    methodology = report.get("methodology", {})
+    required_methodology = (
+        "forecast_horizon",
+        "feature_availability_timestamp",
+        "selection_policy",
+        "multiple_testing_policy",
+        "stopping_rule",
+        "replication_rule",
+        "cost_assumptions",
+    )
+    if not isinstance(methodology, dict) or any(key not in methodology for key in required_methodology):
+        failures.append("mandatory methodology contract is missing")
+
     rows = report.get("folds", [])
     if not rows:
         failures.append("no folds")
@@ -91,6 +122,76 @@ def audit(path: Path) -> dict:
         if expected_baseline != fold.get("baseline"):
             failures.append(f"fold {fold.get('fold')}: baseline score does not recompute")
 
+    holdout = report.get("holdout")
+    if not isinstance(holdout, dict):
+        failures.append("mandatory final holdout artifact is missing")
+    else:
+        holdout_predictions = holdout.get("predictions", [])
+        holdout_size = split.get("holdout_size") if isinstance(split, dict) else None
+        if not isinstance(holdout_size, int) or holdout_size < 1:
+            failures.append("holdout_size is invalid")
+        elif len(holdout_predictions) != holdout_size:
+            failures.append("holdout prediction count does not match holdout_size")
+        if not isinstance(holdout.get("start"), str) or not isinstance(holdout.get("end"), str):
+            failures.append("holdout interval is missing")
+        else:
+            holdout_start = _time(holdout["start"])
+            holdout_end = _time(holdout["end"])
+            if holdout_end < holdout_start:
+                failures.append("holdout interval reversed")
+            validation_ends = [_time(fold["validation_end"]) for fold in rows if fold.get("validation_end")]
+            if validation_ends and max(validation_ends) >= holdout_start:
+                failures.append("holdout begins before or at the last validation observation")
+            max_realized = holdout.get("training_max_realized_end")
+            if not isinstance(max_realized, str) or _time(max_realized) >= holdout_start:
+                failures.append("holdout training label crosses holdout boundary")
+            training_events = holdout.get("training_events")
+            pre_holdout_events = holdout.get("pre_holdout_events")
+            if not isinstance(training_events, int) or not isinstance(pre_holdout_events, int) or not 0 < training_events <= pre_holdout_events:
+                failures.append("holdout training accounting is invalid")
+
+        seen_holdout: set[str] = set()
+        for prediction in holdout_predictions:
+            event_id = prediction.get("event_id")
+            if not isinstance(event_id, str) or not event_id:
+                failures.append("holdout: invalid prediction event id")
+            elif event_id in seen_validation:
+                failures.append(f"holdout event overlaps validation: {event_id}")
+            elif event_id in seen_holdout:
+                failures.append(f"holdout event reused: {event_id}")
+            else:
+                seen_holdout.add(event_id)
+            timestamp_value = prediction.get("timestamp")
+            if isinstance(holdout.get("start"), str) and isinstance(holdout.get("end"), str):
+                timestamp = _time(timestamp_value) if isinstance(timestamp_value, str) else None
+                if timestamp is None or not _time(holdout["start"]) <= timestamp <= _time(holdout["end"]):
+                    failures.append("holdout: prediction outside holdout interval")
+            probability = prediction.get("probability")
+            if not isinstance(probability, (int, float)) or not math.isfinite(probability) or not 0.0 <= probability <= 1.0:
+                failures.append("holdout: probability outside [0,1]")
+            if prediction.get("label") not in (0, 1):
+                failures.append("holdout: invalid prediction label")
+
+        if isinstance(holdout.get("model"), dict) and holdout_predictions:
+            expected_holdout = _score(
+                [float(p["probability"]) for p in holdout_predictions],
+                [int(p["label"]) for p in holdout_predictions],
+            )
+            if expected_holdout != holdout.get("model"):
+                failures.append("holdout model score does not recompute")
+        else:
+            failures.append("holdout model score is missing")
+        rate = holdout.get("training_outcome_rate")
+        if isinstance(rate, (int, float)) and holdout_predictions:
+            expected_holdout_baseline = _score(
+                [float(rate)] * len(holdout_predictions),
+                [int(p["label"]) for p in holdout_predictions],
+            )
+            if expected_holdout_baseline != holdout.get("baseline"):
+                failures.append("holdout baseline score does not recompute")
+        else:
+            failures.append("holdout training outcome rate is missing")
+
     aggregate_predictions = []
     aggregate_labels = []
     aggregate_baseline = []
@@ -115,6 +216,7 @@ def audit(path: Path) -> dict:
         "folds": fold_count,
         "oos_unique_validation_events": len(seen_validation),
         "prediction_records": prediction_count,
+        "holdout_prediction_records": len(holdout.get("predictions", [])) if isinstance(holdout, dict) else 0,
         "checks": {
             "contract": not any("contract" in f for f in failures),
             "temporal_order": not any("train_end" in f or "validation interval" in f for f in failures),

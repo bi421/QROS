@@ -25,7 +25,7 @@ def _request() -> ResearchRequest:
 def test_runner_returns_content_addressed_artifacts() -> None:
     artifact_content = b"evidence"
 
-    def pipeline(request: ResearchRequest):
+    def pipeline(request: ResearchRequest) -> tuple[PipelineArtifact, ...]:
         assert request.dataset.asset == "XAUUSD"
         assert request.dataset.timeframe == "M1"
         return (PipelineArtifact("evidence-1", "evidence.json", artifact_content),)
@@ -39,7 +39,7 @@ def test_runner_returns_content_addressed_artifacts() -> None:
 
 
 def test_runner_converts_pipeline_failure_to_failed_result() -> None:
-    def pipeline(request: ResearchRequest):
+    def pipeline(request: ResearchRequest) -> tuple[PipelineArtifact, ...]:
         raise RuntimeError("pipeline exploded")
 
     result = FrozenXauusdM1Runner(pipeline).run(_request())
@@ -53,7 +53,7 @@ def test_runner_converts_pipeline_failure_to_failed_result() -> None:
 def test_runner_rejects_wrong_workflow_before_pipeline_execution() -> None:
     called = False
 
-    def pipeline(request: ResearchRequest):
+    def pipeline(request: ResearchRequest) -> tuple[PipelineArtifact, ...]:
         nonlocal called
         called = True
         return ()

@@ -2439,3 +2439,16 @@ The ultimate purpose of ResearchOS remains:
 ---
 
 **End of Canonical Architecture Specification**
+
+
+# QROS SaaS Architecture Freeze — Golden Path V1
+
+QROS is now treated as a product workflow around the governed research core.
+
+L0 Infrastructure -> L1 Identity/Tenant -> L2 Research Objects -> L3 Research Pipeline -> L4 API -> L5 UI -> L6 Monetization.
+
+Golden Path: Register -> Workspace -> Dataset -> DatasetVersion -> ResearchRun -> Analysis -> Evidence -> Claim -> Result.
+
+Until this Golden Path is production-validated, new research features and new top-level architecture layers are out of scope except security, reliability, correctness, and production-blocking fixes.
+
+No TenantContext means no business operation. Tenant identity is server-derived. Scientific inputs and outputs retain immutable/content-addressed provenance. Production schema changes are migration-based.

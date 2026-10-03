@@ -41,6 +41,9 @@ class ResearchJobStore:
     def get(self, workspace_id: UUID, job_id: UUID) -> ResearchJob | None:
         raise NotImplementedError
 
+    def list(self, workspace_id: UUID, *, limit: int, offset: int, status: ResearchJobStatus | None = None, workflow_id: str | None = None) -> tuple[list[ResearchJob], int]:
+        raise NotImplementedError
+
     def count_active(self, workspace_id: UUID) -> int:
         raise NotImplementedError
 
@@ -93,6 +96,7 @@ class InMemoryResearchJobStore(ResearchJobStore):
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._idempotency: dict[tuple[UUID, str], tuple[str, ResearchJob]] = {}
         self._results: dict[UUID, ResearchRunResultRecord] = {}
+        self._created_at: dict[UUID, datetime] = {}
 
     def create(self, workspace_id: UUID, job: ResearchJob) -> ResearchJob:
         if job.workspace_id != workspace_id:
@@ -101,6 +105,7 @@ class InMemoryResearchJobStore(ResearchJobStore):
             if job.id in self._jobs:
                 raise ValueError("research job already exists")
             self._jobs[job.id] = job
+            self._created_at[job.id] = self._clock()
             return job
 
     def create_idempotent(
@@ -125,6 +130,7 @@ class InMemoryResearchJobStore(ResearchJobStore):
             if job.id in self._jobs:
                 raise ValueError("research job already exists")
             self._jobs[job.id] = job
+            self._created_at[job.id] = self._clock()
             self._idempotency[key] = (request_fingerprint, job)
             return job, False
 
@@ -137,7 +143,13 @@ class InMemoryResearchJobStore(ResearchJobStore):
                 raise RuntimeError("stale or invalid worker lease")
             if result.source_dataset_sha256 != job.source_dataset_sha256:
                 raise ValueError("research result source hash does not match input dataset")
-            record = build_result_record(workspace_id, job_id, result)
+            record = build_result_record(
+                workspace_id,
+                job_id,
+                result,
+                claim_id=UUID(job.claim_id) if job.claim_id else None,
+                plan_hash=job.plan_hash,
+            )
             existing = self._results.get(job_id)
             if existing is not None:
                 if existing.manifest_sha256 != record.manifest_sha256:
@@ -160,6 +172,20 @@ class InMemoryResearchJobStore(ResearchJobStore):
                 return None
             return job
 
+    def list(self, workspace_id: UUID, *, limit: int, offset: int, status: ResearchJobStatus | None = None, workflow_id: str | None = None) -> tuple[list[ResearchJob], int]:
+        if not 1 <= limit <= 100 or offset < 0:
+            raise ValueError("invalid pagination")
+        with self._lock:
+            jobs = [
+                job for job in self._jobs.values()
+                if job.workspace_id == workspace_id
+                and (status is None or job.status == status)
+                and (workflow_id is None or job.workflow_id == workflow_id)
+            ]
+            jobs.sort(key=lambda item: item.id.hex)
+            total = len(jobs)
+            return jobs[offset : offset + limit], total
+
     def count_active(self, workspace_id: UUID) -> int:
         with self._lock:
             return sum(
@@ -169,8 +195,16 @@ class InMemoryResearchJobStore(ResearchJobStore):
             )
 
     def count_monthly(self, workspace_id: UUID) -> int:
+        now = self._clock()
+        month_start = now.replace(
+            day=1, hour=0, minute=0, second=0, microsecond=0
+        )
         with self._lock:
-            return sum(job.workspace_id == workspace_id for job in self._jobs.values())
+            return sum(
+                job.workspace_id == workspace_id
+                and self._created_at.get(job.id, now) >= month_start
+                for job in self._jobs.values()
+            )
 
     def claim(
         self,

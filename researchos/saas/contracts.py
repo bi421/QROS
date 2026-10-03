@@ -21,6 +21,14 @@ class Plan(str, Enum):
     ENTERPRISE = "enterprise"
 
 
+class WorkspaceRole(str, Enum):
+    OWNER = "owner"
+    ADMIN = "admin"
+    RESEARCHER = "researcher"
+    VIEWER = "viewer"
+    BILLING_ADMIN = "billing_admin"
+
+
 class ResearchJobStatus(str, Enum):
     QUEUED = "queued"
     RUNNING = "running"
@@ -36,6 +44,7 @@ class TenantContext:
     user_id: UUID
     workspace_id: UUID
     plan: Plan
+    role: WorkspaceRole = WorkspaceRole.OWNER
 
 
 @dataclass(frozen=True)
@@ -73,6 +82,8 @@ class ResearchJob:
     status: ResearchJobStatus
     source_dataset_sha256: str
     created_by: UUID | None = None
+    claim_id: str | None = None
+    plan_hash: str | None = None
     attempt_count: int = 0
     max_attempts: int = 3
     error_code: str | None = None
@@ -83,6 +94,12 @@ class ResearchJob:
             raise TypeError("dataset_version_id must be a UUID")
         if not self.workflow_id.strip():
             raise ValueError("workflow_id must not be empty")
+        if (self.claim_id is None) != (self.plan_hash is None):
+            raise ValueError("claim_id and plan_hash must be provided together")
+        if self.claim_id is not None and not self.claim_id.strip():
+            raise ValueError("claim_id must not be empty")
+        if self.plan_hash is not None:
+            _validate_sha256(self.plan_hash, "plan_hash")
         if self.attempt_count < 0:
             raise ValueError("attempt_count must not be negative")
         if self.max_attempts < 1:
@@ -92,7 +109,7 @@ class ResearchJob:
 
 
 DEFAULT_USAGE_POLICIES: dict[Plan, UsagePolicy] = {
-    Plan.FREE: UsagePolicy(monthly_research_runs=5, max_dataset_bytes=50_000_000, max_concurrent_runs=1),
+    Plan.FREE: UsagePolicy(monthly_research_runs=100, max_dataset_bytes=50_000_000, max_concurrent_runs=1),
     Plan.PRO: UsagePolicy(monthly_research_runs=100, max_dataset_bytes=2_000_000_000, max_concurrent_runs=2),
     Plan.TEAM: UsagePolicy(monthly_research_runs=1_000, max_dataset_bytes=10_000_000_000, max_concurrent_runs=8),
     Plan.ENTERPRISE: UsagePolicy(monthly_research_runs=0, max_dataset_bytes=0, max_concurrent_runs=0),
@@ -105,5 +122,6 @@ __all__ = [
     "ResearchJob",
     "ResearchJobStatus",
     "TenantContext",
+    "WorkspaceRole",
     "UsagePolicy",
 ]

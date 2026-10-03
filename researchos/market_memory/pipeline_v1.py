@@ -1,4 +1,4 @@
-"""Market Memory Pipeline — end-to-end market memory research pipeline."""
+""""Market Memory Pipeline — end-to-end market memory research pipeline."""
 
 from __future__ import annotations
 
@@ -7,14 +7,14 @@ from datetime import datetime, timezone
 
 from researchos.market_memory.conditioning import ConditionSpec, MultipleTestingAudit, compute_conditional_statistics, filter_events
 from researchos.market_memory.event_extractor import extract_sma_crossover_events
-from researchos.market_memory.event_schema import EventType, EvidenceStatus, MarketMemoryReport, ValidationResult
+from researchos.market_memory.event_schema import ConditionalResult, EventType, EvidenceStatus, MarketEvent, MarketMemoryReport, ValidationResult
 from researchos.market_memory.evidence import create_evidence_record
 from researchos.market_memory.label_dependence import audit_label_overlap
-from researchos.market_memory.oos_validation import walk_forward_validate
+from researchos.market_memory.oos_validation import OOSValidationResult, walk_forward_validate
 from researchos.market_memory.outcome_engine import compute_forward_outcomes
 from researchos.market_memory.production_gate import check_production_evidence_readiness
 from researchos.market_memory.self_audit import run_self_audit
-from researchos.market_memory.statistical_evidence import bonferroni_alpha, wilson_proportion_ci
+from researchos.market_memory.statistical_evidence import ProportionEvidence, bonferroni_alpha, wilson_proportion_ci
 from researchos.market_memory.temporal_validation import chronological_split, check_temporal_integrity
 
 
@@ -30,8 +30,8 @@ def _compute_dataset_hash(file_path: str) -> str:
     return h.hexdigest()[:16]
 
 
-def _finite_returns(events, condition):
-    values = []
+def _finite_returns(events: list[MarketEvent], condition: ConditionSpec) -> list[float]:
+    values: list[float] = []
     for event in filter_events(events, condition):
         value = event.outcome.return_1d if event.outcome else None
         if isinstance(value, (int, float)) and value == value and abs(value) != float("inf"):
@@ -88,28 +88,12 @@ def run_market_memory_pipeline(
             ConditionSpec("high_volatility", {"volatility_state": "High"}, "Crossovers in high volatility regime"),
         ]
 
-    hypothesis_count = len(conditions)
-    corrected_alpha = bonferroni_alpha(_PIPELINE_ALPHA, hypothesis_count)
-    corrected_confidence_level = 1.0 - corrected_alpha
-
-    conditional_results = []
-    probability_evidence = {}
-    for spec in conditions:
-        result = compute_conditional_statistics(events, spec, outcome_field="return_1d", bootstrap_seed=seed)
-        conditional_results.append(result)
-        values = _finite_returns(events, spec)
-        if values:
-            probability_evidence[spec.name] = wilson_proportion_ci(
-                sum(value > 0.0 for value in values),
-                len(values),
-                confidence_level=corrected_confidence_level,
-            )
 
     train_events, validation_events, test_events = chronological_split(events)
-    validation_results = []
-    oos_results = {}
+    validation_results: list[ValidationResult] = []
+    oos_results: dict[str, OOSValidationResult | None] = {}
 
-    def label_end_getter(event):
+    def label_end_getter(event: MarketEvent) -> datetime | None:
         """Return the actual future observation timestamp used by the outcome."""
         if event.outcome is None:
             return None
@@ -123,15 +107,41 @@ def run_market_memory_pipeline(
         except ValueError:
             return None
 
+    dependence_audit = audit_label_overlap(events, label_end_getter)
+    dependence_block_size = max(1, dependence_audit.max_concurrent_labels)
+
+    hypothesis_count = len(conditions)
+    corrected_alpha = bonferroni_alpha(_PIPELINE_ALPHA, hypothesis_count)
+    corrected_confidence_level = 1.0 - corrected_alpha
+
+    conditional_results: list[ConditionalResult] = []
+    probability_evidence: dict[str, ProportionEvidence] = {}
+    for spec in conditions:
+        result = compute_conditional_statistics(events, spec, outcome_field="return_1d", bootstrap_seed=seed, dependence_block_size=dependence_block_size)
+        conditional_results.append(result)
+        values = _finite_returns(events, spec)
+        if values:
+            probability_evidence[spec.name] = wilson_proportion_ci(
+                sum(value > 0.0 for value in values),
+                len(values),
+                confidence_level=corrected_confidence_level,
+            )
+
     for cr in conditional_results:
         condition = cr.condition_spec
+
+        def matcher(event: MarketEvent) -> bool:
+            return bool(filter_events([event], condition))
+
+        def outcome_getter(event: MarketEvent) -> float | None:
+            return event.outcome.return_1d if event.outcome else None
         train_values = _finite_returns(train_events, condition)
         val_values = _finite_returns(validation_events, condition)
         test_values = _finite_returns(test_events, condition)
         oos = walk_forward_validate(
             events,
-            lambda event, spec=condition: bool(filter_events([event], spec)),
-            lambda event: event.outcome.return_1d if event.outcome else None,
+            matcher,
+            outcome_getter,
             initial_train_size=max(100, min(500, len(events) // 3 or 1)),
             validation_size=max(20, min(100, len(events) // 10 or 1)),
             test_size=max(20, min(100, len(events) // 10 or 1)),
@@ -160,7 +170,6 @@ def run_market_memory_pipeline(
             notes=notes,
         ))
 
-    dependence_audit = audit_label_overlap(events, label_end_getter)
     audit = run_self_audit(
         events,
         conditional_results,
@@ -181,7 +190,7 @@ def run_market_memory_pipeline(
         validated = oos is not None and oos.stable and audit.overall_status != "FAIL"
         status = EvidenceStatus.VALIDATED.value if validated else cr.status
         prob = probability_evidence.get(cr.condition_name)
-        uncertainty = {"mean_confidence_interval": cr.confidence_interval}
+        uncertainty: dict[str, object] = {"mean_confidence_interval": cr.confidence_interval}
         if prob:
             uncertainty["probability_confidence_interval"] = list(prob.confidence_interval)
             uncertainty["probability_confidence_level"] = prob.confidence_level
@@ -200,6 +209,10 @@ def run_market_memory_pipeline(
             "overlap_pairs": dependence_audit.overlap_pairs,
             "max_concurrent_labels": dependence_audit.max_concurrent_labels,
             "interpretation": "Overlap is reported as dependence information; it is not treated as evidence of leakage.",
+            "inference_method": "moving_block_bootstrap" if dependence_block_size > 1 else "percentile_bootstrap",
+            "block_size": dependence_block_size,
+            "block_size_rule": "maximum concurrent realized labels; block bootstrap only when overlap exists",
+            "assumption": "Dependence is treated as predominantly local in event order within the reported block size; this does not establish independence beyond the block.",
         }
         if oos:
             uncertainty["oos"] = {
@@ -214,7 +227,7 @@ def run_market_memory_pipeline(
             condition_definition=str(cr.condition_spec.to_dict()["conditions"]), sample_size=cr.sample_size,
             time_range=(events[0].timestamp.isoformat() if events else "", events[-1].timestamp.isoformat() if events else ""),
             computation_method="forward_return_analysis", code_module="researchos.market_memory.pipeline_v1",
-            statistical_method="Bonferroni-adjusted Wilson probability CI + percentile bootstrap mean CI + purged walk-forward OOS + realized-label boundary and dependence audit",
+            statistical_method="Bonferroni-adjusted Wilson probability CI + dependence-aware block bootstrap mean CI when labels overlap + purged walk-forward OOS + realized-label boundary and dependence audit",
             result={"raw_probability": cr.raw_probability, "mean_return": cr.mean_return, "std_return": cr.std_return},
             uncertainty=uncertainty, validation_method="walk_forward_expanding_purged", random_seed=seed, status=status,
         ))

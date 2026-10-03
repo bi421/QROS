@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from researchos.probability.economic_cost import EconomicCostContext
+
 
 class ProbabilityMethod(str, Enum):
     """Declared method families; analysis code must identify its method explicitly."""
@@ -67,11 +69,33 @@ class ProbabilityAnalysis:
     replication_status: str = "UNKNOWN"
     calibration_status: str = "NOT_APPLICABLE"
     economic_cost_model: str = ""
+    economic_cost_context: EconomicCostContext | None = None
     result_artifact_hash: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "method", ProbabilityMethod(self.method))
+        allowed_statuses = {
+            "integrity_gate_status": {"UNKNOWN", "PASS", "PASSED", "FAIL", "FAILED"},
+            "out_of_sample_status": {
+                "UNKNOWN", "PASS", "PASSED", "FAIL", "FAILED", "NOT_APPLICABLE"
+            },
+            "replication_status": {
+                "UNKNOWN", "PASS", "PASSED", "FAIL", "FAILED", "NOT_APPLICABLE"
+            },
+            "calibration_status": {
+                "UNKNOWN", "PASS", "PASSED", "FAIL", "FAILED", "NOT_APPLICABLE",
+                "INSUFFICIENT_SAMPLE"
+            },
+        }
+        for name, values in allowed_statuses.items():
+            value = getattr(self, name)
+            if value not in values:
+                raise ValueError(f"{name} has unsupported status: {value}")
+        if self.selection_count is not None and self.selection_count < 1:
+            raise ValueError("selection_count must be >= 1 when provided")
+        if self.selection_count is None and self.multiple_testing_context.strip():
+            raise ValueError("selection_count is required when multiple_testing_context is declared")
         if not self.analysis_id.strip():
             raise ValueError("analysis_id is required")
         if not self.claim_id.strip():
@@ -97,7 +121,7 @@ class ProbabilityAnalysis:
         return {
             "analysis_id": self.analysis_id,
             "claim_id": self.claim_id,
-            "method": self.method.value,
+            "method": getattr(self.method, "value", self.method),
             "population_definition": self.population_definition,
             "time_window": self.time_window,
             "data_version": self.data_version,
@@ -117,6 +141,20 @@ class ProbabilityAnalysis:
             "replication_status": self.replication_status,
             "calibration_status": self.calibration_status,
             "economic_cost_model": self.economic_cost_model,
+            "economic_cost_context": (
+                {
+                    "spread_cost": self.economic_cost_context.spread_cost,
+                    "slippage_cost": self.economic_cost_context.slippage_cost,
+                    "commission_cost": self.economic_cost_context.commission_cost,
+                    "other_cost": self.economic_cost_context.other_cost,
+                    "currency": self.economic_cost_context.currency,
+                    "unit": self.economic_cost_context.unit,
+                    "source": self.economic_cost_context.source,
+                    "version": self.economic_cost_context.version,
+                }
+                if self.economic_cost_context is not None
+                else None
+            ),
             "result_artifact_hash": self.result_artifact_hash,
             "metadata": dict(self.metadata),
         }

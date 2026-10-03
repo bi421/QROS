@@ -8,16 +8,16 @@ import pytest  # noqa: E402
 
 pytest.skip("Requires live market data provider — not a unit test", allow_module_level=True)
 
-from researchos.engines.data.contracts import Timeframe  # noqa: E402
+from researchos.data_engine.contracts import Timeframe  # noqa: E402
 
 # noqa: E402
-from researchos.engines.data.macro_analyzer import MacroAnalyzer  # noqa: E402
+from researchos.data_engine.macro_analyzer import MacroAnalyzer  # noqa: E402
 
 # noqa: E402
-from researchos.engines.data.macro_provider import MacroFactorProvider  # noqa: E402
+from researchos.data_engine.macro_provider import MacroFactorProvider  # noqa: E402
 
 # noqa: E402
-from researchos.engines.data.repository import SqliteDatasetRepository  # noqa: E402
+from researchos.data_engine.repository import SqliteDatasetRepository  # noqa: E402
 
 # noqa: E402
 

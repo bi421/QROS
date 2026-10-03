@@ -11,9 +11,9 @@ from datetime import datetime
 
 import yfinance as yf
 
-from researchos.engines.data.candle import Candle
-from researchos.engines.data.dataset import HistoricalDataset
-from researchos.engines.data.repository import SqliteDatasetRepository
+from researchos.data_engine.candle import Candle
+from researchos.data_engine.dataset import HistoricalDataset
+from researchos.data_engine.repository import SqliteDatasetRepository
 
 # Download BTCUSD data
 btc = yf.download("BTC-USD", start="2023-01-01", end=datetime.now().strftime("%Y-%m-%d"))

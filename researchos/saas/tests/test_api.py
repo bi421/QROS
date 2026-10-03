@@ -19,6 +19,10 @@ class StaticAuth:
     def __init__(self, context: TenantContext) -> None:
         self.context = context
 
+    def authenticate_user(self, authorization: str | None) -> UUID:
+        assert authorization == "Bearer test"
+        return self.context.user_id
+
     def authenticate(self, authorization: str | None) -> TenantContext:
         assert authorization == "Bearer test"
         return self.context
@@ -149,8 +153,9 @@ def test_dataset_upload_creates_immutable_version_and_stores_bytes() -> None:
         headers={"Authorization": "Bearer test"},
     )
     assert versions.status_code == 200
-    assert len(versions.json()) == 1
-    version = versions.json()[0]
+    payload_versions = versions.json()
+    assert payload_versions["pagination"]["total"] == 1
+    version = payload_versions["data"][0]
     assert version["id"] == payload["version"]["id"]
     assert storage.get(version["storage_path"]) == body
     assert store.get_dataset(context.workspace_id, UUID(payload["id"])) is not None
@@ -175,7 +180,7 @@ def test_dataset_versions_are_append_only() -> None:
         headers={"Authorization": "Bearer test"},
     )
     assert versions.status_code == 200
-    assert [item["version_no"] for item in versions.json()] == [1, 2]
+    assert [item["version_no"] for item in versions.json()["data"]] == [2, 1]
 
 
 def test_create_research_job_requires_existing_tenant_dataset_version() -> None:
@@ -333,7 +338,7 @@ def test_cross_tenant_dataset_and_version_access_returns_not_found() -> None:
     assert other_client.get(
         f"/v1/datasets/{dataset_id}/versions",
         headers={"Authorization": "Bearer test"},
-    ).json() == []
+    ).json()["data"] == []
     assert other_client.post(
         f"/v1/datasets/{dataset_id}/versions",
         headers={"Authorization": "Bearer test"},
@@ -394,6 +399,7 @@ def test_http_errors_include_structured_error_metadata() -> None:
         "code": "service_unavailable",
         "message": "SaaS authentication provider is not configured",
         "request_id": "req-structured",
+        "correlation_id": "req-structured",
     }
 
 
@@ -404,8 +410,45 @@ def test_validation_errors_include_structured_error_metadata() -> None:
         headers={"Authorization": "Bearer test", "Idempotency-Key": "validation"},
         json={"dataset_version_id": "not-a-uuid"},
     )
-    assert response.status_code == 422
+    assert response.status_code == 400
     payload = response.json()
     assert payload["error"]["code"] == "validation_error"
     assert payload["error"]["request_id"]
     assert isinstance(payload["detail"], list)
+
+
+def test_dataset_versions_reject_invalid_sort_and_filter() -> None:
+    client, _, _, _ = _client()
+    created = _upload(client, "sort-filter", b"x")
+    dataset_id = created.json()["id"]
+    bad_sort = client.get(f"/v1/datasets/{dataset_id}/versions?sort_by=not_a_field", headers={"Authorization": "Bearer test"})
+    assert bad_sort.status_code == 400
+    assert bad_sort.json()["code"] == "INVALID_SORT"
+    assert bad_sort.json()["request_id"] == bad_sort.headers["X-Request-ID"]
+    bad_filter = client.get(f"/v1/datasets/{dataset_id}/versions?filter[status]=completed", headers={"Authorization": "Bearer test"})
+    assert bad_filter.status_code == 400
+    assert bad_filter.json()["code"] == "INVALID_FILTER"
+
+def test_readiness_probe_failure_fails_closed() -> None:
+    def probe() -> None:
+        raise RuntimeError("database unavailable")
+
+    client = TestClient(create_app(readiness_probe=probe))
+    response = client.get("/readyz")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "SaaS dependency readiness check failed"
+
+
+def test_readiness_probe_success_keeps_endpoint_ready() -> None:
+    calls = []
+
+    def probe() -> None:
+        calls.append("checked")
+
+    client = TestClient(create_app(readiness_probe=probe))
+    response = client.get("/readyz")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}
+    assert calls == ["checked"]

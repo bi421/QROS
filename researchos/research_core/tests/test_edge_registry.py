@@ -1,3 +1,7 @@
+from typing import TypedDict
+
+from researchos.probability.economic_cost import EconomicCostContext
+from researchos.probability.calibration import CalibrationResult
 from researchos.research_core.edge_registry import (
     DEFAULT_EDGE_REGISTRY,
     EdgeDefinition,
@@ -5,6 +9,23 @@ from researchos.research_core.edge_registry import (
     EdgeState,
 )
 from researchos.research_core.evidence import EvidenceArtifact, EvidenceKind
+from researchos.research_core.multiple_testing import adjust_p_values
+
+
+class _EdgeEvaluateKwargs(TypedDict, total=False):
+    sample_size: int
+    out_of_sample: bool
+    replicated: bool
+    observed_effect_size: float
+    uncertainty_lower_bound: float | None
+    out_of_sample_evidence_id: str | None
+    replication_evidence_id: str | None
+    out_of_sample_evidence: EvidenceArtifact | None
+    replication_evidence: EvidenceArtifact | None
+    multiple_testing_result: object
+    multiple_testing_hypothesis_index: int
+    calibration_result: CalibrationResult | None
+    economic_cost_context: EconomicCostContext | None
 
 
 DATASET_SHA = "a" * 64
@@ -40,6 +61,23 @@ def _rep() -> EvidenceArtifact:
     )
 
 
+def _multiple_testing() -> object:
+    return adjust_p_values((0.01, 0.20), method="holm")
+
+
+def _economic_cost() -> EconomicCostContext:
+    return EconomicCostContext()
+
+
+def _calibration(sample_size: int = 100) -> CalibrationResult:
+    return CalibrationResult(
+        brier_score=0.08,
+        sample_size=sample_size,
+        mean_predicted_probability=0.5,
+        observed_frequency=0.5,
+    )
+
+
 def test_default_edge_requires_immutable_evidence_artifacts() -> None:
     snapshot = DEFAULT_EDGE_REGISTRY.evaluate(
         sample_size=29,
@@ -50,6 +88,7 @@ def test_default_edge_requires_immutable_evidence_artifacts() -> None:
     decision = snapshot.decisions[0]
     assert decision.state is EdgeState.NOT_ELIGIBLE
     assert "insufficient_sample_size:29<30" in decision.reasons
+    assert "multiple_testing_result_required" in decision.reasons
     assert "out_of_sample_evidence_artifact_required" in decision.reasons
     assert "replication_evidence_artifact_required" in decision.reasons
 
@@ -65,6 +104,9 @@ def test_default_edge_becomes_eligible_only_after_declared_gates() -> None:
         replication_evidence_id="rep-1",
         out_of_sample_evidence=_oos(),
         replication_evidence=_rep(),
+        multiple_testing_result=_multiple_testing(),
+        calibration_result=_calibration(),
+        economic_cost_context=_economic_cost(),
     )
     assert snapshot.decisions[0].state is EdgeState.ELIGIBLE
     assert snapshot.decisions[0].reasons == ()
@@ -82,6 +124,8 @@ def test_registry_snapshot_is_deterministic() -> None:
         replication_evidence_id="rep-1",
         out_of_sample_evidence=_oos(),
         replication_evidence=_rep(),
+        multiple_testing_result=_multiple_testing(),
+        calibration_result=_calibration(),
     )
     assert DEFAULT_EDGE_REGISTRY.evaluate(**kwargs).registry_sha256 == (
         DEFAULT_EDGE_REGISTRY.evaluate(**kwargs).registry_sha256
@@ -109,7 +153,7 @@ def _strict_edge() -> EdgeDefinition:
     )
 
 
-def _passing_evidence() -> dict[str, object]:
+def _passing_evidence() -> _EdgeEvaluateKwargs:
     return {
         "sample_size": 100,
         "out_of_sample": True,
@@ -120,7 +164,73 @@ def _passing_evidence() -> dict[str, object]:
         "replication_evidence_id": "rep-1",
         "out_of_sample_evidence": _oos(),
         "replication_evidence": _rep(),
+        "multiple_testing_result": _multiple_testing(),
+        "calibration_result": _calibration(),
+        "economic_cost_context": _economic_cost(),
     }
+
+
+def test_economic_cost_context_is_required() -> None:
+    args = _passing_evidence()
+    args["economic_cost_context"] = None
+    state, reasons = _strict_edge().evaluate(**args)
+    assert state is EdgeState.NOT_ELIGIBLE
+    assert reasons == ("economic_cost_context_required",)
+
+
+def test_net_effect_after_economic_cost_must_clear_minimum() -> None:
+    args = _passing_evidence()
+    args["economic_cost_context"] = EconomicCostContext(spread_cost=0.04, slippage_cost=0.03)
+    state, reasons = _strict_edge().evaluate(**args)
+    assert state is EdgeState.NOT_ELIGIBLE
+    assert reasons == ("net_effect_below_minimum:0.07999999999999999<0.1",)
+
+def test_zero_cost_context_does_not_duplicate_effect_failure() -> None:
+    args = _passing_evidence()
+    args["observed_effect_size"] = 0.09
+    state, reasons = _strict_edge().evaluate(**args)
+    assert state is EdgeState.NOT_ELIGIBLE
+    assert reasons == ("effect_below_minimum:0.09<0.1",)
+
+
+def test_calibration_result_is_required() -> None:
+    args = _passing_evidence()
+    args["calibration_result"] = None
+    state, reasons = _strict_edge().evaluate(**args)
+    assert state is EdgeState.NOT_ELIGIBLE
+    assert reasons == ("calibration_result_required",)
+
+
+def test_calibration_sample_size_is_governed() -> None:
+    args = _passing_evidence()
+    args["calibration_result"] = _calibration(29)
+    state, reasons = _strict_edge().evaluate(**args)
+    assert state is EdgeState.NOT_ELIGIBLE
+    assert reasons == ("calibration_sample_size_insufficient:29<30",)
+
+
+def test_multiple_testing_result_is_required() -> None:
+    args = _passing_evidence()
+    args["multiple_testing_result"] = None
+    state, reasons = _strict_edge().evaluate(**args)
+    assert state is EdgeState.NOT_ELIGIBLE
+    assert reasons == ("multiple_testing_result_required",)
+
+
+def test_multiple_testing_rejection_is_required() -> None:
+    args = _passing_evidence()
+    args["multiple_testing_result"] = adjust_p_values((0.9,), method="holm")
+    state, reasons = _strict_edge().evaluate(**args)
+    assert state is EdgeState.NOT_ELIGIBLE
+    assert reasons == ("multiple_testing_not_rejected",)
+
+
+def test_multiple_testing_hypothesis_index_is_validated() -> None:
+    args = _passing_evidence()
+    args["multiple_testing_hypothesis_index"] = 2
+    state, reasons = _strict_edge().evaluate(**args)
+    assert state is EdgeState.NOT_ELIGIBLE
+    assert reasons == ("multiple_testing_hypothesis_index_invalid",)
 
 
 def test_effect_below_minimum_blocks_eligibility() -> None:

@@ -13,7 +13,7 @@ from researchos.research_core import (
 SHA256 = "a" * 64
 
 
-def _dataset(**overrides):
+def _dataset(**overrides: object) -> ResearchDataset:
     values = {
         "dataset_id": "dataset-1",
         "asset": "XAUUSD",
@@ -25,7 +25,7 @@ def _dataset(**overrides):
     return ResearchDataset.from_content(**values)
 
 
-def test_frozen_workflow_accepts_xauusd_m1_dataset():
+def test_frozen_workflow_accepts_xauusd_m1_dataset() -> None:
     request = ResearchRequest(dataset=_dataset())
 
     assert request.workflow_id == FROZEN_XAUUSD_M1_WORKFLOW
@@ -33,24 +33,24 @@ def test_frozen_workflow_accepts_xauusd_m1_dataset():
     assert request.dataset.provenance.row_count == 1
 
 
-def test_workflow_rejects_non_frozen_workflow():
+def test_workflow_rejects_non_frozen_workflow() -> None:
     with pytest.raises(ValueError, match="unsupported workflow_id"):
         ResearchRequest(dataset=_dataset(), workflow_id="experimental")
 
 
-def test_workflow_rejects_non_xauusd_dataset():
+def test_workflow_rejects_non_xauusd_dataset() -> None:
     with pytest.raises(ValueError, match="XAUUSD"):
         ResearchRequest(dataset=_dataset(asset="BTCUSDT"))
 
 
-def test_dataset_provenance_is_derived_from_content_and_rows():
+def test_dataset_provenance_is_derived_from_content_and_rows() -> None:
     dataset = _dataset()
     assert dataset.content_sha256 != SHA256
     assert len(dataset.provenance.rows_sha256) == 64
     assert dataset.provenance.row_count == len(dataset.rows)
 
 
-def test_dataset_rejects_tampered_rows_against_provenance():
+def test_dataset_rejects_tampered_rows_against_provenance() -> None:
     dataset = _dataset()
     with pytest.raises(ValueError, match="rows do not match"):
         ResearchDataset(
@@ -62,27 +62,27 @@ def test_dataset_rejects_tampered_rows_against_provenance():
         )
 
 
-def test_dataset_provenance_is_stable_for_same_content_and_rows():
+def test_dataset_provenance_is_stable_for_same_content_and_rows() -> None:
     first = _dataset()
     second = _dataset()
     assert first.content_sha256 == second.content_sha256
     assert first.provenance.rows_sha256 == second.provenance.rows_sha256
 
 
-def test_dataset_content_identity_changes_when_uploaded_bytes_change():
+def test_dataset_content_identity_changes_when_uploaded_bytes_change() -> None:
     first = _dataset()
     second = _dataset(content=b"different-bytes", rows=())
     assert first.content_sha256 != second.content_sha256
 
 
-def test_dataset_requires_nonnegative_row_count():
+def test_dataset_requires_nonnegative_row_count() -> None:
     with pytest.raises(ValueError, match="row_count"):
         from researchos.research_core.contracts import DatasetProvenance
 
         DatasetProvenance(SHA256, SHA256, -1)
 
 
-def test_result_requires_valid_status_and_source_identity():
+def test_result_requires_valid_status_and_source_identity() -> None:
     artifact = ResearchArtifact("artifact-1", "evidence", SHA256)
     result = ResearchResult("SUCCEEDED", SHA256, (artifact,))
 
@@ -90,6 +90,6 @@ def test_result_requires_valid_status_and_source_identity():
     assert result.artifacts == (artifact,)
 
 
-def test_successful_result_cannot_hide_failures():
+def test_successful_result_cannot_hide_failures() -> None:
     with pytest.raises(ValueError, match="failures"):
         ResearchResult("SUCCEEDED", SHA256, failures=("failure",))

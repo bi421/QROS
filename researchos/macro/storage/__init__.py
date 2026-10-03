@@ -1,12 +1,11 @@
-"""
-ResearchOS Macro Intelligence Layer - Storage Package
+"""ResearchOS Macro Intelligence Layer - Storage Package.
+
+Only implemented storage contracts are public here. Experimental skeletons remain
+internal until their read/write methods are fully implemented and verified.
 """
 
 from researchos.macro.storage.base import BaseStore
-from researchos.macro.storage.skeleton import JsonStore, ParquetStore
 
 __all__ = [
     "BaseStore",
-    "ParquetStore",
-    "JsonStore",
 ]

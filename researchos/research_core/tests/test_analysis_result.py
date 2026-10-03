@@ -1,9 +1,27 @@
 from __future__ import annotations
 
+from typing import Any, TypedDict
+
 import pytest
 
 from researchos.research_core.analysis_result import AnalysisResult, AnalysisState
 from researchos.research_core.intelligence import ResearchContext, ResearchPlanner
+
+
+class _AnalysisResultFromPlanKwargs(TypedDict):
+    analysis_id: str
+    claim_id: str
+    population_definition: str
+    time_window: str
+    data_version: str
+    feature_version: str
+    label_version: str
+    sample_size: int
+    point_estimate: Any
+    uncertainty_interval: tuple[float, float] | None
+    probability_definition: str
+    effect_size: Any
+    result_artifact_hash: str
 
 
 def _plan():
@@ -20,21 +38,21 @@ def _plan():
 
 def test_analysis_result_binds_plan_identity_and_is_deterministic() -> None:
     plan = _plan()
-    kwargs = dict(
-        analysis_id="analysis-1",
-        claim_id="claim-1",
-        population_definition="XAUUSD M1 returns",
-        time_window="2021-01-01/2025-12-31",
-        data_version="dataset-v1",
-        feature_version="features-v1",
-        label_version="labels-v1",
-        sample_size=100,
-        point_estimate={"mean": 0.01},
-        uncertainty_interval=(-0.01, 0.03),
-        probability_definition="not_applicable",
-        effect_size=0.01,
-        result_artifact_hash="b" * 64,
-    )
+    kwargs: _AnalysisResultFromPlanKwargs = {
+        "analysis_id": "analysis-1",
+        "claim_id": "claim-1",
+        "population_definition": "XAUUSD M1 returns",
+        "time_window": "2021-01-01/2025-12-31",
+        "data_version": "dataset-v1",
+        "feature_version": "features-v1",
+        "label_version": "labels-v1",
+        "sample_size": 100,
+        "point_estimate": {"mean": 0.01},
+        "uncertainty_interval": (-0.01, 0.03),
+        "probability_definition": "not_applicable",
+        "effect_size": 0.01,
+        "result_artifact_hash": "b" * 64,
+    }
     first = AnalysisResult.from_plan(plan, **kwargs)
     second = AnalysisResult.from_plan(plan, **kwargs)
     assert first.method == "quant.calculate_statistics.v1"

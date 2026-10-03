@@ -4,7 +4,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from researchos.saas.api import create_app
-from researchos.saas.contracts import Plan, TenantContext
+from researchos.saas.contracts import Plan, TenantContext, WorkspaceRole
 from researchos.saas.datasets import DatasetVersion, InMemoryDatasetStorage, InMemoryDatasetStore
 
 
@@ -12,8 +12,10 @@ class StaticAuth:
     def __init__(self, context: TenantContext) -> None:
         self.context = context
 
-    def authenticate(self, authorization: str | None) -> TenantContext:
+    def authenticate(self, authorization: str | None, requested_workspace_id=None) -> TenantContext:
         assert authorization == "Bearer test"
+        if requested_workspace_id is not None and requested_workspace_id != self.context.workspace_id:
+            raise RuntimeError("workspace mismatch")
         return self.context
 
 
@@ -23,7 +25,7 @@ class FailingVersionStore(InMemoryDatasetStore):
 
 
 def test_failed_initial_dataset_upload_rolls_back_metadata_and_object() -> None:
-    context = TenantContext(uuid4(), uuid4(), Plan.PRO)
+    context = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
     store = FailingVersionStore()
     storage = InMemoryDatasetStorage()
     client = TestClient(
@@ -31,7 +33,8 @@ def test_failed_initial_dataset_upload_rolls_back_metadata_and_object() -> None:
             auth_provider=StaticAuth(context),
             dataset_store=store,
             dataset_storage=storage,
-        )
+        ),
+        raise_server_exceptions=False,
     )
 
     response = client.post(

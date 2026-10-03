@@ -1,4 +1,6 @@
 import numpy as np
+import pandas as pd
+from typing import Any
 from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
 
@@ -7,14 +9,14 @@ from researchos.quant_engine.backtest import BacktestEngine
 
 
 class Objective:
-    def __init__(self, df_h, train_df, val_df, test_df, feature_cols):
+    def __init__(self, df_h: pd.DataFrame, train_df: pd.DataFrame, val_df: pd.DataFrame, test_df: pd.DataFrame, feature_cols: list[str]) -> None:
         self.df_h = df_h
         self.train_df = train_df
         self.val_df = val_df
         self.test_df = test_df
         self.feature_cols = feature_cols
 
-    def make_features(self, df, selected_cols, target_horizon=1):
+    def make_features(self, df: pd.DataFrame, selected_cols: list[str], target_horizon: int = 1) -> pd.DataFrame:
         df = df.copy()
         close = df["close"]
         # Үндсэн feature-үүд (заавал байх ёстой)
@@ -54,7 +56,7 @@ class Objective:
         df = df.replace([np.inf, -np.inf], np.nan).ffill().fillna(0)
         return df[keep_cols + ["target"]]
 
-    def __call__(self, trial):
+    def __call__(self, trial: Any) -> float:
         # Hyperparameter search space
         n_estimators = trial.suggest_int("n_estimators", 50, 300, step=50)
         max_depth = trial.suggest_int("max_depth", 3, 12)

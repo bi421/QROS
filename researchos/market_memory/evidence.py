@@ -42,8 +42,15 @@ def compute_evidence_provenance_digest(
     validation_method: str,
     random_seed: int | None,
     result: dict[str, Any],
+    dataset_content_hash: str | None = None,
+    dataset_hash: str | None = None,
 ) -> str:
-    """Return a deterministic SHA-256 identity for an evidence computation."""
+    """Return a deterministic SHA-256 identity for an evidence computation.
+
+    When exact dataset identity is available, both content and dataset hashes
+    are included in the digest. Legacy callers that only provide a dataset
+    version retain the historical digest shape for compatibility.
+    """
     payload = {
         "dataset_id": dataset_id,
         "dataset_version": dataset_version,
@@ -58,6 +65,13 @@ def compute_evidence_provenance_digest(
         "random_seed": random_seed,
         "result": result,
     }
+    if dataset_content_hash is not None or dataset_hash is not None:
+        if dataset_content_hash is None or dataset_hash is None:
+            raise ValueError(
+                "dataset_content_hash and dataset_hash must be provided together"
+            )
+        payload["dataset_content_hash"] = dataset_content_hash
+        payload["dataset_hash"] = dataset_hash
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -114,6 +128,8 @@ def create_evidence_record(
         validation_method=validation_method,
         random_seed=random_seed,
         result=result,
+        dataset_content_hash=dataset_content_hash,
+        dataset_hash=dataset_hash,
     )
     finding_id = f"EVIDENCE|{dataset_id}|{finding_name}|{condition_definition}|{time_range[0]}|{provenance_digest[:16]}"
     record_uncertainty = dict(uncertainty or {})

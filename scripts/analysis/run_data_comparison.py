@@ -3,7 +3,7 @@ import sys
 sys.path.insert(0, ".")
 from datetime import datetime, timedelta
 
-from researchos.engines.data import BrokerConnector, DataComparator
+from researchos.data_engine import BrokerConnector, DataComparator
 
 print("=" * 60)
 print("🚀 DATA COMPARATOR: MT5 vs TradingView (tvdatafeed)")

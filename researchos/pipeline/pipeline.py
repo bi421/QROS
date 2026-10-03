@@ -20,7 +20,7 @@ The pipeline NEVER:
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Any, TypeVar
 
 from researchos.objects.cognitive import CognitiveAssessment
 from researchos.objects.confidence import Confidence, ConfidenceReport
@@ -36,6 +36,8 @@ from researchos.objects.scenario import Scenario, ScenarioSet
 from researchos.objects.validation import FailureAnalysis, Validation
 from researchos.pipeline.references import ReferenceValidator
 from researchos.repository.interface import RepositoryInterface
+
+T = TypeVar("T")
 
 
 class ResearchPipeline:
@@ -58,6 +60,15 @@ class ResearchPipeline:
         """
         self.repo = repository
         self.validator = ReferenceValidator(repository)
+
+    def _require(self, object_id: str | None, cls: type[T]) -> T:
+        """Load a repository object and enforce its concrete runtime type."""
+        if object_id is None:
+            raise ValueError(f"Missing required {cls.__name__} reference")
+        obj = self.repo.get(object_id)
+        if not isinstance(obj, cls):
+            raise ValueError(f"Expected {cls.__name__} for '{object_id}'")
+        return obj
 
     # ------------------------------------------------------------------
     # Stage 1: Research initiation
@@ -144,7 +155,7 @@ class ResearchPipeline:
 
         self.repo.save(obs)
 
-        research = self.repo.get(research_id)
+        research = self._require(research_id, Research)
         research.observation_ids.append(obs.id)
         self.repo.save(research)
 
@@ -209,13 +220,13 @@ class ResearchPipeline:
 
         if research_id:
             self.validator.require_exists(research_id, "Research")
-            research = self.repo.get(research_id)
+            research = self._require(research_id, Research)
             if not research.evidence_registry_id:
                 registry = EvidenceRegistry(research_id=research_id)
                 self.repo.save(registry)
                 research.evidence_registry_id = registry.id
             else:
-                registry = self.repo.get(research.evidence_registry_id)
+                registry = self._require(research.evidence_registry_id, EvidenceRegistry)
             registry.add_evidence(ev)
             self.repo.save(registry)
             self.repo.save(research)
@@ -377,13 +388,13 @@ class ResearchPipeline:
 
         self.repo.save(hypothesis)
 
-        research = self.repo.get(research_id)
+        research = self._require(research_id, Research)
         if not research.hypothesis_set_id:
             hs = HypothesisSet(research_id=research_id)
             self.repo.save(hs)
             research.hypothesis_set_id = hs.id
         else:
-            hs = self.repo.get(research.hypothesis_set_id)
+            hs = self._require(research.hypothesis_set_id, HypothesisSet)
         hs.add_hypothesis(hypothesis)
         self.repo.save(hs)
         self.repo.save(research)
@@ -459,13 +470,13 @@ class ResearchPipeline:
 
         self.repo.save(scenario)
 
-        research = self.repo.get(research_id)
+        research = self._require(research_id, Research)
         if not research.scenario_set_id:
             ss = ScenarioSet(research_id=research_id)
             self.repo.save(ss)
             research.scenario_set_id = ss.id
         else:
-            ss = self.repo.get(research.scenario_set_id)
+            ss = self._require(research.scenario_set_id, ScenarioSet)
         ss.add_scenario(scenario)
         self.repo.save(ss)
         self.repo.save(research)
@@ -522,13 +533,13 @@ class ResearchPipeline:
 
         if research_id:
             self.validator.require_exists(research_id, "Research")
-            research = self.repo.get(research_id)
+            research = self._require(research_id, Research)
             if not research.confidence_report_id:
                 cr = ConfidenceReport(research_id=research_id)
                 self.repo.save(cr)
                 research.confidence_report_id = cr.id
             else:
-                cr = self.repo.get(research.confidence_report_id)
+                cr = self._require(research.confidence_report_id, ConfidenceReport)
             cr.add_confidence(confidence)
             self.repo.save(cr)
             self.repo.save(research)
@@ -576,13 +587,13 @@ class ResearchPipeline:
 
         self.repo.save(contradiction)
 
-        research = self.repo.get(research_id)
+        research = self._require(research_id, Research)
         if not research.contradiction_report_id:
             cr = ContradictionReport(research_id=research_id)
             self.repo.save(cr)
             research.contradiction_report_id = cr.id
         else:
-            cr = self.repo.get(research.contradiction_report_id)
+            cr = self._require(research.contradiction_report_id, ContradictionReport)
         cr.add_contradiction(contradiction)
         self.repo.save(cr)
         self.repo.save(research)
@@ -652,7 +663,7 @@ class ResearchPipeline:
 
         self.repo.save(report)
 
-        research = self.repo.get(research_id)
+        research = self._require(research_id, Research)
         research.report_id = report.id
         research.complete()
         self.repo.save(research)
@@ -705,7 +716,7 @@ class ResearchPipeline:
 
         self.repo.save(validation)
 
-        research = self.repo.get(research_id)
+        research = self._require(research_id, Research)
         research.validate()
         self.repo.save(research)
 

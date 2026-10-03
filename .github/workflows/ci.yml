@@ -1,10 +1,10 @@
+---
 name: CI
 
 on:
   push:
     branches: [main, develop, "feat/**"]
   pull_request:
-    branches: [main, develop]
 
 # Preserve an independent verification result for every main commit.
 # New pushes must not cancel a run already executing for the same branch.
@@ -32,10 +32,52 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install pytest pytest-cov ruff
           python -m pip install -e ".[dev,test,saas]"
+      - name: Verify migration security invariants
+        run: python scripts/verify_migrations.py
+      - name: Verify SaaS authorization coverage
+        run: python scripts/check_authz_coverage.py
       - name: Run ruff
         run: ruff check .
       - name: Run pytest
-        run: python -m pytest researchos/tests/ researchos/research_core/tests/ researchos/saas/tests/ -v --tb=short -x --import-mode=importlib
+        run: python -m pytest researchos/tests/ researchos/research_core/tests/ researchos/saas/tests/ -v --tb=short -x --import-mode=importlib --ignore=researchos/tests/test_cpp_backtest_regression.py
+      - name: Run production forward-migration governance tests
+        run: python -m pytest tests/test_production_forward_migration_governance.py -q
+
+
+  static-type-check:
+    name: Static Type Check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -e ".[dev,test,saas]"
+      - name: Run mypy
+        run: mypy
+
+
+  property-tests:
+    name: Property-Based Tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -e ".[dev,test,saas]"
+      - name: Run property tests
+        run: python -m pytest researchos/tests/test_quality_property_contracts.py -v --tb=short
 
   quant-engine:
     name: Quant Engine (C++ / nanobind)
@@ -54,7 +96,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install nanobind scikit-build-core pytest
+          python -m pip install nanobind scikit-build-core pytest numpy pandas
       - name: Configure C++ Engine
         run: |
           cmake -S researchos/engines/quant \
@@ -68,6 +110,12 @@ jobs:
         env:
           PYTHONPATH: researchos/engines/quant/python
         run: python -m pytest researchos/engines/quant/tests/ -v -x
+      - name: Verify C++ regression backend
+        env:
+          PYTHONPATH: researchos/engines/quant/python
+        run: |
+          python -c "from researchos.engines.quant.cpp_backend import CppQuantAdapter; e=CppQuantAdapter(); assert e.is_cpp, 'compiled C++ backend is not active'; print(e.get_version())"
+          python -m pytest researchos/tests/test_cpp_backtest_regression.py -v --tb=short
 
   health-evidence:
     name: Health Evidence
@@ -88,7 +136,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,test,saas]" 2>&1 || true
+          python -m pip install -e ".[dev,test,saas]"
           python -m pip install nanobind scikit-build-core pytest ruff
       - name: Build C++ Engine
         run: |
@@ -102,4 +150,5 @@ jobs:
         env:
           PYTHONPATH: researchos/engines/quant/python
         run: |
-          python scripts/final_health_check.py --exact-commit="${GITHUB_SHA}"
+          python -m pytest researchos/tests/ researchos/research_core/tests/ -v --tb=short -x --ignore=researchos/tests/test_cpp_backtest_regression.py
+          ruff check .
