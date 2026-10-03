@@ -63,3 +63,5 @@ __all__ = [
     "ResearchReport",
     "ResearchQuestion",
 ]
+
+# Strict diagnostic trigger; no runtime behavior change.

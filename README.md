@@ -146,20 +146,9 @@ See `todo/saas.md` for the canonical execution checklist.
 ```
 QROS/
 ├── researchos/
-│   ├── claims/              # Claims and evidence graph
-│   ├── evidence/            # Evidence envelopes and lineage
-│   ├── probability/         # Probability contracts
-│   ├── research_core/       # Governed research contracts
-│   └── saas/                # API, jobs, datasets, billing, persistence
 ├── supabase/
-│   └── migrations/          # Database/RLS/tenant-boundary migrations
 ├── docs/
-│   ├── architecture/
-│   ├── governance/
-│   ├── product/
-│   └── saas/
 ├── todo/
-│   └── saas.md              # Canonical SaaS roadmap
 ├── scripts/
 └── README.md
 ```
@@ -211,6 +200,12 @@ QROS does not:
 - Treat statistical significance as economic significance
 - Declare production readiness without integration and operational verification
 
-## License
+## Licensing Status
+
+**No open-source or other software license is currently granted for QROS.**
+
+The repository is public, but the absence of a license means the default copyright rules apply to the source code. The research-purpose statement below is a project-purpose disclaimer, **not a software license**.
+
+If QROS is intended to be distributed, reused, or incorporated into a commercial SaaS product by others, a deliberate license choice must be made and recorded in a root `LICENSE` file.
 
 QROS is research infrastructure. Research outputs are for research purposes and do not constitute financial advice or instructions to execute trades.

@@ -1,6 +1,7 @@
 from researchos.decision_engine.probability import ProbabilityAssessment
 from researchos.decision_pipeline import DecisionPipelineInput, run_decision_pipeline
-from researchos.risk.contracts import TradeStatistics
+from researchos.risk.contracts import RiskPolicy, TradeStatistics
+from researchos.risk.governance import RiskAccountState, StrategyRiskState
 
 
 def _assessment(*, calibration_status: str | None = None) -> ProbabilityAssessment:
@@ -25,6 +26,15 @@ def test_pipeline_produces_human_review_report() -> None:
             assessment=_assessment(), asset="XAUUSD", direction="bullish", account_equity=10_000,
             trade_statistics=TradeStatistics(average_win=150, average_loss=100, sample_size=100),
             research_valid=True, risk_per_unit=20,
+            risk_policy=RiskPolicy(max_risk_fraction=0.0025),
+            risk_account=RiskAccountState(
+                day_start_equity=10_000,
+                current_equity=10_000,
+                high_water_mark=10_000,
+                strategy_reference_equity=10_000,
+            ),
+            proposed_notional=1_000,
+            strategy_state=StrategyRiskState.RISK_REVIEW,
         )
     )
     assert report.schema_version == "pretrade.v1"

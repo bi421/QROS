@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from researchos.risk.contracts import RiskCalculation
+from researchos.risk.governance import RiskDecision
 
 ACTION_SCHEMA_VERSION = "pretrade.v1"
 
@@ -26,6 +27,10 @@ class PreTradeReport:
     status: str
     research_id: str | None = None
     limitations: tuple[str, ...] = ()
+    risk_governance_valid: bool = False
+    risk_governance_status: str = "NOT_EVALUATED"
+    risk_violations: tuple[str, ...] = ()
+    risk_decision_hash: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -41,6 +46,10 @@ class PreTradeReport:
             "status": self.status,
             "research_id": self.research_id,
             "limitations": list(self.limitations),
+            "risk_governance_valid": self.risk_governance_valid,
+            "risk_governance_status": self.risk_governance_status,
+            "risk_violations": list(self.risk_violations),
+            "risk_decision_hash": self.risk_decision_hash,
         }
 
 
@@ -49,13 +58,9 @@ def build_pre_trade_report(
     *,
     research_valid: bool,
     research_limitations: tuple[str, ...] = (),
+    risk_decision: RiskDecision | None = None,
 ) -> PreTradeReport:
-    """Assemble a review report without making an execution decision.
-
-    A report is ``READY_FOR_HUMAN_REVIEW`` only when the research is marked
-    valid and the risk calculation itself completed successfully. Unvalidated
-    research is explicitly blocked from appearing trade-ready.
-    """
+    """Assemble a review report without making an execution decision."""
     risk_valid = risk.status == "CALCULATED"
     limitations = tuple(research_limitations)
 
@@ -65,6 +70,10 @@ def build_pre_trade_report(
         status = "BLOCKED_RISK_CALCULATION"
     elif risk.risk_amount <= 0:
         status = "NO_POSITIVE_RISK_BUDGET"
+    elif risk_decision is None:
+        status = "BLOCKED_RISK_GOVERNANCE"
+    elif not risk_decision.allowed:
+        status = "BLOCKED_RISK_GOVERNANCE"
     else:
         status = "READY_FOR_HUMAN_REVIEW"
 
@@ -81,4 +90,18 @@ def build_pre_trade_report(
         status=status,
         research_id=risk.research_id,
         limitations=limitations,
+        risk_governance_valid=(
+            risk_decision.allowed if risk_decision is not None else False
+        ),
+        risk_governance_status=(
+            risk_decision.status if risk_decision is not None else "NOT_EVALUATED"
+        ),
+        risk_violations=(
+            tuple(item.code.value for item in risk_decision.violations)
+            if risk_decision is not None
+            else ()
+        ),
+        risk_decision_hash=(
+            risk_decision.audit_hash if risk_decision is not None else None
+        ),
     )

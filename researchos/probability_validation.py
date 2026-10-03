@@ -165,7 +165,7 @@ def evaluate_probability_calibration(
                 assessment.neutral_probability,
             )
         )
-        actuals.append(outcome)  # type: ignore[arg-type]
+        actuals.append(outcome)
 
     if n == 0:
         limitations.append("No assessment/outcome pairs supplied")

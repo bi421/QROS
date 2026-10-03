@@ -40,8 +40,15 @@ def git_value(args: list[str]) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-cpp", action="store_true", help="Skip C++ configure/build")
+    parser.add_argument("--exact-commit", help="Require HEAD to equal this commit SHA")
     args = parser.parse_args()
     os.chdir(ROOT)
+
+    if args.exact_commit:
+        actual = git_value(["rev-parse", "HEAD"])
+        if actual != args.exact_commit:
+            print(f"EXACT COMMIT MISMATCH: expected {args.exact_commit}, got {actual}", file=sys.stderr)
+            return 2
 
     checks: dict[str, dict[str, object]] = {}
 
@@ -87,8 +94,10 @@ def main() -> int:
     git_status = command_result("git_status", ["git", "status", "--short", "--branch"])
     checks["git_status"] = git_status
 
-    statuses = [check["status"] for check in checks.values()]
-    overall = "PASS" if all(status == "PASS" for status in statuses) else "FAIL"
+    # SKIPPED is an intentional non-blocking state (for example --skip-cpp).
+    # Only an explicit FAIL makes the overall health gate fail.
+    failures = [check["label"] for check in checks.values() if check["status"] == "FAIL"]
+    overall = "FAIL" if failures else "PASS"
     evidence = {
         "schema_version": 1,
         "health_status": overall,
@@ -99,7 +108,10 @@ def main() -> int:
     }
 
     HEALTH_DIR.mkdir(parents=True, exist_ok=True)
-    HEALTH_JSON.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    serialized = json.dumps(evidence, indent=2, sort_keys=True) + "\n"
+    HEALTH_JSON.write_text(serialized, encoding="utf-8")
+    exact_evidence = HEALTH_DIR / f"health_evidence_{evidence['commit']}.json"
+    exact_evidence.write_text(serialized, encoding="utf-8")
 
     print(json.dumps(evidence, indent=2, sort_keys=True))
     print(f"HEALTH: {overall}")

@@ -53,6 +53,9 @@ class DatasetStore(Protocol):
 
 
 class DatasetStorage(Protocol):
+    def exists(self, storage_path: str) -> bool:
+        ...
+
     def put(self, storage_path: str, file: BinaryIO) -> None:
         ...
 
@@ -61,6 +64,10 @@ class DatasetStorage(Protocol):
 
     def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
         """Create a short-lived URL for an already-authorized private object."""
+        ...
+
+    def download(self, storage_path: str) -> bytes:
+        """Download an already-authorized private object server-side."""
         ...
 
 
@@ -127,6 +134,9 @@ class InMemoryDatasetStorage:
     def __init__(self) -> None:
         self._objects: dict[str, bytes] = {}
 
+    def exists(self, storage_path: str) -> bool:
+        return storage_path in self._objects
+
     def put(self, storage_path: str, file: BinaryIO) -> None:
         if storage_path in self._objects:
             raise ValueError("storage object already exists")
@@ -144,6 +154,12 @@ class InMemoryDatasetStorage:
         if not 1 <= expires_in <= 900:
             raise ValueError("signed URL expiry must be between 1 and 900 seconds")
         return f"memory://{storage_path}?expires_in={expires_in}"
+
+    def download(self, storage_path: str) -> bytes:
+        content = self._objects.get(storage_path)
+        if content is None:
+            raise FileNotFoundError(storage_path)
+        return content
 
 
 class SupabaseDatasetStore:
@@ -269,6 +285,15 @@ class SupabaseDatasetStorage:
         self._client = supabase_client
         self._bucket = bucket
 
+    def exists(self, storage_path: str) -> bool:
+        parent = storage_path.rstrip("/")
+        name = parent.rsplit("/", 1)[-1]
+        prefix = parent.rsplit("/", 1)[0] + "/"
+        result = self._client.storage.from_(self._bucket).list(
+            prefix, {"search": name, "limit": 10}
+        )
+        return any(str(row.get("name", "")) == name for row in (result or []))
+
     def put(self, storage_path: str, file: BinaryIO) -> None:
         self._client.storage.from_(self._bucket).upload(
             path=storage_path,
@@ -278,6 +303,12 @@ class SupabaseDatasetStorage:
 
     def remove(self, storage_path: str) -> None:
         self._client.storage.from_(self._bucket).remove([storage_path])
+
+    def download(self, storage_path: str) -> bytes:
+        response = self._client.storage.from_(self._bucket).download(storage_path)
+        if not isinstance(response, bytes):
+            raise RuntimeError("storage provider returned invalid dataset bytes")
+        return response
 
     def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
         if not 1 <= expires_in <= 900:
@@ -289,7 +320,9 @@ class SupabaseDatasetStorage:
         if isinstance(response, dict):
             signed_url = response.get("signedURL") or response.get("signedUrl")
         else:
-            signed_url = getattr(response, "signedURL", None) or getattr(response, "signedUrl", None)
+            signed_url = getattr(response, "signedURL", None) or getattr(
+                response, "signedUrl", None
+            )
         if not signed_url:
             raise RuntimeError("storage provider returned no signed download URL")
         return str(signed_url)
@@ -311,9 +344,18 @@ def stream_sha256(file: BinaryIO, max_bytes: int) -> tuple[str, int]:
     return digest.hexdigest(), size
 
 
-def storage_path_for(workspace_id: UUID, dataset_id: UUID, digest: str) -> str:
-    """Return a tenant-scoped content-addressed object path."""
-    return f"{workspace_id}/datasets/{dataset_id}/sha256/{digest}"
+def storage_path_for(workspace_id: UUID, digest: str, version_no: int | str) -> str:
+    """Return tenant/{workspace_id}/datasets/{sha256(content)}/{version}/."""
+    try:
+        # Системийн түвшний хамгаалалт: str эсвэл int аль нь ч ирсэн найдвартай хөрвүүлнэ
+        v_no = int(version_no)
+    except (ValueError, TypeError) as e:
+        raise ValueError(f"version_no must be a valid integer, got: {version_no!r}") from e
+
+    if v_no < 1:
+        raise ValueError("version_no must be positive")
+
+    return f"tenant/{workspace_id}/datasets/{digest}/{v_no}/"
 
 
 __all__ = [
