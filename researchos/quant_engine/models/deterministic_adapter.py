@@ -1,8 +1,8 @@
 """Concrete adapter for QROS deterministic research-model contracts.
 
-This adapter connects the existing deterministic training framework to the
-provider-neutral model execution boundary. It owns no evidence, tenant state,
-or trading decisions.
+This adapter connects the registry contract to the existing deterministic
+training executor through the provider-neutral model execution boundary.
+It owns no evidence, tenant state, or trading decisions.
 """
 
 from __future__ import annotations
@@ -11,18 +11,48 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from ..machine_learning.dataset_contracts import ResearchDataset
-from ..training.contracts import ModelContract
+from ..training.contracts import ModelContract as TrainingModelContract
+from ..training.contracts import ModelType
 from ..training.trainer import Trainer, dataset_hash, validate_dataset
+from .contracts import ModelContract
 from .runtime import InferenceRequest, InferenceResult
 
 
 @dataclass
 class DeterministicResearchModelAdapter:
-    """Execute one immutable deterministic training-framework model contract."""
+    """Execute one immutable deterministic registry model contract."""
 
     model: ModelContract
     trainer: Trainer = field(default_factory=Trainer)
     _ready: bool = field(default=False, init=False, repr=False)
+    _training_model: TrainingModelContract = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        """Build the execution contract from the canonical registry contract."""
+        try:
+            model_type = ModelType.from_value(self.model.algorithm)
+        except ValueError as exc:
+            raise ValueError(
+                "unsupported deterministic model algorithm: "
+                f"{self.model.algorithm!r}"
+            ) from exc
+
+        object.__setattr__(
+            self,
+            "_training_model",
+            TrainingModelContract(
+                model_id=self.model.model_id,
+                name=self.model.name,
+                version=self.model.version,
+                model_type=model_type,
+                feature_names=tuple(self.model.feature_names),
+                label_name=self.model.label_name,
+                parameters=dict(self.model.parameters),
+                metadata=dict(self.model.metadata),
+                created_at=self.model.created_at,
+                training_hash=str(self.model.metadata.get("training_hash", "")),
+            ),
+        )
 
     @property
     def model_id(self) -> str:
@@ -58,9 +88,12 @@ class DeterministicResearchModelAdapter:
             )
         if request.seed is not None:
             raise ValueError("request.seed must be None for a deterministic model")
+        if request.dataset_hash != self.model.dataset_hash:
+            raise ValueError(
+                "request.dataset_hash does not match the registry model dataset hash"
+            )
 
         validate_dataset(dataset)
-
         actual_hash = dataset_hash(dataset)
         if actual_hash != request.dataset_hash:
             raise ValueError(
@@ -73,18 +106,26 @@ class DeterministicResearchModelAdapter:
         if dataset.label_name != self.model.label_name:
             raise ValueError("dataset label_name does not match the model contract")
 
-        predictions = tuple(self.trainer.predict(self.model, dataset))
+        predictions = tuple(self.trainer.predict(self._training_model, dataset))
         return InferenceResult(
             model_id=self.model_id,
             model_version=self.model_version,
             dataset_hash=actual_hash,
             predictions=predictions,
             metadata={
-                "model_type": self.model.model_type.value,
+                "algorithm": self.model.algorithm,
                 "feature_names": tuple(self.model.feature_names),
                 "prediction_count": len(predictions),
+                "validation_hash": self.model.validation_hash,
+                "model_contract_hash": self.model.content_hash(),
             },
         )
+
+    def predict_batch(
+        self, requests: Sequence[InferenceRequest]
+    ) -> Sequence[InferenceResult]:
+        """Execute each request in order through the same guarded path."""
+        return tuple(self.predict(request) for request in requests)
 
 
 __all__ = ["DeterministicResearchModelAdapter"]
