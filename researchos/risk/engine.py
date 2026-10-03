@@ -166,20 +166,22 @@ def evaluate_risk_gate(
         ("DAILY_LOSS_UTILIZATION_HIGH", account.daily_loss_fraction, policy.max_daily_loss_fraction),
         ("TOTAL_DRAWDOWN_UTILIZATION_HIGH", account.total_drawdown_fraction, policy.max_total_drawdown_fraction),
         ("STRATEGY_LOSS_UTILIZATION_HIGH", account.strategy_loss_fraction, policy.max_strategy_loss_fraction),
-        ("OPEN_RISK_UTILIZATION_HIGH", projected_open_risk / account.equity, policy.max_portfolio_open_risk_fraction),
-        ("GROSS_EXPOSURE_UTILIZATION_HIGH", projected_gross / account.equity, policy.max_gross_exposure_multiple),
+        ("OPEN_RISK_UTILIZATION_HIGH", projected_open_risk, max_open_risk),
+        ("GROSS_EXPOSURE_UTILIZATION_HIGH", projected_gross, max_gross),
         (
             "INSTRUMENT_EXPOSURE_UTILIZATION_HIGH",
-            projected_instrument / account.equity,
-            policy.max_single_instrument_exposure_multiple,
+            projected_instrument,
+            max_instrument,
         ),
     )
-    for warning, utilization, limit in utilization_checks:
+    for warning, value, limit in utilization_checks:
         if (
             limit > 0
-            and utilization + _ZERO_TOLERANCE >= policy.warning_utilization_fraction
+            and (value / limit) + _ZERO_TOLERANCE
+            >= policy.warning_utilization_fraction
         ):
             warnings.append(warning)
+
 
     status = "BLOCKED" if failures else (
         "RESEARCH_ONLY" if intent.execution_mode is ExecutionMode.RESEARCH else "PASS"
