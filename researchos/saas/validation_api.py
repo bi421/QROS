@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from researchos.saas.validation import ResearchValidationRecord
 from researchos.saas.contracts import TenantContext
+from researchos.saas.store import ResearchJobStore
 
 
 class ResearchValidationStore(Protocol):
@@ -47,7 +48,7 @@ def register_research_validation_routes(
     *,
     tenant_dependency: Callable[..., TenantContext],
     validation_store: ResearchValidationStore | None,
-    job_store: object,
+    job_store: ResearchJobStore,
 ) -> None:
     @app.post("/v1/research-runs/{job_id}/validation", status_code=status.HTTP_201_CREATED, tags=["research"])
     def create_validation(

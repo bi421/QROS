@@ -61,7 +61,15 @@ class ResearchClaimEvidenceGraph:
         if not plan_hash:
             raise ValueError("ResearchClaim clone has no plan_hash")
 
-        graph = ClaimEvidenceGraph(claim_id=claim_copy.id, claim_hash=claim_copy.claim_hash, plan_hash=plan_hash, evidence_hashes=normalized)
+        plan_hash = claim_copy.plan_hash
+        if plan_hash is None:
+            raise ValueError("ResearchClaim has no plan_hash after cloning")
+        graph = ClaimEvidenceGraph(
+            claim_id=claim_copy.id,
+            claim_hash=claim_copy.claim_hash,
+            plan_hash=plan_hash,
+            evidence_hashes=normalized,
+        )
         self._repository.save_object(_GraphObject(graph))
         return graph
 
