@@ -148,6 +148,8 @@ def evaluate_risk_gate(
         failures.append("NO_POSITIVE_RISK_BUDGET")
 
     if intent.execution_mode in {ExecutionMode.PAPER, ExecutionMode.LIVE}:
+        if intent.requested_position_size > _ZERO_TOLERANCE and intent.position_notional <= _ZERO_TOLERANCE:
+            failures.append("MISSING_POSITION_NOTIONAL")
         if (
             intent.probability_calibration_status is None
             or intent.probability_calibration_status.strip().lower()
