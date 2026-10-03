@@ -6,7 +6,8 @@ from researchos.decision_engine.contracts import ProbabilityOutcome
 from researchos.decision_pipeline import DecisionPipelineInput, run_decision_pipeline
 from researchos.market_memory.decision_adapter import market_memory_to_decision_evidence, market_memory_to_probability
 from researchos.market_memory.event_schema import EvidenceRecord, EvidenceStatus, MarketMemoryReport
-from researchos.risk.contracts import TradeStatistics
+from researchos.risk.contracts import RiskPolicy, TradeStatistics
+from researchos.risk.governance import RiskAccountState, StrategyRiskState
 
 
 def _record(name: str, direction: str, probability: float) -> EvidenceRecord:
