@@ -285,6 +285,7 @@ class PythonResearchBackend(ResearchComputationInterface, QuantComputationInterf
             yield_curve_metrics,
         )
 
+        output: Any
         if analytics == "macro_statistics":
             output = macro_series_statistics(list(inputs))
         elif analytics == "yield_curve":

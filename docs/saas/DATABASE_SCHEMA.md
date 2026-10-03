@@ -14,7 +14,7 @@ workspace
 workspace_member
   workspace_id uuid FK workspace
   user_id uuid FK auth.users
-  role text CHECK (owner|admin|researcher|viewer)
+  role text CHECK (owner|admin|researcher|viewer|billing)
   created_at timestamptz
   PK (workspace_id, user_id)
 
@@ -48,6 +48,7 @@ dataset_version
   created_at timestamptz
   UNIQUE (dataset_id, version_no)
   UNIQUE (dataset_id, content_sha256)
+  CHECK storage_path follows tenant/{tenant_id}/datasets/{sha256(content)}/{version}/
 
 research_run
   id uuid PK
@@ -113,6 +114,18 @@ usage_event
   research_run_id uuid FK research_run
   created_at timestamptz
 
+research_finding
+  id uuid PK
+  workspace_id uuid FK workspace
+  research_run_id uuid FK research_run
+  validation_id uuid FK research_validation
+  finding_sha256 text
+  status text
+  payload jsonb
+  contract_version text
+  created_at timestamptz
+  deleted_at timestamptz nullable
+
 audit_log
   id uuid PK
   workspace_id uuid FK workspace
@@ -122,6 +135,12 @@ audit_log
   resource_id uuid
   metadata jsonb
   created_at timestamptz
+
+dataset_version_feed
+  dataset_version_id uuid FK dataset_version
+  experiment_id text
+  created_at timestamptz
+  PK (dataset_version_id, experiment_id)
 ```
 
 ## Tenant isolation contract
@@ -134,6 +153,33 @@ The membership helper is `private.is_workspace_member(...)`, a `SECURITY DEFINER
 
 Cross-resource policies additionally require research runs to reference a dataset version belonging to the same workspace, artifacts to reference runs in the same workspace, and evidence to reference matching runs/artifacts.
 
+
+## Migration compatibility and RLS audit
+
+QROS uses a **forward-only** migration chain under `supabase/migrations/`. There are no down, rollback, or revert migration files. A deployed schema is never repaired by editing an applied migration; the correction is always a new timestamped forward migration.
+
+The tenant boundary uses `workspace_id` rather than a client-supplied `tenant_id`. Authorization is derived from `auth.uid()` through `private.is_workspace_member(workspace_id)`. This deliberately avoids trusting mutable JWT metadata or request-body tenant identifiers.
+
+The current tenant-table RLS audit covers:
+
+- `workspace`, `workspace_member`, `subscription`
+- `dataset`, `dataset_version`
+- `research_run`, `research_run_result`, `research_run_artifact`
+- `artifact`, `evidence`, `usage_event`, `audit_log`
+- `api_idempotency`, `api_rate_limit`
+- `billing_event`, `audit_event`, `retention_deletion_operation`
+- `research_claim`, `research_validation`, `research_finding`
+
+All listed tenant tables are RLS-enabled and forced. Customer-readable tables have membership-scoped SELECT policies plus explicit fail-closed INSERT/UPDATE/DELETE policies. Server-owned projections and coordination state have explicit fail-closed SELECT/INSERT/UPDATE/DELETE policies. The trusted server/service-role path remains outside the browser RLS boundary.
+
+Run the reproducibility gate with:
+
+```bash
+python scripts/verify_migrations.py
+```
+
+The verifier validates strict migration ordering and UTF-8 integrity, rejects down/rollback/revert migrations, resets a fresh local Supabase database so the full chain is replayed in order, checks that every tenant table has RLS enabled, checks the expected CRUD policy shape, and writes `artifacts/migration_schema_diff.sql`. The gate fails if fresh replay leaves schema drift.
+
 ## Dataset immutability
 
 `dataset_version` is append-only. PostgreSQL enforces two invariants:
@@ -141,19 +187,25 @@ Cross-resource policies additionally require research runs to reference a datase
 1. `dataset_version_allocate_no` allocates the next `version_no` under a per-dataset transaction advisory lock.
 2. `dataset_version_immutable` rejects UPDATE/DELETE operations that would mutate or remove a version.
 
-Content is identified by lowercase SHA-256 and duplicate content is rejected per dataset. The API creates a new version and content-addressed object path rather than overwriting an existing scientific source.
+Content is identified by lowercase SHA-256 and duplicate content is deduplicated per dataset. The API hashes the upload before persistence, writes only to the canonical immutable path, then re-reads the stored object and verifies its SHA-256 before recording the version. If identical content already exists, the existing version/path is returned; a concurrent duplicate is reconciled to that same existing version rather than creating a second object.
 
 ## Storage contract
 
 The `qros-datasets` bucket is private. Server-side code uses the privileged Supabase client; browser code never receives service-role/secret credentials.
 
-Current object path contract:
+Canonical object path contract:
 
 ```text
-{workspace_id}/datasets/{dataset_id}/sha256/{sha256}
+tenant/{tenant_id}/datasets/{sha256(content)}/{version}/
 ```
 
-The API computes SHA-256 and byte size before persistence and removes an uploaded object if metadata persistence fails. Supabase recommends resumable/TUS upload flows for large files; those will replace the current server-side multipart path before large-plan production rollout.
+The path is immutable and content-addressed. `tenant_id` is the authenticated workspace/tenant identifier. The canonical path is exactly `tenant/{tenant_id}/datasets/{sha256(content)}/{version}/`; the database validates that the path tenant matches the dataset workspace and that the path digest matches `content_sha256`. Upload computes SHA-256 and byte size before persistence, verifies the persisted bytes again, and never overwrites an existing object. Download verifies the stored object SHA-256 against `dataset_version.content_sha256` before issuing a signed URL.
+
+Dataset versions are append-only. Updating a dataset means creating a new version; the previous version remains readable and its storage object is never overwritten or deleted by an update. Version numbers are unique per dataset and immutable.
+
+`dataset_version_feed` records the immutable lineage edge from a dataset version to an Experiment identifier, exposed by `DatasetVersion.feeds`. Finding retention is enforced by a database trigger: a dataset cannot be deleted while a non-deleted `research_finding` references a research run backed by one of its versions. The API maps this condition to HTTP `409` with the stable message/code `DATASET_REFERENCED`.
+
+Supabase recommends resumable/TUS upload flows for large files; those will replace the current server-side multipart path before large-plan production rollout.
 
 ## Queue contract
 

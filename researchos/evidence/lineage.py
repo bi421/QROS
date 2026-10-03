@@ -39,7 +39,7 @@ decisions and performs no execution.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -160,7 +160,7 @@ class FullChain:
         }
 
 
-def _sorted_hashes(hashes: Sequence[str]) -> list[str]:
+def _sorted_hashes(hashes: Iterable[str]) -> list[str]:
     """Return a deterministically sorted list of hashes."""
     return sorted(list(hashes))
 
@@ -286,8 +286,10 @@ class LineageQueryEngine:
         env = self._get(artifact_hash)
         if env is None:
             return None
-        parents = tuple(LineageNode.from_envelope(self._get(h)) for h in self._parents_of(artifact_hash))
-        children = tuple(LineageNode.from_envelope(self._get(h)) for h in self._children_of(artifact_hash))
+        parent_nodes = [self._get(h) for h in self._parents_of(artifact_hash)]
+        child_nodes = [self._get(h) for h in self._children_of(artifact_hash)]
+        parents = tuple(LineageNode.from_envelope(env) for env in parent_nodes if env is not None)
+        children = tuple(LineageNode.from_envelope(env) for env in child_nodes if env is not None)
         lineage_path = self._lineage_path_hashes(artifact_hash)
         return LineageExplanation(
             artifact=env,
