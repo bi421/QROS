@@ -1,109 +1,112 @@
-name: Exact Release Gate
+name: Exact Release CI
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main, develop]
-  workflow_dispatch:
-    inputs:
-      commit_sha:
-        description: "Exact 40-character commit SHA to validate"
-        required: true
-        type: string
-      release_tag:
-        description: "Optional release tag; created only after the exact SHA is green"
-        required: false
-        type: string
+    tags:
+      - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: exact-release-${{ inputs.commit_sha || github.sha }}
+  group: exact-release-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
-  health-gate:
-    name: Exact SHA Production Health Gate
+  exact-release:
+    name: Exact tagged release gate
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    permissions:
-      contents: read
+    timeout-minutes: 90
     env:
-      RELEASE_SHA: ${{ inputs.commit_sha || github.sha }}
+      RELEASE_SHA: ${{ github.sha }}
+      RELEASE_TAG: ${{ github.ref_name }}
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      TARGET_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+
     steps:
-      - name: Checkout exact release commit
+      - name: Checkout exact tag
         uses: actions/checkout@v5
         with:
-          ref: ${{ env.RELEASE_SHA }}
+          ref: ${{ github.ref }}
           fetch-depth: 0
 
-      - name: Assert exact commit
+      - name: Assert tag resolves to exact SHA
+        shell: bash
         run: |
           set -euo pipefail
           actual="$(git rev-parse HEAD)"
+          tag_sha="$(git rev-list -n 1 "$RELEASE_TAG")"
           test "$actual" = "$RELEASE_SHA"
+          test "$tag_sha" = "$RELEASE_SHA"
           test "${#RELEASE_SHA}" -eq 40
-          echo "Exact release SHA: $actual"
+          echo "Exact release: $RELEASE_TAG -> $RELEASE_SHA"
 
-      - name: Install system dependencies
+      - name: Install PostgreSQL client and build tools
         run: |
-          set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y postgresql-client ninja-build cmake g++
 
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python -m pip install pytest pytest-cov ruff nanobind scikit-build-core cmake -e ".[dev,test,saas]"
-
-      - name: Start isolated Supabase database
+      - name: Install Supabase CLI
         uses: supabase/setup-cli@v2
         with:
           version: latest
 
-      - name: Start local Supabase
+      - name: Install Python dependencies
         run: |
-          supabase init
-          supabase start
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install pytest pytest-cov ruff mypy nanobind scikit-build-core cmake ninja
+          python -m pip install -e ".[dev,test,saas]"
 
-      - name: Build canonical C++ backend
+      - name: Start fresh Supabase database
         run: |
-          set -euo pipefail
-          cmake -S researchos/engines/quant -B researchos/engines/quant/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_PYTHON_BINDINGS=ON
-          cmake --build researchos/engines/quant/build -j
+          supabase start
 
       - name: Build exact-commit Docker image
         run: |
           set -euo pipefail
-          docker build --label "commit=$RELEASE_SHA" -t "qros-api:$RELEASE_SHA" .
-          actual="$(docker inspect --format='{{ index .Config.Labels "commit" }}' "qros-api:$RELEASE_SHA")"
-          test "$actual" = "$RELEASE_SHA"
+          docker build             --label "org.opencontainers.image.revision=$RELEASE_SHA"             --label "commit=$RELEASE_SHA"             -t "qros-api:$RELEASE_SHA" .
+          revision="$(docker inspect --format='{{ index .Config.Labels "org.opencontainers.image.revision" }}' "qros-api:$RELEASE_SHA")"
+          commit="$(docker inspect --format='{{ index .Config.Labels "commit" }}' "qros-api:$RELEASE_SHA")"
+          test "$revision" = "$RELEASE_SHA"
+          test "$commit" = "$RELEASE_SHA"
 
-      - name: Prepare object replication fixture
+      - name: Prepare deterministic Storage hash fixture
         run: |
           set -euo pipefail
+          rm -rf .dr-objects
           mkdir -p .dr-objects/before/datasets .dr-objects/after/datasets
-          printf '%s' 'qros-exact-release-fixture' > .dr-objects/before/datasets/sample.csv
+          printf '%s' "qros-release-$RELEASE_SHA" > .dr-objects/before/datasets/sample.csv
           cp .dr-objects/before/datasets/sample.csv .dr-objects/after/datasets/sample.csv
 
-      - name: Run exact-release health gate
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-          TARGET_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      - name: Run exact release health gate
         run: |
           set -euo pipefail
-          python scripts/final_health_check.py \
-            --expected-commit "$RELEASE_SHA" \
-            --database-url "$DATABASE_URL" \
-            --backup-source-url "$DATABASE_URL" \
-            --backup-target-admin-url "$TARGET_ADMIN_URL" \
-            --object-root-before .dr-objects/before \
-            --object-root-after .dr-objects/after
+          python scripts/final_health_check.py             --expected-commit "$RELEASE_SHA"             --database-url "$DATABASE_URL"             --backup-source-url "$DATABASE_URL"             --backup-target-admin-url "$TARGET_ADMIN_URL"             --object-root-before .dr-objects/before             --object-root-after .dr-objects/after
 
-      - name: Upload immutable health evidence
-        if: always()
+      - name: Require exact health evidence
+        run: |
+          set -euo pipefail
+          evidence="health_evidence_$RELEASE_SHA.json"
+          test -f "$evidence"
+          python - "$evidence" "$RELEASE_SHA" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          expected = sys.argv[2]
+          data = json.loads(path.read_text(encoding="utf-8"))
+          assert data["commit"] == expected
+          assert data["tests_passed"] is True
+          assert data["health_status"] == "PASS"
+          required = {
+              "commit", "timestamp", "tests_passed", "coverage",
+              "rls_check", "authz_check", "tenant_isolation_check",
+          }
+          assert required <= data.keys()
+          PY
+
+      - name: Upload exact health evidence
         uses: actions/upload-artifact@v4
         with:
           name: health-evidence-${{ env.RELEASE_SHA }}
@@ -111,47 +114,14 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-      - name: Stop Supabase
-        if: always()
-        run: supabase stop
-
-  release-tag:
-    name: Create Release Tag From Green Evidence
-    needs: [health-gate]
-    if: ${{ needs.health-gate.result == 'success' && inputs.release_tag != '' }}
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    env:
-      RELEASE_SHA: ${{ inputs.commit_sha }}
-      RELEASE_TAG: ${{ inputs.release_tag }}
-    steps:
-      - name: Validate release tag
-        run: |
-          set -euo pipefail
-          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-
-      - name: Checkout exact green SHA
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ env.RELEASE_SHA }}
-          fetch-depth: 0
-
-      - name: Require green health evidence
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
-          echo "Tagging is allowed only because the exact SHA health-gate job succeeded."
-          test -n "$RELEASE_SHA"
-
-      - name: Create tag only from the exact green SHA
+      - name: Publish GitHub release only after green evidence
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Release tag already exists: $RELEASE_TAG"
-            exit 1
-          fi
-          git tag -a "$RELEASE_TAG" "$RELEASE_SHA" -m "Release $RELEASE_TAG"
-          git push origin "$RELEASE_TAG"
+          test -f "health_evidence_$RELEASE_SHA.json"
+          gh release create "$RELEASE_TAG"             --verify-tag             --title "$RELEASE_TAG"             --generate-notes             "health_evidence_$RELEASE_SHA.json"
+
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop

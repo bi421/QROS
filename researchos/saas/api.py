@@ -459,96 +459,6 @@ def create_app(
         workspace_id: UUID,
         tenant: TenantContext = Depends(current_tenant),
     ) -> DeletionReceiptResponse:
-        require_role(tenant, WorkspaceRole.OWNER)
-        if tenant.workspace_id != workspace_id:
-            raise HTTPException(status_code=404, detail="workspace not found")
-        try:
-            receipt = persistence.soft_delete_workspace(
-                workspace_id,
-                retention=retention,
-            )
-        except (TenantPersistenceError, ValueError) as exc:
-            raise HTTPException(status_code=409, detail={"code": "WORKSPACE_DELETE_FAILED", "message": str(exc)}) from exc
-        return DeletionReceiptResponse(
-            deletion_receipt_id=receipt.receipt_id,
-            scheduled_purge_at=receipt.scheduled_purge_at.isoformat(),
-        )
-
-    @app.get("/v1/workspaces/{workspace_id}/export", response_model=dict[str, str], tags=["workspace"])
-    @require_permission("workspace", "read")
-    def export_workspace(
-        workspace_id: UUID,
-        tenant: TenantContext = Depends(current_tenant),
-    ) -> dict[str, str]:
-        if tenant.workspace_id != workspace_id:
-            raise HTTPException(status_code=404, detail="workspace not found")
-        try:
-            payload = persistence.export_workspace(workspace_id)
-            export_id = uuid4()
-            storage_path = f"tenant/{workspace_id}/exports/{export_id}.zip"
-            storage.put(storage_path, io.BytesIO(payload))
-            provider_url = storage.create_signed_download_url(storage_path, DEFAULT_EXPIRY_SECONDS)
-            url = bind_signed_url(
-                provider_url,
-                workspace_id,
-                storage_path,
-                expires_in=DEFAULT_EXPIRY_SECONDS,
-            )
-        except (FileNotFoundError, SignedUrlError, ValueError) as exc:
-            raise HTTPException(status_code=400, detail={"code": "EXPORT_FAILED", "message": str(exc)}) from exc
-        except Exception as exc:
-            raise HTTPException(status_code=503, detail="workspace export service unavailable") from exc
-        return {"url": url, "expires_in": str(DEFAULT_EXPIRY_SECONDS)}
-
-    @app.get("/healthz", tags=["system"])
-    def healthz() -> dict[str, str]:
-        return {"status": "ok"}
-
-    @app.get("/readyz", tags=["system"])
-    def readyz() -> dict[str, str]:
-        if store is None or datasets is None or storage is None or queue is None:
-            raise HTTPException(status_code=503, detail="SaaS persistence is not configured")
-        return {"status": "ready"}
-
-    @app.post("/v1/billing/webhook", status_code=200, tags=["billing"])
-    @require_permission("billing", "create", service_principal=True)
-    async def billing_webhook(
-        request: Request,
-        x_billing_signature: str | None = Header(default=None, alias="X-Billing-Signature"),
-        x_billing_provider: str | None = Header(default=None, alias="X-Billing-Provider"),
-    ) -> dict[str, str]:
-        if billing is None or not billing_webhook_secret:
-            raise HTTPException(status_code=503, detail="billing webhook is not configured")
-        if not x_billing_signature or not x_billing_provider:
-            raise HTTPException(status_code=400, detail="billing signature and provider are required")
-        payload = await request.body()
-        try:
-            verify_hmac_signature(payload, x_billing_signature, billing_webhook_secret)
-            event = parse_billing_event(payload)
-        except BillingSignatureError as exc:
-            raise HTTPException(status_code=401, detail="invalid billing webhook signature") from exc
-        except (TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise HTTPException(status_code=400, detail="invalid billing event") from exc
-        payload_sha256 = hashlib.sha256(payload).hexdigest()
-        try:
-            processed = billing.process(event, x_billing_provider.strip()[:64], payload_sha256)
-        except BillingEventConflict as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail="billing event processing failed") from exc
-        return {"status": "processed" if processed else "replayed"}
-
-    @app.get("/v1/me", response_model=dict[str, str], tags=["identity"])
-    @require_permission("workspace", "read")
-    def me(tenant: TenantContext = Depends(current_tenant)) -> dict[str, str]:
-        return {"user_id": str(tenant.user_id), "workspace_id": str(tenant.workspace_id), "plan": tenant.plan.value}
-
-    @app.delete("/v1/workspaces/{workspace_id}", response_model=DeletionReceiptResponse, tags=["workspace"])
-    @require_permission("workspace", "delete")
-    def delete_workspace(
-        workspace_id: UUID,
-        tenant: TenantContext = Depends(current_tenant),
-    ) -> DeletionReceiptResponse:
         if workspace_id != tenant.workspace_id:
             raise HTTPException(status_code=404, detail="workspace not found")
         require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.ADMIN)
@@ -835,6 +745,7 @@ def create_app(
             "claim_id": request.claim_id,
             "plan_hash": request.plan_hash,
         })
+        policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         if not policy.allows_concurrency(store.count_active(tenant.workspace_id)):
             raise HTTPException(status_code=429, detail="concurrent research run limit reached")
         version = datasets.get_version(tenant.workspace_id, request.dataset_version_id)

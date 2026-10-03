@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
-import json
 import threading
 import time
 from typing import Mapping

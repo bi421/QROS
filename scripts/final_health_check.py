@@ -1,47 +1,31 @@
 #!/usr/bin/env python3
-"""Run the exact-release health gates and emit immutable SHA-scoped evidence."""
+"""Run exact-release gates and emit/verify SHA-scoped health evidence."""
 
 from __future__ import annotations
 
 import argparse
 import datetime as dt
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 TENANT_TEST = ROOT / "supabase" / "tests" / "tenant_isolation_test.sql"
 REQUIRED_RLS_TABLES = (
-    "workspace",
-    "workspace_member",
-    "subscription",
-    "dataset",
-    "dataset_version",
-    "research_run",
-    "artifact",
-    "evidence",
-    "usage_event",
-    "audit_log",
-    "billing_event",
-    "api_idempotency",
-    "research_claim",
-    "research_validation",
-    "research_finding",
-    "research_run_result",
-    "research_run_artifact",
-    "audit_event",
-    "retention_deletion_operation",
-    "workspace_retention_policy",
-    "tenant_deletion_tombstone",
-    "entitlements",
+    "workspace", "workspace_member", "subscription", "dataset", "dataset_version",
+    "research_run", "artifact", "evidence", "usage_event", "audit_log", "billing_event",
+    "api_idempotency", "research_claim", "research_validation", "research_finding",
+    "research_run_result", "research_run_artifact", "audit_event",
+    "retention_deletion_operation", "workspace_retention_policy",
+    "tenant_deletion_tombstone", "entitlements",
 )
 
 
-def run_check(label: str, command: list[str], *, cwd: Path = ROOT) -> dict[str, object]:
+def run_check(label: str, command: list[str], *, env: dict[str, str] | None = None) -> dict[str, object]:
     completed = subprocess.run(
-        command, cwd=cwd, text=True, capture_output=True, check=False
+        command, cwd=ROOT, text=True, capture_output=True, check=False, env=env
     )
     return {
         "label": label,
@@ -51,15 +35,6 @@ def run_check(label: str, command: list[str], *, cwd: Path = ROOT) -> dict[str, 
         "stdout": completed.stdout[-12000:],
         "stderr": completed.stderr[-12000:],
     }
-
-
-def db_url_for_database(admin_url: str, database: str) -> str:
-    parts = urlsplit(admin_url)
-    query = dict(parse_qsl(parts.query, keep_blank_values=True))
-    query.pop("dbname", None)
-    return urlunsplit(
-        (parts.scheme, parts.netloc, f"/{database}", urlencode(query), parts.fragment)
-    )
 
 
 def git_sha() -> str:
@@ -82,16 +57,42 @@ where n.nspname = 'public'
   and c.relname in ({table_list})
   and not c.relrowsecurity;
 """
-    result = run_check(
-        "rls_check",
-        ["psql", database_url, "-Atqc", sql],
-    )
+    result = run_check("rls_check", ["psql", database_url, "-Atqc", sql])
     missing = result["stdout"].strip()
     if result["status"] == "PASS" and missing:
         result["status"] = "FAIL"
         result["returncode"] = 1
         result["stderr"] = f"RLS disabled on required tables: {missing}"
     return result
+
+
+def read_coverage() -> dict[str, object]:
+    path = ROOT / ".health" / "coverage.json"
+    if not path.exists():
+        return {"status": "FAIL", "percent_covered": None, "source": str(path)}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        percent = raw["totals"]["percent_covered"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError):
+        return {"status": "FAIL", "percent_covered": None, "source": str(path)}
+    if not isinstance(percent, (int, float)):
+        return {"status": "FAIL", "percent_covered": None, "source": str(path)}
+    return {"status": "PASS", "percent_covered": percent, "source": str(path)}
+
+
+def verify_evidence(path: Path, expected_commit: str) -> None:
+    if not path.is_file():
+        raise SystemExit(f"required health evidence missing: {path.name}")
+    try:
+        evidence = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"invalid health evidence: {exc}") from exc
+    if evidence.get("commit") != expected_commit:
+        raise SystemExit("health evidence commit does not match current commit")
+    if evidence.get("tests_passed") is not True:
+        raise SystemExit("health evidence does not record tests_passed=true")
+    if evidence.get("health_status") != "PASS":
+        raise SystemExit("health evidence health_status is not PASS")
 
 
 def main() -> int:
@@ -105,106 +106,66 @@ def main() -> int:
     args = parser.parse_args()
 
     actual = git_sha()
-    if actual != args.expected_commit:
-        raise SystemExit(
-            f"exact-release violation: expected {args.expected_commit}, got {actual}"
-        )
+    if actual != args.expected_commit or len(args.expected_commit) != 40:
+        raise SystemExit(f"exact-release violation: expected {args.expected_commit}, got {actual}")
 
+    coverage_path = ROOT / ".health" / "coverage.json"
+    coverage_path.parent.mkdir(parents=True, exist_ok=True)
     checks: dict[str, dict[str, object]] = {}
 
-    checks["ruff"] = run_check(
-        "ruff", [sys.executable, "-m", "ruff", "check", "."]
-    )
-
-    coverage_json = ROOT / ".health" / "coverage.json"
-    coverage_json.parent.mkdir(parents=True, exist_ok=True)
-    pytest_cmd = [
-        sys.executable,
-        "-m",
-        "pytest",
-        "-q",
-        "--cov=researchos",
-        "--cov-report=json:.health/coverage.json",
-    ]
-    checks["full_test_suite"] = run_check("full_test_suite", pytest_cmd)
-
-    coverage: dict[str, object]
-    if coverage_json.exists():
-        try:
-            raw = json.loads(coverage_json.read_text(encoding="utf-8"))
-            totals = raw.get("totals", {})
-            coverage = {
-                "percent_covered": totals.get("percent_covered"),
-                "covered_lines": totals.get("covered_lines"),
-                "num_statements": totals.get("num_statements"),
-                "source": ".health/coverage.json",
-            }
-        except (OSError, json.JSONDecodeError, AttributeError):
-            coverage = {"status": "FAIL", "source": ".health/coverage.json"}
-        else:
-            if not isinstance(coverage["percent_covered"], (int, float)):
-                coverage["status"] = "FAIL"
-            else:
-                coverage["status"] = "PASS"
-    else:
-        coverage = {"status": "FAIL", "source": ".health/coverage.json"}
-
-    checks["authz_matrix"] = run_check(
-        "authz_matrix", [sys.executable, "scripts/verify_authz_routes.py"]
-    )
-    checks["rls"] = rls_check(args.database_url)
-
-    # This SQL suite is the repository's adversarial/red-team tenant boundary.
-    checks["tenant_isolation_red_team"] = run_check(
-        "tenant_isolation_red_team",
-        ["psql", args.database_url, "-v", "ON_ERROR_STOP=1", "-f", str(TENANT_TEST)],
-    )
-
-    checks["backup_restore"] = run_check(
-        "backup_restore",
+    checks["ruff"] = run_check("ruff", [sys.executable, "-m", "ruff", "check", "."])
+    checks["mypy"] = run_check("mypy", [sys.executable, "-m", "mypy", "."])
+    checks["pytest_real_db"] = run_check(
+        "pytest_real_db",
         [
-            sys.executable,
-            "scripts/backup_verify.py",
-            "--source-url",
-            args.backup_source_url,
-            "--target-admin-url",
-            args.backup_target_admin_url,
-            "--object-root-before",
-            str(args.object_root_before),
-            "--object-root-after",
-            str(args.object_root_after),
+            sys.executable, "-m", "pytest", "--real-db", "-q",
+            "--cov=researchos", "--cov-report=json:.health/coverage.json",
         ],
     )
 
+    external_env = {**os.environ, "QROS_VERIFY_DATABASE_URL": args.database_url}
+    checks["verify_migrations"] = run_check(
+        "verify_migrations", [sys.executable, "scripts/verify_migrations.py"], env=external_env
+    )
+    checks["authz_check"] = run_check(
+        "check_authz_coverage", [sys.executable, "scripts/check_authz_coverage.py"]
+    )
+    checks["rls_check"] = rls_check(args.database_url)
+    checks["tenant_isolation_check"] = run_check(
+        "tenant_isolation",
+        ["supabase", "test", "db", str(TENANT_TEST), "--db-url", args.database_url],
+    )
+    checks["backup_verify"] = run_check(
+        "backup_verify",
+        [
+            sys.executable, "scripts/backup_verify.py",
+            "--source-url", args.backup_source_url,
+            "--target-admin-url", args.backup_target_admin_url,
+            "--object-root-before", str(args.object_root_before),
+            "--object-root-after", str(args.object_root_after),
+        ],
+    )
+
+    coverage = read_coverage()
+    all_pass = all(item["status"] == "PASS" for item in checks.values()) and coverage["status"] == "PASS"
     evidence = {
-        "schema_version": 2,
+        "schema_version": 3,
         "commit": actual,
-        "timestamp_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "health_status": (
-            "PASS"
-            if all(check["status"] == "PASS" for check in checks.values())
-            else "FAIL"
-        ),
-        "test_results": {
-            name: {
-                "status": result["status"],
-                "returncode": result["returncode"],
-            }
-            for name, result in checks.items()
-        },
+        "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "tests_passed": all_pass,
+        "health_status": "PASS" if all_pass else "FAIL",
         "coverage": coverage,
-        "rls_check": checks["rls"],
-        "authz_matrix_check": checks["authz_matrix"],
+        "rls_check": checks["rls_check"],
+        "authz_check": checks["authz_check"],
+        "tenant_isolation_check": checks["tenant_isolation_check"],
         "checks": checks,
     }
-
     output = ROOT / f"health_evidence_{actual}.json"
-    output.write_text(
-        json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    output.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    verify_evidence(output, actual)
     print(json.dumps(evidence, indent=2, sort_keys=True))
     print(f"HEALTH_EVIDENCE={output.name}")
-    return 0 if evidence["health_status"] == "PASS" else 1
+    return 0 if all_pass else 1
 
 
 if __name__ == "__main__":
