@@ -206,6 +206,12 @@ class RequestMetrics:
     status_counts: Counter[int] = field(default_factory=Counter)
     latency_buckets: Counter[int] = field(default_factory=Counter)
     latency_sum_ms: float = 0.0
+    jobs_created_total: int = 0
+    jobs_failed_total: int = 0
+    jobs_duration_seconds_sum: float = 0.0
+    jobs_duration_seconds_count: int = 0
+    tenant_isolation_violations_total: int = 0
+    rls_violations_total: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def observe(self, status_code: int, duration_ms: float) -> None:
@@ -244,6 +250,17 @@ class RequestMetrics:
                 "latency_buckets": dict(self.latency_buckets),
                 "latency_sum_ms": self.latency_sum_ms,
             }
+
+    def job_created(self) -> None:
+        with self._lock:
+            self.jobs_created_total += 1
+
+    def job_finished(self, duration_seconds: float, failed: bool) -> None:
+        with self._lock:
+            self.jobs_duration_seconds_sum += duration_seconds
+            self.jobs_duration_seconds_count += 1
+            if failed:
+                self.jobs_failed_total += 1
 
     def prometheus_text(self) -> str:
         s = self.snapshot()
@@ -338,7 +355,7 @@ def span(name: str, **attributes: object) -> Iterator[object]:
 
 class StructuredRequestObserver:
     def __init__(self, metrics: RequestMetrics | None = None) -> None:
-        self.metrics = metrics or RequestMetrics()
+        self.metrics = metrics or DEFAULT_METRICS
 
     def observe(
         self, *, request_id: str, method: str, path: str, status_code: int,
@@ -354,7 +371,12 @@ class StructuredRequestObserver:
             job_id=job_id,
             duration_ms=duration_ms,
         )
-        _LOGGER.info(json.dumps(event, sort_keys=True, separators=(",", ":")))
+        event["timestamp"] = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+        event["level"] = "info"
+        event["tenant_id"] = str(tenant_id) if tenant_id is not None else None
+        event["job_id"] = str(job_id) if job_id is not None else None
+        if _LOGGER is not None:
+            _LOGGER.info("request_completed", **event)
         if status_code >= 500:
             error_event = sanitize_log_fields(
                 {

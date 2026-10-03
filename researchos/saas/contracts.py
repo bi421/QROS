@@ -7,11 +7,13 @@ vocabulary.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
 from researchos.research_core.contracts import _validate_sha256
+from researchos.core.timestamp import utc_now
 
 
 class Plan(str, Enum):
