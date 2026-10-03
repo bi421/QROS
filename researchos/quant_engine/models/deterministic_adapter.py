@@ -88,10 +88,6 @@ class DeterministicResearchModelAdapter:
             )
         if request.seed is not None:
             raise ValueError("request.seed must be None for a deterministic model")
-        if request.dataset_hash != self.model.dataset_hash:
-            raise ValueError(
-                "request.dataset_hash does not match the registry model dataset hash"
-            )
 
         validate_dataset(dataset)
         actual_hash = dataset_hash(dataset)
