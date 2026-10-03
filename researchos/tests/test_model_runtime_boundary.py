@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Sequence
 
 from researchos.quant_engine.models import (
     BatchResultCountMismatchError,
@@ -183,7 +183,6 @@ class TestModelRuntime(unittest.TestCase):
 
         self.assertEqual(left.list_models(), ("a",))
         self.assertEqual(right.list_models(), ())
-
 
 
 if __name__ == "__main__":
