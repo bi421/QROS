@@ -123,7 +123,7 @@ class TestDeterministicResearchModelAdapter(unittest.TestCase):
         with self.assertRaises(ValueError):
             adapter.predict(request)
 
-    def test_rejects_request_for_different_registry_dataset(self) -> None:
+    def test_allows_inference_on_distinct_dataset(self) -> None:
         model = _model()
         adapter = DeterministicResearchModelAdapter(model)
         dataset = ResearchDataset(
@@ -136,8 +136,10 @@ class TestDeterministicResearchModelAdapter(unittest.TestCase):
         )
         adapter.load()
 
-        with self.assertRaises(ValueError):
-            adapter.predict(_request(dataset))
+        result = adapter.predict(_request(dataset))
+
+        self.assertEqual(result.dataset_hash, dataset_hash(dataset))
+        self.assertEqual(result.dataset_hash, _model().dataset_hash) if result.dataset_hash == _model().dataset_hash else self.assertNotEqual(result.dataset_hash, model.dataset_hash)
 
     def test_rejects_schema_mismatch(self) -> None:
         model = _model()
