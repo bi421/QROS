@@ -58,6 +58,7 @@ from researchos.saas.validation_api import (
 
 from researchos.saas.datasets import (
     Dataset,
+    DatasetReferencedError,
     DatasetStorage,
     DatasetStore,
     DatasetVersion,
@@ -85,6 +86,9 @@ from researchos.saas.billing import (
     BillingSignatureError,
     parse_billing_event,
     verify_hmac_signature,
+    verify_stripe_signature,
+    EntitlementStore,
+    InMemoryEntitlementStore,
 )
 
 REQUEST_ID_HEADER = "X-Request-ID"
@@ -210,7 +214,15 @@ class DatasetResponse(BaseModel):
     workspace_id: UUID
     name: str
     created_by: UUID
-    version: DatasetVersion
+    version: DatasetVersion | None
+
+class DatasetPageResponse(BaseModel):
+    items: list[DatasetResponse]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
 
 
 def _research_job_response(job: ResearchJob) -> ResearchJobResponse:
@@ -247,6 +259,7 @@ def create_app(
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
+    configure_tracing()
     auth = auth_provider or UnconfiguredAuthProvider()
     store = job_store or InMemoryResearchJobStore()
     datasets = dataset_store or InMemoryDatasetStore()
@@ -332,7 +345,7 @@ def create_app(
     def require_rate_limit(tenant: TenantContext) -> None:
         principal = hashlib.sha256(f"workspace:{tenant.workspace_id}".encode()).hexdigest()
         try:
-            allowed = limiter.allow(principal)
+            allowed = selected.allow(principal)
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -349,6 +362,10 @@ def create_app(
         *, dataset_id: UUID, tenant: TenantContext, file: UploadFile
     ) -> DatasetVersion:
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
+        try:
+            entitlement = entitlements.get(tenant.workspace_id, tenant.plan.value)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="entitlement service unavailable") from exc
         try:
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
@@ -381,6 +398,9 @@ def create_app(
                     storage.remove(storage_path)
                 raise
             return version
+        except PermissionError as exc:
+            app.state.observability.metrics.inc_tenant_isolation_violation()
+            raise HTTPException(status_code=403, detail="tenant storage authorization failed") from exc
         except ValueError as exc:
             raise HTTPException(status_code=413, detail=str(exc)) from exc
         except HTTPException:
@@ -448,9 +468,11 @@ def create_app(
         return {"status": "ready"}
 
     @app.post("/v1/billing/webhook", status_code=200, tags=["billing"])
+    @require_permission("billing", "create", service_principal=True)
     async def billing_webhook(
         request: Request,
         x_billing_signature: str | None = Header(default=None, alias="X-Billing-Signature"),
+        stripe_signature: str | None = Header(default=None, alias="Stripe-Signature"),
         x_billing_provider: str | None = Header(default=None, alias="X-Billing-Provider"),
     ) -> dict[str, str]:
         if billing is None or not billing_webhook_secret:
@@ -461,7 +483,10 @@ def create_app(
             )
         payload = await request.body()
         try:
-            verify_hmac_signature(payload, x_billing_signature, billing_webhook_secret)
+            if signature.startswith("t="):
+                verify_stripe_signature(payload, signature, billing_webhook_secret)
+            else:
+                verify_hmac_signature(payload, signature, billing_webhook_secret)
             event = parse_billing_event(payload)
         except BillingSignatureError as exc:
             raise HTTPException(
@@ -512,12 +537,46 @@ def create_app(
         )
 
     @app.get("/v1/me", response_model=dict[str, str], tags=["identity"])
+    @require_permission("workspace", "read")
     def me(tenant: TenantContext = Depends(current_tenant)) -> dict[str, str]:
         return {
             "user_id": str(tenant.user_id),
             "workspace_id": str(tenant.workspace_id),
             "plan": tenant.plan.value,
         }
+
+    @app.get("/v1/datasets", response_model=DatasetPageResponse, tags=["datasets"])
+    @require_permission("dataset", "list")
+    def list_datasets(
+        limit: int = 50,
+        offset: int = 0,
+        name: str | None = None,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> DatasetPageResponse:
+        try:
+            page = PageRequest(limit=limit, offset=offset)
+            if name is not None and not 1 <= len(name.strip()) <= 256:
+                raise ValueError("name filter must be between 1 and 256 characters")
+            rows, total = datasets.list_datasets(
+                tenant.workspace_id, limit=page.limit, offset=page.offset, name_filter=name
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        items = [
+            DatasetResponse(
+                id=row.id, workspace_id=row.workspace_id, name=row.name,
+                created_by=row.created_by,
+                version=sorted(
+                    datasets.list_versions(tenant.workspace_id, row.id),
+                    key=lambda item: item.version_no,
+                )[-1] if datasets.list_versions(tenant.workspace_id, row.id) else None,
+            )
+            for row in rows
+        ]
+        return DatasetPageResponse(
+            items=items, total=total, limit=page.limit, offset=page.offset,
+            has_more=page.offset + len(items) < total,
+        )
 
     @app.post("/v1/datasets", response_model=DatasetResponse, status_code=201, tags=["datasets"])
     @require_permission(Resource.DATASET, Action.CREATE)
@@ -534,7 +593,18 @@ def create_app(
         )
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         try:
-            digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
+            entitlement = entitlements.get(tenant.workspace_id, tenant.plan.value)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="entitlement service unavailable") from exc
+        if entitlement.max_datasets > 0 and datasets.count_datasets(tenant.workspace_id) >= entitlement.max_datasets:
+            raise HTTPException(
+                status_code=402,
+                detail={"code": "ENTITLEMENT_EXCEEDED", "message": "dataset entitlement exceeded", "upgrade_url": "https://qros.ai/upgrade"},
+            )
+        policy = DEFAULT_USAGE_POLICIES[tenant.plan]
+        persisted_dataset = None
+        try:
+            _, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
                 raise ValueError("dataset exceeds plan upload limit")
             storage_path = storage_path_for(tenant.workspace_id, digest, 1)
@@ -648,8 +718,15 @@ def create_app(
             }
         )
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
-        if not policy.allows_monthly_runs(store.count_monthly(tenant.workspace_id)):
-            raise HTTPException(status_code=402, detail="research run limit reached")
+        if not policy.allows_monthly_runs(monthly_jobs):
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "code": "ENTITLEMENT_EXCEEDED",
+                    "message": "monthly job entitlement exceeded",
+                    "upgrade_url": "https://qros.ai/upgrade",
+                },
+            )
         if not policy.allows_concurrency(store.count_active(tenant.workspace_id)):
             raise HTTPException(status_code=429, detail="concurrent research run limit reached")
         version = datasets.get_version(tenant.workspace_id, request.dataset_version_id)
@@ -687,17 +764,26 @@ def create_app(
             queue.enqueue(tenant.workspace_id, created.id)
         except Exception as exc:
             try:
-                store.transition(
+                queue.enqueue(
                     tenant.workspace_id,
                     created.id,
-                    ResearchJobStatus.QUEUED,
-                    ResearchJobStatus.FAILED,
+                    request_id=getattr(request.state, "request_id", None),
                 )
             except Exception:
                 pass
             jobs_failed_total.inc()
             raise RuntimeError("research job queue unavailable") from exc
         return JSONResponse(status_code=202, content=body)
+
+    @app.get("/v1/research-runs/{job_id}/logs", response_model=list[dict[str, object]], tags=["research"])
+    @require_permission("job", "read")
+    def get_research_run_logs(
+        job_id: UUID,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> list[dict[str, object]]:
+        if store.get(tenant.workspace_id, job_id) is None:
+            raise HTTPException(status_code=404, detail="research run not found")
+        return store.logs(tenant.workspace_id, job_id)
 
     @app.get("/v1/research-runs/{job_id}/result", tags=["research"])
     @require_permission(Resource.JOB, Action.READ)
@@ -772,11 +858,13 @@ def create_app(
             raise HTTPException(status_code=404, detail="research run not found")
         return _research_job_response(job)
 
+    claim_router = APIRouter()
     register_research_claim_routes(
-        app,
+        claim_router,
         tenant_dependency=current_tenant,
         claim_store=claim_store,
     )
+    app.include_router(claim_router)
 
     register_research_evidence_routes(
         app,
@@ -799,6 +887,52 @@ def create_app(
         validation_store=effective_validation_store,
     )
 
+    original_openapi = app.openapi
+
+    def _custom_openapi() -> dict[str, object]:
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = original_openapi()
+        components = schema.setdefault("components", {})
+        schemas = components.setdefault("schemas", {})
+        schemas["ErrorResponse"] = {
+            "type": "object",
+            "required": ["code", "message", "request_id", "correlation_id"],
+            "properties": {
+                "code": {"type": "string", "example": "not_found"},
+                "message": {"type": "string", "example": "research run not found"},
+                "request_id": {"type": "string", "example": "01JQROSREQUEST123"},
+                "correlation_id": {"type": "string", "example": "01JQROSREQUEST123"},
+            },
+        }
+        for path_item in schema.get("paths", {}).values():
+            for operation in path_item.values():
+                if not isinstance(operation, dict):
+                    continue
+                responses = operation.setdefault("responses", {})
+                for code in ("400", "401", "403", "404", "409", "413", "422", "429", "500", "503"):
+                    response = responses.setdefault(code, {"description": "Structured API error"})
+                    response.setdefault("content", {})["application/json"] = {
+                        "schema": {"$ref": "#/components/schemas/ErrorResponse"},
+                        "example": {
+                            "code": _error_code(int(code)),
+                            "message": "request failed",
+                            "request_id": "01JQROSREQUEST123",
+                            "correlation_id": "01JQROSREQUEST123",
+                        },
+                    }
+                for response in responses.values():
+                    if isinstance(response, dict):
+                        headers = response.setdefault("headers", {})
+                        headers["X-Request-ID"] = {
+                            "description": "Bounded request/correlation identifier.",
+                            "schema": {"type": "string", "maxLength": MAX_REQUEST_ID_LENGTH},
+                            "example": "01JQROSREQUEST123",
+                        }
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = _custom_openapi
     return app
 
 

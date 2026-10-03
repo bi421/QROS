@@ -109,7 +109,7 @@ select throws_ok(
       (id, dataset_id, version_no, content_sha256, storage_path, byte_size, created_by)
     values ('aaaaaaaa-1001-0000-0000-aaaaaaaaaaaa',
             'bbbbbbbb-0000-0000-0000-bbbbbbbbbbbb', 2,
-            repeat('c', 64), 'qros/c.csv', 1,
+            repeat('c', 64), 'tenant/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/datasets/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc/2/', 1,
             '11111111-1111-1111-1111-111111111111')$$,
   '42501',
   null,
