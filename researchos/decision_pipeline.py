@@ -83,6 +83,12 @@ def _blocked_risk_context(request: DecisionPipelineInput) -> RiskGateResult:
 
 def run_decision_pipeline(request: DecisionPipelineInput) -> PreTradeReport:
     """Run probability -> sizing -> hard risk gate -> human-review report."""
+    if request.risk_account is not None:
+        if abs(request.account_equity - request.risk_account.equity) > 1e-12 * max(1.0, request.risk_account.equity):
+            raise ValueError(
+                "account_equity must match risk_account.equity exactly at the pipeline boundary"
+            )
+
     risk_input = risk_input_from_probability(
         request.assessment,
         asset=request.asset,
