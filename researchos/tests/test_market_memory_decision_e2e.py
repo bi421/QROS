@@ -6,7 +6,7 @@ from researchos.decision_engine.contracts import ProbabilityOutcome
 from researchos.decision_pipeline import DecisionPipelineInput, run_decision_pipeline
 from researchos.market_memory.decision_adapter import market_memory_to_decision_evidence, market_memory_to_probability
 from researchos.market_memory.event_schema import EvidenceRecord, EvidenceStatus, MarketMemoryReport
-from researchos.risk.contracts import TradeStatistics
+from researchos.risk.contracts import RiskAccountSnapshot, RiskPolicy, TradeStatistics
 
 
 def _record(name: str, direction: str, probability: float) -> EvidenceRecord:
@@ -65,6 +65,12 @@ def test_market_memory_to_probability_to_risk_to_pretrade_is_end_to_end() -> Non
             trade_statistics=TradeStatistics(average_win=150, average_loss=100, sample_size=1000),
             research_valid=True,
             research_limitations=(),
+            risk_account=RiskAccountSnapshot.flat(10_000),
+            strategy_id="strategy-e2e",
+            risk_policy=RiskPolicy(
+                max_risk_fraction=0.005,
+                max_loss_per_trade_fraction=0.005,
+            ),
             risk_per_unit=20,
         )
     )
@@ -78,7 +84,8 @@ def test_market_memory_to_probability_to_risk_to_pretrade_is_end_to_end() -> Non
     assert assessment.bullish_probability > assessment.bearish_probability
     assert assessment.bullish_probability + assessment.bearish_probability + assessment.neutral_probability == pytest.approx(1.0)
     assert assessment.assessment_hash
-    assert pretrade.schema_version == "pretrade.v1"
+    assert pretrade.schema_version == "pretrade.v2"
+    assert pretrade.risk_gate_status == "RESEARCH_ONLY"
     assert pretrade.status == "READY_FOR_HUMAN_REVIEW"
     assert pretrade.research_id == "research-e2e-xauusd"
     assert pretrade.direction == "bullish"

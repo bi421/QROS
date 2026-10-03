@@ -2452,3 +2452,28 @@ Golden Path: Register -> Workspace -> Dataset -> DatasetVersion -> ResearchRun -
 Until this Golden Path is production-validated, new research features and new top-level architecture layers are out of scope except security, reliability, correctness, and production-blocking fixes.
 
 No TenantContext means no business operation. Tenant identity is server-derived. Scientific inputs and outputs retain immutable/content-addressed provenance. Production schema changes are migration-based.
+
+
+# 80. Governed Risk Management Boundary
+
+The current decision path includes the governed risk layer:
+
+```
+Probability Assessment
+        ↓
+RiskInput
+        ↓
+Deterministic Risk Sizing
+        ↓
+RiskAccountSnapshot + RiskOrderIntent
+        ↓
+Hard Risk Gate
+        ↓
+PreTradeReport + Immutable RiskAuditEvent
+```
+
+The risk layer enforces account loss, drawdown, strategy loss, per-trade risk, portfolio open-risk, exposure, operational, calibration, strategy-state, and kill-switch controls.
+
+Risk management remains separate from broker execution. A risk gate can block or authorize an execution context, but the research core does not place orders.
+
+Canonical details: `docs/RISK_MANAGEMENT_ARCHITECTURE_V2.md`.
