@@ -6,7 +6,7 @@ import hashlib
 from typing import Any, Protocol
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
 from researchos.claims.claim import ResearchClaim, ResearchClaimType, ResearchPlan
