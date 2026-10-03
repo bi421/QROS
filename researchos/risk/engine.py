@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Iterable
-
 from researchos.risk.contracts import (
     ExecutionMode,
     RISK_SCHEMA_VERSION,
@@ -67,13 +65,6 @@ def calculate_risk(request: RiskInput) -> RiskCalculation:
         status="CALCULATED",
         research_id=request.research_id,
     )
-
-
-def _append_unique(target: list[str], values: Iterable[str]) -> None:
-    for value in values:
-        if value not in target:
-            target.append(value)
-
 
 def evaluate_risk_gate(
     account: RiskAccountSnapshot,
