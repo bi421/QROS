@@ -24,7 +24,7 @@ def _rolling_apply(
         window = [v for v in values[i - period + 1 : i + 1] if v is not None]
         if len(window) != period:
             continue
-        out[i] = fn(window)
+        out[i] = fn(numeric_window)
     return out
 
 
@@ -155,8 +155,8 @@ def rsi_feature(prices: Sequence[float], period: int = 14) -> list[float | None]
         l_window = [v for v in losses[i - period + 1 : i + 1] if v is not None]
         if len(g_window) != period or len(l_window) != period:
             continue
-        avg_gain = _mean(g_window)
-        avg_loss = _mean(l_window)
+        avg_gain = _mean(numeric_gains)
+        avg_loss = _mean(numeric_losses)
         if avg_loss == 0:
             out[i] = 100.0
         else:
@@ -349,7 +349,8 @@ def volatility_percentile(prices: Sequence[float], period: int = 20, lookback: i
     n = len(vol)
     out: list[float | None] = [None] * n
     for i in range(n):
-        if vol[i] is None:
+        vol_value = vol[i]
+        if vol_value is None:
             continue
         start = max(0, i - lookback + 1)
         window = [v for v in vol[start : i + 1] if v is not None]

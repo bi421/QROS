@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import numpy as np
 
@@ -192,7 +192,7 @@ def run_indicator_strategy(
     )
 
     # Compute metrics
-    metrics = compute_indicator_metrics(trades)
+    metrics: dict[Any, Any] = compute_indicator_metrics(trades)
     metrics["total_time"] = time.time() - start_time
 
     return metrics

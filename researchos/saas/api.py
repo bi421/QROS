@@ -772,11 +772,13 @@ def create_app(
             raise HTTPException(status_code=404, detail="research run not found")
         return _research_job_response(job)
 
+    claim_router = APIRouter()
     register_research_claim_routes(
-        app,
+        claim_router,
         tenant_dependency=current_tenant,
         claim_store=claim_store,
     )
+    app.include_router(claim_router)
 
     register_research_evidence_routes(
         app,

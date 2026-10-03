@@ -40,7 +40,7 @@ def _load_candles(csv_path: str, fmt: str, symbol: str, timeframe: str):
     return ([c.close for c in candles], [c.high for c in candles], [c.low for c in candles], [c.volume for c in candles], [c.timestamp for c in candles])
 
 
-def _load_macro_series(csv_path: str, fmt: str, symbol: str, timeframe: str) -> tuple[list[float], list[Any]]:
+def _load_macro_series(csv_path: str, fmt: str, symbol: str, timeframe: str) -> tuple[list[float], list[datetime]]:
     """Load a macro series without repairing or fabricating observations."""
     loader = CsvLoader()
     if fmt == "mt5":
