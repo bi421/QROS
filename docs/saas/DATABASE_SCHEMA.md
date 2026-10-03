@@ -160,7 +160,7 @@ Cross-resource policies additionally require research runs to reference a datase
 1. `dataset_version_allocate_no` allocates the next `version_no` under a per-dataset transaction advisory lock.
 2. `dataset_version_immutable` rejects UPDATE/DELETE operations that would mutate or remove a version.
 
-Content is identified by lowercase SHA-256 and duplicate content is rejected per dataset. The API creates a new version and content-addressed object path rather than overwriting an existing scientific source.
+Content is identified by lowercase SHA-256 and duplicate content is deduplicated per dataset. The API hashes the upload before persistence, writes only to the canonical immutable path, then re-reads the stored object and verifies its SHA-256 before recording the version. If identical content already exists, the existing version/path is returned; a concurrent duplicate is reconciled to that same existing version rather than creating a second object.
 
 ## Storage contract
 
@@ -172,11 +172,11 @@ Canonical object path contract:
 tenant/{tenant_id}/datasets/{sha256(content)}/{version}/
 ```
 
-The path is immutable and content-addressed. `tenant_id` is the authenticated workspace/tenant identifier. Upload computes SHA-256 and byte size before persistence; duplicate content reuses the existing object/version rather than overwriting it. Download verifies the stored object SHA-256 against `dataset_version.content_sha256` before issuing a signed URL.
+The path is immutable and content-addressed. `tenant_id` is the authenticated workspace/tenant identifier. The canonical path is exactly `tenant/{tenant_id}/datasets/{sha256(content)}/{version}/`; the database validates that the path tenant matches the dataset workspace and that the path digest matches `content_sha256`. Upload computes SHA-256 and byte size before persistence, verifies the persisted bytes again, and never overwrites an existing object. Download verifies the stored object SHA-256 against `dataset_version.content_sha256` before issuing a signed URL.
 
-Dataset versions are append-only. Creating a new version allocates the next `version_no`; existing versions and their storage objects are never overwritten.
+Dataset versions are append-only. Updating a dataset means creating a new version; the previous version remains readable and its storage object is never overwritten or deleted by an update. Version numbers are unique per dataset and immutable.
 
-`dataset_version_feed` records the immutable lineage edge from a dataset version to an Experiment identifier. Finding retention is enforced by a database trigger: a dataset cannot be deleted while a non-deleted `research_finding` references a research run backed by one of its versions; the API maps this condition to `409 DATASET_REFERENCED`.
+`dataset_version_feed` records the immutable lineage edge from a dataset version to an Experiment identifier, exposed by `DatasetVersion.feeds`. Finding retention is enforced by a database trigger: a dataset cannot be deleted while a non-deleted `research_finding` references a research run backed by one of its versions. The API maps this condition to HTTP `409` with the stable message/code `DATASET_REFERENCED`.
 
 Supabase recommends resumable/TUS upload flows for large files; those will replace the current server-side multipart path before large-plan production rollout.
 
