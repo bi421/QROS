@@ -355,7 +355,7 @@ def span(name: str, **attributes: object) -> Iterator[object]:
 
 class StructuredRequestObserver:
     def __init__(self, metrics: RequestMetrics | None = None) -> None:
-        self.metrics = metrics or RequestMetrics()
+        self.metrics = metrics or DEFAULT_METRICS
 
     def observe(
         self, *, request_id: str, method: str, path: str, status_code: int,
