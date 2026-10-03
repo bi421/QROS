@@ -4,7 +4,7 @@ from researchos.action.report import build_pre_trade_report
 from researchos.decision_engine.probability import ProbabilityAssessment
 from researchos.decision_pipeline import DecisionPipelineInput, run_decision_pipeline
 from researchos.risk.adapters import risk_input_from_probability
-from researchos.risk.contracts import RiskPolicy, TradeStatistics
+from researchos.risk.contracts import RiskAccountSnapshot, RiskPolicy, TradeStatistics
 from researchos.risk.engine import calculate_risk
 
 
@@ -24,6 +24,10 @@ def _assessment(status: str | None = None) -> ProbabilityAssessment:
     )
 
 
+def _account() -> RiskAccountSnapshot:
+    return RiskAccountSnapshot.flat(10_000.0)
+
+
 def test_calibration_status_survives_probability_risk_pretrade_boundary() -> None:
     assessment = _assessment("Well-Calibrated")
     risk_input = risk_input_from_probability(
@@ -31,7 +35,11 @@ def test_calibration_status_survives_probability_risk_pretrade_boundary() -> Non
         asset="XAUUSD",
         direction="bullish",
         account_equity=10_000,
-        trade_statistics=TradeStatistics(average_win=150, average_loss=100, sample_size=100),
+        trade_statistics=TradeStatistics(
+            average_win=150,
+            average_loss=100,
+            sample_size=100,
+        ),
     )
 
     assert risk_input.probability_calibration_status == "Well-Calibrated"
@@ -42,11 +50,18 @@ def test_calibration_status_survives_probability_risk_pretrade_boundary() -> Non
             asset="XAUUSD",
             direction="bullish",
             account_equity=10_000,
-            trade_statistics=TradeStatistics(average_win=150, average_loss=100, sample_size=100),
+            trade_statistics=TradeStatistics(
+                average_win=150,
+                average_loss=100,
+                sample_size=100,
+            ),
             research_valid=True,
+            risk_account=_account(),
+            strategy_id="strategy-001",
         )
     )
     assert report.status == "READY_FOR_HUMAN_REVIEW"
+    assert report.risk_gate_status == "RESEARCH_ONLY"
     assert report.probability == assessment.bullish_probability
 
 
@@ -77,6 +92,8 @@ def test_invalid_research_never_becomes_trade_ready() -> None:
             account_equity=10_000,
             trade_statistics=TradeStatistics(average_win=150, average_loss=100),
             research_valid=False,
+            risk_account=_account(),
+            strategy_id="strategy-001",
             research_limitations=("research evidence not validated",),
         )
     )
