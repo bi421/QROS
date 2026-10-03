@@ -7,14 +7,14 @@ from datetime import datetime, timezone
 
 from researchos.market_memory.conditioning import ConditionSpec, MultipleTestingAudit, compute_conditional_statistics, filter_events
 from researchos.market_memory.event_extractor import extract_sma_crossover_events
-from researchos.market_memory.event_schema import EventType, EvidenceStatus, MarketEvent, MarketMemoryReport, ValidationResult
+from researchos.market_memory.event_schema import ConditionalResult, EventType, EvidenceStatus, MarketEvent, MarketMemoryReport, ValidationResult
 from researchos.market_memory.evidence import create_evidence_record
 from researchos.market_memory.label_dependence import audit_label_overlap
 from researchos.market_memory.oos_validation import OOSValidationResult, walk_forward_validate
 from researchos.market_memory.outcome_engine import compute_forward_outcomes
 from researchos.market_memory.production_gate import check_production_evidence_readiness
 from researchos.market_memory.self_audit import run_self_audit
-from researchos.market_memory.statistical_evidence import bonferroni_alpha, wilson_proportion_ci
+from researchos.market_memory.statistical_evidence import ProportionEvidence, bonferroni_alpha, wilson_proportion_ci
 from researchos.market_memory.temporal_validation import chronological_split, check_temporal_integrity
 
 
@@ -114,8 +114,8 @@ def run_market_memory_pipeline(
     corrected_alpha = bonferroni_alpha(_PIPELINE_ALPHA, hypothesis_count)
     corrected_confidence_level = 1.0 - corrected_alpha
 
-    conditional_results: list[object] = []
-    probability_evidence: dict[str, object] = {}
+    conditional_results: list[ConditionalResult] = []
+    probability_evidence: dict[str, ProportionEvidence] = {}
     for spec in conditions:
         result = compute_conditional_statistics(events, spec, outcome_field="return_1d", bootstrap_seed=seed, dependence_block_size=dependence_block_size)
         conditional_results.append(result)
@@ -129,8 +129,9 @@ def run_market_memory_pipeline(
 
     for cr in conditional_results:
         condition = cr.condition_spec
-        def matcher(event: MarketEvent, spec: object = condition) -> bool:
-            return bool(filter_events([event], spec))
+
+        def matcher(event: MarketEvent) -> bool:
+            return bool(filter_events([event], condition))
 
         def outcome_getter(event: MarketEvent) -> float | None:
             return event.outcome.return_1d if event.outcome else None
