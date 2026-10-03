@@ -1,4 +1,4 @@
-"""Market Memory Pipeline — end-to-end market memory research pipeline."""
+""""Market Memory Pipeline — end-to-end market memory research pipeline."""
 
 from __future__ import annotations
 
@@ -7,14 +7,14 @@ from datetime import datetime, timezone
 
 from researchos.market_memory.conditioning import ConditionSpec, MultipleTestingAudit, compute_conditional_statistics, filter_events
 from researchos.market_memory.event_extractor import extract_sma_crossover_events
-from researchos.market_memory.event_schema import EventType, EvidenceStatus, MarketMemoryReport, ValidationResult
+from researchos.market_memory.event_schema import ConditionalResult, EventType, EvidenceStatus, MarketEvent, MarketMemoryReport, ValidationResult
 from researchos.market_memory.evidence import create_evidence_record
 from researchos.market_memory.label_dependence import audit_label_overlap
-from researchos.market_memory.oos_validation import walk_forward_validate
+from researchos.market_memory.oos_validation import OOSValidationResult, walk_forward_validate
 from researchos.market_memory.outcome_engine import compute_forward_outcomes
 from researchos.market_memory.production_gate import check_production_evidence_readiness
 from researchos.market_memory.self_audit import run_self_audit
-from researchos.market_memory.statistical_evidence import bonferroni_alpha, wilson_proportion_ci
+from researchos.market_memory.statistical_evidence import ProportionEvidence, bonferroni_alpha, wilson_proportion_ci
 from researchos.market_memory.temporal_validation import chronological_split, check_temporal_integrity
 
 
@@ -30,8 +30,8 @@ def _compute_dataset_hash(file_path: str) -> str:
     return h.hexdigest()[:16]
 
 
-def _finite_returns(events, condition):
-    values = []
+def _finite_returns(events: list[MarketEvent], condition: ConditionSpec) -> list[float]:
+    values: list[float] = []
     for event in filter_events(events, condition):
         value = event.outcome.return_1d if event.outcome else None
         if isinstance(value, (int, float)) and value == value and abs(value) != float("inf"):
@@ -90,10 +90,10 @@ def run_market_memory_pipeline(
 
 
     train_events, validation_events, test_events = chronological_split(events)
-    validation_results = []
-    oos_results = {}
+    validation_results: list[ValidationResult] = []
+    oos_results: dict[str, OOSValidationResult | None] = {}
 
-    def label_end_getter(event):
+    def label_end_getter(event: MarketEvent) -> datetime | None:
         """Return the actual future observation timestamp used by the outcome."""
         if event.outcome is None:
             return None
@@ -114,8 +114,8 @@ def run_market_memory_pipeline(
     corrected_alpha = bonferroni_alpha(_PIPELINE_ALPHA, hypothesis_count)
     corrected_confidence_level = 1.0 - corrected_alpha
 
-    conditional_results = []
-    probability_evidence = {}
+    conditional_results: list[ConditionalResult] = []
+    probability_evidence: dict[str, ProportionEvidence] = {}
     for spec in conditions:
         result = compute_conditional_statistics(events, spec, outcome_field="return_1d", bootstrap_seed=seed, dependence_block_size=dependence_block_size)
         conditional_results.append(result)
@@ -129,13 +129,19 @@ def run_market_memory_pipeline(
 
     for cr in conditional_results:
         condition = cr.condition_spec
+
+        def matcher(event: MarketEvent) -> bool:
+            return bool(filter_events([event], condition))
+
+        def outcome_getter(event: MarketEvent) -> float | None:
+            return event.outcome.return_1d if event.outcome else None
         train_values = _finite_returns(train_events, condition)
         val_values = _finite_returns(validation_events, condition)
         test_values = _finite_returns(test_events, condition)
         oos = walk_forward_validate(
             events,
-            lambda event, spec=condition: bool(filter_events([event], spec)),
-            lambda event: event.outcome.return_1d if event.outcome else None,
+            matcher,
+            outcome_getter,
             initial_train_size=max(100, min(500, len(events) // 3 or 1)),
             validation_size=max(20, min(100, len(events) // 10 or 1)),
             test_size=max(20, min(100, len(events) // 10 or 1)),
@@ -184,7 +190,7 @@ def run_market_memory_pipeline(
         validated = oos is not None and oos.stable and audit.overall_status != "FAIL"
         status = EvidenceStatus.VALIDATED.value if validated else cr.status
         prob = probability_evidence.get(cr.condition_name)
-        uncertainty = {"mean_confidence_interval": cr.confidence_interval}
+        uncertainty: dict[str, object] = {"mean_confidence_interval": cr.confidence_interval}
         if prob:
             uncertainty["probability_confidence_interval"] = list(prob.confidence_interval)
             uncertainty["probability_confidence_level"] = prob.confidence_level

@@ -45,7 +45,7 @@ class MT5Connector:
         "1d": mt5.TIMEFRAME_D1 if MT5_AVAILABLE else None,
     }
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.initialized = False
         if MT5_AVAILABLE:
             try:
@@ -58,7 +58,7 @@ class MT5Connector:
                 print(f"⚠️ MT5 init error: {e}")
 
     def is_available(self) -> bool:
-        return self.initialized
+        return bool(self.initialized)
 
     def fetch_ohlcv(self, symbol: str, timeframe: str, start: datetime, end: datetime) -> pd.DataFrame:
         """
@@ -116,7 +116,12 @@ class DataComparator:
     """
 
     @staticmethod
-    def compare(df1: pd.DataFrame, df2: pd.DataFrame, source1: str = "MT5", source2: str = "Other") -> dict:
+    def compare(
+        df1: pd.DataFrame,
+        df2: pd.DataFrame,
+        source1: str = "MT5",
+        source2: str = "Other",
+    ) -> dict[str, object]:
         """
         Compare two OHLCV DataFrames.
         Returns correlation, MAPE, missing bars, etc.

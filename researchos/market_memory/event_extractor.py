@@ -38,13 +38,13 @@ def _compute_sma(prices: list[float], period: int) -> list[float | None]:
     """Compute Simple Moving Average. Returns None for insufficient data."""
     if len(prices) < period:
         return [None] * len(prices)
-    sma = [None] * (period - 1)
+    sma: list[float | None] = [None] * (period - 1)
     for i in range(period - 1, len(prices)):
         sma.append(sum(prices[i - period + 1 : i + 1]) / period)
     return sma
 
 
-def _compute_atr(highs: list[float], lows: list[float], closes: list[float], period: int = 14) -> list[float | None]:
+def _compute_atr(highs: list[float], lows: list[float], closes: list[float], period: int = 14) -> list[float]:
     """Compute Average True Range."""
     if len(closes) < period + 1:
         return [0.0] * len(closes)
@@ -58,14 +58,14 @@ def _compute_atr(highs: list[float], lows: list[float], closes: list[float], per
         )
         trs.append(tr)
 
-    atr = [0.0] * period
+    atr: list[float] = [0.0] * period
     atr.append(sum(trs[1 : period + 1]) / period)
     for i in range(period + 1, len(trs)):
         atr.append((atr[-1] * (period - 1) + trs[i]) / period)
     return atr
 
 
-def _compute_rsi(closes: list[float], period: int = 14) -> list[float | None]:
+def _compute_rsi(closes: list[float], period: int = 14) -> list[float]:
     """Compute Relative Strength Index."""
     if len(closes) < period + 1:
         return [50.0] * len(closes)
@@ -77,7 +77,7 @@ def _compute_rsi(closes: list[float], period: int = 14) -> list[float | None]:
     avg_gain = sum(gains[:period]) / period
     avg_loss = sum(losses[:period]) / period
 
-    rsi = [50.0] * period
+    rsi: list[float] = [50.0] * period
     for i in range(period, len(gains)):
         avg_gain = (avg_gain * (period - 1) + gains[i]) / period
         avg_loss = (avg_loss * (period - 1) + losses[i]) / period
@@ -95,7 +95,7 @@ def _compute_macd(closes: list[float], fast: int = 12, slow: int = 26, signal: i
         return [0.0] * len(closes), [0.0] * len(closes), [0.0] * len(closes)
 
     # Compute EMAs
-    def ema(prices: list[float], period: int) -> list[float]:
+    def ema(prices: list[float], period: int) -> list[float | None]:
         k = 2.0 / (period + 1)
         e = [sum(prices[:period]) / period]
         for p in prices[period:]:
@@ -106,8 +106,10 @@ def _compute_macd(closes: list[float], fast: int = 12, slow: int = 26, signal: i
     ema_slow = ema(closes, slow)
     macd_line = [0.0] * len(closes)
     for i in range(len(closes)):
-        if ema_fast[i] is not None and ema_slow[i] is not None:
-            macd_line[i] = ema_fast[i] - ema_slow[i]
+        fast_value = ema_fast[i]
+        slow_value = ema_slow[i]
+        if fast_value is not None and slow_value is not None:
+            macd_line[i] = fast_value - slow_value
 
     # Signal line
     valid_macd = [m for m in macd_line if m != 0.0 or macd_line.index(m) >= slow - 1]
@@ -224,14 +226,14 @@ def extract_sma_crossover_events(
     if len(df) < slow_period + 1:
         raise ValueError(f"Insufficient data: need at least {slow_period + 1} bars, got {len(df)}")
 
-    closes = df["close"].to_list()
+    closes: list[float] = [float(value) for value in df["close"].to_list()]
     timestamps = df["timestamp"].to_list()
-    highs = df["high"].to_list()
-    lows = df["low"].to_list()
-    volumes = df["tick_volume"].to_list()
+    highs: list[float] = [float(value) for value in df["high"].to_list()]
+    lows: list[float] = [float(value) for value in df["low"].to_list()]
+    volumes: list[float] = [float(value) for value in df["tick_volume"].to_list()]
 
-    sma_fast = _compute_sma(closes, fast_period)
-    sma_slow = _compute_sma(closes, slow_period)
+    sma_fast: list[float | None] = _compute_sma(closes, fast_period)
+    sma_slow: list[float | None] = _compute_sma(closes, slow_period)
     atr = _compute_atr(highs, lows, closes)
     rsi = _compute_rsi(closes)
     macd_line, macd_signal, macd_histogram = _compute_macd(closes)
@@ -248,6 +250,8 @@ def extract_sma_crossover_events(
         prev_slow = sma_slow[i - 1]
         curr_fast = sma_fast[i]
         curr_slow = sma_slow[i]
+        assert prev_fast is not None and prev_slow is not None
+        assert curr_fast is not None and curr_slow is not None
 
         direction = None
         if prev_fast <= prev_slow and curr_fast > curr_slow:

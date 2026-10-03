@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from bisect import bisect_right
 from datetime import timedelta
+from typing import cast
 
 import polars as pl
 
@@ -57,7 +58,7 @@ def extract_xauusd_m1_sma_crossover_events(
     for i in range(slow_period, len(frame)):
         prev_fast, prev_slow = sma_fast[i - 1], sma_slow[i - 1]
         curr_fast, curr_slow = sma_fast[i], sma_slow[i]
-        if None in (prev_fast, prev_slow, curr_fast, curr_slow):
+        if prev_fast is None or prev_slow is None or curr_fast is None or curr_slow is None:
             continue
 
         if prev_fast <= prev_slow and curr_fast > curr_slow:
@@ -76,7 +77,7 @@ def extract_xauusd_m1_sma_crossover_events(
             j = bisect_right(timestamps, target, hi=i) - 1
             if j < 0 or closes[j] == 0:
                 return None
-            return (closes[i] - closes[j]) / closes[j]
+            return (float(closes[i]) - float(closes[j])) / float(closes[j])
 
         context = EventContext(
             event_id=event_id,
@@ -91,11 +92,11 @@ def extract_xauusd_m1_sma_crossover_events(
             tick_volume=int(volumes[i]),
             sma_fast=curr_fast,
             sma_slow=curr_slow,
-            atr=atr[i],
+            atr=cast(float, atr[i]),
             rsi=rsi[i] if rsi[i] is not None else 50.0,
-            macd_line=macd_line[i],
-            macd_signal=macd_signal[i],
-            macd_histogram=macd_histogram[i],
+            macd_line=cast(float, macd_line[i]),
+            macd_signal=cast(float, macd_signal[i]),
+            macd_histogram=cast(float, macd_histogram[i]),
             market_regime=regime,
             volatility_state=vol_state,
             day_of_week=timestamp.weekday(),

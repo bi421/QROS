@@ -28,7 +28,7 @@ class PositionSizingResult:
     kelly_fraction: float
     max_position: float
     vol_target: float
-    metadata: dict[str, Any] = None
+    metadata: dict[str, Any] | None = None
 
 
 def confidence_based_sizing(

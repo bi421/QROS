@@ -17,6 +17,7 @@ import math
 import pytest
 
 from researchos.engines.quant.backend import PythonQuantBackend
+from researchos.engines.quant.cpp_backend import CppQuantAdapter, has_cpp_engine
 from researchos.engines.quant.models import (
     CalculationVersion,
     SimulationRequest,
@@ -34,16 +35,15 @@ def python_backend():
 
 @pytest.fixture
 def cpp_backend():
-    """Try to load C++ backend, skip if not available."""
-    try:
-        from researchos.engines.quant.cpp_engine.backend_wrapper import CppQuantBackendWrapper
-
-        backend = CppQuantBackendWrapper()
-        if not backend.is_cpp:
-            pytest.skip("C++ backend not available — skipping integration tests")
-        return backend
-    except (ImportError, Exception) as e:
-        pytest.skip(f"C++ backend not available: {e}")
+    """Require the compiled C++ backend; never silently substitute Python."""
+    if not has_cpp_engine():
+        pytest.fail(
+            "C++ Quant Engine is unavailable; refusing to run integration tests against Python fallback."
+        )
+    backend = CppQuantAdapter()
+    if not backend.is_cpp:
+        pytest.fail("C++ Quant Engine is unavailable; refusing Python fallback.")
+    return backend
 
 
 @pytest.fixture

@@ -19,7 +19,7 @@ class XauCsvLoader:
         # ... цэвэрлэгээ ...
 
         # Deterministic hash - таны self-validation-д хэрэгтэй
-        content_hash = hashlib.sha256(df.to_csv().encode()).hexdigest()
+        content_hash = hashlib.sha256(df.write_csv().encode()).hexdigest()
 
         # Parquet руу - DuckDB-аас 10x хурдан
         curated_path = Path("data/curated/xauusd/m1/xauusd_m1.parquet")

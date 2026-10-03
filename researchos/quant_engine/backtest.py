@@ -19,12 +19,17 @@ class BacktestResult:
 
 
 class BacktestEngine:
-    def __init__(self, initial_capital=100000.0, commission=0.001, slippage=0.0005):
+    def __init__(
+        self,
+        initial_capital: float = 100000.0,
+        commission: float = 0.001,
+        slippage: float = 0.0005,
+    ) -> None:
         self.initial_capital = initial_capital
         self.commission = commission
         self.slippage = slippage
 
-    def run(self, prices: list[float], strategy) -> BacktestResult:
+    def run(self, prices: list[float], strategy: Any) -> BacktestResult:
         signals = strategy.generate_signals(prices)
         if not signals:
             return BacktestResult(0.0, 0.0, 0.0, 0.0, 0, signals)
@@ -32,8 +37,8 @@ class BacktestEngine:
         capital = self.initial_capital
         position = 0.0
         entry_price = 0.0
-        trades = []  # (action, price, size, pnl)
-        equity_curve = [capital]
+        trades: list[tuple[str, float, float, float]] = []  # (action, price, size, pnl)
+        equity_curve: list[float] = [capital]
 
         for signal in signals:
             price = signal.price
@@ -55,11 +60,9 @@ class BacktestEngine:
                 position = 0.0
                 entry_price = 0.0
 
-            # Хөрөнгийн үнэлгээ
             current_equity = capital + position * price
             equity_curve.append(current_equity)
 
-        # Хэрэв позиц үлдсэн бол эцсийн үнээр хаах
         if position > 0 and prices:
             closing_price = prices[-1]
             revenue_per_unit = closing_price * (1 - self.commission - self.slippage)
@@ -72,7 +75,6 @@ class BacktestEngine:
         final_value = capital
         total_return = (final_value - self.initial_capital) / self.initial_capital
 
-        # Sharpe ratio
         equity = np.array(equity_curve)
         returns = np.diff(equity) / equity[:-1]
         if len(returns) > 1:
@@ -80,14 +82,12 @@ class BacktestEngine:
         else:
             sharpe = 0.0
 
-        # Max drawdown
         peak = np.maximum.accumulate(equity)
         drawdown = (peak - equity) / peak
         max_drawdown = -np.max(drawdown) if len(drawdown) > 0 else 0.0
 
-        # Win rate – зөвхөн хаагдсан трейдууд (SELL эсвэл CLOSE)
         closed_trades = [t for t in trades if t[0] in ("SELL", "CLOSE")]
-        winning_trades = [t for t in closed_trades if t[3] > 0]  # t[3] = pnl
+        winning_trades = [t for t in closed_trades if t[3] > 0]
         win_rate = len(winning_trades) / len(closed_trades) if closed_trades else 0.0
 
         return BacktestResult(

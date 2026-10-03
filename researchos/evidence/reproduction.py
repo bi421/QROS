@@ -66,7 +66,7 @@ from researchos.quant_engine.machine_learning.dataset_contracts import (
 # =========================================================================
 
 
-def research_dataset_to_runner_dataset(dataset: ResearchDataset) -> list[dict]:
+def research_dataset_to_runner_dataset(dataset: ResearchDataset) -> list[dict[str, float]]:
     """Deterministically convert a ``ResearchDataset`` into the OHLCV contract
     the certified ``BaseExperimentRunner`` boundary normalizes.
 
@@ -92,7 +92,7 @@ def research_dataset_to_runner_dataset(dataset: ResearchDataset) -> list[dict]:
             }
             for i in range(252)
         ]
-    bars: list[dict] = []
+    bars: list[dict[str, float]] = []
     for row in feature_rows:
         row_values = list(row)
         close = float(row_values[0]) if row_values else 100.0
@@ -274,6 +274,10 @@ class ReproductionEngine:
         # ---------------------------------------------------------------
         # 5. Extract original result_hash
         # ---------------------------------------------------------------
+        if chain.result is None:
+            raise ReconstructionFailure("Result envelope is None")
+        if chain.result is None:
+            raise ReconstructionFailure("Result envelope is None")
         payload = chain.result.payload
         if not isinstance(payload, Mapping):
             raise ReconstructionFailure(f"Result payload is not a mapping: {type(payload).__name__}")
