@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from researchos.risk.contracts import RiskCalculation
+from researchos.risk.contracts import RiskAuditEvent, RiskCalculation, RiskGateResult
 
-ACTION_SCHEMA_VERSION = "pretrade.v1"
+ACTION_SCHEMA_VERSION = "pretrade.v2"
 
 
 @dataclass(frozen=True)
@@ -26,6 +26,11 @@ class PreTradeReport:
     status: str
     research_id: str | None = None
     limitations: tuple[str, ...] = ()
+    risk_gate_status: str | None = None
+    execution_allowed: bool = False
+    risk_hard_failures: tuple[str, ...] = ()
+    risk_warnings: tuple[str, ...] = ()
+    risk_audit_event: RiskAuditEvent | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -41,6 +46,15 @@ class PreTradeReport:
             "status": self.status,
             "research_id": self.research_id,
             "limitations": list(self.limitations),
+            "risk_gate_status": self.risk_gate_status,
+            "execution_allowed": self.execution_allowed,
+            "risk_hard_failures": list(self.risk_hard_failures),
+            "risk_warnings": list(self.risk_warnings),
+            "risk_audit_event": (
+                self.risk_audit_event.to_dict()
+                if self.risk_audit_event is not None
+                else None
+            ),
         }
 
 
@@ -49,20 +63,30 @@ def build_pre_trade_report(
     *,
     research_valid: bool,
     research_limitations: tuple[str, ...] = (),
+    risk_gate: RiskGateResult | None = None,
+    risk_audit_event: RiskAuditEvent | None = None,
 ) -> PreTradeReport:
-    """Assemble a review report without making an execution decision.
-
-    A report is ``READY_FOR_HUMAN_REVIEW`` only when the research is marked
-    valid and the risk calculation itself completed successfully. Unvalidated
-    research is explicitly blocked from appearing trade-ready.
-    """
+    """Assemble a review report without placing or authorizing an order."""
     risk_valid = risk.status == "CALCULATED"
+    gate_status = risk_gate.status if risk_gate is not None else None
+    if risk_gate is not None:
+        risk_valid = risk_valid and gate_status != "BLOCKED"
+
     limitations = tuple(research_limitations)
+    execution_allowed = (
+        risk_gate.execution_allowed if risk_gate is not None else False
+    )
+    hard_failures = risk_gate.hard_failures if risk_gate is not None else ()
+    warnings = risk_gate.warnings if risk_gate is not None else ()
 
     if not research_valid:
         status = "BLOCKED_RESEARCH_VALIDATION"
     elif not risk_valid:
-        status = "BLOCKED_RISK_CALCULATION"
+        status = (
+            "BLOCKED_RISK_GATE"
+            if risk_gate is not None and gate_status == "BLOCKED"
+            else "BLOCKED_RISK_CALCULATION"
+        )
     elif risk.risk_amount <= 0:
         status = "NO_POSITIVE_RISK_BUDGET"
     else:
@@ -81,4 +105,9 @@ def build_pre_trade_report(
         status=status,
         research_id=risk.research_id,
         limitations=limitations,
+        risk_gate_status=gate_status,
+        execution_allowed=execution_allowed,
+        risk_hard_failures=hard_failures,
+        risk_warnings=warnings,
+        risk_audit_event=risk_audit_event,
     )
