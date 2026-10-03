@@ -133,3 +133,28 @@ def test_decision_pipeline_blocks_without_risk_governance_context() -> None:
     assert report.status == "BLOCKED_RISK_GOVERNANCE"
     assert report.risk_governance_valid is False
     assert report.risk_governance_status == "NOT_EVALUATED"
+
+
+def test_decision_pipeline_preserves_missing_notional_governance_violation() -> None:
+    report = run_decision_pipeline(
+        DecisionPipelineInput(
+            assessment=_assessment("Well-Calibrated"),
+            asset="XAUUSD",
+            direction="bullish",
+            account_equity=10_000,
+            trade_statistics=TradeStatistics(average_win=150, average_loss=100),
+            research_valid=True,
+            risk_account=RiskAccountState(
+                day_start_equity=10_000,
+                current_equity=10_000,
+                high_water_mark=10_000,
+                strategy_reference_equity=10_000,
+            ),
+        )
+    )
+
+    assert report.status == "BLOCKED_RISK_GOVERNANCE"
+    assert report.risk_governance_valid is False
+    assert report.risk_governance_status == "BLOCKED"
+    assert report.risk_violations == ("PROPOSED_NOTIONAL_REQUIRED",)
+    assert report.risk_decision_hash is not None
