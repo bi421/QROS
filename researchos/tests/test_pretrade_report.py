@@ -3,7 +3,7 @@ from __future__ import annotations
 from researchos.action import build_pre_trade_report
 from researchos.risk import RiskInput, TradeStatistics, calculate_risk
 from researchos.risk.contracts import RiskCalculation
-from researchos.risk.governance import RiskAccountState, StrategyRiskState, evaluate_pretrade_risk
+from researchos.risk.governance import RiskAccountState, RiskDecision, StrategyRiskState, evaluate_pretrade_risk
 
 
 def _risk() -> object:
@@ -19,7 +19,7 @@ def _risk() -> object:
     )
 
 
-def _governance(risk: RiskCalculation, *, research_valid: bool = True) -> object:
+def _governance(risk: RiskCalculation, *, research_valid: bool = True) -> RiskDecision:
     return evaluate_pretrade_risk(
         risk,
         account=RiskAccountState(
