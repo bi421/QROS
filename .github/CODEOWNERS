@@ -1,0 +1,9 @@
+# QROS SaaS repository ownership
+# Keep governance/security-sensitive surfaces explicitly reviewable.
+* @bi421
+.github/ @bi421
+supabase/ @bi421
+researchos/saas/ @bi421
+scripts/ @bi421
+docs/saas/ @bi421
+todo/saas.md @bi421
