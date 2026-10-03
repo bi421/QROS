@@ -57,6 +57,9 @@ class ResearchClaimEvidenceGraph:
         for evidence_hash in normalized:
             claim_copy.add_evidence(evidence_hash)
         self._repository.save_object(claim_copy)
+        plan_hash = claim_copy.plan_hash
+        if not plan_hash:
+            raise ValueError("ResearchClaim clone has no plan_hash")
 
         plan_hash = claim_copy.plan_hash
         if plan_hash is None:

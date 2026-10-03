@@ -207,19 +207,12 @@ def register_research_evidence_routes(
 
     @router.get(
         "/v1/research-runs/{job_id}/evidence",
-        response_model=dict[str, object],
+        response_model=list[ResearchEvidenceResponse],
         tags=["evidence"],
     )
     @require_permission("evidence", "list")
     def list_research_run_evidence(
-        request: Request,
         job_id: UUID,
-        page: str = "1",
-        page_size: str = "20",
-        sort_by: str = "created_at",
-        sort_order: str = "desc",
-        status_filter: str | None = Query(default=None, alias="filter[status]"),
-        tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
         context: TenantContext = Depends(tenant_dependency),
     ) -> dict[str, object]:
         _validate_evidence_query(page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, status_filter=status_filter, tenant_filter=tenant_filter, request=request)
