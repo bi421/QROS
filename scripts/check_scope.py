@@ -9,6 +9,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+FORBIDDEN_REPOSITORY_PATHS = (
+    re.compile(r"^qros_pybind11_forensic_audit\\.txt$", re.I),
+    re.compile(r"^scripts/cpp_true_production_v[1-9]\\.py$", re.I),
+)
+
 FORBIDDEN_NEW_PATHS = (
     # Root-level Python scripts are intentionally not an allowed extension point.
     # Existing legacy files are audited separately; new/changed root scripts must
@@ -22,6 +27,13 @@ FORBIDDEN_NEW_PATHS = (
 )
 
 
+def repository_paths() -> list[str]:
+    completed = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=ROOT, text=False, capture_output=True, check=True
+    )
+    return [item for item in completed.stdout.decode("utf-8").split("\\0") if item]
+
+
 def changed_paths(base: str | None, staged: bool) -> list[str]:
     command = ["git", "diff", "--name-only", "--diff-filter=ACMR"]
     if staged:
@@ -31,7 +43,9 @@ def changed_paths(base: str | None, staged: bool) -> list[str]:
     else:
         command.append("HEAD")
     completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=True)
-    return [line.strip().replace("\\", "/") for line in completed.stdout.splitlines() if line.strip()]
+    return [
+        line.strip().replace("\\", "/") for line in completed.stdout.splitlines() if line.strip()
+    ]
 
 
 def main() -> int:
@@ -47,6 +61,16 @@ def main() -> int:
         return 1
 
     failures: list[str] = []
+
+    # Changed-path rules prevent new scope creep; repository rules also detect
+    # legacy forbidden artifacts that predate the current diff and would
+    # otherwise escape the guard forever.
+    for path in repository_paths():
+        for pattern in FORBIDDEN_REPOSITORY_PATHS:
+            if pattern.search(path):
+                failures.append(f"forbidden repository artifact: {path}")
+                break
+
     for path in paths:
         for pattern in FORBIDDEN_NEW_PATHS:
             if pattern.search(path):
@@ -57,8 +81,13 @@ def main() -> int:
         text = workflow.read_text(encoding="utf-8")
         if re.search(r"^\s*-\s*master\s*$", text, re.MULTILINE):
             failures.append(f"workflow uses forbidden master branch trigger: {workflow.as_posix()}")
-        if "branches:" in text and not re.search(r"^\s*-\s*main\s*$", text, re.MULTILINE):
-            failures.append(f"workflow has no explicit main trigger: {workflow.as_posix()}")
+        if "branches:" in text:
+            has_main = bool(
+                re.search(r"^\s*-\s*main\s*$", text, re.MULTILINE)
+                or re.search(r"branches:\s*\[[^]]*\bmain\b[^]]*\]", text)
+            )
+            if not has_main:
+                failures.append(f"workflow has no explicit main trigger: {workflow.as_posix()}")
 
     if failures:
         print("SCOPE GUARD: FAIL")

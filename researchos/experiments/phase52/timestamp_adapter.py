@@ -16,6 +16,9 @@ from typing import Callable
 
 from researchos.data_engine.csv_loader import Candle
 
+from researchos.data_engine.candle import Candle
+from researchos.data_engine.csv_loader import CsvLoader
+
 
 @dataclass(frozen=True)
 class ScalarObservation:
@@ -114,10 +117,8 @@ def load_fred_scalar_series_from_text(text: str) -> list[ScalarObservation] | No
 # enter as value+timestamp observations while all other CSVs retain the
 # original loader path. This does not alter the raw source or repair data.
 def _install_fred_scalar_adapter() -> None:
-    from researchos.data_engine.loader import CsvLoader
-
-    original: Callable[[CsvLoader, str, str, str | None, str | None], list[Candle]] = CsvLoader.load_candles_auto_from_text
-    if _FRED_SCALAR_ADAPTER_INSTALLED:
+    original = CsvLoader.load_candles_auto_from_text
+    if getattr(original, "_phase52_fred_scalar_adapter", False):
         return
 
     def load_candles_auto_from_text_phase52(
@@ -126,16 +127,14 @@ def _install_fred_scalar_adapter() -> None:
         symbol: str,
         timeframe: str | None = None,
         timezone: str | None = None,
-    ) -> list[Candle] | list[ScalarObservation]:
+    ) -> list[ScalarObservation] | list[Candle]:
         observations = load_fred_scalar_series_from_text(text)
         if observations is not None:
             return observations
         return original(self, text, symbol, timeframe, timezone)
 
+    setattr(load_candles_auto_from_text_phase52, "_phase52_fred_scalar_adapter", True)
     setattr(CsvLoader, "load_candles_auto_from_text", load_candles_auto_from_text_phase52)
-
-
-_FRED_SCALAR_ADAPTER_INSTALLED = False
 
 
 _install_fred_scalar_adapter()

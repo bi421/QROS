@@ -1,4 +1,5 @@
 import numpy as np
+from typing import Any
 
 
 def vectorized_backtest_with_tpsl(
@@ -10,16 +11,16 @@ def vectorized_backtest_with_tpsl(
     stop_loss_pct: float = 0.02,
     take_profit_pct: float = 0.04,
     trailing_stop: bool = True,
-) -> dict:
+) -> dict[str, Any]:
     capital = initial_capital
     position = 0.0
     entry_price = 0.0
-    trades = []
-    equity_curve = [capital]
+    trades: list[tuple[str, float, float, float]] = []
+    equity_curve: list[float] = [capital]
 
-    sl_price = None
-    tp_price = None
-    trailing_high = None
+    sl_price: float | None = None
+    tp_price: float | None = None
+    trailing_high: float | None = None
 
     for action, price in signals:
         if action == "BUY" and position == 0:
@@ -44,7 +45,7 @@ def vectorized_backtest_with_tpsl(
             sl_price = tp_price = trailing_high = None
 
         if position > 0:
-            if trailing_stop and price > trailing_high:
+            if trailing_stop and trailing_high is not None and price > trailing_high:
                 trailing_high = price
                 sl_price = trailing_high * (1 - stop_loss_pct)
 
@@ -101,5 +102,5 @@ def vectorized_backtest_with_tpsl(
         "win_rate": win_rate,
         "num_trades": len(closed_trades),
         "trades": trades,
-        "equity_curve": equity_curve,  # fixed: already a list
+        "equity_curve": equity_curve,
     }

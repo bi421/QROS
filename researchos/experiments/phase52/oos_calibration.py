@@ -63,7 +63,7 @@ def _validate_rows(probabilities: Sequence[Mapping[int, float]], labels: Sequenc
 def _normalise(row: Mapping[int, float]) -> tuple[float, float, float]:
     values = [max(EPSILON, float(row.get(cls, 0.0))) for cls in CLASSES]
     total = sum(values)
-    return tuple(v / total for v in values)
+    return (values[0] / total, values[1] / total, values[2] / total)
 
 
 def apply_temperature(probabilities: Sequence[Mapping[int, float]], temperature: float) -> list[dict[int, float]]:
