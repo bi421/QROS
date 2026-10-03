@@ -26,7 +26,15 @@ jobs:
         env:
           PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
         run: |
-          pg_dump --no-password "$PROD_DATABASE_URL" > /tmp/qros-backup.sql
+          # GitHub-hosted runners may have no IPv6 route to Supabase's direct
+          # database hostname. Keep the hostname in the URL for TLS and resolve
+          # an IPv4 address separately for libpq's network target.
+          DB_HOST="$(python3 -c 'from urllib.parse import urlparse; import os; print(urlparse(os.environ["PROD_DATABASE_URL"]).hostname or "")')"
+          test -n "$DB_HOST"
+          DB_IPV4="$(getent ahostsv4 "$DB_HOST" | awk 'NR==1 {print $1}')"
+          test -n "$DB_IPV4"
+          echo "Resolved production DB hostname to IPv4 for pg_dump."
+          PGHOSTADDR="$DB_IPV4" pg_dump --no-password "$PROD_DATABASE_URL" > /tmp/qros-backup.sql
 
       - name: Generate checksum
         run: |
