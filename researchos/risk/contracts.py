@@ -463,6 +463,27 @@ class RiskOrderIntent:
     research_id: str | None = None
     probability_calibration_status: str | None = None
 
+    def __post_init__(self) -> None:
+        """Normalize JSON-compatible enum values at the contract boundary."""
+        if not isinstance(self.execution_mode, ExecutionMode):
+            try:
+                object.__setattr__(
+                    self, "execution_mode", ExecutionMode(self.execution_mode)
+                )
+            except ValueError as exc:
+                raise ValueError(
+                    "execution_mode must be a valid ExecutionMode value"
+                ) from exc
+        if not isinstance(self.strategy_state, StrategyState):
+            try:
+                object.__setattr__(
+                    self, "strategy_state", StrategyState(self.strategy_state)
+                )
+            except ValueError as exc:
+                raise ValueError(
+                    "strategy_state must be a valid StrategyState value"
+                ) from exc
+
     def validate(self) -> None:
         if not self.asset.strip():
             raise ValueError("asset must not be empty")
