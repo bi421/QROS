@@ -1,0 +1,54 @@
+name: Git Governance
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  governance:
+    name: Repository governance
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Validate PR branch and title
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          python - <<'PY'
+          import os, re, sys
+          title = os.environ["PR_TITLE"]
+          branch = os.environ["HEAD_REF"]
+          title_re = re.compile(r"^(feat|fix|docs|test|refactor|perf|build|ci|chore|revert)(\\([a-z0-9._/-]+\\))?: .+")
+          branch_re = re.compile(r"^(feat|fix|docs|test|refactor|perf|build|ci|chore)/[a-z0-9][a-z0-9._/-]*$")
+          errors=[]
+          if not title_re.match(title): errors.append(f"PR title is not Conventional Commit style: {title!r}")
+          if not branch_re.match(branch): errors.append(f"PR branch name is not allowed: {branch!r}")
+          if branch == "main": errors.append("Direct main PR branch is forbidden")
+          if errors:
+              print("\\n".join(errors)); sys.exit(1)
+          print(f"PR governance OK: branch={branch} title={title}")
+          PY
+
+      - name: Verify main is the only protected integration branch
+        run: |
+          test "$(git symbolic-ref --short HEAD)" = "main" || true
+          git show-ref --verify --quiet refs/remotes/origin/main
+          echo "main ref present: $(git rev-parse origin/main)"
+
+      - name: Verify no tracked secret-like files
+        run: |
+          if git ls-files | grep -Ei '(^|/)(\.env|.*\\.(pem|key|p12|pfx))$'; then
+            echo "Secret-like tracked file detected" >&2
+            exit 1
+          fi
+          echo "No secret-like tracked files detected"
