@@ -25,8 +25,6 @@ from researchos.engines.quant.compatibility import (
 from researchos.engines.quant.interface import QuantComputationInterface
 from researchos.engines.quant.models import CalculationVersion, SimulationRequest, SimulationResult
 
-pytestmark = pytest.mark.skipif(not has_cpp_engine(), reason="compiled C++ quant engine not available")
-
 _V1 = CalculationVersion.CALCULATION_V1
 
 # Minimum data length for rolling volatility / volatility change (window 21).
@@ -59,7 +57,14 @@ def python_backend() -> PythonQuantBackend:
 
 @pytest.fixture(scope="module")
 def cpp_backend() -> CppQuantAdapter:
-    return CppQuantAdapter()
+    if not has_cpp_engine():
+        pytest.fail(
+            "C++ Quant Engine is unavailable; this parity suite must fail rather than skip or fallback."
+        )
+    backend = CppQuantAdapter()
+    if not backend.is_cpp:
+        pytest.fail("C++ Quant Engine is unavailable; refusing Python fallback in C++ parity suite.")
+    return backend
 
 
 def build_equity(returns: list[float], initial_capital: float = 100000.0) -> list[float]:

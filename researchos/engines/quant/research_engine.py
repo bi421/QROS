@@ -26,7 +26,7 @@ This is a certification/trust layer only — it computes no trading decisions.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 from researchos.engines.quant.backend_hash import canonicalize
 from researchos.engines.quant.capabilities import BackendCapabilities, default_capabilities
@@ -477,8 +477,8 @@ def research_capabilities(backend: Any) -> BackendCapabilities:
     base = default_capabilities(backend)
     return BackendCapabilities(
         backend_name=type(backend).__name__,
-        version=str(getattr(backend, "get_version", lambda: type(backend).__name__)()),
-        supported_operations=tuple(RESEARCH_OPERATIONS) + tuple(base.supported_operations),
+        version=cast(str, getattr(backend, "get_version", lambda: type(backend).__name__)()),
+        supported_operations=tuple(RESEARCH_OPERATIONS) + base.supported_operations,
         deterministic=base.deterministic,
         stateless=base.stateless,
         no_timestamps=base.no_timestamps,

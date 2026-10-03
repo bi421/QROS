@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from researchos.data_engine.broker_connectors import MT5Connector
 
 print("=" * 60)
-print("🔌 MT5 CONNECTOR TEST")
+print("[MT5] MT5 CONNECTOR TEST")
 print("=" * 60)
 
 connector = MT5Connector()
@@ -18,15 +18,15 @@ if connector.is_available():
     end = datetime.now()
     start = end - timedelta(days=30)
 
-    print(f"\n📊 Fetching {n_bars} bars of {symbol} {tf}...")
+    print(f"\n[DATA] Fetching {n_bars} bars of {symbol} {tf}...")
     df = connector.fetch_recent(symbol, tf, n_bars)
 
     if not df.empty:
-        print(f"✅ Fetched {len(df)} bars")
-        print(f"📅 {df.index.min()} -> {df.index.max()}")
-        print("\n📋 Last 5 rows:")
+        print(f"[OK] Fetched {len(df)} bars")
+        print(f"[DATE] {df.index.min()} -> {df.index.max()}")
+        print("\n[INFO] Last 5 rows:")
         print(df.tail())
     else:
-        print("❌ No data fetched. Check symbol and MT5 connection.")
+        print("[ERROR] No data fetched. Check symbol and MT5 connection.")
 else:
-    print("❌ MT5 not available. Ensure MetaTrader 5 is running.")
+    print("[ERROR] MT5 not available. Ensure MetaTrader 5 is running.")

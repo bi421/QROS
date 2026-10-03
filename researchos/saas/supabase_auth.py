@@ -43,7 +43,7 @@ class SupabaseJwtAuthProvider:
         self._expected_issuer = expected_issuer.rstrip("/")
         self._session_validator = session_validator
 
-    def authenticate(self, authorization: str | None, requested_workspace_id: UUID | None = None) -> TenantContext:
+    def _authenticate_user(self, authorization: str | None) -> UUID:
         if not authorization or not authorization.startswith("Bearer "):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token")
 
@@ -87,6 +87,14 @@ class SupabaseJwtAuthProvider:
                     detail="authentication session is no longer active",
                 )
 
+        return user_id
+
+    def authenticate_user(self, authorization: str | None) -> UUID:
+        """Verify the caller without requiring an existing workspace."""
+        return self._authenticate_user(authorization)
+
+    def authenticate(self, authorization: str | None, requested_workspace_id: UUID | None = None) -> TenantContext:
+        user_id = self._authenticate_user(authorization)
         try:
             resolved = self._membership.resolve(user_id, requested_workspace_id)
         except ValueError as exc:

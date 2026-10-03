@@ -84,8 +84,10 @@ def _config_to_dict(config: Any) -> dict[str, Any]:
     to_dict = getattr(config, "to_dict", None)
     if to_dict is None:
         return {}
-    value = to_dict()
-    return value if isinstance(value, dict) else {}
+    result = to_dict()
+    if not isinstance(result, dict):
+        raise TypeError("config serialization must return a dictionary")
+    return result
 
 
 def run_payload(

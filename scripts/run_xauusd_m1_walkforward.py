@@ -90,9 +90,18 @@ def _score(predictions: list[float], labels: list[int]) -> dict[str, float | int
     }
 
 
-def run(input_path: Path, output_path: Path, train_size: int, validation_size: int, step_size: int) -> dict:
+def run(
+    input_path: Path,
+    output_path: Path,
+    train_size: int,
+    validation_size: int,
+    step_size: int,
+    holdout_size: int = 500,
+) -> dict:
     if train_size <= 0 or validation_size <= 0 or step_size <= 0:
         raise ValueError("train_size, validation_size and step_size must be positive")
+    if holdout_size <= 0:
+        raise ValueError("holdout_size must be positive")
     if step_size < validation_size:
         raise ValueError("step_size must be >= validation_size so OOS validation windows do not overlap")
     if not input_path.exists():
@@ -111,8 +120,15 @@ def run(input_path: Path, output_path: Path, train_size: int, validation_size: i
         raise ValueError("Input artifact is missing dataset SHA-256 identity")
 
     rows = _complete_rows(report)
-    if len(rows) < train_size + validation_size:
-        raise ValueError("Insufficient complete events for requested walk-forward configuration")
+    minimum_events = train_size + validation_size + holdout_size
+    if len(rows) < minimum_events:
+        raise ValueError(
+            "Insufficient complete events for requested walk-forward plus holdout configuration"
+        )
+
+    pre_holdout_rows = rows[:-holdout_size]
+    holdout_rows = rows[-holdout_size:]
+    holdout_start = holdout_rows[0]["timestamp"]
 
     folds = []
     all_predictions: list[float] = []
@@ -120,12 +136,12 @@ def run(input_path: Path, output_path: Path, train_size: int, validation_size: i
     all_labels: list[int] = []
     all_validation_ids: set[str] = set()
     start = 0
-    while start + train_size + validation_size <= len(rows):
+    while start + train_size + validation_size <= len(pre_holdout_rows):
         val_start_idx = start + train_size
         val_end_idx = val_start_idx + validation_size
         validation = rows[val_start_idx:val_end_idx]
         validation_start = validation[0]["timestamp"]
-        train_pool = rows[:val_start_idx]
+        train_pool = pre_holdout_rows[:val_start_idx]
         train = [item for item in train_pool if item["realized_end"] < validation_start]
         if not train:
             raise RuntimeError(f"No leakage-safe training observations for fold starting {validation_start.isoformat()}")
@@ -185,8 +201,37 @@ def run(input_path: Path, output_path: Path, train_size: int, validation_size: i
         start += step_size
 
     if not folds:
-        raise RuntimeError("No walk-forward folds were produced")
+        raise RuntimeError("No walk-forward folds were produced before the final holdout")
 
+    holdout_train = [item for item in pre_holdout_rows if item["realized_end"] < holdout_start]
+    if not holdout_train:
+        raise RuntimeError(
+            f"No leakage-safe training observations for final holdout starting {holdout_start.isoformat()}"
+        )
+    holdout_train_rate = sum(item["label"] for item in holdout_train) / len(holdout_train)
+    holdout_predictions: list[float] = []
+    holdout_labels: list[int] = []
+    holdout_prediction_records = []
+    holdout_methods: dict[str, int] = {}
+    for row in holdout_rows:
+        probability, method = _estimate(holdout_train, row)
+        if not 0.0 <= probability <= 1.0:
+            raise RuntimeError("Holdout probability outside [0, 1]")
+        holdout_predictions.append(probability)
+        holdout_labels.append(row["label"])
+        holdout_methods[method] = holdout_methods.get(method, 0) + 1
+        holdout_prediction_records.append(
+            {
+                "event_id": row["event_id"],
+                "timestamp": row["timestamp"].isoformat(),
+                "direction": row["direction"],
+                "probability": round(probability, 12),
+                "label": row["label"],
+            }
+        )
+
+    holdout_model_score = _score(holdout_predictions, holdout_labels)
+    holdout_baseline_score = _score([holdout_train_rate] * len(holdout_labels), holdout_labels)
     model_score = _score(all_predictions, all_labels)
     baseline_score = _score(all_baseline, all_labels)
     report_out = {
@@ -199,19 +244,60 @@ def run(input_path: Path, output_path: Path, train_size: int, validation_size: i
             "train_size": train_size,
             "validation_size": validation_size,
             "step_size": step_size,
+            "holdout_size": holdout_size,
             "embargo_rule": "training realized_end < validation_start",
+            "holdout_rule": "holdout training realized_end < holdout_start",
             "fit_uses_validation_labels": False,
+            "fit_uses_holdout_labels": False,
             "validation_windows_overlap": False,
+            "holdout_is_disjoint": True,
+        },
+        "methodology": {
+            "forecast_horizon": "1d",
+            "feature_availability_timestamp": "event timestamp",
+            "selection_policy": "single fixed direction_conditional estimator; no parameter selection",
+            "multiple_testing_policy": "not_applicable_single_fixed_estimator",
+            "stopping_rule": "none; evaluate the full pre-registered chronological range",
+            "replication_rule": "final independent temporal holdout",
+            "cost_assumptions": {
+                "spread": "not applicable to this probability-only stage",
+                "slippage": "not applicable to this probability-only stage",
+                "commission": "not applicable to this probability-only stage",
+            },
         },
         "folds": folds,
-        "aggregate": {"model": model_score, "baseline": baseline_score},
+        "aggregate": {
+            "scope": "walk_forward_validation_only_excludes_final_holdout",
+            "model": model_score,
+            "baseline": baseline_score,
+        },
+        "holdout": {
+            "start": holdout_rows[0]["timestamp"].isoformat(),
+            "end": holdout_rows[-1]["timestamp"].isoformat(),
+            "holdout_events": len(holdout_rows),
+            "pre_holdout_events": len(pre_holdout_rows),
+            "training_events": len(holdout_train),
+            "embargoed_training_events": len(pre_holdout_rows) - len(holdout_train),
+            "training_start": holdout_train[0]["timestamp"].isoformat(),
+            "training_end": holdout_train[-1]["timestamp"].isoformat(),
+            "training_max_realized_end": max(item["realized_end"] for item in holdout_train).isoformat(),
+            "training_outcome_rate": round(holdout_train_rate, 12),
+            "prediction_methods": holdout_methods,
+            "predictions": holdout_prediction_records,
+            "model": holdout_model_score,
+            "baseline": holdout_baseline_score,
+        },
         "audit": {
             "complete_events": len(rows),
+            "pre_holdout_events": len(pre_holdout_rows),
             "oos_unique_validation_events": len(all_validation_ids),
+            "holdout_events": len(holdout_rows),
+            "holdout_is_disjoint_from_validation": True,
             "probabilities_in_unit_interval": True,
             "training_validation_overlap": False,
             "validation_event_reuse": False,
             "all_training_labels_realized_before_validation": True,
+            "all_holdout_training_labels_realized_before_holdout": True,
             "source_sha256_verified_from_bytes": True,
         },
     }
@@ -227,10 +313,19 @@ def main() -> int:
     parser.add_argument("--train-size", type=int, default=2000)
     parser.add_argument("--validation-size", type=int, default=500)
     parser.add_argument("--step-size", type=int, default=500)
+    parser.add_argument("--holdout-size", type=int, default=500)
     args = parser.parse_args()
-    result = run(args.input, args.output, args.train_size, args.validation_size, args.step_size)
+    result = run(
+        args.input,
+        args.output,
+        args.train_size,
+        args.validation_size,
+        args.step_size,
+        args.holdout_size,
+    )
     print(f"Folds: {len(result['folds'])}")
-    print(f"OOS samples: {result['aggregate']['model']['sample_count']}")
+    print(f"OOS validation samples: {result['aggregate']['model']['sample_count']}")
+    print(f"Final holdout samples: {result['holdout']['model']['sample_count']}")
     print(f"Model Brier: {result['aggregate']['model']['brier_score']}")
     print(f"Baseline Brier: {result['aggregate']['baseline']['brier_score']}")
     print(f"Model LogLoss: {result['aggregate']['model']['log_loss']}")
