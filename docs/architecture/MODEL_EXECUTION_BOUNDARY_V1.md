@@ -251,7 +251,7 @@ Prove:
 
 Concrete adapters are implemented only after the boundary is green.
 
-The first concrete adapter is the deterministic research-model adapter. It executes the existing deterministic training-framework ModelContract through the new runtime without adding an external model dependency.
+The first concrete adapter is the deterministic research-model adapter. It executes a canonical registry ModelContract through the new runtime, using the existing deterministic training framework as the execution engine without adding an external model dependency.
 
 Each adapter must be added as a separate change with its own:
 
@@ -311,7 +311,7 @@ The model is a component of research, not the definition of research.
 
 ## 16. Implemented reference adapter
 
-The `DeterministicResearchModelAdapter` binds an existing deterministic training-framework ModelContract to the provider-neutral execution boundary.
+The `DeterministicResearchModelAdapter` binds a canonical registry ModelContract to the provider-neutral execution boundary and delegates deterministic execution to the existing training framework.
 
 The adapter:
 
