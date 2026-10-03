@@ -468,7 +468,7 @@ class RiskOrderIntent:
         if not isinstance(self.execution_mode, ExecutionMode):
             try:
                 object.__setattr__(
-                    self, "execution_mode", ExecutionMode(self.execution_mode)
+                    self, "execution_mode", ExecutionMode(str(self.execution_mode))
                 )
             except ValueError as exc:
                 raise ValueError(
@@ -477,7 +477,7 @@ class RiskOrderIntent:
         if not isinstance(self.strategy_state, StrategyState):
             try:
                 object.__setattr__(
-                    self, "strategy_state", StrategyState(self.strategy_state)
+                    self, "strategy_state", StrategyState(str(self.strategy_state))
                 )
             except ValueError as exc:
                 raise ValueError(
