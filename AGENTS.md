@@ -968,92 +968,156 @@ nearby commit.
 
 ---
 
-# 11. Parallel workstream protocol — 2026-09-27
+# 11. Workstream B quantitative protocol — 2026-09-28
 
-The repository is now being advanced by two independent engineering workstreams.
-Parallel work is allowed only when ownership and file scope are explicit.
+This addendum records the current quantitative-research baseline and the next
+mandatory evidence boundary. It does not reopen completed controls and does not
+substitute for executed historical evidence.
 
 ## 11.1 Current exact baseline
 
-Current main SHA after PR #367:
-`03191c86cdff541ac07cfca4291e9801ffab64bc`
+- Current main SHA after PR #375 merge: d9c2f1b1d6d5e1b420d294cac6992f5e474793bd.
+- PR #373 is already merged into this baseline and is the authoritative XAUUSD M1
+  final-holdout implementation.
+- PR #375 is already merged into this baseline and is the authoritative exact-code-
+  SHA binding for Phase 5.2 evidence generation.
+- PR #374 was superseded and must not be reintroduced as duplicate XAUUSD M1
+  holdout work.
 
-Phase 2 — Static typing:
-- PR #367 merged with the governed typing scope at zero mypy errors.
-- No production typing files required modification in that governed scope.
-- This does NOT establish repo-wide mypy == 0.
+## 11.2 Next Workstream B gap
 
-Phase 3 — Property/invariant testing:
-- PR #367 merged.
-- `researchos/tests/test_quality_property_contracts.py` added 197 lines.
-- 12 property/invariant tests execute in CI.
-- Exact PR-head CI, Release Readiness, and Supabase gates passed.
-- Post-merge main gates passed at the exact resulting SHA.
+The next distinct quantitative gap is mandatory final-holdout enforcement inside
 
-## 11.2 Workstream A — platform / production engineering
+the Phase 5.2 DXY/US10Y/VIX macro experiment itself.
 
-Workstream A owns:
-- Phase 1 architecture/source-of-truth integrity;
-- Phase 4 observability;
-- Phase 7 backup/restore and disaster recovery;
-- Phase 8 production schema/security/tenant-boundary verification;
-- Phase 9 production storage/jobs/claims/evidence execution;
-- Phase 10 billing/provider integration;
-- Phase 11 exact release verification;
-- Phase 12 evidence review.
+The XAUUSD M1 final holdout from PR #373 does NOT by itself prove that the
+Phase 5.2 macro feature experiment has an independent final holdout.
 
-Workstream A must not modify B-owned quantitative research logic merely to simplify
-its own branch.
+The macro experiment must establish an untouched chronological final test boundary
+that is excluded from:
 
-Current A branches/PRs must always disclose their exact base SHA.
+- walk-forward training;
+- validation/fold selection;
+- feature-set selection;
+- threshold/model selection;
+- calibration fitting;
+- aggregate training/validation metrics;
+- any stopping or tuning decision.
 
-## 11.3 Workstream B — quantitative research / validation engineering
+The final holdout may be scored only after all pre-holdout decisions are frozen.
 
-Workstream B owns research/quantitative validation work only, including:
-- XAUUSD walk-forward validation;
-- out-of-sample holdout enforcement;
-- DXY/US10Y/VIX feature validation;
-- Bayesian probability/calibration contracts;
-- quantitative result artifacts and research methodology documentation.
+## 11.3 Non-negotiable quantitative rules
 
-Workstream B must not modify:
-- `.github/workflows/`;
-- `AGENTS.md`;
-- production/staging Environment controls;
-- SaaS authentication/authorization/storage/billing runtime;
+11.3.1 Do NOT weaken, lower, or silently redefine any existing Phase 5.2 data-size
+thresholds, common-overlap requirements, minimum observations, or date-range
+requirements merely to make a holdout feasible.
+
+11.3.2 Do NOT add interpolation, forward-fill, resampling, synthetic repair, or
+look-ahead leakage. Any missing-data policy must remain explicit and justified.
+
+11.3.3 Chronology is mandatory. Information used at timestamp t MUST be available
+by timestamp t under the declared feature-availability convention.
+
+11.3.4 The holdout boundary, pre-holdout training range, validation ranges, and
+realized-label cutoffs MUST be emitted into the evidence artifact.
+
+11.3.5 The holdout MUST remain independent of parameter/model/feature selection.
+No post-hoc selection based on holdout performance is permitted.
+
+11.3.6 Probability/calibration evidence MUST declare whether calibration is fit
+only on pre-holdout observations. Holdout observations MUST NOT leak into
+calibration fitting or tuning.
+
+11.3.7 Any multiple-feature-set or multiple-hypothesis search MUST be disclosed
+and must not be presented as a single pre-registered result without accounting
+for the search scope.
+
+11.3.8 No predictive-edge, profitability, or trading-performance claim may be
+made from code-only validation. Historical numerical evidence must be actually
+executed and recorded.
+
+11.3.9 DXY source identity remains explicit: the current DXY series is a Dukascopy
+secondary series; equivalence to ICE DXY is NOT PROVEN unless independently
+evidenced.
+
+11.3.10 Scientific initialization/convergence remains a separate gate from
+mechanical holdout correctness. Passing one does not imply the other.
+
+## 11.4 Required evidence package for the macro final holdout
+
+A completed macro holdout implementation MUST make it possible to independently
+verify, at minimum:
+
+- exact repository SHA;
+- source-data SHA-256 identities;
+- feature-source identities and ordered timestamp/value hashing;
+- experiment configuration hash;
+- chronological train/validation/holdout boundaries;
+- realized-label embargo/cutoff rules;
+- feature availability convention;
+- holdout observation count and boundary timestamps;
+- explicit accounting that holdout rows are excluded from WFO aggregate metrics;
+- pre-holdout model/feature selection state;
+- calibration training population and exclusion of holdout observations;
+- holdout predictions and independently recomputable holdout metrics;
+- uncertainty/confidence information appropriate to the estimator;
+- multiplicity/search scope where more than one feature set or hypothesis exists;
+- a clear NOT VERIFIED field when real 2021–2025 execution has not occurred.
+
+## 11.5 Workstream isolation
+
+Workstream B MAY modify quantitative-research producers, auditors, evidence
+builders, research-only tests, and quantitative documentation required for this
+macro holdout.
+
+Workstream B MUST NOT modify, unless a separately identified blocker is proven:
+
+- SaaS auth/authorization;
+- billing;
+- production environment controls;
+- staging/production deployment configuration;
 - observability/runtime operations;
-- backup/recovery controls;
-- canonical architecture/scope guards.
+- backup/recovery infrastructure;
+- repository architecture/source-of-truth controls owned by Workstream A;
+- AGENTS.md within the implementation PR itself;
+- unrelated CI/workflow governance.
 
-B-owned changes must remain evidence-driven and must not introduce trading
-execution or broker-side actions.
+If a quantitative change requires one of those surfaces, split it into a distinct
+owned change and reconcile against the exact current main SHA before proceeding.
 
-## 11.4 Cross-workstream synchronization
+## 11.6 Acceptance boundary
 
-Before any PR:
-1. fetch and verify the exact current main SHA;
-2. create a dedicated branch from that SHA;
-3. inspect the other workstream's open PRs for file overlap;
-4. do not edit the same files/contract surface concurrently;
-5. if main changes, stop and reconcile before further code changes.
+The macro final-holdout phase is COMPLETE only when:
 
-A workstream may merge only after its own exact-head required gates are GREEN.
-A merge on another branch is not evidence for a different SHA.
+1. the implementation is bound to an exact Git SHA;
+2. focused regression/invariant coverage proves holdout independence and chronology;
+3. exact-head CI required for the changed surface is GREEN;
+4. the independent final holdout is actually executed on the historical dataset;
+5. the resulting metrics and uncertainty are preserved as evidence;
+6. no holdout result is used to select or tune the reported configuration;
+7. the scientific-convergence gate is separately reported;
+8. no predictive/profitability claim exceeds the executed historical evidence.
 
-## 11.5 Phase ownership does not transfer evidence
+Tests proving only structural behavior do NOT close this phase.
 
-Passing CI for one workstream does not close another workstream's phase.
-Real staging/production execution remains separate evidence even when repository
-tests are green.
+## 11.7 Required reporting format
 
-## 11.6 Required reporting
+Every B quantitative PR/report MUST distinguish:
 
-Every parallel-workstream update must state:
-- current main SHA;
-- branch and head SHA;
-- files changed;
-- exact CI/release/security evidence;
-- NOT VERIFIED items;
-- BLOCKER items, if any.
+FACT:
+- exact SHA(s), changed files, CI runs, executed datasets, measured metrics.
 
-Never report a phase as complete merely because another workstream passed CI.
+GAP:
+- the next missing evidence boundary.
+
+NOT VERIFIED:
+- anything not actually executed or independently recomputed.
+
+BLOCKER:
+- concrete failure preventing acceptance.
+
+DECISION:
+- keep open / merge / stop, based only on the evidence above.
+
+Never convert an unexecuted macro experiment into a predictive claim merely
+because its code paths and CI tests are green.

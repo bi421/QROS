@@ -46,7 +46,7 @@ def test_exit_zero_quality_gate_is_rejected():
     assert "fail-open" in failures[0]
 
 
-def test_intentional_cleanup_is_not_rejected():
+def test_storage_cleanup_suppression_is_rejected():
     audit = load_audit()
     failures: list[str] = []
 
@@ -56,7 +56,22 @@ def test_intentional_cleanup_is_not_rejected():
         failures,
     )
 
-    assert failures == []
+    assert len(failures) == 1
+    assert "fail-open" in failures[0]
+
+
+def test_storage_api_cleanup_suppression_is_rejected():
+    audit = load_audit()
+    failures: list[str] = []
+
+    audit.check_workflow_fail_open(
+        ".github/workflows/storage-recovery-drill.yml",
+        "curl --fail https://example.invalid/object || true\n",
+        failures,
+    )
+
+    assert len(failures) == 1
+    assert "fail-open" in failures[0]
 
 
 def test_governed_workflow_with_clean_commands_passes():
@@ -90,7 +105,20 @@ def test_exact_release_workflow_is_governed():
     audit = load_audit()
 
     assert ".github/workflows/release.yml" in audit.GOVERNED_WORKFLOWS
+    assert ".github/workflows/supabase-db-tests.yml" in audit.GOVERNED_WORKFLOWS
     assert all(
         marker in audit.REQUIRED_MARKERS[".github/workflows/release.yml"]
         for marker in ("mypy", "backup_verify.py", "final_health_check.py")
     )
+
+
+def test_backup_verifier_is_real_and_fail_closed() -> None:
+    root = Path(__file__).resolve().parents[2]
+    source = (root / "scripts" / "backup_verify.py").read_text(encoding="utf-8")
+
+    assert "mock://test" not in source
+    assert 'status": "success"' not in source
+    assert "pg_dump" in source
+    assert "pg_restore" in source
+    assert "database_snapshot" in source
+    assert "migration/security verification failed" in source

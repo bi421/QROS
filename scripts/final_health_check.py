@@ -94,8 +94,10 @@ def main() -> int:
     git_status = command_result("git_status", ["git", "status", "--short", "--branch"])
     checks["git_status"] = git_status
 
-    statuses = [check["status"] for check in checks.values()]
-    overall = "PASS" if all(status == "PASS" for status in statuses) else "FAIL"
+    # SKIPPED is an intentional non-blocking state (for example --skip-cpp).
+    # Only an explicit FAIL makes the overall health gate fail.
+    failures = [check["label"] for check in checks.values() if check["status"] == "FAIL"]
+    overall = "FAIL" if failures else "PASS"
     evidence = {
         "schema_version": 1,
         "health_status": overall,

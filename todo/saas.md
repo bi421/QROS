@@ -15,7 +15,7 @@
 | Research governance | 🟢 Complete | Core claim/plan/evidence/result governance implemented |
 | Tenant security | 🟢 Complete | RLS, authorization, isolation tests and session boundary implemented |
 | API foundation | 🟢 Complete | Versioned API, validation, rate limits, idempotency and errors |
-| Database migrations | 🟡 In progress | 44/44 migrations applied to staging; canonical history parity still unverified |
+| Database migrations | 🟡 Verified (staging version-set parity) | 45 staging migration rows; 48 canonical migration files are currently present on main; staging contains the worker execution version `20260928103556` under the historical remote display name `20260928103225_saas_worker_queue_consumer`; the three current M1 reconciliation migrations are not yet applied to staging |
 | Staging Golden Path | 🟡 Blocked | Auth/application identities and end-to-end operational evidence pending |
 | Disaster Recovery | 🔴 Blocked | Isolated recovery target and recovery storage not provisioned |
 | Observability | 🟡 In progress | Production-grade acceptance evidence pending |
@@ -32,8 +32,8 @@
 
 ### Exit criteria
 
-- [ ] Canonical migration history parity verified.
-- [ ] Staging schema/security objects verified.
+- [x] Canonical migration version-set parity verified; historical remote name drift documented without rewriting migration history.
+- [x] Staging schema/security objects verified.
 - [ ] Two controlled staging identities verified.
 - [ ] Real API tenant isolation verified.
 - [ ] Complete governed Golden Path executed.
@@ -101,24 +101,25 @@
 - [x] Canonical migrations under `supabase/migrations/`.
 - [x] Migration filename/order validation.
 - [x] Migration security invariants.
-- [x] 44 canonical migration files at current baseline.
+- [x] 48 canonical migration files at current baseline.
 
 ### QROS Staging
 - [x] Staging project exists.
 - [x] Project ref: `yebwhcntiockckhdvawt`.
 - [x] Region: `ap-northeast-1`.
 - [x] PostgreSQL 17.6 / engine 17.
-- [x] 44/44 repository migration SQL files applied.
-- [x] 44 migration rows observed.
+- [x] 45 migration rows observed; the worker migration is present under its historical remote display name.
+- [ ] Current 48-file repository migration set fully applied to staging.
 - [x] 20 public tables observed.
 - [x] 0 public tables with RLS disabled.
 
 ### Remaining
-- [ ] Verify migration-history identity against repository filenames.
-- [ ] Verify schema objects, constraints, indexes, functions, grants and triggers.
-- [ ] Verify RLS policies against canonical definitions.
-- [ ] Review staging Security Advisor findings.
-- [ ] Resolve/document the pgtap-in-public-schema warning.
+- [x] Verify the worker execution version `20260928103556` is present; its historical remote display name remains `20260928103225_saas_worker_queue_consumer` and is not rewritten.
+- [ ] Apply/verify the three current M1 reconciliation migrations in staging when the staging deployment gate is provisioned.
+- [x] Verify staging QROS tables, RLS state, public policies/triggers, and governed queue function grants.
+- [x] Verify RLS is enabled on all 20 QROS public tables (20/20; 0 disabled).
+- [x] Review staging Security Advisor findings.
+- [x] Document the existing `pgtap`-in-public-schema warning; no live schema mutation performed.
 
 > **Important:** Manual migration application proves the SQL was applied; it does **not** by itself prove canonical migration-history parity. Do not rewrite migration history merely to obtain a green check.
 
@@ -405,7 +406,7 @@ Local Windows validation: **NOT EXECUTED**.
 - Public tables observed: **20**
 - Public tables with RLS disabled: **0**
 - pgtap: **installed**
-- Migration-history canonical parity: **NOT VERIFIED**
+- Migration-history version-set parity: **VERIFIED**; remote historical display-name drift retained as evidence, not repaired
 - Real Auth/API Golden Path: **NOT EXECUTED**
 
 ## DR
