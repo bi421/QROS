@@ -45,6 +45,7 @@ def test_calibration_status_survives_probability_risk_pretrade_boundary() -> Non
             account_equity=10_000,
             trade_statistics=TradeStatistics(average_win=150, average_loss=100, sample_size=100),
             research_valid=True,
+            risk_policy=RiskPolicy(max_risk_fraction=0.0025),
             risk_account=RiskAccountState(
                 day_start_equity=10_000,
                 current_equity=10_000,
