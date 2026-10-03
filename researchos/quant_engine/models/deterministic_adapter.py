@@ -7,6 +7,8 @@ It owns no evidence, tenant state, or trading decisions.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
@@ -113,7 +115,13 @@ class DeterministicResearchModelAdapter:
                 "feature_names": tuple(self.model.feature_names),
                 "prediction_count": len(predictions),
                 "validation_hash": self.model.validation_hash,
-                "model_contract_hash": self.model.content_hash(),
+                "model_contract_hash": hashlib.sha256(
+                    json.dumps(
+                        self.model.to_dict(),
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest(),
             },
         )
 
