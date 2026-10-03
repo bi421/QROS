@@ -323,3 +323,12 @@ The adapter:
 - performs no trading action and creates no evidence.
 
 This adapter is an execution integration test of the architecture, not a forecasting or trading claim.
+
+
+### Inference versus training identity
+
+The registry model contract retains the dataset identity used to establish the
+model. Inference requests carry the identity of the dataset actually being
+executed. These identities are intentionally allowed to differ so that the
+same validated model can be evaluated on later or out-of-sample datasets
+without changing the model contract.
