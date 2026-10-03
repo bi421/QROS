@@ -60,6 +60,7 @@ saas = [
     "opentelemetry-api>=1.27,<2",
     "opentelemetry-sdk>=1.27,<2",
     "prometheus-client>=0.21,<1",
+    "msgpack>=1.2.1,<2",
 ]
 dev = [
     "pytest>=7.0",
@@ -72,6 +73,7 @@ dev = [
     "nanobind>=1.5.0",
     "cmake>=3.27",
     "ninja>=1.11",
+    "yfinance>=0.2",
 ]
 test = [
     "yfinance>=0.2",
@@ -79,6 +81,7 @@ test = [
 
 [project.scripts]
 researchos-health = "scripts.final_health_check:main"
+qros-worker = "researchos.saas.worker_runtime:main"
 
 [project.urls]
 Homepage = "https://github.com/bi421/QROS"
@@ -90,7 +93,6 @@ cmake.version = ">=3.27"
 cmake.build-type = "Release"
 wheel.packages = [
     "researchos",
-    "researchos/engines/quant/python/cpp_quant_engine",
     "financial_research_lab/src/financial_research_lab",
 ]
 

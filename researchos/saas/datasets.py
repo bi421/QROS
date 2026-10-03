@@ -66,6 +66,10 @@ class DatasetStorage(Protocol):
         """Create a short-lived URL for an already-authorized private object."""
         ...
 
+    def download(self, storage_path: str) -> bytes:
+        """Download an already-authorized private object server-side."""
+        ...
+
 
 class InMemoryDatasetStore:
     """Deterministic development/test implementation; not production storage."""
@@ -150,6 +154,12 @@ class InMemoryDatasetStorage:
         if not 1 <= expires_in <= 900:
             raise ValueError("signed URL expiry must be between 1 and 900 seconds")
         return f"memory://{storage_path}?expires_in={expires_in}"
+
+    def download(self, storage_path: str) -> bytes:
+        content = self._objects.get(storage_path)
+        if content is None:
+            raise FileNotFoundError(storage_path)
+        return content
 
 
 class SupabaseDatasetStore:
@@ -293,6 +303,12 @@ class SupabaseDatasetStorage:
 
     def remove(self, storage_path: str) -> None:
         self._client.storage.from_(self._bucket).remove([storage_path])
+
+    def download(self, storage_path: str) -> bytes:
+        response = self._client.storage.from_(self._bucket).download(storage_path)
+        if not isinstance(response, bytes):
+            raise RuntimeError("storage provider returned invalid dataset bytes")
+        return response
 
     def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
         if not 1 <= expires_in <= 900:

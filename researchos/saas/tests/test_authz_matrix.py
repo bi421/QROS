@@ -29,3 +29,26 @@ def test_viewer_cannot_create_jobs() -> None:
     with pytest.raises(HTTPException) as exc:
         authorize(context, Resource.JOB, Action.CREATE)
     assert exc.value.status_code == 403
+
+
+
+def test_viewer_cannot_access_billing() -> None:
+    context = TenantContext(uuid4(), uuid4(), Plan.PRO, role=WorkspaceRole.VIEWER)
+    for action in Action:
+        with pytest.raises(HTTPException) as exc:
+            authorize(context, Resource.BILLING, action)
+        assert exc.value.status_code == 403
+
+
+@pytest.mark.parametrize("action", [Action.READ, Action.LIST, Action.UPDATE])
+def test_billing_admin_has_only_non_destructive_billing_access(action: Action) -> None:
+    context = TenantContext(uuid4(), uuid4(), Plan.PRO, role=WorkspaceRole.BILLING_ADMIN)
+    authorize(context, Resource.BILLING, action)
+
+
+@pytest.mark.parametrize("action", [Action.CREATE, Action.DELETE])
+def test_billing_admin_cannot_create_or_delete_billing_records(action: Action) -> None:
+    context = TenantContext(uuid4(), uuid4(), Plan.PRO, role=WorkspaceRole.BILLING_ADMIN)
+    with pytest.raises(HTTPException) as exc:
+        authorize(context, Resource.BILLING, action)
+    assert exc.value.status_code == 403

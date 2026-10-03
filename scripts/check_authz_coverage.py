@@ -15,12 +15,15 @@ def main() -> int:
     route_count = 0
     missing: list[str] = []
     public_prefixes = ("/healthz", "/readyz", "/metrics", "/v1/me", "/v1/billing/webhook")
+    public_routes = {"/onboarding", "/onboarding/app.js", "/onboarding/config"}
+    identity_only_routes = {"/v1/workspaces"}
 
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         route_paths: list[str] = []
         has_permission = False
+        has_identity_auth = False
         for decorator in node.decorator_list:
             target = decorator.func if isinstance(decorator, ast.Call) else decorator
             if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == "app":
@@ -29,9 +32,23 @@ def main() -> int:
                         route_paths.append(decorator.args[0].value)
             if isinstance(target, ast.Name) and target.id == "require_permission":
                 has_permission = True
+        for child in ast.walk(node):
+            if not isinstance(child, ast.Call):
+                continue
+            target = child.func
+            if (
+                isinstance(target, ast.Attribute)
+                and isinstance(target.value, ast.Name)
+                and target.value.id == "auth"
+                and target.attr == "authenticate_user"
+            ):
+                has_identity_auth = True
+                break
         for route in route_paths:
             route_count += 1
-            if route.startswith(public_prefixes):
+            if route in public_routes or route.startswith(public_prefixes):
+                continue
+            if route in identity_only_routes and has_identity_auth:
                 continue
             if not has_permission:
                 missing.append(f"{node.name}: {route}")
