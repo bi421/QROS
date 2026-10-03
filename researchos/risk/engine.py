@@ -175,7 +175,10 @@ def evaluate_risk_gate(
         ),
     )
     for warning, utilization, limit in utilization_checks:
-        if limit > 0 and utilization >= policy.warning_utilization_fraction:
+        if (
+            limit > 0
+            and utilization + _ZERO_TOLERANCE >= policy.warning_utilization_fraction
+        ):
             warnings.append(warning)
 
     status = "BLOCKED" if failures else (
