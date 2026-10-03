@@ -151,8 +151,6 @@ def run_phase52_comparison(
 ) -> dict[str, Phase52Result]:
     """Run all five feature sets with the governed final-holdout contract."""
     base = config or Phase52Config()
-    kwargs_without_config = dict(kwargs)
-    kwargs_without_config.pop("config", None)
     return {
         feature_set: run_phase52(
             close,
