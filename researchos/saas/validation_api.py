@@ -51,6 +51,7 @@ def register_research_validation_routes(
     job_store: ResearchJobStore,
 ) -> None:
     @app.post("/v1/research-runs/{job_id}/validation", status_code=status.HTTP_201_CREATED, tags=["research"])
+    @require_permission("job", "update")
     def create_validation(
         job_id: UUID,
         request: ResearchValidationRequest,

@@ -18,7 +18,7 @@ from researchos.saas.evidence_api import SupabaseResearchEvidenceStore
 from researchos.saas.supabase_validation_store import SupabaseResearchValidationStore
 from researchos.saas.supabase_finding_store import SupabaseResearchFindingStore
 from researchos.saas.idempotency import SupabaseIdempotencyStore
-from researchos.saas.billing import SupabaseBillingEventStore
+from researchos.saas.billing import SupabaseBillingEventStore, SupabaseEntitlementStore
 from researchos.saas.rate_limit import SupabaseRateLimiter
 from researchos.saas.workspace import SupabaseWorkspaceProvisioner
 
@@ -44,7 +44,11 @@ def build_production_app() -> FastAPI:
         auth_provider=auth,
         job_store=SupabaseResearchJobStore(client),
         dataset_store=SupabaseDatasetStore(client),
-        dataset_storage=SupabaseDatasetStorage(client),
+        dataset_storage=SupabaseDatasetStorage(
+            client,
+            supabase_url=url,
+            publishable_key=os.environ["SUPABASE_ANON_KEY"],
+        ),
         job_queue=SupabaseResearchJobQueue(client),
         idempotency_store=SupabaseIdempotencyStore(client),
         claim_store=SupabaseResearchClaimStore(client),
@@ -52,6 +56,13 @@ def build_production_app() -> FastAPI:
         validation_store=SupabaseResearchValidationStore(client),
         finding_store=SupabaseResearchFindingStore(client),
         billing_store=SupabaseBillingEventStore(client),
+        entitlement_store=SupabaseEntitlementStore(client),
+        plan_rate_limiters={
+            Plan.FREE: SupabaseRateLimiter(client, limit=100, window_seconds=60),
+            Plan.PRO: SupabaseRateLimiter(client, limit=1000, window_seconds=60),
+            Plan.TEAM: SupabaseRateLimiter(client, limit=1000, window_seconds=60),
+            Plan.ENTERPRISE: SupabaseRateLimiter(client, limit=1000, window_seconds=60),
+        },
         billing_webhook_secret=os.environ.get("BILLING_WEBHOOK_SECRET"),
         metrics_token=os.environ.get("QROS_METRICS_TOKEN"),
         rate_limiter=SupabaseRateLimiter(client, limit=120, window_seconds=60),

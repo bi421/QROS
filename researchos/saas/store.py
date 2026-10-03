@@ -44,6 +44,18 @@ class ResearchJobStore:
     def list(self, workspace_id: UUID, *, limit: int, offset: int, status: ResearchJobStatus | None = None, workflow_id: str | None = None) -> tuple[list[ResearchJob], int]:
         raise NotImplementedError
 
+    def logs(self, workspace_id: UUID, job_id: UUID) -> list[dict[str, object]]:
+        """Return tenant-scoped lifecycle log projection for the public API."""
+        job = self.get(workspace_id, job_id)
+        if job is None:
+            return []
+        return [{
+            "event": "job_state",
+            "status": job.status.value,
+            "attempt_count": job.attempt_count,
+            "error_code": job.error_code,
+        }]
+
     def count_active(self, workspace_id: UUID) -> int:
         raise NotImplementedError
 
