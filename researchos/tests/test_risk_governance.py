@@ -243,7 +243,7 @@ def test_risk_equity_mismatch_is_blocked() -> None:
 def test_near_limit_usage_emits_warning_without_blocking() -> None:
     decision = _evaluate(
         account=_account(current_equity=9_838.0),
-        risk=_risk(final_risk_fraction=0.001),
+        risk=_risk(account_equity=9_838.0, final_risk_fraction=0.001),
     )
 
     assert decision.allowed
