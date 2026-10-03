@@ -112,3 +112,23 @@ def test_zero_risk_budget_never_becomes_trade_ready() -> None:
         research_valid=True,
     )
     assert report.status == "NO_POSITIVE_RISK_BUDGET"
+
+def test_decision_pipeline_blocks_without_risk_governance_context() -> None:
+    report = run_decision_pipeline(
+        DecisionPipelineInput(
+            assessment=_assessment("Well-Calibrated"),
+            asset="XAUUSD",
+            direction="bullish",
+            account_equity=10_000,
+            trade_statistics=TradeStatistics(
+                average_win=150,
+                average_loss=100,
+                sample_size=100,
+            ),
+            research_valid=True,
+        )
+    )
+
+    assert report.status == "BLOCKED_RISK_GOVERNANCE"
+    assert report.risk_governance_valid is False
+    assert report.risk_governance_status == "NOT_EVALUATED"
