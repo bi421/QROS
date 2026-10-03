@@ -2,70 +2,72 @@ name: Production Database Backup
 
 on:
   schedule:
-    - cron: "17 2 * * *"
+    - cron: '0 2 * * *'
   workflow_dispatch:
-
-permissions:
-  contents: read
 
 jobs:
   backup:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    environment: production
     steps:
-      - name: Validate backup configuration
-        env:
-          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ secrets.BACKUP_AWS_REGION }}
-          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "${DATABASE_URL}" || { echo "PROD_DATABASE_URL is required"; exit 1; }
-          test -n "${AWS_ACCESS_KEY_ID}" || { echo "BACKUP_AWS_ACCESS_KEY_ID is required"; exit 1; }
-          test -n "${AWS_SECRET_ACCESS_KEY}" || { echo "BACKUP_AWS_SECRET_ACCESS_KEY is required"; exit 1; }
-          test -n "${AWS_DEFAULT_REGION}" || { echo "BACKUP_AWS_REGION is required"; exit 1; }
-          test -n "${BACKUP_S3_BUCKET}" || { echo "BACKUP_S3_BUCKET is required"; exit 1; }
+      - uses: actions/checkout@v4
 
-      - name: Install PostgreSQL client
-        shell: bash
+      - name: Install pg_dump
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-client
 
-      - name: Create compressed logical backup
-        env:
-          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
-        shell: bash
+      - name: Verify AWS CLI
         run: |
-          set -euo pipefail
-          mkdir -p backup
-          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-          pg_dump "${DATABASE_URL}" --format=custom --no-owner --file="backup/qros-${stamp}.dump"
-          sha256sum "backup/qros-${stamp}.dump" | tee "backup/qros-${stamp}.sha256"
-          echo "BACKUP_FILE=backup/qros-${stamp}.dump" >> "$GITHUB_ENV"
-          echo "BACKUP_SHA=backup/qros-${stamp}.sha256" >> "$GITHUB_ENV"
+          command -v aws
+          aws --version
 
-      - name: Verify local backup integrity
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -s "${BACKUP_FILE}"
-          test -s "${BACKUP_SHA}"
-          sha256sum --check "${BACKUP_SHA}"
-
-      - name: Upload backup to S3
+      - name: Dump production database with pg_dump
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ secrets.BACKUP_AWS_REGION }}
-          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
-        shell: bash
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
         run: |
-          set -euo pipefail
-          aws s3 cp "${BACKUP_FILE}" "s3://${BACKUP_S3_BUCKET}/qros/postgres/$(basename "${BACKUP_FILE}")" --sse AES256
-          aws s3 cp "${BACKUP_SHA}" "s3://${BACKUP_S3_BUCKET}/qros/postgres/$(basename "${BACKUP_SHA}")" --sse AES256
-          aws s3api head-object --bucket "${BACKUP_S3_BUCKET}" --key "qros/postgres/$(basename "${BACKUP_FILE}")" >/dev/null
-          aws s3api head-object --bucket "${BACKUP_S3_BUCKET}" --key "qros/postgres/$(basename "${BACKUP_SHA}")" >/dev/null
+          # GitHub-hosted runners may have no IPv6 route to Supabase's direct
+          # database hostname. Keep the hostname in the URL for TLS and resolve
+          # an IPv4 address separately for libpq's network target.
+          DB_HOST="$(python3 -c 'from urllib.parse import urlparse; import os; print(urlparse(os.environ["PROD_DATABASE_URL"]).hostname or "")')"
+          test -n "$DB_HOST"
+          DB_IPV4="$(getent ahostsv4 "$DB_HOST" | awk 'NR==1 {print $1}')"
+          test -n "$DB_IPV4"
+          echo "Resolved production DB hostname to IPv4 for pg_dump."
+          PGHOSTADDR="$DB_IPV4" pg_dump --no-password "$PROD_DATABASE_URL" > /tmp/qros-backup.sql
+
+      - name: Generate checksum
+        run: |
+          sha256sum /tmp/qros-backup.sql > /tmp/backup.sha256
+
+      - name: Upload backup to S3 with aws s3 cp
+        env:
+          BACKUP_AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
+          BACKUP_AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
+          BACKUP_AWS_REGION: ${{ secrets.BACKUP_AWS_REGION }}
+        run: |
+          aws configure set aws_access_key_id "$BACKUP_AWS_ACCESS_KEY_ID"
+          aws configure set aws_secret_access_key "$BACKUP_AWS_SECRET_ACCESS_KEY"
+          aws configure set region "$BACKUP_AWS_REGION"
+          aws s3 cp /tmp/qros-backup.sql s3://qros-backups/qros-backup.sql
+          aws s3 cp /tmp/backup.sha256 s3://qros-backups/backup.sha256
+
+      - name: Verify backup exists with head-object
+        env:
+          BACKUP_AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
+          BACKUP_AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
+          BACKUP_AWS_REGION: ${{ secrets.BACKUP_AWS_REGION }}
+        run: |
+          aws configure set aws_access_key_id "$BACKUP_AWS_ACCESS_KEY_ID"
+          aws configure set aws_secret_access_key "$BACKUP_AWS_SECRET_ACCESS_KEY"
+          aws configure set region "$BACKUP_AWS_REGION"
+          aws s3api head-object --bucket qros-backups --key qros-backup.sql
+
+      - name: Verify checksums with sha256sum --check
+        run: |
+          cd /tmp
+          sha256sum --check backup.sha256
+
+      - name: Cleanup
+        if: always()
+        run: rm -f /tmp/qros-backup.sql /tmp/backup.sha256
