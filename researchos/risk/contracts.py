@@ -52,9 +52,7 @@ _ALLOWED_STRATEGY_TRANSITIONS: dict[StrategyState, frozenset[StrategyState]] = {
     StrategyState.DEPLOYMENT_ELIGIBLE: frozenset(
         {StrategyState.ACTIVE, StrategyState.SUSPENDED}
     ),
-    StrategyState.ACTIVE: frozenset(
-        {StrategyState.SUSPENDED, StrategyState.RETIRED}
-    ),
+    StrategyState.ACTIVE: frozenset({StrategyState.SUSPENDED}),
     StrategyState.SUSPENDED: frozenset(
         {StrategyState.RISK_REVIEW, StrategyState.RETIRED}
     ),
