@@ -300,3 +300,32 @@ This standard is informed by published controls from:
 - Published FTMO trading objectives: equity-based maximum daily loss and maximum loss rules.
 
 These references establish the control categories and philosophy. ResearchOS's numerical defaults are intentionally conservative internal defaults and remain configurable by risk profile.
+
+
+## 17. Executable Risk Management V2 — 2026-10-03
+
+The P0 risk-management boundary is now implemented in code under:
+
+```
+researchos/risk/
+```
+
+Implemented:
+
+- versioned `RiskPolicy`;
+- immutable account/equity risk snapshot;
+- daily-loss, total-drawdown, and strategy-loss accounting;
+- maximum loss per trade;
+- portfolio open-risk budget;
+- gross and single-instrument exposure limits;
+- stale-data, session, permission, duplicate-order, order-rate, fat-finger, and margin gates;
+- explicit paper/live calibration and strategy-state gates;
+- kill-switch state;
+- immutable content-addressed risk audit events;
+- governed strategy state machine;
+- mandatory risk-context enforcement in `run_decision_pipeline()`;
+- risk status, hard failures, warnings, and audit event in `PreTradeReport`.
+
+The implementation remains research/paper/live-risk **authorization logic only**. It does not place broker orders.
+
+The remaining operational layer is persistence and real account-state adapters. Until those exist, a green risk calculation is not evidence of live execution readiness.

@@ -56,5 +56,5 @@ def test_report_is_serializable() -> None:
     report = build_pre_trade_report(_risk(), research_valid=True)
     payload = report.to_dict()
 
-    assert payload["schema_version"] == "pretrade.v1"
+    assert payload["schema_version"] == "pretrade.v2"
     assert payload["status"] == "READY_FOR_HUMAN_REVIEW"
