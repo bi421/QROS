@@ -11,6 +11,7 @@ from researchos.risk.adapters import risk_input_from_probability
 from researchos.risk.contracts import (
     ExecutionMode,
     RiskAccountSnapshot,
+    RiskAuditEvent,
     RiskGateResult,
     RiskOrderIntent,
     RiskPolicy,
@@ -59,6 +60,15 @@ def _calibration_status(request: DecisionPipelineInput) -> str | None:
     if isinstance(request.assessment, ProbabilityAssessment):
         return request.assessment.probability_calibration_status
     return request.assessment.get("probability_calibration_status")
+
+
+def _assessment_timestamp(assessment: ProbabilityAssessment | dict[str, Any]) -> str:
+    if isinstance(assessment, ProbabilityAssessment):
+        return assessment.timestamp.isoformat()
+    timestamp = assessment.get("timestamp")
+    if not timestamp:
+        raise ValueError("probability assessment is missing timestamp for risk audit")
+    return str(timestamp)
 
 
 def _blocked_risk_context(request: DecisionPipelineInput) -> RiskGateResult:
@@ -116,9 +126,16 @@ def run_decision_pipeline(request: DecisionPipelineInput) -> PreTradeReport:
             policy=request.risk_policy,
         )
 
+    audit_event = RiskAuditEvent.from_gate(
+        gate,
+        asset=request.asset,
+        strategy_id=request.strategy_id or "UNSPECIFIED",
+        timestamp=_assessment_timestamp(request.assessment),
+    )
     return build_pre_trade_report(
         risk,
         research_valid=request.research_valid,
         research_limitations=request.research_limitations,
         risk_gate=gate,
+        risk_audit_event=audit_event,
     )
