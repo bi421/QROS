@@ -1,0 +1,22 @@
+name: Mypy Production Source Diagnostic v4
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  mypy-production-diagnostic:
+    name: Mypy production source diagnostic
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: python -m pip install -e ".[dev,test,saas]"
+      - run: python -m mypy researchos --exclude '(^|/)tests/' --allow-untyped-defs
