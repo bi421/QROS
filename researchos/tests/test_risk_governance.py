@@ -101,13 +101,13 @@ def test_clean_account_passes_and_has_deterministic_audit_hash() -> None:
 
 
 def test_daily_equity_loss_is_a_hard_block() -> None:
-    decision = _evaluate(account=_account(current_equity=7_900.0))
+    decision = _evaluate(account=_account(current_equity=9_700.0))
 
     assert not decision.allowed
     assert RiskViolationCode.DAILY_LOSS_LIMIT in {
         item.code for item in decision.violations
     }
-    assert decision.daily_loss_fraction == pytest.approx(0.21)
+    assert decision.daily_loss_fraction == pytest.approx(0.03)
 
 
 def test_high_water_mark_drawdown_is_a_hard_block() -> None:
@@ -242,7 +242,7 @@ def test_risk_equity_mismatch_is_blocked() -> None:
 
 def test_near_limit_usage_emits_warning_without_blocking() -> None:
     decision = _evaluate(
-        account=_account(current_equity=8_100.0),
+        account=_account(current_equity=9_838.0),
         risk=_risk(final_risk_fraction=0.001),
     )
 
