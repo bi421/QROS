@@ -56,8 +56,33 @@ The authenticated context contains:
 - `POST /v1/datasets` — create a dataset and immutable version from an upload.
 - `POST /v1/datasets/{dataset_id}/versions` — append an immutable dataset version.
 - `GET /v1/datasets` — list datasets visible to the authenticated workspace; optional `name`, `limit`, and `offset` filters.
-- `GET /v1/datasets/{dataset_id}/versions` — list versions visible to the authenticated workspace.
+- `GET /v1/datasets/{dataset_id}/versions` — list versions visible to the authenticated workspace with the standard pagination envelope.
 - `GET /v1/datasets/{dataset_id}/versions/{version_id}/download` — issue a short-lived private download URL after tenant authorization.
+- `DELETE /v1/datasets/{dataset_id}/versions/{version_id}` — delete an authorized dataset version.
+
+## 4.1 List response contract
+
+Every list endpoint uses the same query parameters and response envelope:
+
+- Query: `page` (default `1`), `page_size` (default `20`, maximum `100`), `sort_by` (endpoint allowlist), `sort_order` (`asc` or `desc`), and supported `filter[...]` parameters such as `filter[status]` and `filter[tenant_id]`.
+- Unknown or malformed filters return HTTP 400 with code `INVALID_FILTER`.
+- Unsupported `sort_by` returns HTTP 400 with code `INVALID_SORT`.
+- The response body is:
+
+```json
+{
+  "data": [],
+  "pagination": {
+    "page": 1,
+    "page_size": 20,
+    "total": 100,
+    "total_pages": 5
+  },
+  "request_id": "01JQROSREQUEST123"
+}
+```
+
+`filter[tenant_id]` is never used to widen authorization scope; it can only constrain results to the authenticated tenant. A different tenant value produces an empty result set.
 
 Dataset bytes are streamed through a bounded SHA-256 calculation before persistence. Storage paths are tenant-scoped and content-addressed.
 
@@ -66,14 +91,20 @@ Dataset bytes are streamed through a bounded SHA-256 calculation before persiste
 - `POST /v1/research-runs` — enqueue a frozen research workflow.
 - `GET /v1/research-runs` — list workspace-scoped jobs with bounded status/workflow filters and pagination.
 - `GET /v1/research-runs/{job_id}` — retrieve a workspace-scoped job.
-- `GET /v1/research-runs/{job_id}/logs` — retrieve the tenant-scoped deterministic lifecycle log projection.
+- `GET /v1/research-runs/{job_id}/logs` — retrieve the tenant-scoped deterministic lifecycle log projection with the standard pagination envelope.
+- `GET /v1/jobs/{job_id}/logs` — compatibility alias for the research-run lifecycle log projection.
 - `GET /v1/research-runs/{job_id}/result` — retrieve the immutable governed result projection.
-- `GET /v1/research-runs/{job_id}/evidence` — retrieve tenant-scoped stored evidence lineage.
+- `GET /v1/research-runs/{job_id}/evidence` — retrieve tenant-scoped stored evidence lineage with the standard pagination envelope.
+- `POST /v1/research-runs/{job_id}/validation` — persist a governed validation projection for an available research result.
+- `GET /v1/research-runs/{job_id}/validation` — retrieve the governed validation projection.
+- `POST /v1/research-runs/{job_id}/finding` — persist a finding only from a validated research result.
+- `GET /v1/research-runs/{job_id}/finding` — retrieve the governed finding projection.
 - `GET /v1/research-runs/{job_id}/report` — retrieve a deterministic human-readable report projection.
 - `POST /v1/research-claims` — create a tenant-scoped Research Claim.
 - `GET /v1/research-claims/{claim_id}` — retrieve a workspace-scoped Research Claim.
 - `POST /v1/research-claims/{claim_id}/plan-lock` — lock the immutable research plan for a claim.
-- `GET /v1/research-claims/{claim_id}/evidence-graph` — retrieve tenant-scoped evidence lineage associated with the claim.
+- `GET /v1/research-claims/{claim_id}/evidence-graph` — retrieve tenant-scoped evidence lineage associated with the claim with the standard pagination envelope.
+- `GET /v1/claims/{claim_id}/evidence_graph` — compatibility alias for the claim evidence graph.
 - `GET /v1/research-claims` — list Research Claims with bounded tenant-scoped pagination.
 
 ### Findings

@@ -17,17 +17,24 @@ EXPECTED = {
     "POST /v1/datasets/{dataset_id}/versions",
     "GET /v1/datasets/{dataset_id}/versions",
     "GET /v1/datasets/{dataset_id}/versions/{version_id}/download",
+    "DELETE /v1/datasets/{dataset_id}/versions/{version_id}",
     "POST /v1/research-runs",
     "GET /v1/research-runs",
     "GET /v1/research-runs/{job_id}",
     "GET /v1/research-runs/{job_id}/logs",
+    "GET /v1/jobs/{job_id}/logs",
     "GET /v1/research-runs/{job_id}/result",
     "GET /v1/research-runs/{job_id}/evidence",
+    "POST /v1/research-runs/{job_id}/validation",
+    "GET /v1/research-runs/{job_id}/validation",
+    "POST /v1/research-runs/{job_id}/finding",
+    "GET /v1/research-runs/{job_id}/finding",
     "GET /v1/research-runs/{job_id}/report",
     "POST /v1/research-claims",
     "GET /v1/research-claims",
     "GET /v1/research-claims/{claim_id}",
     "GET /v1/research-claims/{claim_id}/evidence-graph",
+    "GET /v1/claims/{claim_id}/evidence_graph",
     "GET /v1/findings",
     "DELETE /v1/workspaces/{workspace_id}",
     "GET /v1/workspaces/{workspace_id}/export",
@@ -45,6 +52,8 @@ def main() -> int:
                 documented.add(value)
     actual: set[str] = set()
     for source in (ROOT / "researchos" / "saas").rglob("*.py"):
+        if "tests" in source.parts:
+            continue
         tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -74,4 +83,4 @@ def main() -> int:
     return 0
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main())\n

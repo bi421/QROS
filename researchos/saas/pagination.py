@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import ceil
+from collections.abc import Mapping
 
 
 DEFAULT_PAGE = 1
@@ -27,6 +28,7 @@ class ListQuery:
     sort_by: str = "created_at"
     sort_order: str = "desc"
     status: str | None = None
+    tenant_id: str | None = None
 
     @property
     def offset(self) -> int:
@@ -40,6 +42,7 @@ def parse_list_query(
     sort_by: str = "created_at",
     sort_order: str = "desc",
     status: str | None = None,
+    tenant_id: str | None = None,
     allowed_sort_fields: frozenset[str],
 ) -> ListQuery:
     try:
@@ -73,13 +76,23 @@ def parse_list_query(
         )
 
     normalized_status = status.strip() if status is not None else None
+    normalized_tenant_id = tenant_id.strip() if tenant_id is not None else None
+    if normalized_tenant_id is not None and len(normalized_tenant_id) > 128:
+        raise PaginationParameterError("tenant_id filter is too long", code="INVALID_FILTER")
     return ListQuery(
         page=parsed_page,
         page_size=parsed_page_size,
         sort_by=normalized_sort,
         sort_order=normalized_order,
         status=normalized_status or None,
+        tenant_id=normalized_tenant_id or None,
     )
+
+
+def validate_filter_keys(filters: Mapping[str, object], *, allowed: frozenset[str]) -> None:
+    for key in filters:
+        if key not in allowed:
+            raise PaginationParameterError(f"invalid filter: {key}", code="INVALID_FILTER")
 
 
 def pagination_envelope(
@@ -88,6 +101,7 @@ def pagination_envelope(
     page: int,
     page_size: int,
     total: int,
+    request_id: str | None = None,
 ) -> dict[str, object]:
     return {
         "data": data,
@@ -97,6 +111,7 @@ def pagination_envelope(
             "total": total,
             "total_pages": ceil(total / page_size) if total else 0,
         },
+        "request_id": request_id,
     }
 
 
@@ -108,4 +123,5 @@ __all__ = [
     "PaginationParameterError",
     "pagination_envelope",
     "parse_list_query",
+    "validate_filter_keys",
 ]
