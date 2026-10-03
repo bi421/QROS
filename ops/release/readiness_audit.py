@@ -14,14 +14,18 @@ REQUIRED_FILES = (
     ".github/workflows/staging-release-gate.yml",
     ".github/workflows/staging-performance-gate.yml",
     ".github/workflows/storage-recovery-drill.yml",
+    ".github/workflows/supabase-db-tests.yml",
     ".github/workflows/release.yml",
     "docs/operations/PRODUCTION_RECOVERY_CONTROLS_V1.md",
     "scripts/ci/production_schema_parity.sh",
+    "scripts/ci/production_forward_migration.sh",
+    ".github/workflows/production-forward-migration.yml",
 )
 
 REQUIRED_MARKERS = {
     ".github/workflows/production-db-backup.yml": (
         "workflow_dispatch",
+        "environment: production",
         "pg_dump",
         "aws s3 cp",
         "head-object",
@@ -45,6 +49,11 @@ REQUIRED_MARKERS = {
         "workflow_dispatch",
         "p95",
         "max-error-rate",
+    ),
+    ".github/workflows/supabase-db-tests.yml": (
+        "Run database security tests",
+        "supabase test db",
+        "ON_ERROR_STOP=1",
     ),
     ".github/workflows/storage-recovery-drill.yml": (
         "workflow_dispatch",
@@ -79,6 +88,20 @@ REQUIRED_MARKERS = {
         "supabase db push --linked --dry-run",
         "relrowsecurity",
     ),
+    "scripts/ci/production_forward_migration.sh": (
+        "set -euo pipefail",
+        "--include-all",
+        "--dry-run",
+        "APPLY_MIGRATION",
+        "CONFIRM_APPLY",
+    ),
+    ".github/workflows/production-forward-migration.yml": (
+        "workflow_dispatch",
+        "environment: production",
+        "type: choice",
+        "type: boolean",
+        "pvhdsngxyoiqhqwujfjt",
+    ),
 }
 
 
@@ -93,6 +116,7 @@ FAIL_OPEN_PATTERNS = (
     re.compile(r"\bruff\s+check\b.*\|\|\s*true\b", re.IGNORECASE),
     re.compile(r"\b(?:pytest|ruff\s+check)\b.*--exit-zero\b", re.IGNORECASE),
     re.compile(r"\bpython(?:3)?\s+\S+.*\|\|\s*true\b", re.IGNORECASE),
+    re.compile(r"\b(?:aws\s+s3|supabase|curl)\b.*\|\|\s*true\b", re.IGNORECASE),
     re.compile(r"^\s*continue-on-error\s*:\s*true\s*$", re.IGNORECASE),
 )
 

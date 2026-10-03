@@ -39,7 +39,9 @@ jobs:
       - name: Run ruff
         run: ruff check .
       - name: Run pytest
-        run: python -m pytest researchos/tests/ researchos/research_core/tests/ researchos/saas/tests/ -v --tb=short -x --import-mode=importlib
+        run: python -m pytest researchos/tests/ researchos/research_core/tests/ researchos/saas/tests/ -v --tb=short -x --import-mode=importlib --ignore=researchos/tests/test_cpp_backtest_regression.py
+      - name: Run production forward-migration governance tests
+        run: python -m pytest tests/test_production_forward_migration_governance.py -q
 
 
   static-type-check:
@@ -94,7 +96,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install nanobind scikit-build-core pytest
+          python -m pip install nanobind scikit-build-core pytest numpy pandas
       - name: Configure C++ Engine
         run: |
           cmake -S researchos/engines/quant \
@@ -108,6 +110,12 @@ jobs:
         env:
           PYTHONPATH: researchos/engines/quant/python
         run: python -m pytest researchos/engines/quant/tests/ -v -x
+      - name: Verify C++ regression backend
+        env:
+          PYTHONPATH: researchos/engines/quant/python
+        run: |
+          python -c "from researchos.engines.quant.cpp_backend import CppQuantAdapter; e=CppQuantAdapter(); assert e.is_cpp, 'compiled C++ backend is not active'; print(e.get_version())"
+          python -m pytest researchos/tests/test_cpp_backtest_regression.py -v --tb=short
 
   health-evidence:
     name: Health Evidence
@@ -142,5 +150,5 @@ jobs:
         env:
           PYTHONPATH: researchos/engines/quant/python
         run: |
-          python -m pytest researchos/tests/ researchos/research_core/tests/ -v --tb=short -x
+          python -m pytest researchos/tests/ researchos/research_core/tests/ -v --tb=short -x --ignore=researchos/tests/test_cpp_backtest_regression.py
           ruff check .

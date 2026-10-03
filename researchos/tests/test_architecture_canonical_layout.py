@@ -3,8 +3,34 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[2]
+
+# Repository-owned generated/build trees that may contain Python artifacts but
+# are not application source. Keep this allowlist narrow and deterministic.
+IGNORED_SOURCE_DIRS = frozenset(
+    {
+        ".git",
+        ".healthcheck",
+        "__pycache__",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".mypy_cache",
+        "build",
+        "_deps",
+        "dist",
+    }
+)
+
+
+def _iter_source_python_files(root: Path):
+    """Yield relevant repository Python source without generated/build residue."""
+    for path in sorted(root.rglob("*.py")):
+        if any(part in IGNORED_SOURCE_DIRS for part in path.parts):
+            continue
+        yield path
 
 
 def _imported_modules(path: Path) -> set[str]:
@@ -18,10 +44,8 @@ def _imported_modules(path: Path) -> set[str]:
     return modules
 
 
-def test_no_python_consumer_imports_legacy_data_engine() -> None:
-    for path in ROOT.rglob("*.py"):
-        if ".git" in path.parts:
-            continue
+def _assert_no_forbidden_imports(root: Path) -> None:
+    for path in _iter_source_python_files(root):
         if path == Path(__file__).resolve():
             continue
         assert not any(
@@ -29,6 +53,47 @@ def test_no_python_consumer_imports_legacy_data_engine() -> None:
             or module.startswith("researchos.engines.data.")
             for module in _imported_modules(path)
         ), path
+
+
+def test_no_python_consumer_imports_legacy_data_engine() -> None:
+    _assert_no_forbidden_imports(ROOT)
+
+
+def test_source_scanner_rejects_forbidden_import_in_relevant_source(tmp_path: Path) -> None:
+    source = tmp_path / "researchos" / "feature.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from researchos.engines.data import DataEngine\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(AssertionError):
+        _assert_no_forbidden_imports(tmp_path)
+
+
+def test_source_scanner_ignores_known_generated_tree(tmp_path: Path) -> None:
+    generated = tmp_path / "build" / "generated.py"
+    generated.parent.mkdir(parents=True)
+    generated.write_text(
+        "from researchos.engines.data import DataEngine\n",
+        encoding="utf-8",
+    )
+
+    assert list(_iter_source_python_files(tmp_path)) == []
+
+
+def test_source_scanner_is_unchanged_by_generated_residue(tmp_path: Path) -> None:
+    source = tmp_path / "researchos" / "feature.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("import researchos\n", encoding="utf-8")
+    generated = tmp_path / ".healthcheck" / "generated.py"
+    generated.parent.mkdir(parents=True)
+    generated.write_text(
+        "from researchos.engines.data import DataEngine\n",
+        encoding="utf-8",
+    )
+
+    assert list(_iter_source_python_files(tmp_path)) == [source]
 
 
 def test_no_root_level_python_scripts() -> None:

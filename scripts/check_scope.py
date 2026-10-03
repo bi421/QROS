@@ -9,6 +9,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+FORBIDDEN_REPOSITORY_PATHS = (
+    re.compile(r"^qros_pybind11_forensic_audit\\.txt$", re.I),
+    re.compile(r"^scripts/cpp_true_production_v[1-9]\\.py$", re.I),
+)
+
 FORBIDDEN_NEW_PATHS = (
     # Root-level Python scripts are intentionally not an allowed extension point.
     # Existing legacy files are audited separately; new/changed root scripts must
@@ -22,12 +27,15 @@ FORBIDDEN_NEW_PATHS = (
 )
 
 
-def changed_paths(
-    base: str | None,
-    staged: bool,
-    diff_filter: str = "ACMR",
-) -> list[str]:
-    command = ["git", "diff", "--name-only", f"--diff-filter={diff_filter}"]
+def repository_paths() -> list[str]:
+    completed = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=ROOT, text=False, capture_output=True, check=True
+    )
+    return [item for item in completed.stdout.decode("utf-8").split("\\0") if item]
+
+
+def changed_paths(base: str | None, staged: bool) -> list[str]:
+    command = ["git", "diff", "--name-only", "--diff-filter=ACMR"]
     if staged:
         command.append("--cached")
     elif base:
@@ -84,6 +92,16 @@ def main() -> int:
         return 1
 
     failures: list[str] = []
+
+    # Changed-path rules prevent new scope creep; repository rules also detect
+    # legacy forbidden artifacts that predate the current diff and would
+    # otherwise escape the guard forever.
+    for path in repository_paths():
+        for pattern in FORBIDDEN_REPOSITORY_PATHS:
+            if pattern.search(path):
+                failures.append(f"forbidden repository artifact: {path}")
+                break
+
     for path in paths:
         for pattern in FORBIDDEN_NEW_PATHS:
             if pattern.search(path):
