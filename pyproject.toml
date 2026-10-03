@@ -57,17 +57,24 @@ saas = [
     "uvicorn>=0.20.0",
     "python-multipart>=0.0.9",
     "supabase>=2.18.1",
+    "structlog>=24.4,<26",
+    "opentelemetry-api>=1.27,<2",
+    "opentelemetry-sdk>=1.27,<2",
+    "prometheus-client>=0.21,<1",
+    "msgpack>=1.2.1,<2",
 ]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "httpx>=0.27",
     "ruff>=0.1.0",
-    "mypy>=2.3,<3",
+    "mypy==2.3.1",
+    "hypothesis==6.140.2",
     "scikit-build-core>=0.9.0",
     "nanobind>=1.5.0",
     "cmake>=3.27",
     "ninja>=1.11",
+    "yfinance>=0.2",
 ]
 test = [
     "yfinance>=0.2",
@@ -75,6 +82,7 @@ test = [
 
 [project.scripts]
 researchos-health = "scripts.final_health_check:main"
+qros-worker = "researchos.saas.worker_runtime:main"
 
 [project.urls]
 Homepage = "https://github.com/bi421/QROS"
@@ -86,7 +94,6 @@ cmake.version = ">=3.27"
 cmake.build-type = "Release"
 wheel.packages = [
     "researchos",
-    "researchos/engines/quant/python/cpp_quant_engine",
     "financial_research_lab/src/financial_research_lab",
 ]
 
@@ -125,15 +132,16 @@ markers = [
 
 [tool.mypy]
 python_version = "3.12"
+files = [
+    "researchos/saas/api.py",
+    "researchos/saas/contracts.py",
+    "researchos/saas/claim_api.py",
+    "researchos/saas/evidence_api.py",
+]
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
-disable_error_code = ["import-untyped", "import-not-found"]
-
-[[tool.mypy.overrides]]
-module = ["researchos.research_core.tests.*", "researchos.probability.tests.*"]
-ignore_errors = true
 
 [tool.ruff]
 exclude = ["archive"]
