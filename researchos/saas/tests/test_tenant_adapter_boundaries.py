@@ -83,7 +83,7 @@ def test_supabase_dataset_version_rejects_foreign_parent_without_version_insert(
         dataset_id=foreign_dataset,
         version_no=1,
         content_sha256="a" * 64,
-        storage_path=f"{foreign_dataset}/sha256/" + "a" * 64,
+        storage_path=f"tenant/{tenant}/datasets/" + "a" * 64 + "/1/",
         byte_size=1,
         created_by=uuid4(),
     )
@@ -124,7 +124,7 @@ def test_supabase_dataset_version_accepts_matching_parent_and_writes():
         dataset_id=dataset.id,
         version_no=1,
         content_sha256="b" * 64,
-        storage_path=f"{tenant}/datasets/{dataset.id}/sha256/" + "b" * 64,
+        storage_path=f"tenant/{tenant}/datasets/" + "b" * 64 + "/1/",
         byte_size=1,
         created_by=uuid4(),
     )
