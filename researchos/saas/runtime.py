@@ -5,8 +5,10 @@ import os
 
 
 from supabase import create_client
+from fastapi import FastAPI
 
 from researchos.saas.api import create_app
+from researchos.saas.contracts import Plan
 from researchos.saas.supabase_auth import SupabaseJwtAuthProvider
 from researchos.saas.supabase_membership import SupabaseWorkspaceMembershipResolver
 from researchos.saas.supabase_session import SupabaseSessionValidator

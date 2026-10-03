@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from threading import Event, Thread
 from time import perf_counter
-from typing import Protocol
+from typing import Mapping, Protocol
 from uuid import UUID, uuid4
 import time
 
@@ -11,11 +11,11 @@ import structlog
 
 from researchos.saas.auth.permissions import current_request_id
 from researchos.saas.tracing import job_span
-from researchos.saas.observability import metrics_registry
-
 from researchos.research_core.contracts import ResearchResult
 from researchos.saas.contracts import ResearchJobStatus
 from researchos.saas.observability import (
+    StructuredRequestObserver,
+    configure_tracing,
     jobs_duration_seconds,
     jobs_failed_total,
     jobs_retries_total,
