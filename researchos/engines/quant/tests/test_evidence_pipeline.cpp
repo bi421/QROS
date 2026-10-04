@@ -63,3 +63,23 @@ TEST(EvidencePipelineTest, EvidenceCannotBeAcceptedTwice) {
   ASSERT_TRUE(EvidencePipeline::accept_evidence(state, &record, 1));
   EXPECT_FALSE(EvidencePipeline::accept_evidence(state, &record, 1));
 }
+
+
+TEST(EvidencePipelineTest, BranchPlanSeparatesImplementedAndMissingLayers) {
+  std::size_t count = 0;
+  const auto* plan = EvidencePipeline::branch_plan(count);
+  ASSERT_NE(plan, nullptr);
+  ASSERT_EQ(count, 12u);
+
+  std::size_t implemented = 0;
+  for (std::size_t i = 0; i < count; ++i) {
+    EXPECT_NE(plan[i].independence_group, 0u);
+    EXPECT_TRUE(plan[i].parallel_safe);
+    implemented += plan[i].implemented ? 1u : 0u;
+  }
+
+  EXPECT_EQ(implemented, 9u);
+  EXPECT_FALSE(plan[3].implemented);   // empirical frequency
+  EXPECT_FALSE(plan[10].implemented);  // market structure
+  EXPECT_FALSE(plan[11].implemented);  // statistical model
+}
