@@ -3,7 +3,7 @@ from researchos.decision_pipeline import (
     DecisionPipelineInput,
     run_decision_pipeline_with_artifact,
 )
-from researchos.risk.contracts import TradeStatistics
+from researchos.risk.contracts import RiskPolicy, TradeStatistics
 from researchos.risk.decision_artifact_store import InMemoryRiskDecisionArtifactStore
 from researchos.risk.governance import (
     RiskAccountState,
@@ -36,6 +36,7 @@ def test_full_probability_to_risk_artifact_replay() -> None:
             sample_size=20,
         ),
         research_valid=True,
+        risk_policy=RiskPolicy(max_risk_fraction=0.0025),
         risk_account=RiskAccountState(
             day_start_equity=10_000.0,
             current_equity=10_000.0,
