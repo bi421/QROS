@@ -71,3 +71,9 @@ TEST(LowLatencyCandleGeometryTest, RejectsInvalidOHLC) {
   const double o[]={101},h[]={100},l[]={90},c[]={95}; double out[5]{};
   EXPECT_THROW(CandleGeometryKernel::compute(o,h,l,c,1,out),std::invalid_argument);
 }
+
+TEST(LowLatencyEmpiricalEdgeTest, RejectsDegenerateNullProbability) {
+  const double empirical[]={0.10}, geometric[]={0.0}, n[]={100};
+  double out[5]{};
+  EXPECT_THROW(EmpiricalEdgeKernel::compute(empirical,geometric,n,1,out),std::invalid_argument);
+}
