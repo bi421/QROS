@@ -25,7 +25,8 @@ class DecisionPipelineResult:
     probability:ProbabilityAssessment
     report:DecisionReport
     @property
-    def report_hash(self)->str: return self.report.report_hash
+    def report_hash(self)->str:
+        return self.report.report_hash
     @property
     def artifact(self)->DecisionArtifact:
         return DecisionArtifact.build(self.evidence,self.score,self.probability,self.report)
@@ -34,16 +35,19 @@ class DecisionPipelineResult:
 
 class DecisionPipeline:
     def __init__(self,*,aggregator:EvidenceAggregator|None=None,weight_config:WeightConfiguration|None=None,probability_calculator:ProbabilityCalculator|None=None,reasoner:DecisionReasoner|None=None,calibration_evidence:CalibrationEvidence|None=None,quant_math_result:QuantMathResult|None=None)->None:
-        if aggregator is not None and quant_math_result is not None: raise DecisionPipelineError("provide either aggregator or quant_math_result, not both")
+        if aggregator is not None and quant_math_result is not None:
+            raise DecisionPipelineError("provide either aggregator or quant_math_result, not both")
         if aggregator is None:
             providers={}
-            if quant_math_result is not None: providers[EvidenceSource.QUANT_ENGINE]=QuantMathEvidenceProvider(quant_math_result)
+            if quant_math_result is not None:
+                providers[EvidenceSource.QUANT_ENGINE]=QuantMathEvidenceProvider(quant_math_result)
             self.aggregator=EvidenceAggregator(providers=providers)
         else: self.aggregator=aggregator
         self.weight_config=weight_config or WeightConfiguration()
         self.probability_calculator=probability_calculator or ProbabilityCalculator()
         self.reasoner=reasoner or DecisionReasoner()
-        if calibration_evidence is not None: calibration_evidence.validate()
+        if calibration_evidence is not None:
+            calibration_evidence.validate()
         self.calibration_evidence=calibration_evidence
         self.context_validator=DecisionContextValidator()
         self.evidence_validator=EvidenceValidator()
@@ -51,10 +55,12 @@ class DecisionPipeline:
 
     @staticmethod
     def _raise_if_errors(stage:str,errors:list[str])->None:
-        if errors: raise DecisionPipelineError(f"{stage} validation failed: {'; '.join(errors)}")
+        if errors: raise DecisionPipelineError(f"{stage} validation failed: {'
+        '.join(errors)}")
 
     def run_many(self,contexts:tuple[DecisionContext,...],*,executor:ParallelResearchExecutor|None=None)->tuple[DecisionPipelineResult,...]:
-        if not contexts: raise DecisionPipelineError("at least one DecisionContext is required")
+        if not contexts:
+            raise DecisionPipelineError("at least one DecisionContext is required")
         branch=tuple(ResearchBranch(branch_id=context.id,operation=lambda _snapshot,context=context:self.run(context)) for context in contexts)
         plan=(ResearchWave(wave_id="decision-contexts",branches=branch),)
         result=(executor or ParallelResearchExecutor(max_workers=min(8,len(contexts)))).run(plan)
@@ -66,7 +72,8 @@ class DecisionPipeline:
         self._raise_if_errors("EvidenceCollection",self.evidence_validator.validate_collection(evidence))
         score=compute_evidence_score(context.id,evidence.items,self.weight_config)
         probability=self.probability_calculator.calculate(evidence)
-        if self.calibration_evidence is not None: probability=probability.with_calibration_status(self.calibration_evidence.status.value)
+        if self.calibration_evidence is not None:
+            probability=probability.with_calibration_status(self.calibration_evidence.status.value)
         self._raise_if_errors("ProbabilityAssessment",self.probability_validator.validate(probability))
         report=generate_decision_report(context,score,probability,reasoner=self.reasoner)
         return DecisionPipelineResult(context,evidence,score,probability,report)
