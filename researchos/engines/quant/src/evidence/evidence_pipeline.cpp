@@ -10,6 +10,26 @@ bool statistically_validated(ValidationStatus status) noexcept {
 
 }  // namespace
 
+const EvidencePipeline::BranchDescriptor* EvidencePipeline::branch_plan(
+    std::size_t& count) noexcept {
+  static constexpr BranchDescriptor kPlan[] = {
+      {Branch::CandleGeometry, 1, true, true},
+      {Branch::GeometricNull, 1, true, true},
+      {Branch::FirstPassage, 1, true, true},
+      {Branch::EmpiricalFrequency, 2, false, true},
+      {Branch::Bayesian, 3, true, true},
+      {Branch::MonteCarlo, 4, true, true},
+      {Branch::Diffusion, 4, true, true},
+      {Branch::OrnsteinUhlenbeck, 4, true, true},
+      {Branch::MarketDynamics, 5, true, true},
+      {Branch::ShannonEntropy, 6, true, true},
+      {Branch::MarketStructure, 7, false, true},
+      {Branch::StatisticalModel, 2, false, true},
+  };
+  count = sizeof(kPlan) / sizeof(kPlan[0]);
+  return kPlan;
+}
+
 PipelineState EvidencePipeline::begin(std::size_t evidence_capacity) noexcept {
   PipelineState state{};
   state.evidence_count = 0;
