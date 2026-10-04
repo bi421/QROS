@@ -214,11 +214,11 @@ def test_unconfigured_claim_persistence_fails_closed() -> None:
 def test_claim_pagination_is_bounded() -> None:
     client, _, _ = _client()
     assert client.get(
-        "/v1/research-claims?limit=101",
+        "/v1/research-claims?page=1&page_size=101",
         headers={"Authorization": "Bearer test"},
     ).status_code == 422
     assert client.get(
-        "/v1/research-claims?offset=-1",
+        "/v1/research-claims?page=0&page_size=1",
         headers={"Authorization": "Bearer test"},
     ).status_code == 422
 
@@ -239,14 +239,11 @@ def test_claim_and_run_identity_remain_workspace_scoped_across_golden_path_bound
     assert created.status_code == 201
     claim_id = created.json()["id"]
 
-    # A claim identifier alone must never grant another tenant access.
     assert other_client.get(
         f"/v1/research-claims/{claim_id}",
         headers={"Authorization": "Bearer test"},
     ).status_code == 404
 
-    # The same logical claim payload in another workspace is a distinct
-    # identity because workspace_id participates in the deterministic id.
     other_created = other_client.post(
         "/v1/research-claims",
         headers={"Authorization": "Bearer test"},
@@ -261,7 +258,7 @@ def test_claim_and_run_identity_remain_workspace_scoped_across_golden_path_bound
         headers={"Authorization": "Bearer test"},
     )
     other_list = other_client.get(
-        "/v1/research-claims?limit=100&offset=0",
+        "/v1/research-claims?page=1&page_size=100",
         headers={"Authorization": "Bearer test"},
     )
     assert owner_list.json()["pagination"]["total"] == 1
@@ -356,3 +353,4 @@ def test_plan_lock_is_tenant_scoped_and_viewer_forbidden() -> None:
         headers={"Authorization": "Bearer test"},
         json=_plan_payload("Tenant-scoped plan"),
     ).status_code == 403
+}
