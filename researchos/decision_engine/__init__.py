@@ -1,26 +1,25 @@
-"""
-Phase 7.1 — DecisionContext Module.
-
-Purpose:
-    DecisionContext is the foundational input to the decision pipeline.
-    It represents everything known about the market at one moment in time,
-    using ONLY references (IDs) to existing ResearchOS objects — no data duplication.
-
-Exports:
-    DecisionContext — A BaseObject subclass representing a complete market snapshot.
-    DecisionContextValidator — Validates DecisionContext structural integrity.
-
-Future Phases (not yet implemented):
-    Phase 7.2 — EvidenceAggregator (evidence.py — placeholder)
-    Phase 7.3 — EvidenceScore (score.py — placeholder)
-    Phase 7.4 — ProbabilityAssessment (probability.py — placeholder)
-    Phase 7.5 — DecisionReasoner (reasoner.py — placeholder)
-    Phase 7.6 — DecisionReport (report.py — placeholder)
-"""
+"""Public API for the complete Decision Intelligence Engine."""
 
 from researchos.decision_engine.context import DecisionContext, DecisionContextValidator
+from researchos.decision_engine.contracts import (
+    CalculationMethod, DecisionEvidenceItem, DecisionStatus, DecisionVersion,
+    EvidenceSource, ProbabilityDirection, ProbabilityOutcome, WeightConfiguration,
+)
+from researchos.decision_engine.evidence import EvidenceAggregator, EvidenceCollection, EvidenceValidator
+from researchos.decision_engine.pipeline import DecisionPipeline, DecisionPipelineError, DecisionPipelineResult
+from researchos.decision_engine.probability import ProbabilityAssessment, ProbabilityCalculator, ProbabilityValidator
+from researchos.decision_engine.reasoner import DecisionReasoner, ReasoningStep
+from researchos.decision_engine.report import DecisionReport, generate_decision_report
+from researchos.decision_engine.score import EvidenceScore, compute_evidence_score
 
 __all__ = [
-    "DecisionContext",
-    "DecisionContextValidator",
+    "CalculationMethod", "DecisionContext", "DecisionContextValidator",
+    "DecisionEvidenceItem", "DecisionPipeline", "DecisionPipelineError",
+    "DecisionPipelineResult", "DecisionReasoner", "DecisionReport",
+    "DecisionStatus", "DecisionVersion", "EvidenceAggregator",
+    "EvidenceCollection", "EvidenceScore", "EvidenceSource",
+    "EvidenceValidator", "ProbabilityAssessment", "ProbabilityCalculator",
+    "ProbabilityDirection", "ProbabilityOutcome", "ProbabilityValidator",
+    "ReasoningStep", "WeightConfiguration", "compute_evidence_score",
+    "generate_decision_report",
 ]
