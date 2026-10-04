@@ -18,7 +18,11 @@ from researchos.quant_math.mle import bernoulli_mle, normal_mle
 from researchos.quant_math.monte_carlo import simulate_terminal_distribution
 from researchos.quant_math.multivariate import normalize_minmax, nearest_neighbors
 from researchos.quant_math.partition import PARTITION_VERSION, ProbabilityPartition
-from researchos.quant_math.statistics import describe, linear_regression, pearson_correlation
+from researchos.quant_math.statistics import (
+    describe,
+    linear_regression,
+    pearson_correlation,
+)
 
 __all__ = [
     "QuantMathEngine",
