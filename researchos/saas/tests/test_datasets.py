@@ -165,7 +165,7 @@ def test_tenant_b_cannot_generate_signed_url_for_tenant_a_file() -> None:
     tenant_b = uuid4()
     digest = "a" * 64
     path = storage_path_for(tenant_a, digest, 1)
-    storage.put(path, BytesIO(b"tenant-a"), tenant_id=tenant_a)
+    storage.put(path, BytesIO(b"tenant-a"))
 
     with pytest.raises(PermissionError, match="outside tenant context"):
         storage.create_signed_download_url(
