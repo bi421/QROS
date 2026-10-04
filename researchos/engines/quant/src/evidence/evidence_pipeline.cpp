@@ -32,9 +32,11 @@ const EvidencePipeline::BranchDescriptor* EvidencePipeline::branch_plan(
 
 PipelineState EvidencePipeline::begin(std::size_t evidence_capacity) noexcept {
   PipelineState state{};
+  // Capacity is advisory for the caller; it never implies that integrity
+  // checks have passed.
+  (void)evidence_capacity;
   state.evidence_count = 0;
-  if (evidence_capacity == 0)
-    state.completed_through = Stage::DataIntegrity;
+  state.completed_through = Stage::RawMarketData;
   return state;
 }
 
@@ -118,12 +120,10 @@ bool EvidencePipeline::accept_statistical_validation(
 }
 
 bool EvidencePipeline::accept_calibration(PipelineState& state) noexcept {
-  if (!state.statistical_validation_passed ||
-      state.completed_through != Stage::EvidenceIntegration)
-    return false;
-  state.calibration_passed = true;
-  state.completed_through = Stage::Calibration;
-  return true;
+  // Calibration is not implemented yet. Do not advance the state machine by
+  // accepting an assertion that a model is calibrated.
+  (void)state;
+  return false;
 }
 
 bool EvidencePipeline::probability_synthesis_allowed(
