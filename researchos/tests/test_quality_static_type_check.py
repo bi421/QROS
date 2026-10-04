@@ -16,8 +16,8 @@ def test_mypy_governed_scope_is_explicit_and_pinned() -> None:
     assert "disallow_untyped_defs = true" in pyproject
 
 
-def test_ci_executes_the_governed_static_type_check() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    assert "name: Static Type Check" in workflow
+def test_mypy_workflow_executes_the_governed_static_type_check() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "mypy.yml").read_text(encoding="utf-8")
+    assert "name: mypy" in workflow
     assert "name: Run mypy" in workflow
     assert "run: mypy" in workflow
