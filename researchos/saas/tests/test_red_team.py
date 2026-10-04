@@ -86,7 +86,9 @@ def test_storage_path_traversal_is_rejected() -> None:
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "INVALID_PATH"
+    payload = response.json()
+    assert payload["code"] == "INVALID_PATH"
+    assert payload["message"] == "INVALID_PATH"
 
 
 def test_job_id_enumeration_never_leaks_existence() -> None:
