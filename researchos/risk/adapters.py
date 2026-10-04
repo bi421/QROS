@@ -43,9 +43,9 @@ def risk_input_from_probability(
     """
     if isinstance(assessment, ProbabilityAssessment):
         normalized_assessment = assessment
-        normalized_assessment.validate_integrity()
     else:
         normalized_assessment = ProbabilityAssessment.from_dict(dict(assessment))
+    normalized_assessment.validate_integrity()
     validation_errors = ProbabilityValidator().validate(normalized_assessment)
     if validation_errors:
         raise ValueError("invalid probability assessment: " + "; ".join(validation_errors))
