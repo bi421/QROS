@@ -37,7 +37,16 @@ class DatasetReferencedError(RuntimeError):
 
 
 class DatasetStore(Protocol):
-    def list_datasets(self, workspace_id: UUID, *, limit: int = 50, offset: int = 0, name_filter: str | None = None) -> tuple[list[Dataset], int]: ...
+    def list_datasets(
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        name_filter: str | None = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+    ) -> tuple[list[Dataset], int]: ...
     def create_dataset(self, workspace_id: UUID, dataset: Dataset) -> Dataset: ...
     def delete_dataset(self, workspace_id: UUID, dataset_id: UUID) -> None: ...
     def create_version(self, workspace_id: UUID, version: DatasetVersion) -> DatasetVersion: ...

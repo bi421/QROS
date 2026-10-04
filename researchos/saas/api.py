@@ -65,7 +65,6 @@ from researchos.saas.datasets import (
     DatasetStorage,
     DatasetStore,
     DatasetVersion,
-    DatasetReferencedError,
     InMemoryDatasetStorage,
     InMemoryDatasetStore,
     storage_path_for,
@@ -819,12 +818,13 @@ def create_app(
     )
     @require_permission(Resource.JOB, Action.CREATE)
     def create_research_run(
-        request: ResearchCreateRequest,
+        payload: ResearchCreateRequest,
+        request: Request,
         tenant: TenantContext = Depends(current_tenant),
         idempotency_key: str | None = Header(default=None, alias=IDEMPOTENCY_HEADER),
     ) -> Response:
         require_rate_limit(tenant)
-        if request.workflow_id != FROZEN_XAUUSD_M1_WORKFLOW:
+        if payload.workflow_id != FROZEN_XAUUSD_M1_WORKFLOW:
             raise HTTPException(status_code=400, detail="unsupported workflow")
         if not idempotency_key:
             raise HTTPException(status_code=400, detail="Idempotency-Key header is required")
@@ -833,8 +833,8 @@ def create_app(
             raise HTTPException(status_code=400, detail="invalid Idempotency-Key")
         fingerprint = request_fingerprint(
             {
-                "dataset_version_id": str(request.dataset_version_id),
-                "workflow_id": request.workflow_id,
+                "dataset_version_id": str(payload.dataset_version_id),
+                "workflow_id": payload.workflow_id,
             }
         )
         try:
@@ -853,7 +853,7 @@ def create_app(
             )
         if not policy.allows_concurrency(store.count_active(tenant.workspace_id)):
             raise HTTPException(status_code=429, detail="concurrent research run limit reached")
-        version = datasets.get_version(tenant.workspace_id, request.dataset_version_id)
+        version = datasets.get_version(tenant.workspace_id, payload.dataset_version_id)
         if version is None:
             raise HTTPException(status_code=404, detail="dataset version not found")
 
@@ -861,7 +861,7 @@ def create_app(
             id=uuid4(),
             workspace_id=tenant.workspace_id,
             dataset_version_id=version.id,
-            workflow_id=request.workflow_id,
+            workflow_id=payload.workflow_id,
             status=ResearchJobStatus.QUEUED,
             source_dataset_sha256=version.content_sha256,
             created_by=tenant.user_id,
