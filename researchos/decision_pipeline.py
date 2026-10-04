@@ -1,17 +1,29 @@
 """Canonical probability -> sizing -> governance -> human-review pipeline."""
+
 from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Any
+
 from researchos.action.report import PreTradeReport, build_pre_trade_report
+from researchos.decision_engine.probability import ProbabilityAssessment
 from researchos.risk.adapters import risk_input_from_probability
 from researchos.risk.contracts import RiskCalculation, RiskPolicy, TradeStatistics
 from researchos.risk.decision_artifact import RiskDecisionArtifact
-from researchos.risk.governance import RiskAccountState, RiskDecision, RiskLimits, StrategyRiskState, evaluate_pretrade_risk
 from researchos.risk.engine import calculate_risk
-from researchos.decision_engine.probability import ProbabilityAssessment
+from researchos.risk.governance import (
+    RiskAccountState,
+    RiskDecision,
+    RiskLimits,
+    StrategyRiskState,
+    evaluate_pretrade_risk,
+)
+
 
 @dataclass(frozen=True)
 class DecisionPipelineInput:
+    """Explicit API-first input for the canonical decision pipeline."""
+
     assessment: ProbabilityAssessment | dict[str, Any]
     asset: str
     direction: str
@@ -27,6 +39,7 @@ class DecisionPipelineInput:
     proposed_notional: float | None = None
     strategy_state: StrategyRiskState = StrategyRiskState.RISK_REVIEW
 
+
 @dataclass(frozen=True)
 class DecisionRiskPipelineResult:
     risk: RiskCalculation
@@ -34,14 +47,20 @@ class DecisionRiskPipelineResult:
     report: PreTradeReport
     artifact: RiskDecisionArtifact
 
+
 def _calibration_status(request: DecisionPipelineInput) -> str | None:
+    """Resolve explicit calibration evidence without inventing a status."""
     if request.probability_calibration_status is not None:
         return request.probability_calibration_status
     if isinstance(request.assessment, ProbabilityAssessment):
         return request.assessment.probability_calibration_status
     return request.assessment.get("probability_calibration_status")
 
-def _risk_decision(request: DecisionPipelineInput, risk: RiskCalculation) -> RiskDecision | None:
+
+def _risk_decision(
+    request: DecisionPipelineInput,
+    risk: RiskCalculation,
+) -> RiskDecision | None:
     if request.risk_account is None:
         return None
     return evaluate_pretrade_risk(
@@ -53,7 +72,10 @@ def _risk_decision(request: DecisionPipelineInput, risk: RiskCalculation) -> Ris
         research_valid=request.research_valid,
     )
 
-def _calculate(request: DecisionPipelineInput) -> tuple[RiskCalculation, RiskDecision | None, PreTradeReport]:
+
+def _calculate(
+    request: DecisionPipelineInput,
+) -> tuple[RiskCalculation, RiskDecision | None, PreTradeReport]:
     risk_input = risk_input_from_probability(
         request.assessment,
         asset=request.asset,
@@ -74,11 +96,15 @@ def _calculate(request: DecisionPipelineInput) -> tuple[RiskCalculation, RiskDec
     )
     return risk, decision, report
 
+
 def run_decision_pipeline(request: DecisionPipelineInput) -> PreTradeReport:
-    """Return the historical report-only API; never submits an order."""
+    """Run validated probability -> sizing -> governance -> human-review report."""
     return _calculate(request)[2]
 
-def run_decision_pipeline_with_artifact(request: DecisionPipelineInput) -> DecisionRiskPipelineResult:
+
+def run_decision_pipeline_with_artifact(
+    request: DecisionPipelineInput,
+) -> DecisionRiskPipelineResult:
     """Return the complete hash-linked sizing/governance/review chain.
 
     A governance decision is mandatory for artifact creation. This prevents an
@@ -94,6 +120,7 @@ def run_decision_pipeline_with_artifact(request: DecisionPipelineInput) -> Decis
         report=report,
         artifact=artifact,
     )
+
 
 __all__ = [
     "DecisionPipelineInput",
