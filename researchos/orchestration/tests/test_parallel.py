@@ -168,3 +168,48 @@ def test_duplicate_wave_ids_are_rejected_before_execution() -> None:
         ParallelResearchExecutor(max_workers=2).run(plan)
 
     assert started == []
+
+
+def test_executor_factory_is_used_and_shutdown_between_waves() -> None:
+    class RecordingExecutor:
+        def __init__(self) -> None:
+            self.submissions: list[tuple[object, object]] = []
+            self.shutdown_calls = 0
+
+        def submit(self, fn, *args, **kwargs):
+            from concurrent.futures import Future
+
+            future = Future()
+            try:
+                future.set_result(fn(*args, **kwargs))
+            except BaseException as exc:
+                future.set_exception(exc)
+            self.submissions.append((fn, args))
+            return future
+
+        def shutdown(self, *, wait=True, cancel_futures=False) -> None:
+            assert wait is True
+            assert cancel_futures is True
+            self.shutdown_calls += 1
+
+    executors: list[RecordingExecutor] = []
+
+    def factory(_max_workers):
+        executor = RecordingExecutor()
+        executors.append(executor)
+        return executor
+
+    result = ParallelResearchExecutor(
+        max_workers=2,
+        executor_factory=factory,
+    ).run(
+        (
+            ResearchWave("wave-1", (ResearchBranch("a", lambda _ctx: "a"),)),
+            ResearchWave("wave-2", (ResearchBranch("b", lambda _ctx: "b"),)),
+        )
+    )
+
+    assert result.by_branch_id() == {"a": "a", "b": "b"}
+    assert len(executors) == 2
+    assert all(executor.shutdown_calls == 1 for executor in executors)
+    assert [len(executor.submissions) for executor in executors] == [1, 1]
