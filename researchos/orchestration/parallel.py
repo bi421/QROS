@@ -150,6 +150,10 @@ class ParallelResearchExecutor:
         if not waves:
             raise ValueError("at least one research wave is required")
 
+        wave_ids = [wave.wave_id for wave in waves]
+        if len(wave_ids) != len(set(wave_ids)):
+            raise ValueError("wave_id values must be unique across the research plan")
+
         branch_ids = [
             branch.branch_id
             for wave in waves
