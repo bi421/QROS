@@ -49,6 +49,41 @@ class BayesianUpdateResult:
     def verify(self) -> bool:
         if self.update_version != BAYESIAN_UPDATE_VERSION:
             return False
+        if self.partition_version != "PROBABILITY_PARTITION_V1":
+            return False
+        try:
+            partition = ProbabilityPartition(
+                self.partition_id,
+                self.hypotheses,
+                self.prior_probabilities,
+                self.partition_version,
+            )
+        except ValueError:
+            return False
+        if len(self.likelihoods) != len(self.hypotheses):
+            return False
+        if len(self.posterior_probabilities) != len(self.hypotheses):
+            return False
+        if any(not isfinite(value) or not 0.0 <= value <= 1.0 for value in self.likelihoods):
+            return False
+        if any(not isfinite(value) or not 0.0 <= value <= 1.0 for value in self.posterior_probabilities):
+            return False
+        weights = tuple(
+            prior * likelihood
+            for prior, likelihood in zip(partition.prior_probabilities, self.likelihoods)
+        )
+        if not isfinite(self.evidence_probability) or self.evidence_probability <= 0.0:
+            return False
+        if abs(sum(weights) - self.evidence_probability) > PROBABILITY_TOLERANCE:
+            return False
+        expected = tuple(weight / self.evidence_probability for weight in weights)
+        if any(
+            abs(actual - wanted) > PROBABILITY_TOLERANCE
+            for actual, wanted in zip(self.posterior_probabilities, expected)
+        ):
+            return False
+        if abs(sum(self.posterior_probabilities) - 1.0) > PROBABILITY_TOLERANCE:
+            return False
         return deterministic_hash(self.to_dict(include_result_hash=False)) == self.result_hash
 
     @classmethod
