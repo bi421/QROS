@@ -353,4 +353,3 @@ def test_plan_lock_is_tenant_scoped_and_viewer_forbidden() -> None:
         headers={"Authorization": "Bearer test"},
         json=_plan_payload("Tenant-scoped plan"),
     ).status_code == 403
-}
