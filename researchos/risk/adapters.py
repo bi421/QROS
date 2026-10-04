@@ -83,6 +83,7 @@ def risk_input_from_probability(
         risk_per_unit=risk_per_unit,
         research_id=str(data["decision_context_id"]),
         probability_method=probability_method,
+        probability_calculation_version=normalized_assessment.calculation_version,
         probability_calibration_status=(
             str(calibration_status) if calibration_status is not None else None
         ),
