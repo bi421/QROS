@@ -436,8 +436,8 @@ class SupabaseDatasetStorage:
         return data
 
     def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
-        if not 1 <= expires_in <= 900:
-            raise ValueError("signed URL expiry must be between 1 and 900 seconds")
+        if expires_in != 3600:
+            raise ValueError("dataset signed URL expiry must be exactly 3600 seconds")
         response = self._client.storage.from_(self._bucket).create_signed_url(
             storage_path,
             expires_in,
