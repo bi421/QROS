@@ -246,9 +246,28 @@ class RequestMetrics:
                 f'qros_http_request_duration_ms_bucket{{le="+Inf"}} {total}',
                 f"qros_http_request_duration_ms_sum {snapshot['latency_sum_ms']:.3f}",
                 f"qros_http_request_duration_ms_count {total}",
-                "",
             ]
         )
+
+        # The request metrics above are maintained locally for bounded HTTP
+        # cardinality. Job/security counters are Prometheus collectors and
+        # must be included in this authenticated scrape as well.
+        prometheus_payload = generate_latest().decode("utf-8").splitlines()
+        required_prefixes = (
+            "jobs_created_total",
+            "jobs_failed_total",
+            "jobs_retries_total",
+            "tenant_isolation_violations_total",
+            "rls_violations_total",
+        )
+        for line in prometheus_payload:
+            if line.startswith("# HELP ") or line.startswith("# TYPE "):
+                if any(f" {prefix} " in line for prefix in required_prefixes):
+                    lines.append(line)
+            elif any(line.startswith(prefix) for prefix in required_prefixes):
+                lines.append(line)
+
+        lines.append("")
         return "\n".join(lines)
 
 
