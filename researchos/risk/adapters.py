@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from researchos.decision_engine.probability import ProbabilityAssessment
+from researchos.decision_engine.probability import ProbabilityAssessment, ProbabilityValidator
 from researchos.risk.contracts import RiskInput, RiskPolicy, TradeStatistics
 
 
