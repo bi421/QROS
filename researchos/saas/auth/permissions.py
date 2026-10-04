@@ -92,7 +92,7 @@ POLICY: dict[Role, dict[Resource, frozenset[Action]]] = {
         Resource.PLAN: READ,
         Resource.EVIDENCE: READ,
         Resource.FINDING: READ,
-        Resource.BILLING: WRITE,
+        Resource.BILLING: frozenset({Action.READ, Action.LIST, Action.UPDATE}),
     },
 }
 
