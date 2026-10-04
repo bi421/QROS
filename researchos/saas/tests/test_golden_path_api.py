@@ -83,17 +83,21 @@ def test_golden_path_result_and_evidence_are_tenant_scoped() -> None:
         headers={"Authorization": "Bearer test"},
     )
     assert evidence_response.status_code == 200
-    assert len(evidence_response.json()) == 1
+    assert len(evidence_response.json()["data"]) == 1
+    assert evidence_response.json()["pagination"]["total"] == 1
 
     other_client = TestClient(create_app(auth_provider=StaticAuth(other), job_store=jobs, evidence_store=evidence))
     assert other_client.get(
         f"/v1/research-runs/{job.id}/result",
         headers={"Authorization": "Bearer test"},
     ).status_code == 404
-    assert other_client.get(
+    other_evidence = other_client.get(
         f"/v1/research-runs/{job.id}/evidence",
         headers={"Authorization": "Bearer test"},
-    ).json() == []
+    )
+    assert other_evidence.status_code == 200
+    assert other_evidence.json()["data"] == []
+    assert other_evidence.json()["pagination"]["total"] == 0
 
 
 def test_result_endpoint_fails_closed_when_no_result_exists() -> None:
