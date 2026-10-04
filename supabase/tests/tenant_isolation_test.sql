@@ -226,12 +226,12 @@ set local request.jwt.claims = '{"sub":"11111111-1111-1111-1111-111111111111","r
 
 -- RLS tenant-rebind assertion: the UPDATE must be rejected, not silently filtered.
 select throws_ok(
-  $
+  $qros$
     update public.dataset
        set workspace_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
      where id = 'aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa'
      returning id
-  $,
+  $qros$,
   '42501',
   null,
   'tenant A cannot rebind its dataset to tenant B'
