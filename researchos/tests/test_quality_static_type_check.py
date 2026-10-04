@@ -14,10 +14,16 @@ def test_mypy_governed_scope_is_explicit_and_pinned() -> None:
     assert '"researchos/saas/api.py"' in pyproject
     assert '"researchos/saas/contracts.py"' in pyproject
     assert "disallow_untyped_defs = true" in pyproject
+    assert '[tool.mypy-baseline]' in pyproject
+    assert 'baseline_path = "mypy-baseline.txt"' in pyproject
 
 
-def test_mypy_workflow_executes_the_governed_static_type_check() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "mypy.yml").read_text(encoding="utf-8")
-    assert "name: mypy" in workflow
-    assert "name: Run mypy" in workflow
-    assert "run: mypy" in workflow
+def test_ci_does_not_duplicate_mypy_and_ratchet_workflow_is_canonical() -> None:
+    ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    mypy = (ROOT / ".github" / "workflows" / "mypy.yml").read_text(encoding="utf-8")
+
+    assert "name: Static Type Check" not in ci
+    assert "run: mypy" not in ci
+    assert "name: mypy" in mypy
+    assert "--follow-imports=skip" in mypy
+    assert "mypy-baseline filter" in mypy
