@@ -1,6 +1,14 @@
+import pytest
+
 from researchos.risk.contracts import RiskCalculation
 from researchos.risk.decision_artifact import RiskDecisionArtifact
-from researchos.risk.governance import RiskAccountState, RiskLimits, StrategyRiskState, evaluate_pretrade_risk
+from researchos.risk.governance import (
+    RiskAccountState,
+    RiskLimits,
+    StrategyRiskState,
+    evaluate_pretrade_risk,
+)
+
 
 def _risk() -> RiskCalculation:
     return RiskCalculation(
@@ -21,23 +29,24 @@ def _risk() -> RiskCalculation:
         probability_calculation_version="PROBABILITY_V1",
     )
 
+
 def _decision(risk: RiskCalculation):
     return evaluate_pretrade_risk(
         risk,
         account=RiskAccountState(
-            day_start_equity=10000.0,
-            current_equity=10000.0,
-            high_water_mark=10000.0,
-            strategy_reference_equity=10000.0,
+            day_start_equity=10_000.0,
+            current_equity=10_000.0,
+            high_water_mark=10_000.0,
+            strategy_reference_equity=10_000.0,
         ),
         limits=RiskLimits(),
-        proposed_notional=1000.0,
+        proposed_notional=1_000.0,
         strategy_state=StrategyRiskState.RISK_REVIEW,
         research_valid=True,
     )
 
+
 def test_risk_artifact_requires_full_provenance() -> None:
-    import pytest
     risk = _risk()
     decision = _decision(risk)
     with pytest.raises(ValueError, match="assessment_hash"):
@@ -47,6 +56,7 @@ def test_risk_artifact_requires_full_provenance() -> None:
             "report-1",
         )
 
+
 def test_risk_artifact_golden_path_and_tamper_detection() -> None:
     risk = _risk()
     decision = _decision(risk)
@@ -55,7 +65,6 @@ def test_risk_artifact_golden_path_and_tamper_detection() -> None:
     restored = RiskDecisionArtifact.from_dict(artifact.to_dict())
     assert restored == artifact
 
-    import pytest
     tampered = {**artifact.to_dict(), "report_hash": "report-2"}
     with pytest.raises(ValueError, match="hash"):
         RiskDecisionArtifact.from_dict(tampered)
