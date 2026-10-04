@@ -152,6 +152,12 @@ class ResearchEvidenceResponse(BaseModel):
     provenance: dict[str, object]
 
 
+class ResearchEvidencePageResponse(BaseModel):
+    data: list[ResearchEvidenceResponse]
+    pagination: dict[str, int]
+    request_id: str
+
+
 def _evidence_response(row: ResearchEvidenceRecord) -> ResearchEvidenceResponse:
     return ResearchEvidenceResponse(
         id=str(row.id), workspace_id=str(row.workspace_id), research_run_id=str(row.research_run_id),
@@ -207,7 +213,7 @@ def register_research_evidence_routes(
 
     @router.get(
         "/v1/research-runs/{job_id}/evidence",
-        response_model=list[ResearchEvidenceResponse],
+        response_model=ResearchEvidencePageResponse,
         tags=["evidence"],
     )
     @require_permission("evidence", "list")
