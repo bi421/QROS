@@ -9,6 +9,8 @@ from pydantic import BaseModel, Field
 
 from researchos.saas.finding import ResearchFindingRecord, VALIDATED_STATUS
 from researchos.saas.contracts import TenantContext
+from researchos.saas.auth.permissions import require_permission
+from researchos.saas.pagination import validate_filter_keys, parse_list_query, PaginationParameterError, pagination_envelope
 from researchos.saas.validation_api import ResearchValidationStore
 
 
@@ -118,6 +120,7 @@ def register_research_finding_routes(
         sort_order: str = "desc",
         status_filter: str | None = Query(default=None, alias="filter[status]"),
         tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
+        request: Request = None,
         tenant=Depends(tenant_dependency),
     ) -> dict[str, object]:
         try:

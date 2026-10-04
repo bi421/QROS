@@ -28,7 +28,7 @@ jobs:
           import os, re, sys
           title = os.environ["PR_TITLE"]
           branch = os.environ["HEAD_REF"]
-          title_re = re.compile(r"^(feat|fix|docs|test|refactor|perf|build|ci|chore|revert)(\\([a-z0-9._/-]+\\))?: .+")
+          title_re = re.compile(r"^(feat|fix|docs|test|refactor|perf|build|ci|chore|revert)(\([a-z0-9._/-]+\))?: .+")
           branch_re = re.compile(r"^(feat|fix|docs|test|refactor|perf|build|ci|chore)/[a-z0-9][a-z0-9._/-]*$")
           errors=[]
           if not title_re.match(title): errors.append(f"PR title is not Conventional Commit style: {title!r}")

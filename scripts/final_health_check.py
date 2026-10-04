@@ -8,6 +8,7 @@ import datetime as dt
 import json
 import subprocess
 import sys
+import shutil
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -16,6 +17,9 @@ HEALTH_DIR = ROOT / ".health"
 COVERAGE_JSON = HEALTH_DIR / "coverage.json"
 BACKUP_WORKFLOW = ROOT / ".github" / "workflows" / "production-db-backup.yml"
 BACKUP_RESULT = HEALTH_DIR / "backup_verify.json"
+HEALTH_JSON = HEALTH_DIR / "health_evidence.json"
+evidence_path = HEALTH_JSON
+REQUIRED_RLS_TABLES = ("research_runs", "research_claims", "research_evidence", "research_findings")
 
 REQUIRED_CHECKS = (
     "ruff",
@@ -38,6 +42,17 @@ def command_result(label: str, command: list[str], *, cwd: Path = ROOT) -> dict[
         "stdout": completed.stdout.strip()[-12000:],
         "stderr": completed.stderr.strip()[-12000:],
     }
+
+
+def run_check(label: str, command: list[str]) -> dict[str, object]:
+    return command_result(label, command)
+
+
+def git_value(args: list[str]) -> str:
+    result = subprocess.run(["git", *args], cwd=ROOT, text=True, capture_output=True, check=False)
+    if result.returncode != 0:
+        raise SystemExit(f"git command failed: {' '.join(args)}")
+    return result.stdout.strip()
 
 
 def db_url_for_database(admin_url: str, database: str) -> str:
