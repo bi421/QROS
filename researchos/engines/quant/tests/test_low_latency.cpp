@@ -11,6 +11,8 @@
 #include <cmath>
 #include <stdexcept>
 
+namespace { constexpr double kPi = 3.141592653589793238462643383279502884; }
+
 using namespace quant::low_latency;
 
 TEST(LowLatencyBayesianTest, MatchesSequentialBayesUpdate) {
@@ -86,8 +88,8 @@ TEST(LowLatencyDiffusionTest, HeatKernelAndGBMDensity) {
   const double x[]={0,1}, mean[]={0,0}, diffusion[]={.5,.5}, time[]={1,1};
   double out[2]{};
   DiffusionModelKernel::heat_density(x,mean,diffusion,time,2,out);
-  EXPECT_NEAR(1.0/std::sqrt(2.0*M_PI),out[0],1e-14);
-  EXPECT_NEAR(std::exp(-.5)/std::sqrt(2.0*M_PI),out[1],1e-14);
+  EXPECT_NEAR(1.0/std::sqrt(2.0*kPi),out[0],1e-14);
+  EXPECT_NEAR(std::exp(-.5)/std::sqrt(2.0*kPi),out[1],1e-14);
 
   const double spot[]={100}, price[]={100}, drift[]={.05}, vol[]={.2}, t[]={1};
   double gbm[1]{};
