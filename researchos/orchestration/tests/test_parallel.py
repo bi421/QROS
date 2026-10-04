@@ -9,14 +9,14 @@ from typing import Any, TypeVar
 
 import pytest
 
-_T = TypeVar("_T")
-
 from researchos.orchestration.parallel import (
     ParallelOrchestrationError,
     ParallelResearchExecutor,
     ResearchBranch,
     ResearchWave,
 )
+
+_T = TypeVar("_T")
 
 
 def test_branches_in_one_wave_execute_concurrently_and_preserve_plan_order() -> None:
