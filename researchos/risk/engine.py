@@ -57,4 +57,5 @@ def calculate_risk(request: RiskInput) -> RiskCalculation:
         probability_method=request.probability_method,
         probability_calculation_version=request.probability_calculation_version,
         probability_calibration_status=request.probability_calibration_status,
+        assessment_hash=request.assessment_hash,
     )
