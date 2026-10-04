@@ -99,9 +99,14 @@ class ParallelBranchResult(Generic[T]):
 
 @dataclass(frozen=True)
 class ParallelResearchResult:
-    """Immutable result of all completed waves."""
+    """Immutable result of all completed waves with plan identity preserved."""
 
     waves: tuple[tuple[ParallelBranchResult[Any], ...], ...]
+    wave_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if len(self.wave_ids) not in (0, len(self.waves)):
+            raise ValueError("wave_ids must align one-to-one with completed waves")
 
     def by_branch_id(self) -> dict[str, Any]:
         """Return a deterministic branch-id -> value mapping."""
@@ -213,7 +218,10 @@ class ParallelResearchExecutor:
             finally:
                 executor.shutdown(wait=True, cancel_futures=True)
 
-        return ParallelResearchResult(waves=tuple(completed))
+        return ParallelResearchResult(
+            waves=tuple(completed),
+            wave_ids=tuple(wave.wave_id for wave in normalized_waves),
+        )
 
 
 __all__ = [

@@ -222,3 +222,15 @@ def test_executor_factory_is_used_and_shutdown_between_waves() -> None:
     assert len(executors) == 2
     assert all(executor.shutdown_calls == 1 for executor in executors)
     assert [len(executor.submissions) for executor in executors] == [1, 1]
+
+
+def test_result_preserves_dependency_wave_identity() -> None:
+    result = ParallelResearchExecutor(max_workers=1).run(
+        (
+            ResearchWave("snapshot-derived", (ResearchBranch("a", lambda _ctx: 1),)),
+            ResearchWave("evidence-derived", (ResearchBranch("b", lambda _ctx: 2),)),
+        )
+    )
+
+    assert result.wave_ids == ("snapshot-derived", "evidence-derived")
+    assert len(result.wave_ids) == len(result.waves)
