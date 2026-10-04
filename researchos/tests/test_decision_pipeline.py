@@ -1,3 +1,5 @@
+import pytest
+
 from researchos.decision_engine.probability import ProbabilityAssessment
 from researchos.decision_pipeline import DecisionPipelineInput, run_decision_pipeline
 from researchos.risk.contracts import RiskPolicy, TradeStatistics
@@ -43,6 +45,9 @@ def test_pipeline_produces_human_review_report() -> None:
     assert report.risk_amount > 0
     assert report.position_size is not None
     assert report.research_id == "research-001"
+    assert report.assessment_hash == _assessment().assessment_hash
+    assert report.probability_method == "WEIGHTED_EVIDENCE"
+    assert report.probability_calculation_version == "PROBABILITY_V1"
 
 
 def test_pipeline_blocks_invalid_research() -> None:
@@ -68,6 +73,42 @@ def test_pipeline_accepts_serialized_probability_boundary() -> None:
     )
     assert report.direction == "bearish"
     assert report.probability == 0.25
+    assert report.assessment_hash == data["assessment_hash"]
+
+
+
+def test_pipeline_rejects_missing_probability_provenance() -> None:
+    data = _assessment().to_dict()
+    data["bullish_probability"] = 1.2
+    data["assessment_hash"] = ""
+    with pytest.raises(ValueError, match="missing assessment_hash"):
+        run_decision_pipeline(
+            DecisionPipelineInput(
+                assessment=data,
+                asset="XAUUSD",
+                direction="bullish",
+                account_equity=10_000,
+                trade_statistics=TradeStatistics(average_win=100, average_loss=100),
+                research_valid=True,
+            )
+        )
+
+
+
+def test_pipeline_rejects_assessment_hash_mismatch() -> None:
+    data = _assessment().to_dict()
+    data["bullish_probability"] = 0.61
+    with pytest.raises(ValueError, match="assessment_hash does not match content"):
+        run_decision_pipeline(
+            DecisionPipelineInput(
+                assessment=data,
+                asset="XAUUSD",
+                direction="bullish",
+                account_equity=10_000,
+                trade_statistics=TradeStatistics(average_win=100, average_loss=100),
+                research_valid=True,
+            )
+        )
 
 
 def test_pipeline_propagates_evidence_backed_calibration_status() -> None:
@@ -81,6 +122,10 @@ def test_pipeline_propagates_evidence_backed_calibration_status() -> None:
     )
     assert report.risk_valid is True
     assert report.probability == 0.60
+    assert report.probability_calibration_status == "Well-Calibrated"
+    assert report.assessment_hash == _assessment(
+        calibration_status="Well-Calibrated"
+    ).assessment_hash
 
 
 def test_probability_calibration_status_round_trips_through_serialization() -> None:
