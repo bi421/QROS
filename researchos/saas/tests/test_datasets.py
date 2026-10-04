@@ -45,8 +45,7 @@ def test_in_memory_store_rejects_duplicate_version_identity() -> None:
     store = InMemoryDatasetStore()
     dataset = Dataset(uuid4(), uuid4(), "sample", uuid4())
     store.create_dataset(dataset.workspace_id, dataset)
-    first = DatasetVersion(uuid4(), dataset.id, 1, "a" * 64, "path/a", 1, dataset.created_by)
-    second = DatasetVersion(uuid4(), dataset.id, 2, "b" * 64, "path/b", 1, dataset.created_by)
+    first = DatasetVersion(\n        uuid4(), dataset.id, 1, "a" * 64, storage_path_for(dataset.workspace_id, "a" * 64, 1), 1, dataset.created_by\n    )\n    second = DatasetVersion(\n        uuid4(), dataset.id, 2, "b" * 64, storage_path_for(dataset.workspace_id, "b" * 64, 2), 1, dataset.created_by\n    )
 
     store.create_version(dataset.workspace_id, first)
     store.create_version(dataset.workspace_id, second)
@@ -63,7 +62,7 @@ def test_in_memory_store_rejects_version_write_from_other_workspace() -> None:
     store.create_dataset(dataset.workspace_id, dataset)
 
     version = DatasetVersion(
-        uuid4(), dataset.id, 1, "b" * 64, "path/b", 1, dataset.created_by
+        uuid4(), dataset.id, 1, "b" * 64, storage_path_for(owner_workspace, "b" * 64, 1), 1, dataset.created_by
     )
 
     with pytest.raises(KeyError, match="dataset not found for workspace"):
