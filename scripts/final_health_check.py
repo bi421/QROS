@@ -123,23 +123,23 @@ def backup_verify_contract() -> dict[str, object]:
     }
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-cpp", action="store_true", help="Skip C++ configure/build")
     parser.add_argument("--exact-commit", help="Require HEAD to equal this commit SHA")
-    args = parser.parse_args()
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
 
     actual = git_sha()
-    if actual != args.expected_commit:
-        raise SystemExit(
-            f"exact-release violation: expected {args.expected_commit}, got {actual}"
+    if args.exact_commit and actual != args.exact_commit:
+        print(
+            f"EXACT COMMIT MISMATCH: expected {args.exact_commit}, got {actual}",
+            file=sys.stderr,
         )
-
-    if args.exact_commit:
-        actual = git_value(["rev-parse", "HEAD"])
-        if actual != args.exact_commit:
-            print(f"EXACT COMMIT MISMATCH: expected {args.exact_commit}, got {actual}", file=sys.stderr)
-            return 2
+        return 2
 
     checks: dict[str, dict[str, object]] = {}
 
@@ -180,16 +180,7 @@ def main() -> int:
         ],
     )
 
-    if args.skip_rls:
-        checks["rls_tenant_isolation"] = {
-            "label": "rls_tenant_isolation",
-            "command": [],
-            "returncode": None,
-            "status": "SKIPPED",
-            "stdout": "",
-            "stderr": "--skip-rls",
-        }
-    elif shutil.which("supabase"):
+    if shutil.which("supabase"):
         checks["rls_tenant_isolation"] = command_result(
             "rls_tenant_isolation",
             ["supabase", "test", "db", "supabase/tests/tenant_isolation_test.sql"],
@@ -254,7 +245,7 @@ def main() -> int:
         "schema_version": 2,
         "health_status": overall,
         "timestamp_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "commit": actual_commit,
+        "commit": actual,
         "branch": git_value(["branch", "--show-current"]),
         "checks": checks,
         "test_results": {
