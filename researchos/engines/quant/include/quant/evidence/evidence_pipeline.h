@@ -30,7 +30,18 @@ struct PipelineState final {
 
 class EvidencePipeline final {
 public:
+  struct BranchDescriptor final {
+    Branch branch{};
+    std::uint32_t independence_group{0};
+    bool implemented{false};
+    bool parallel_safe{false};
+  };
+
   static PipelineState begin(std::size_t evidence_capacity) noexcept;
+
+  // Static registry: independent branches may be executed concurrently,
+  // but their outputs remain separate until the validation gates.
+  static const BranchDescriptor* branch_plan(std::size_t& count) noexcept;
 
   static bool accept_integrity(PipelineState& state) noexcept;
 
