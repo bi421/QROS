@@ -1,3 +1,5 @@
+import pytest
+
 from researchos.decision_engine.probability import ProbabilityAssessment
 from researchos.decision_pipeline import DecisionPipelineInput, run_decision_pipeline
 from researchos.risk.contracts import RiskPolicy, TradeStatistics
@@ -72,6 +74,23 @@ def test_pipeline_accepts_serialized_probability_boundary() -> None:
     assert report.direction == "bearish"
     assert report.probability == 0.25
     assert report.assessment_hash == data["assessment_hash"]
+
+
+
+def test_pipeline_rejects_invalid_probability_payload() -> None:
+    data = _assessment().to_dict()
+    data["bullish_probability"] = 1.2
+    with pytest.raises(ValueError, match="invalid probability assessment"):
+        run_decision_pipeline(
+            DecisionPipelineInput(
+                assessment=data,
+                asset="XAUUSD",
+                direction="bullish",
+                account_equity=10_000,
+                trade_statistics=TradeStatistics(average_win=100, average_loss=100),
+                research_valid=True,
+            )
+        )
 
 
 def test_pipeline_propagates_evidence_backed_calibration_status() -> None:
