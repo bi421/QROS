@@ -14,9 +14,7 @@ from researchos.saas.datasets import (
 
 
 def test_stream_sha256_returns_digest_size_and_rewinds_file() -> None:
-    body = b"xauusd,test
-1,100
-"
+    body = b"xauusd,test\n1,100\n"
     file = BytesIO(body)
 
     digest, size = stream_sha256(file, max_bytes=1024)
@@ -47,12 +45,8 @@ def test_in_memory_store_rejects_duplicate_version_identity() -> None:
     store = InMemoryDatasetStore()
     dataset = Dataset(uuid4(), uuid4(), "sample", uuid4())
     store.create_dataset(dataset.workspace_id, dataset)
-    first = DatasetVersion(
-        uuid4(), dataset.id, 1, "a" * 64, storage_path_for(dataset.workspace_id, "a" * 64, 1), 1, dataset.created_by
-    )
-    second = DatasetVersion(
-        uuid4(), dataset.id, 2, "b" * 64, storage_path_for(dataset.workspace_id, "b" * 64, 2), 1, dataset.created_by
-    )
+    first = DatasetVersion(uuid4(), dataset.id, 1, "a" * 64, storage_path_for(dataset.workspace_id, "a" * 64, 1), 1, dataset.created_by)
+    second = DatasetVersion(uuid4(), dataset.id, 2, "b" * 64, storage_path_for(dataset.workspace_id, "b" * 64, 2), 1, dataset.created_by)
 
     store.create_version(dataset.workspace_id, first)
     store.create_version(dataset.workspace_id, second)
