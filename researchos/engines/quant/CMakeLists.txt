@@ -11,6 +11,9 @@ option(BUILD_SHARED_LIBS "Build shared library" OFF)
 option(BUILD_TESTS "Build C++ unit tests" ON)
 option(BUILD_BENCHMARKS "Build benchmarks" ON)
 option(BUILD_PYTHON_BINDINGS "Build nanobind Python bindings" ON)
+option(QROS_ENABLE_OPENMP "Enable OpenMP for independent Monte Carlo paths" ON)
+option(QROS_ENABLE_AVX2 "Enable AVX2 kernels on x86 targets" ON)
+option(QROS_ENABLE_AVX512 "Enable AVX-512 kernels on x86 targets" OFF)
 
 # Include Directories
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -27,6 +30,32 @@ target_include_directories(quant_engine PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/python
 )
 target_compile_features(quant_engine PUBLIC cxx_std_20)
+
+if(QROS_ENABLE_OPENMP)
+    find_package(OpenMP QUIET COMPONENTS CXX)
+    if(OpenMP_CXX_FOUND)
+        target_link_libraries(quant_engine PUBLIC OpenMP::OpenMP_CXX)
+        target_compile_definitions(quant_engine PUBLIC QROS_HAS_OPENMP=1)
+    endif()
+endif()
+
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64|x86")
+    if(QROS_ENABLE_AVX512)
+        if(MSVC)
+            target_compile_options(quant_engine PRIVATE /arch:AVX512)
+        else()
+            target_compile_options(quant_engine PRIVATE -mavx512f)
+        endif()
+        target_compile_definitions(quant_engine PRIVATE QROS_AVX512=1)
+    elseif(QROS_ENABLE_AVX2)
+        if(MSVC)
+            target_compile_options(quant_engine PRIVATE /arch:AVX2)
+        else()
+            target_compile_options(quant_engine PRIVATE -mavx2 -mfma)
+        endif()
+        target_compile_definitions(quant_engine PRIVATE QROS_AVX2=1)
+    endif()
+endif()
 
 # MSVC: structured exceptions + UTF-8 source
 target_compile_options(quant_engine PRIVATE
