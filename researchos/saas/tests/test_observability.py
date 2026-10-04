@@ -68,7 +68,7 @@ def test_metrics_endpoint_exposes_required_counters() -> None:
         "jobs_failed_total",
         "tenant_isolation_violations_total",
     ):
-        assert re.search(rf"^{metric} (?:\\d+(?:\\.\\d+)?)$", body, re.MULTILINE)
+        assert re.search(rf"^{metric} (?:\d+(?:\.\d+)?)$", body, re.MULTILINE)
 
 
 def test_metrics_endpoint_fails_closed_without_configuration() -> None:
