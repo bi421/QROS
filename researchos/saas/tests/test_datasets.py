@@ -65,6 +65,7 @@ def test_in_memory_store_rejects_version_write_from_other_workspace() -> None:
     version = DatasetVersion(
         uuid4(), dataset.id, 1, "b" * 64, storage_path_for(other_workspace, "b" * 64, 1), 1, dataset.created_by
     )
+    # Keep the fixture canonical for the requested workspace so ownership validation is reached.
 
     with pytest.raises(KeyError, match="dataset not found for workspace"):
         store.create_version(other_workspace, version)
