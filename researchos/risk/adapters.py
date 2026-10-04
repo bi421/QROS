@@ -41,7 +41,15 @@ def risk_input_from_probability(
     otherwise the serialized ``probability_calibration_status`` value is
     preserved.
     """
-    data = assessment.to_dict() if isinstance(assessment, ProbabilityAssessment) else assessment
+    if isinstance(assessment, ProbabilityAssessment):
+        normalized_assessment = assessment
+        normalized_assessment.validate_integrity()
+    else:
+        normalized_assessment = ProbabilityAssessment.from_dict(dict(assessment))
+    validation_errors = ProbabilityValidator().validate(normalized_assessment)
+    if validation_errors:
+        raise ValueError("invalid probability assessment: " + "; ".join(validation_errors))
+    data = normalized_assessment.to_dict()
     normalized_direction = direction.strip().lower()
 
     try:
