@@ -55,7 +55,7 @@ class DecisionPipeline:
 
     def run_many(self,contexts:tuple[DecisionContext,...],*,executor:ParallelResearchExecutor|None=None)->tuple[DecisionPipelineResult,...]:
         if not contexts: raise DecisionPipelineError("at least one DecisionContext is required")
-        branch=tuple(ResearchBranch(branch_id=context.id,operation=lambda _snapshot,context=context:self.run(context)) for context in contexts)
+        branch=tuple(ResearchBranch(branch_id=context.id,operation=lambda _snapshot,context=context:self.run(context)) for index, context in enumerate(contexts))
         plan=(ResearchWave(wave_id="decision-contexts",branches=branch),)
         result=(executor or ParallelResearchExecutor(max_workers=min(8,len(contexts)))).run(plan)
         return tuple(item.value for item in result.waves[0])
