@@ -917,6 +917,75 @@ def create_app(
             raise RuntimeError("research job queue unavailable") from exc
         return JSONResponse(status_code=202, content=body)
 
+    @app.get("/v1/research-runs", response_model=PageResponse, tags=["research"])
+    @require_permission(Resource.JOB, Action.LIST)
+    def list_research_runs(
+        request: Request,
+        page: str = "1",
+        page_size: str = "20",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        status_filter: str | None = Query(default=None, alias="filter[status]"),
+        workflow_filter: str | None = Query(default=None, alias="filter[workflow_id]"),
+        tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> PageResponse:
+        try:
+            validate_filter_keys(
+                {key.removeprefix("filter[").removesuffix("]"): value
+                 for key, value in request.query_params.items() if key.startswith("filter[")},
+                allowed=frozenset({"status", "workflow_id", "tenant_id"}),
+            )
+            query = parse_list_query(
+                page=page,
+                page_size=page_size,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                status=status_filter,
+                tenant_id=tenant_filter,
+                allowed_sort_fields=frozenset({"created_at", "status", "workflow_id"}),
+            )
+            status_value = (
+                ResearchJobStatus(query.status) if query.status is not None else None
+            )
+        except (PaginationParameterError, ValueError) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "INVALID_FILTER" if "status" in str(exc).lower() else "INVALID_SORT", "message": str(exc)},
+            ) from exc
+        if tenant_filter is not None and tenant_filter != str(tenant.workspace_id):
+            jobs, total = [], 0
+        else:
+            try:
+                jobs, total = store.list(
+                    tenant.workspace_id,
+                    limit=query.page_size,
+                    offset=query.offset,
+                    sort_by=query.sort_by,
+                    sort_order=query.sort_order,
+                    status=status_value,
+                    workflow_id=workflow_filter,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"code": "INVALID_SORT" if "sort" in str(exc).lower() else "INVALID_FILTER", "message": str(exc)},
+                ) from exc
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail="research run persistence unavailable",
+                ) from exc
+        return PageResponse.model_validate(
+            pagination_envelope(
+                data=[_research_job_response(job).model_dump(mode="json") for job in jobs],
+                page=query.page,
+                page_size=query.page_size,
+                total=total,
+                request_id=request.state.request_id,
+            )
+        )
+
     @app.get("/v1/research-runs/{job_id}/logs", response_model=list[dict[str, object]], tags=["research"])
     @require_permission("job", "read")
     def get_research_run_logs(
