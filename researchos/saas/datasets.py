@@ -6,9 +6,6 @@ from dataclasses import dataclass, field as dataclass_field
 from datetime import datetime
 from hashlib import sha256
 from typing import Any, BinaryIO, Protocol
-from urllib.error import HTTPError
-from urllib.parse import quote
-from urllib.request import Request, urlopen
 from uuid import UUID
 
 from researchos.core.timestamp import utc_now
@@ -37,10 +34,6 @@ class DatasetVersion:
 
 class DatasetReferencedError(RuntimeError):
     """Raised when retention policy prevents dataset deletion."""
-
-
-class DatasetReferencedError(RuntimeError):
-    """Raised when an immutable dataset version is still part of research lineage."""
 
 
 class DatasetStore(Protocol):
