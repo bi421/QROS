@@ -81,3 +81,24 @@ def test_pipeline_handles_empty_evidence_without_fabricating_direction() -> None
     assert result.probability.bearish_probability == pytest.approx(1 / 3)
     assert result.probability.neutral_probability == pytest.approx(1 / 3)
     assert "No evidence items available for probability assessment" in result.probability.limitations
+
+
+def test_pipeline_runs_independent_contexts_in_declared_order() -> None:
+    contexts = (
+        make_context(market_snapshot_id="snap_a"),
+        make_context(market_snapshot_id="snap_b"),
+        make_context(market_snapshot_id="snap_c"),
+    )
+    results = DecisionPipeline().run_many(contexts)
+
+    assert tuple(result.context.market_snapshot_id for result in results) == (
+        "snap_a",
+        "snap_b",
+        "snap_c",
+    )
+    assert all(result.report.reasoning_steps for result in results)
+
+
+def test_pipeline_run_many_rejects_empty_input() -> None:
+    with pytest.raises(DecisionPipelineError, match="at least one DecisionContext"):
+        DecisionPipeline().run_many(())

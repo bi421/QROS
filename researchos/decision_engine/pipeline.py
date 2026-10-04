@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from researchos.orchestration.parallel import ParallelResearchExecutor, ResearchBranch, ResearchWave
 from researchos.decision_engine.context import DecisionContext, DecisionContextValidator
 from researchos.decision_engine.contracts import WeightConfiguration
 from researchos.decision_engine.evidence import EvidenceAggregator, EvidenceCollection, EvidenceValidator
@@ -73,6 +74,26 @@ class DecisionPipeline:
     def _raise_if_errors(stage: str, errors: list[str]) -> None:
         if errors:
             raise DecisionPipelineError(f"{stage} validation failed: {'; '.join(errors)}")
+
+    def run_many(
+        self,
+        contexts: tuple[DecisionContext, ...],
+        *,
+        executor: ParallelResearchExecutor | None = None,
+    ) -> tuple[DecisionPipelineResult, ...]:
+        """Evaluate independent decision contexts concurrently in declared order."""
+        if not contexts:
+            raise DecisionPipelineError("at least one DecisionContext is required")
+        branch = tuple(
+            ResearchBranch(
+                branch_id=context.id,
+                operation=lambda _snapshot, context=context: self.run(context),
+            )
+            for context in contexts
+        )
+        plan = (ResearchWave(wave_id="decision-contexts", branches=branch),)
+        result = (executor or ParallelResearchExecutor(max_workers=min(8, len(contexts)))).run(plan)
+        return tuple(item.value for item in result.waves[0])
 
     def run(self, context: DecisionContext) -> DecisionPipelineResult:
         """Run every decision stage in dependency order, fail-closed."""
