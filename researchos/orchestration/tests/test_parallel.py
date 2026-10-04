@@ -128,3 +128,25 @@ def test_wave_failure_blocks_later_waves() -> None:
 def test_empty_plan_is_rejected() -> None:
     with pytest.raises(ValueError, match="at least one research wave"):
         ParallelResearchExecutor().run(())
+
+
+def test_duplicate_branch_ids_across_waves_are_rejected_before_execution() -> None:
+    started: list[str] = []
+
+    def first(_context):
+        started.append("first")
+        return 1
+
+    def second(_context):
+        started.append("second")
+        return 2
+
+    plan = (
+        ResearchWave("wave-1", (ResearchBranch("duplicate", first),)),
+        ResearchWave("wave-2", (ResearchBranch("duplicate", second),)),
+    )
+
+    with pytest.raises(ValueError, match="unique across the research plan"):
+        ParallelResearchExecutor(max_workers=2).run(plan)
+
+    assert started == []
