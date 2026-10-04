@@ -54,8 +54,7 @@ grant select, insert, update, delete on
 to authenticated;
 
 set local role authenticated;
-set local request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
-set local request.jwt.claim.tenant_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+set local request.jwt.claims = '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated","tenant_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
 
 select results_eq(
   $$select count(*)::bigint from public.workspace$$,
@@ -123,8 +122,7 @@ select is_empty(
   'tenant A cannot observe tenant B run by id'
 );
 
-set local request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
-set local request.jwt.claim.tenant_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+set local request.jwt.claims = '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated","tenant_id":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}';
 
 select results_eq(
   $$select count(*)::bigint from public.workspace$$,
@@ -224,7 +222,7 @@ select is(
 
 
 set local role authenticated;
-set local request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+set local request.jwt.claims = '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated","tenant_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
 
 select is_empty(
   $$
@@ -254,7 +252,7 @@ select results_eq(
   'tenant A cannot delete tenant B dataset by resource id'
 );
 
-set local request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
+set local request.jwt.claims = '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated","tenant_id":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}';
 
 select results_eq(
   $$with deleted as (
