@@ -5,24 +5,28 @@
 #if defined(_OPENMP)
 #include <omp.h>
 #endif
-#if defined(QROS_AVX2) || defined(__AVX2__)
+#if defined(QROS_AVX512) || defined(__AVX512F__) || defined(QROS_AVX2) || defined(__AVX2__)
 #include <immintrin.h>
 #endif
 namespace quant::low_latency {
 namespace {
 double sum_shocks(const double* row, std::size_t n) noexcept {
   double sum=0.0;
-#if defined(QROS_AVX2) || defined(__AVX2__)
   std::size_t i=0;
-  __m256d acc=_mm256_setzero_pd();
-  for (;i+4<=n;i+=4) acc=_mm256_add_pd(acc,_mm256_loadu_pd(row+i));
-  alignas(32) double lanes[4];
-  _mm256_store_pd(lanes,acc);
-  sum=lanes[0]+lanes[1]+lanes[2]+lanes[3];
-  for (;i<n;++i) sum+=row[i];
-#else
-  for (std::size_t i=0;i<n;++i) sum+=row[i];
+#if defined(QROS_AVX512) || defined(__AVX512F__)
+  __m512d acc512=_mm512_setzero_pd();
+  for (;i+8<=n;i+=8) acc512=_mm512_add_pd(acc512,_mm512_loadu_pd(row+i));
+  alignas(64) double lanes512[8];
+  _mm512_store_pd(lanes512,acc512);
+  for (double v : lanes512) sum+=v;
+#elif defined(QROS_AVX2) || defined(__AVX2__)
+  __m256d acc256=_mm256_setzero_pd();
+  for (;i+4<=n;i+=4) acc256=_mm256_add_pd(acc256,_mm256_loadu_pd(row+i));
+  alignas(32) double lanes256[4];
+  _mm256_store_pd(lanes256,acc256);
+  for (double v : lanes256) sum+=v;
 #endif
+  for (;i<n;++i) sum+=row[i];
   return sum;
 }
 }
