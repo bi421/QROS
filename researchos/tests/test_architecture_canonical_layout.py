@@ -173,6 +173,8 @@ def test_production_runtime_is_explicitly_durable() -> None:
         "job_queue": "SupabaseResearchJobQueue",
         "idempotency_store": "SupabaseIdempotencyStore",
         "billing_store": "SupabaseBillingEventStore",
+        "entitlement_store": "SupabaseEntitlementStore",
+        "plan_rate_limiters": "dict",
         "rate_limiter": "SupabaseRateLimiter",
         "claim_store": "SupabaseResearchClaimStore",
         "evidence_store": "SupabaseResearchEvidenceStore",
