@@ -469,7 +469,12 @@ def test_readiness_probe_failure_fails_closed() -> None:
     response = client.get("/readyz")
 
     assert response.status_code == 503
-    assert response.json()["detail"] == "SaaS dependency readiness check failed"
+    assert response.json() == {
+        "code": "service_unavailable",
+        "message": "SaaS dependency readiness check failed",
+        "request_id": response.headers["X-Request-ID"],
+        "correlation_id": response.headers["X-Request-ID"],
+    }
 
 
 def test_readiness_probe_success_keeps_endpoint_ready() -> None:
