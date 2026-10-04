@@ -5,7 +5,9 @@ from typing import Any
 from researchos.core.identity import deterministic_hash
 from researchos.risk.contracts import RiskCalculation
 from researchos.risk.governance import RiskDecision
-from researchos.action.report import PreTradeReport
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from researchos.action.report import PreTradeReport
 
 RISK_DECISION_ARTIFACT_VERSION="RISK_DECISION_ARTIFACT_V1"
 
@@ -19,7 +21,7 @@ class RiskDecisionArtifact:
     artifact_hash:str
 
     @classmethod
-    def build(cls,risk:RiskCalculation,decision:RiskDecision,report:PreTradeReport|str)->"RiskDecisionArtifact":
+    def build(cls,risk:RiskCalculation,decision:RiskDecision,report:"PreTradeReport"|str)->"RiskDecisionArtifact":
         report_hash=report.report_hash if hasattr(report,"report_hash") else str(report)
         if not report_hash.strip(): raise ValueError("report_hash is required")
         if not risk.assessment_hash: raise ValueError("risk calculation assessment_hash is required")
