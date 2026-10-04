@@ -43,6 +43,9 @@ def test_pipeline_produces_human_review_report() -> None:
     assert report.risk_amount > 0
     assert report.position_size is not None
     assert report.research_id == "research-001"
+    assert report.assessment_hash == _assessment().assessment_hash
+    assert report.probability_method == "WEIGHTED_EVIDENCE"
+    assert report.probability_calculation_version == "PROBABILITY_V1"
 
 
 def test_pipeline_blocks_invalid_research() -> None:
