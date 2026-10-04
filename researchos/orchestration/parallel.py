@@ -21,6 +21,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any, Generic, TypeVar
 
 T = TypeVar("T")
@@ -42,7 +43,7 @@ class ResearchBranch(Generic[T]):
         if not isinstance(self.branch_id, str) or not self.branch_id.strip():
             raise ValueError("branch_id must be a non-empty string")
         object.__setattr__(self, "branch_id", self.branch_id.strip())
-        object.__setattr__(self, "metadata", dict(self.metadata))
+        object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
 
 
 @dataclass(frozen=True)
@@ -56,6 +57,7 @@ class ResearchWave:
         if not isinstance(self.wave_id, str) or not self.wave_id.strip():
             raise ValueError("wave_id must be a non-empty string")
         object.__setattr__(self, "wave_id", self.wave_id.strip())
+        object.__setattr__(self, "branches", tuple(self.branches))
         if not self.branches:
             raise ValueError("a research wave must contain at least one branch")
         ids = [branch.branch_id for branch in self.branches]
@@ -124,7 +126,7 @@ class ParallelResearchExecutor:
         if not waves:
             raise ValueError("at least one research wave is required")
 
-        snapshot = dict(context or {})
+        snapshot = MappingProxyType(dict(context or {}))
         completed: list[tuple[ParallelBranchResult[Any], ...]] = []
 
         for wave in waves:
@@ -141,7 +143,7 @@ class ParallelResearchExecutor:
                 for branch, future in zip(wave.branches, futures, strict=True):
                     try:
                         values.append(future.result())
-                    except BaseException as exc:
+                    except Exception as exc:
                         failures.append((branch.branch_id, exc))
 
                 if failures:
