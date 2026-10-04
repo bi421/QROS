@@ -5,7 +5,12 @@ hash-linked human-review artifacts. Nothing here creates or submits orders.
 """
 
 from researchos.risk.adapters import risk_input_from_probability
-from researchos.risk.contracts import RiskCalculation, RiskInput, RiskPolicy, TradeStatistics
+from researchos.risk.contracts import (
+    RiskCalculation,
+    RiskInput,
+    RiskPolicy,
+    TradeStatistics,
+)
 from researchos.risk.decision_artifact import (
     RISK_DECISION_ARTIFACT_VERSION,
     RiskDecisionArtifact,
