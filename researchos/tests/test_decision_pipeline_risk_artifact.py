@@ -5,7 +5,12 @@ from researchos.decision_pipeline import (
 )
 from researchos.risk.contracts import TradeStatistics
 from researchos.risk.decision_artifact_store import InMemoryRiskDecisionArtifactStore
-from researchos.risk.governance import RiskAccountState, RiskLimits, StrategyRiskState
+from researchos.risk.governance import (
+    RiskAccountState,
+    RiskLimits,
+    StrategyRiskState,
+)
+
 
 def test_full_probability_to_risk_artifact_replay() -> None:
     assessment = ProbabilityAssessment(
@@ -25,7 +30,11 @@ def test_full_probability_to_risk_artifact_replay() -> None:
         asset="XAUUSD",
         direction="LONG",
         account_equity=10_000.0,
-        trade_statistics=TradeStatistics(average_win=200.0, average_loss=100.0, sample_size=20),
+        trade_statistics=TradeStatistics(
+            average_win=200.0,
+            average_loss=100.0,
+            sample_size=20,
+        ),
         research_valid=True,
         risk_account=RiskAccountState(
             day_start_equity=10_000.0,
