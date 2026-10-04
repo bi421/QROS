@@ -25,7 +25,7 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          python -m pip install ruff pyyaml pydantic pandas numpy polars plotly
+          python -m pip install pytest ruff pyyaml pydantic pandas numpy polars plotly
           python -m pip install fastapi uvicorn python-multipart supabase structlog
           python -m pip install "opentelemetry-api>=1.27,<2" "opentelemetry-sdk>=1.27,<2"
           python -m pip install "prometheus-client>=0.21,<1" "msgpack>=1.2.1,<2" httpx
@@ -34,6 +34,11 @@ jobs:
       - name: Undefined names and redefinitions
         run: python -m ruff check researchos --select E9,F82,F811
       - name: Every SaaS module imports
+        env:
+          SUPABASE_URL: https://example.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: smoke-service-role-key
+          SUPABASE_ANON_KEY: smoke-anon-key
+          QROS_STORAGE_SIGNING_SECRET: smoke-signing-secret
         run: python tools/import_smoke.py researchos.saas
       - name: Workflow hygiene
         run: python tools/check_workflows.py
