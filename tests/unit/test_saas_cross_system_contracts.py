@@ -31,8 +31,6 @@ def test_supplied_dataset_storage_contract_verifies_content_hash() -> None:
     payload = b"qros"
     storage.put(path, BytesIO(payload))
 
-    assert storage.download_verified(path, "9a7b5b3a5b8f7e4f4f3b9f5f4a8d9b2f6f2f8f0f7f8f6f7f9f6f7f5f4f3f2f1f0") if False else True
-    # Use the actual digest so this test checks the implementation rather than a fixture.
     import hashlib
 
     assert storage.download_verified(path, hashlib.sha256(payload).hexdigest()) == payload
