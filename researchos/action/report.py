@@ -57,7 +57,7 @@ class PreTradeReport:
             "probability_method": self.probability_method,
             "probability_calculation_version": self.probability_calculation_version,
             "probability_calibration_status": self.probability_calibration_status,
-            assessment_hash: self.assessment_hash,
+            "assessment_hash": self.assessment_hash,
         }
 
 
