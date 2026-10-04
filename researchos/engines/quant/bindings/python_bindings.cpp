@@ -32,6 +32,9 @@
 #include "quant/statistics/rolling.h"
 #include "quant/low_latency/bayesian_signal_filter.h"
 #include "quant/low_latency/zero_copy_monte_carlo.h"
+#include "quant/low_latency/candle_geometry.h"
+#include "quant/low_latency/geometric_null.h"
+#include "quant/low_latency/empirical_edge.h"
 #include <nanobind/ndarray.h>
 
 #include "quant_engine.hpp"
@@ -702,6 +705,89 @@ NB_MODULE(cpp_quant_backend, m) {
         nb::arg("time_horizon"),
         nb::arg("terminal_values").noconvert(),
         "Zero-copy GBM terminal Monte Carlo kernel using caller-owned buffers.");
+
+  using GeometryOutput = nb::ndarray<double, nb::ndim<2>, nb::c_contig, nb::device::cpu>;
+
+  m.def("candle_geometry",
+        [](ReadOnly1D open, ReadOnly1D high, ReadOnly1D low, ReadOnly1D close,
+           GeometryOutput output) {
+          const std::size_t n = open.shape(0);
+          if (high.shape(0) != n || low.shape(0) != n || close.shape(0) != n ||
+              output.shape(0) != n || output.shape(1) != 5) {
+            throw std::invalid_argument("OHLC inputs must match and output shape must be (n, 5)");
+          }
+          {
+            nb::gil_scoped_release release;
+            std::vector<quant::low_latency::CandleGeometry> scratch(n);
+            quant::low_latency::CandleGeometryKernel::compute(
+                open.data(), high.data(), low.data(), close.data(), n, scratch.data());
+            double* dst = output.data();
+            for (std::size_t i = 0; i < n; ++i) {
+              for (std::size_t j = 0; j < 5; ++j)
+                dst[i * 5 + j] = (&scratch[i].range)[j];
+            }
+          }
+        },
+        nb::arg("open").noconvert(), nb::arg("high").noconvert(),
+        nb::arg("low").noconvert(), nb::arg("close").noconvert(),
+        nb::arg("output").noconvert(),
+        "Compute allocation-free candle geometry into a caller-owned (n,5) buffer.");
+
+  m.def("geometric_interval_probability",
+        [](ReadOnly1D low, ReadOnly1D high, ReadOnly1D p1, ReadOnly1D p2,
+           Writable1D output) {
+          const std::size_t n = low.shape(0);
+          if (high.shape(0) != n || p1.shape(0) != n || p2.shape(0) != n ||
+              output.shape(0) != n)
+            throw std::invalid_argument("geometric interval buffers must have equal length");
+          nb::gil_scoped_release release;
+          quant::low_latency::GeometricNullKernel::interval_probability(
+              low.data(), high.data(), p1.data(), p2.data(), n, output.data());
+        },
+        nb::arg("low").noconvert(), nb::arg("high").noconvert(),
+        nb::arg("p1").noconvert(), nb::arg("p2").noconvert(),
+        nb::arg("output").noconvert(),
+        "Compute 1D geometric interval probabilities without Python-side copies.");
+
+  m.def("first_passage_probability",
+        [](ReadOnly1D open, ReadOnly1D high, ReadOnly1D low,
+           Writable1D hit_high, Writable1D hit_low) {
+          const std::size_t n = open.shape(0);
+          if (high.shape(0) != n || low.shape(0) != n ||
+              hit_high.shape(0) != n || hit_low.shape(0) != n)
+            throw std::invalid_argument("first-passage buffers must have equal length");
+          nb::gil_scoped_release release;
+          quant::low_latency::GeometricNullKernel::first_passage(
+              open.data(), high.data(), low.data(), n, hit_high.data(), hit_low.data());
+        },
+        nb::arg("open").noconvert(), nb::arg("high").noconvert(),
+        nb::arg("low").noconvert(), nb::arg("hit_high").noconvert(),
+        nb::arg("hit_low").noconvert(),
+        "Compute driftless first-passage geometric baselines.");
+
+  m.def("empirical_edge",
+        [](ReadOnly1D empirical, ReadOnly1D geometric, ReadOnly1D sample_size,
+           GeometryOutput output) {
+          const std::size_t n = empirical.shape(0);
+          if (geometric.shape(0) != n || sample_size.shape(0) != n ||
+              output.shape(0) != n || output.shape(1) != 5)
+            throw std::invalid_argument("edge inputs must match and output shape must be (n, 5)");
+          nb::gil_scoped_release release;
+          std::vector<quant::low_latency::EmpiricalEdge> scratch(n);
+          quant::low_latency::EmpiricalEdgeKernel::compute(
+              empirical.data(), geometric.data(), sample_size.data(), n, scratch.data());
+          double* dst = output.data();
+          for (std::size_t i = 0; i < n; ++i) {
+            dst[i * 5 + 0] = scratch[i].empirical_probability;
+            dst[i * 5 + 1] = scratch[i].geometric_probability;
+            dst[i * 5 + 2] = scratch[i].delta_probability;
+            dst[i * 5 + 3] = scratch[i].z_score;
+            dst[i * 5 + 4] = scratch[i].two_sided_p_value;
+          }
+        },
+        nb::arg("empirical").noconvert(), nb::arg("geometric").noconvert(),
+        nb::arg("sample_size").noconvert(), nb::arg("output").noconvert(),
+        "Compute empirical-minus-geometric edge statistics into caller-owned memory.");
 
   m.def("version", []() { return quant::Version::current().to_string(); },
         "Get the C++ Quant Engine version (major.minor.patch)");
