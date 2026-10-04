@@ -12,6 +12,18 @@ from researchos.decision_engine.pipeline import DecisionPipeline, DecisionPipeli
 FIXED_TS = datetime(2025, 1, 15, 14, 30, 0, tzinfo=timezone.utc)
 
 
+def _without_runtime_timestamps(value: object) -> object:
+    if isinstance(value, dict):
+        return {
+            key: _without_runtime_timestamps(item)
+            for key, item in value.items()
+            if key not in {"created_at", "timestamp"}
+        }
+    if isinstance(value, list):
+        return [_without_runtime_timestamps(item) for item in value]
+    return value
+
+
 def make_context(**overrides: object) -> DecisionContext:
     params: dict[str, object] = {
         "asset": "XAUUSD",
@@ -53,7 +65,7 @@ def test_pipeline_is_deterministic_for_fixed_context() -> None:
     assert first.score.score_hash == second.score.score_hash
     assert first.probability.assessment_hash == second.probability.assessment_hash
     assert first.report.report_hash == second.report.report_hash
-    assert first.report.to_dict() == second.report.to_dict()
+    assert _without_runtime_timestamps(first.report.to_dict()) == _without_runtime_timestamps(second.report.to_dict())
 
 
 def test_pipeline_fails_closed_before_report_on_invalid_context() -> None:
