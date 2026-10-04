@@ -30,6 +30,9 @@
 #include "quant/core/engine.h"
 #include "quant/statistics/regression.h"
 #include "quant/statistics/rolling.h"
+#include "quant/low_latency/bayesian_signal_filter.h"
+#include "quant/low_latency/zero_copy_monte_carlo.h"
+#include <nanobind/ndarray.h>
 
 #include "quant_engine.hpp"
 
@@ -643,6 +646,61 @@ NB_MODULE(cpp_quant_backend, m) {
            nb::arg("data"), nb::arg("window"), nb::arg("ddof") = 1)
       .def("rolling_variance_ext", &CppQuantBackend::rolling_variance_ext,
            nb::arg("data"), nb::arg("window"), nb::arg("ddof") = 1);
+
+  using ReadOnly1D = nb::ndarray<const double, nb::ndim<1>, nb::c_contig, nb::device::cpu>;
+  using Writable1D = nb::ndarray<double, nb::ndim<1>, nb::c_contig, nb::device::cpu>;
+  using ReadOnly2D = nb::ndarray<const double, nb::ndim<2>, nb::c_contig, nb::device::cpu>;
+
+  m.def("bayesian_filter_binary",
+        [](ReadOnly1D signal, ReadOnly1D p_signal_given_up,
+           ReadOnly1D p_signal_given_down, double prior_probability_up,
+           Writable1D posterior_probability_up) {
+          const std::size_t n = signal.shape(0);
+          if (p_signal_given_up.shape(0) != n ||
+              p_signal_given_down.shape(0) != n ||
+              posterior_probability_up.shape(0) != n) {
+            throw std::invalid_argument("all Bayesian buffers must have equal length");
+          }
+          {
+            nb::gil_scoped_release release;
+            quant::low_latency::BayesianSignalFilter::filter_binary(
+                signal.data(), p_signal_given_up.data(), p_signal_given_down.data(),
+                n, prior_probability_up, posterior_probability_up.data());
+          }
+        },
+        nb::arg("signal").noconvert(),
+        nb::arg("p_signal_given_up").noconvert(),
+        nb::arg("p_signal_given_down").noconvert(),
+        nb::arg("prior_probability_up"),
+        nb::arg("posterior_probability_up").noconvert(),
+        "Allocation-free sequential Bayesian binary-state filter writing into a caller-owned buffer.");
+
+  m.def("gbm_terminal_from_shocks",
+        [](ReadOnly2D shocks, double spot, double drift, double volatility,
+           double time_horizon, Writable1D terminal_values) {
+          const std::size_t paths = shocks.shape(0);
+          const std::size_t steps = shocks.shape(1);
+          if (terminal_values.shape(0) != paths) {
+            throw std::invalid_argument("terminal_values length must equal shocks rows");
+          }
+          quant::low_latency::GBMTerminalConfig config;
+          config.spot = spot;
+          config.drift = drift;
+          config.volatility = volatility;
+          config.time_horizon = time_horizon;
+          {
+            nb::gil_scoped_release release;
+            quant::low_latency::ZeroCopyMonteCarlo::gbm_terminal_from_shocks(
+                shocks.data(), paths, steps, config, terminal_values.data());
+          }
+        },
+        nb::arg("shocks").noconvert(),
+        nb::arg("spot"),
+        nb::arg("drift"),
+        nb::arg("volatility"),
+        nb::arg("time_horizon"),
+        nb::arg("terminal_values").noconvert(),
+        "Zero-copy GBM terminal Monte Carlo kernel using caller-owned buffers.");
 
   m.def("version", []() { return quant::Version::current().to_string(); },
         "Get the C++ Quant Engine version (major.minor.patch)");
