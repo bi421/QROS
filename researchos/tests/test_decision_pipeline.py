@@ -121,6 +121,10 @@ def test_pipeline_propagates_evidence_backed_calibration_status() -> None:
     )
     assert report.risk_valid is True
     assert report.probability == 0.60
+    assert report.probability_calibration_status == "Well-Calibrated"
+    assert report.assessment_hash == _assessment(
+        calibration_status="Well-Calibrated"
+    ).assessment_hash
 
 
 def test_probability_calibration_status_round_trips_through_serialization() -> None:
