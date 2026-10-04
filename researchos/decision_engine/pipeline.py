@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 from researchos.orchestration.parallel import ParallelResearchExecutor,ResearchBranch,ResearchWave
+from researchos.decision_engine.artifact import DecisionArtifact
 from researchos.decision_engine.calibration import CalibrationEvidence
 from researchos.decision_engine.context import DecisionContext,DecisionContextValidator
 from researchos.decision_engine.contracts import EvidenceSource,WeightConfiguration
@@ -25,22 +26,20 @@ class DecisionPipelineResult:
     report:DecisionReport
     @property
     def report_hash(self)->str: return self.report.report_hash
+    @property
+    def artifact(self)->DecisionArtifact:
+        return DecisionArtifact.build(self.evidence,self.score,self.probability,self.report)
     def to_dict(self)->dict[str,Any]:
-        return {"context":self.context.to_dict(),"evidence":self.evidence.to_dict(),"score":self.score.to_dict(),"probability":self.probability.to_dict(),"report":self.report.to_dict()}
+        return {"context":self.context.to_dict(),"evidence":self.evidence.to_dict(),"score":self.score.to_dict(),"probability":self.probability.to_dict(),"report":self.report.to_dict(),"artifact":self.artifact.to_dict()}
 
 class DecisionPipeline:
-    def __init__(self,*,aggregator:EvidenceAggregator|None=None,weight_config:WeightConfiguration|None=None,
-                 probability_calculator:ProbabilityCalculator|None=None,reasoner:DecisionReasoner|None=None,
-                 calibration_evidence:CalibrationEvidence|None=None,quant_math_result:QuantMathResult|None=None)->None:
-        if aggregator is not None and quant_math_result is not None:
-            raise DecisionPipelineError("provide either aggregator or quant_math_result, not both")
+    def __init__(self,*,aggregator:EvidenceAggregator|None=None,weight_config:WeightConfiguration|None=None,probability_calculator:ProbabilityCalculator|None=None,reasoner:DecisionReasoner|None=None,calibration_evidence:CalibrationEvidence|None=None,quant_math_result:QuantMathResult|None=None)->None:
+        if aggregator is not None and quant_math_result is not None: raise DecisionPipelineError("provide either aggregator or quant_math_result, not both")
         if aggregator is None:
             providers={}
-            if quant_math_result is not None:
-                providers[EvidenceSource.QUANT_ENGINE]=QuantMathEvidenceProvider(quant_math_result)
+            if quant_math_result is not None: providers[EvidenceSource.QUANT_ENGINE]=QuantMathEvidenceProvider(quant_math_result)
             self.aggregator=EvidenceAggregator(providers=providers)
-        else:
-            self.aggregator=aggregator
+        else: self.aggregator=aggregator
         self.weight_config=weight_config or WeightConfiguration()
         self.probability_calculator=probability_calculator or ProbabilityCalculator()
         self.reasoner=reasoner or DecisionReasoner()
