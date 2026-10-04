@@ -7,7 +7,7 @@ TEST(EvidencePipelineTest, EnforcesLayerOrder) {
   EvidenceRecord record{};
   record.branch = Branch::GeometricNull;
   record.quantity = Quantity::Probability;
-  record.validation = ValidationStatus::MathematicalCheckPassed;
+  record.validation = ValidationStatus::StatisticalCheckPassed;
 
   auto state = EvidencePipeline::begin(1);
   EXPECT_FALSE(EvidencePipeline::accept_evidence(state, &record, 1));
@@ -40,4 +40,26 @@ TEST(EvidencePipelineTest, RejectsStatisticallyUnvalidatedEvidence) {
   ASSERT_TRUE(EvidencePipeline::accept_evidence(state, &record, 1));
   ASSERT_TRUE(EvidencePipeline::accept_mathematical_verification(state, &record, 1));
   EXPECT_FALSE(EvidencePipeline::accept_statistical_validation(state, &record, 1));
+}
+
+TEST(EvidencePipelineTest, OOSValidationCanAdvanceToCalibration) {
+  EvidenceRecord record{};
+  record.validation = ValidationStatus::OOSValidated;
+
+  auto state = EvidencePipeline::begin(1);
+  ASSERT_TRUE(EvidencePipeline::accept_integrity(state));
+  ASSERT_TRUE(EvidencePipeline::accept_evidence(state, &record, 1));
+  ASSERT_TRUE(EvidencePipeline::accept_mathematical_verification(state, &record, 1));
+  ASSERT_TRUE(EvidencePipeline::accept_statistical_validation(state, &record, 1));
+  EXPECT_TRUE(EvidencePipeline::accept_calibration(state));
+}
+
+TEST(EvidencePipelineTest, EvidenceCannotBeAcceptedTwice) {
+  EvidenceRecord record{};
+  record.validation = ValidationStatus::StatisticalCheckPassed;
+
+  auto state = EvidencePipeline::begin(1);
+  ASSERT_TRUE(EvidencePipeline::accept_integrity(state));
+  ASSERT_TRUE(EvidencePipeline::accept_evidence(state, &record, 1));
+  EXPECT_FALSE(EvidencePipeline::accept_evidence(state, &record, 1));
 }
