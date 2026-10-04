@@ -56,9 +56,10 @@ def test_evidence_validator_rejects_duplicate_inference_hash() -> None:
     result = _result()
     items = bayesian_partition_to_evidence(result, _context())
     duplicate = list(items)
+    duplicate[0].source_id = "tampered-source-id"
     collection = EvidenceCollection(
         decision_context_id=_context().id,
         items=duplicate,
     )
     errors = EvidenceValidator().validate_collection(collection)
-    assert any("Duplicate evidence_hash" in error for error in errors)
+    assert any("Duplicate Bayesian inference evidence" in error for error in errors)
