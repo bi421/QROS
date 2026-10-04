@@ -63,11 +63,11 @@ def test_gbm_terminal_is_zero_copy_and_deterministic():
 def test_candle_geometry_writes_caller_owned_array():
     o = np.asarray([97.0, 90.0])
     h = np.asarray([100.0, 100.0])
-    l = np.asarray([90.0, 80.0])
+    low = np.asarray([90.0, 80.0])
     c = np.asarray([98.0, 85.0])
     out = np.empty((2, 5), dtype=np.float64)
 
-    candle_geometry(o, h, l, c, out)
+    candle_geometry(o, h, low, c, out)
 
     np.testing.assert_allclose(
         out,
