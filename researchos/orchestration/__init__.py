@@ -27,6 +27,14 @@ from .contracts import (
     PipelineStatus,
 )
 from .engine import ResearchOrchestrator
+from .parallel import (
+    ParallelBranchResult,
+    ParallelOrchestrationError,
+    ParallelResearchExecutor,
+    ParallelResearchResult,
+    ResearchBranch,
+    ResearchWave,
+)
 
 __all__ = [
     "ORCHESTRATION_VERSION",
@@ -37,4 +45,10 @@ __all__ = [
     "EvidenceEdgeDescriptor",
     "PipelineReport",
     "ResearchOrchestrator",
+    "ParallelOrchestrationError",
+    "ResearchBranch",
+    "ResearchWave",
+    "ParallelBranchResult",
+    "ParallelResearchResult",
+    "ParallelResearchExecutor",
 ]
