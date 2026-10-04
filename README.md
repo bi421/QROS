@@ -8,6 +8,29 @@ QROS is a research-first quantitative research system being evolved into a **mul
 
 QROS is **research infrastructure, not a broker/execution system**. It does not place trades or send orders.
 
+## SaaS Operating Model
+
+QROS follows a conservative SaaS engineering model:
+
+- `main` is the only integration branch.
+- Every change is delivered through a short-lived pull request branch.
+- CI evidence is tied to the exact PR head SHA.
+- SaaS-sensitive paths are governed through CODEOWNERS and applicable security gates.
+- Merged same-repository branches are automatically deleted.
+- Production claims require environment-specific evidence; repository CI alone is not production verification.
+- Missing or ambiguous evidence is surfaced, not silently repaired.
+
+### Engineering state model
+
+| State | Meaning |
+|---|---|
+| **Implemented** | Code or repository control exists |
+| **CI verified** | Exact commit passed the applicable automated gate |
+| **Environment verified** | Target environment behavior was directly observed |
+| **Production ready** | All required release and operational evidence is complete |
+
+QROS deliberately does not collapse these states into a single “done” label.
+
 ## Research Pipeline
 
 ```
