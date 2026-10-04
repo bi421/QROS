@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Protocol
+from typing import Callable, Protocol, cast
 from uuid import UUID, uuid4
 import hashlib
 import json
@@ -680,9 +680,11 @@ def create_app(
             )
             for row in rows
         ]
-        return PageResponse.model_validate(
-            pagination_envelope(
-                data=[item.model_dump(mode="json") for item in items],
+        return cast(
+            PageResponse,
+            PageResponse.model_validate(
+                pagination_envelope(
+                    data=[item.model_dump(mode="json") for item in items],
                 page=query.page,
                 page_size=query.page_size,
                 total=total,
@@ -753,6 +755,7 @@ def create_app(
                 page_size=query.page_size,
                 total=total,
                 request_id=request.state.request_id,
+                )
             )
         )
 
@@ -987,8 +990,12 @@ def create_app(
     @require_permission("job", "read")
     def get_research_run_logs(
         job_id: UUID,
+        page: int = Query(default=1),
+        page_size: int = Query(default=20),
         tenant: TenantContext = Depends(current_tenant),
     ) -> list[dict[str, object]]:
+        if page < 1 or page_size < 1 or page_size > 100:
+            raise HTTPException(status_code=400, detail="INVALID_PAGINATION")
         if store.get(tenant.workspace_id, job_id) is None:
             raise HTTPException(status_code=404, detail="research run not found")
         return store.logs(tenant.workspace_id, job_id)
