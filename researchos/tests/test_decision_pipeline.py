@@ -81,7 +81,7 @@ def test_pipeline_rejects_invalid_probability_payload() -> None:
     data = _assessment().to_dict()
     data["bullish_probability"] = 1.2
     data["assessment_hash"] = ""
-    with pytest.raises(ValueError, match="invalid probability assessment"):
+    with pytest.raises(ValueError, match="missing assessment_hash"):
         run_decision_pipeline(
             DecisionPipelineInput(
                 assessment=data,
