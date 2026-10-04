@@ -54,6 +54,29 @@ bool EvidencePipeline::accept_evidence(
       state.completed_through != Stage::IndependentEvidence ||
       !records || count == 0)
     return false;
+
+  std::size_t plan_count = 0;
+  const auto* plan = branch_plan(plan_count);
+  for (std::size_t i = 0; i < count; ++i) {
+    const auto* descriptor = static_cast<const BranchDescriptor*>(nullptr);
+    for (std::size_t j = 0; j < plan_count; ++j) {
+      if (plan[j].branch == records[i].branch) {
+        descriptor = &plan[j];
+        break;
+      }
+    }
+    if (!descriptor || !descriptor->implemented ||
+        descriptor->independence_group !=
+            independence_group(records[i].branch) ||
+        records[i].model_version == 0 || records[i].data_version == 0)
+      return false;
+
+    for (std::size_t j = 0; j < i; ++j) {
+      if (records[j].branch == records[i].branch)
+        return false;
+    }
+  }
+
   state.evidence_count = count;
   state.completed_through = Stage::MathematicalVerification;
   return true;
