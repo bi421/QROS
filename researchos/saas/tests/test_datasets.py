@@ -122,11 +122,12 @@ def test_old_versions_remain_readable_after_new_version() -> None:
 
 def test_storage_path_preserves_digest_and_version() -> None:
     workspace_id = uuid4()
-    uppercase = "A" * 64
+    digest = "a" * 64
     arbitrary = "not-a-digest"
 
-    assert storage_path_for(workspace_id, uppercase, 1) == f"tenant/{workspace_id}/datasets/{uppercase}/1/"
-    assert storage_path_for(workspace_id, arbitrary, 1) == f"tenant/{workspace_id}/datasets/{arbitrary}/1/"
+    assert storage_path_for(workspace_id, digest, 1) == f"tenant/{workspace_id}/datasets/{digest}/1/"
+    with pytest.raises(ValueError, match="canonical SHA-256 digest"):
+        storage_path_for(workspace_id, arbitrary, 1)
 
 
 def test_version_storage_path_is_immutable_and_canonical() -> None:
