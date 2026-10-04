@@ -336,12 +336,13 @@ def create_app(
                 "status_code": 400,
             },
         )
-        payload = _error_payload(request, 400, _safe_validation_details(exc))
-        payload["code"] = "validation_error"
-        error = payload["error"]
-        if isinstance(error, dict):
-            error["code"] = "validation_error"
-            error["message"] = "Request validation failed"
+        payload = {
+            "code": "validation_error",
+            "message": "Request validation failed",
+            "request_id": getattr(request.state, "request_id", None),
+            "correlation_id": request.headers.get("X-Correlation-ID")
+            or getattr(request.state, "request_id", None),
+        }
         return JSONResponse(status_code=400, content=payload)
 
     @app.exception_handler(Exception)
@@ -807,35 +808,28 @@ def create_app(
 
     @app.get(
         "/v1/datasets/{dataset_id}/versions/{version_id}/download",
-        response_class=Response,
+        response_model=dict[str, str],
         tags=["datasets"],
     )
     @require_permission(Resource.DATASET_VERSION, Action.READ)
-    def download_dataset_version(
+    def create_dataset_download_url(
         dataset_id: UUID,
         version_id: UUID,
         tenant: TenantContext = Depends(current_tenant),
-    ) -> Response:
+    ) -> dict[str, str]:
+        """Authorize tenant ownership before issuing a short-lived private URL."""
         version = datasets.get_version(tenant.workspace_id, version_id)
         if version is None or version.dataset_id != dataset_id:
             raise HTTPException(status_code=404, detail="dataset version not found")
         try:
-            content = storage.download_verified(
-                version.storage_path,
-                version.content_sha256,
-            )
+            url = storage.create_signed_download_url(version.storage_path, 300)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="dataset object not found") from exc
         except ValueError as exc:
-            raise HTTPException(
-                status_code=502,
-                detail="dataset storage integrity verification failed",
-            ) from exc
-        return Response(
-            content=content,
-            media_type="application/octet-stream",
-            headers={"X-Content-SHA256": version.content_sha256},
-        )
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="dataset download service unavailable") from exc
+        return {"url": url, "expires_in": "300"}
 
     @app.post(
         "/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"]
