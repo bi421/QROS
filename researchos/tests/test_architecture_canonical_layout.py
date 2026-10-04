@@ -174,7 +174,6 @@ def test_production_runtime_is_explicitly_durable() -> None:
         "idempotency_store": "SupabaseIdempotencyStore",
         "billing_store": "SupabaseBillingEventStore",
         "entitlement_store": "SupabaseEntitlementStore",
-        "plan_rate_limiters": "dict",
         "rate_limiter": "SupabaseRateLimiter",
         "claim_store": "SupabaseResearchClaimStore",
         "evidence_store": "SupabaseResearchEvidenceStore",
@@ -185,6 +184,8 @@ def test_production_runtime_is_explicitly_durable() -> None:
             target = node.targets[0]
             if isinstance(target, ast.Name):
                 assignments[target.id] = node.value
+
+    assert isinstance(keywords.get("plan_rate_limiters"), ast.Dict)
 
     for argument, constructor in required.items():
         value = keywords.get(argument)
