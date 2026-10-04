@@ -841,6 +841,7 @@ def create_app(
             entitlement = entitlements.get(tenant.workspace_id, tenant.plan.value)
         except Exception as exc:
             raise HTTPException(status_code=503, detail="entitlement service unavailable") from exc
+        policy = DEFAULT_USAGE_POLICIES[tenant.plan]
         if not entitlement.allows_jobs(store.count_monthly(tenant.workspace_id)):
             raise HTTPException(
                 status_code=402,
