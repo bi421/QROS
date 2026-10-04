@@ -28,7 +28,7 @@ def test_full_probability_to_risk_artifact_replay() -> None:
     request = DecisionPipelineInput(
         assessment=assessment,
         asset="XAUUSD",
-        direction="LONG",
+        direction="bullish",
         account_equity=10_000.0,
         trade_statistics=TradeStatistics(
             average_win=200.0,
