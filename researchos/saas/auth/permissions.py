@@ -199,6 +199,21 @@ def _check(
         )
 
 
+def authorize(
+    tenant: TenantContext,
+    resource: Resource | str,
+    action: Action | str,
+    *,
+    service_principal: bool = False,
+) -> bool:
+    """Compatibility authorization entry point backed by the canonical POLICY."""
+    if service_principal:
+        return True
+    if not is_allowed(tenant.role, resource, action):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="FORBIDDEN")
+    return True
+
+
 def require_permission(
     resource: Resource | str,
     action: Action | str,
@@ -242,6 +257,7 @@ def require_permission(
 
 __all__ = [
     "Action",
+    "authorize",
     "POLICY",
     "Resource",
     "Role",
