@@ -42,4 +42,7 @@ __all__ = [
     "bayesian_update",
     "condition_on_elimination",
     "vos_savant_filter",
+    "describe",
+    "linear_regression",
+    "pearson_correlation",
 ]
