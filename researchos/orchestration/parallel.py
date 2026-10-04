@@ -18,7 +18,7 @@ and prevents later waves from starting.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence, Set
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from types import MappingProxyType
@@ -29,6 +29,30 @@ T = TypeVar("T")
 
 class ParallelOrchestrationError(RuntimeError):
     """Raised when a parallel research wave cannot complete safely."""
+
+
+def _freeze_value(value: Any) -> Any:
+    """Recursively freeze standard container values used by orchestration.
+
+    Branches receive a structurally immutable snapshot for mappings, lists,
+    tuples, and sets. Other values are preserved by reference because the
+    orchestrator cannot safely infer how arbitrary domain objects should be
+    copied or frozen.
+    """
+    if isinstance(value, Mapping):
+        return MappingProxyType(
+            {key: _freeze_value(item) for key, item in value.items()}
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_value(item) for item in value)
+    if isinstance(value, Set):
+        return frozenset(_freeze_value(item) for item in value)
+    return value
+
+
+def _freeze_mapping(value: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Return a recursively immutable mapping snapshot."""
+    return _freeze_value(dict(value))
 
 
 @dataclass(frozen=True)
@@ -43,7 +67,7 @@ class ResearchBranch(Generic[T]):
         if not isinstance(self.branch_id, str) or not self.branch_id.strip():
             raise ValueError("branch_id must be a non-empty string")
         object.__setattr__(self, "branch_id", self.branch_id.strip())
-        object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
+        object.__setattr__(self, "metadata", _freeze_mapping(self.metadata))
 
 
 @dataclass(frozen=True)
@@ -116,9 +140,9 @@ class ParallelResearchExecutor:
     ) -> ParallelResearchResult:
         """Run waves left-to-right; branches inside a wave run concurrently.
 
-        The input context is snapshotted before dispatch. Results are collected
-        in declared branch order, making output deterministic even when branch
-        completion order differs.
+        The input context is snapshotted and recursively frozen before
+        dispatch. Results are collected in declared branch order, making
+        output deterministic even when branch completion order differs.
 
         Any branch failure cancels work that has not started, raises a single
         orchestration error, and prevents all later waves from starting.
@@ -126,7 +150,7 @@ class ParallelResearchExecutor:
         if not waves:
             raise ValueError("at least one research wave is required")
 
-        snapshot = MappingProxyType(dict(context or {}))
+        snapshot = _freeze_mapping(context or {})
         completed: list[tuple[ParallelBranchResult[Any], ...]] = []
 
         for wave in waves:
