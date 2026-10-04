@@ -99,7 +99,6 @@ def test_all_list_endpoints_return_standard_pagination_envelope(
         "/v1/findings",
         "/v1/datasets/00000000-0000-0000-0000-000000000000/versions",
         "/v1/research-runs/00000000-0000-0000-0000-000000000000/logs",
-        "/v1/jobs/00000000-0000-0000-0000-000000000000/logs",
         "/v1/claims/00000000-0000-0000-0000-000000000000/evidence_graph",
     ],
 )
@@ -150,10 +149,10 @@ def test_invalid_filter_returns_structured_400(client: TestClient) -> None:
     assert body["correlation_id"] == body["request_id"]
 
 
-def test_openapi_contains_contract_alias_endpoints(client: TestClient) -> None:
+def test_openapi_contains_contract_endpoints(client: TestClient) -> None:
     paths = client.get("/openapi.json").json()["paths"]
     assert "/v1/datasets/{dataset_id}/versions" in paths
-    assert "/v1/jobs/{job_id}/logs" in paths
+    assert "/v1/research-runs/{job_id}/logs" in paths
     assert "/v1/claims/{claim_id}/evidence_graph" in paths
 
 

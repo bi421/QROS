@@ -1,15 +1,30 @@
 # Phase 8 — Evidence-Based Decision Intelligence Engine
 
-## Implementation Steps
+## Implementation status
 
-- [x] Step 1: Create `contracts.py` — Enums, dataclasses (DecisionEvidenceItem, WeightConfiguration, CalculationVersion)
-- [x] Step 2: Create `context.py` — DecisionContext (BaseObject)
-- [x] Step 3: Create `evidence.py` — EvidenceAggregator (collects from all modules)
-- [x] Step 4: Create `score.py` — EvidenceScore (BaseObject, intermediate normalization)
-- [x] Step 5: Create `probability.py` — ProbabilityAssessment (BaseObject)
-- [x] Step 6: Create `reasoner.py` — DecisionReasoner (deterministic rules)
-- [x] Step 7: Create `report.py` — DecisionReport (BaseObject)
-- [x] Step 8: Create `__init__.py` — Package exports
-- [x] Step 9: Update `researchos/__init__.py` — Add decision_engine
-- [x] Step 10: Create `tests/test_decision_engine.py` — Comprehensive tests
-- [x] Step 11: Run tests and verify
+The individual stages and their end-to-end composition are implemented and
+covered by executable tests.
+
+- [x] Contracts and canonical evidence/weight models
+- [x] DecisionContext and structural validation
+- [x] EvidenceAggregator and EvidenceCollection validation
+- [x] EvidenceScore and deterministic normalization
+- [x] ProbabilityAssessment and probability validation
+- [x] DecisionReasoner and deterministic reasoning chain
+- [x] DecisionReport and serialization/hash support
+- [x] Public package exports
+- [x] End-to-end DecisionPipeline composition
+- [x] End-to-end tests, deterministic provenance, and fail-closed validation
+
+## Architecture boundary
+
+DecisionPipeline composes existing scientific modules. It does not create a
+second scoring model, probability model, evidence model, or persistence layer.
+Every intermediate artifact remains available for audit and downstream
+integration.
+
+## Remaining integration work
+
+The decision engine is executable as a library pipeline. Production integration
+still requires connecting real evidence producers, authenticated SaaS research
+runs, persistence, and the final customer-facing/reporting path.

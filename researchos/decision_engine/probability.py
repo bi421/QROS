@@ -91,6 +91,31 @@ class ProbabilityAssessment(BaseObject):
             ),
         )
 
+    def with_calibration_status(self, status: str) -> "ProbabilityAssessment":
+        """Return an immutable-equivalent assessment carrying governed calibration evidence."""
+        normalized = str(status).strip()
+        if not normalized:
+            raise ValueError("calibration status must not be empty")
+        return ProbabilityAssessment(
+            decision_context_id=self.decision_context_id,
+            evidence_collection_id=self.evidence_collection_id,
+            bullish_probability=self.bullish_probability,
+            bearish_probability=self.bearish_probability,
+            neutral_probability=self.neutral_probability,
+            confidence=self.confidence,
+            uncertainty=self.uncertainty,
+            evidence_strength=self.evidence_strength,
+            historical_consistency=self.historical_consistency,
+            sample_size=self.sample_size,
+            calculation_method=self.calculation_method,
+            calculation_version=self.calculation_version,
+            limitations=list(self.limitations),
+            timestamp=self.timestamp,
+            ontology_tags=list(self.ontology_tags),
+            id=self.id,
+            probability_calibration_status=normalized,
+        )
+
     @property
     def assessment_hash(self) -> str:
         if not self._assessment_hash:

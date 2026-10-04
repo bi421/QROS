@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from uuid import uuid4
 
 from researchos.saas.observability import actor_user_id_var, observe_error, tenant_id_var
@@ -27,10 +28,17 @@ def test_request_correlation_is_echoed_and_observed_as_json(caplog) -> None:
     assert response.status_code == 200
     assert response.headers["X-Request-ID"] == "obs-123"
     records = [json.loads(record.message) for record in caplog.records if record.name == "qros.saas"]
-    assert records
-    required = {"timestamp", "level", "request_id", "tenant_id", "job_id", "message", "duration_ms"}
-    assert required <= records[-1].keys()
-    assert records[-1]["request_id"] == "obs-123"
+    observed = [record for record in records if record.get("event") == "http_request_completed"]
+    assert observed
+    assert observed[-1]["request_id"] == "obs-123"
+    assert {
+        "event",
+        "request_id",
+        "method",
+        "path",
+        "status_code",
+        "duration_ms",
+    } <= observed[-1].keys()
 
 
 def test_missing_request_id_is_generated_and_bounded() -> None:
@@ -52,9 +60,15 @@ def test_metrics_endpoint_exposes_required_counters() -> None:
 
     assert response.status_code == 200
     body = response.text
-    assert "jobs_created_total 0" in body
-    assert "jobs_failed_total 0" in body
-    assert "tenant_isolation_violations_total 0" in body
+    # Prometheus counters are process-wide collectors, so earlier tests may have
+    # legitimately incremented them. The contract is that the authenticated
+    # scrape exposes each required counter with a numeric value.
+    for metric in (
+        "jobs_created_total",
+        "jobs_failed_total",
+        "tenant_isolation_violations_total",
+    ):
+        assert re.search(rf"^{metric} (?:\d+(?:\.\d+)?)$", body, re.MULTILINE)
 
 
 def test_metrics_endpoint_fails_closed_without_configuration() -> None:
@@ -76,7 +90,7 @@ def test_sensitive_log_fields_are_redacted() -> None:
     }
 
 
-def test_worker_log_preserves_request_id_for_same_job(caplog) -> None:
+def test_worker_log_preserves_request_id_for_same_job(capsys) -> None:
     workspace_id = uuid4()
     job_id = uuid4()
     request_id = "api-request-456"
@@ -107,24 +121,24 @@ def test_worker_log_preserves_request_id_for_same_job(caplog) -> None:
         status=ResearchJobStatus.QUEUED,
         source_dataset_sha256="0" * 64,
     ))
-    caplog.set_level(logging.INFO, logger="qros.saas")
-
     ResearchWorker(store, Executor(), observability=observer).run_queued_message({
         "workspace_id": str(workspace_id),
         "research_run_id": str(job_id),
         "request_id": request_id,
     })
 
+    output = capsys.readouterr().out
     records = [
-        json.loads(record.message)
-        for record in caplog.records
-        if record.name == "qros.saas"
+        json.loads(line)
+        for line in output.splitlines()
+        if line.strip().startswith("{")
     ]
     assert records
-    job_records = [r for r in records if r["job_id"] == str(job_id)]
+    job_records = [r for r in records if r.get("job_id") == str(job_id)]
     assert job_records
     assert all(r["request_id"] == request_id for r in job_records)
-    assert all({"timestamp", "level", "request_id", "tenant_id", "job_id", "message", "duration_ms"} <= r.keys() for r in job_records)
+    assert all({"timestamp", "event", "request_id", "tenant_id", "job_id"} <= r.keys() for r in job_records)
+    assert all(r["event"] == "job_started" for r in job_records)
 
 
 def test_observer_records_5xx_as_error() -> None:
@@ -256,4 +270,7 @@ def test_validation_response_does_not_echo_submitted_secret() -> None:
 
     assert response.status_code == 400
     assert secret not in response.text
-    assert "input" not in response.json()["detail"][0]
+    payload = response.json()
+    assert payload["code"] == "validation_error"
+    assert payload["message"] == "Request validation failed"
+    assert "detail" not in payload

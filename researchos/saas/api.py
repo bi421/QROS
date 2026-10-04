@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Protocol
+from typing import Callable, Protocol, cast
 from uuid import UUID, uuid4
 import hashlib
 import json
@@ -127,12 +127,16 @@ def _error_code(status_code: int) -> str:
 def _error_payload(
     request: Request, status_code: int, detail: object, details: object | None = None
 ) -> dict[str, object]:
-    message = detail if isinstance(detail, str) else "request failed"
-    code = (
-        detail
-        if isinstance(detail, str) and detail.startswith("INVALID_")
-        else _error_code(status_code)
-    )
+    if isinstance(detail, dict) and isinstance(detail.get("code"), str):
+        code = str(detail["code"])
+        message = str(detail.get("message", "request failed"))
+    else:
+        message = detail if isinstance(detail, str) else "request failed"
+        code = (
+            detail
+            if isinstance(detail, str) and detail.startswith("INVALID_")
+            else _error_code(status_code)
+        )
     return {
         "code": code,
         "message": message,
@@ -680,14 +684,86 @@ def create_app(
             )
             for row in rows
         ]
-        return PageResponse.model_validate(
-            pagination_envelope(
-                data=[item.model_dump(mode="json") for item in items],
-                page=query.page,
-                page_size=query.page_size,
-                total=total,
-                request_id=request.state.request_id if request is not None else "",
+        return cast(
+            PageResponse,
+            PageResponse.model_validate(
+                pagination_envelope(
+                    data=[item.model_dump(mode="json") for item in items],
+                    page=query.page,
+                    page_size=query.page_size,
+                    total=total,
+                    request_id=request.state.request_id if request is not None else "",
+                )
+            ),
+        )
+
+    @app.get("/v1/research-runs", response_model=PageResponse, tags=["research"])
+    @require_permission(Resource.JOB, Action.LIST)
+    def list_research_runs(
+        request: Request,
+        page: str = "1",
+        page_size: str = "20",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        filter_status: str | None = Query(default=None, alias="filter[status]"),
+        filter_workflow_id: str | None = Query(default=None, alias="filter[workflow_id]"),
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> PageResponse:
+        try:
+            validate_filter_keys(
+                {
+                    key.removeprefix("filter[").removesuffix("]"): value
+                    for key, value in request.query_params.items()
+                    if key.startswith("filter[")
+                },
+                allowed=frozenset({"status", "workflow_id"}),
             )
+            query = parse_list_query(
+                page=page,
+                page_size=page_size,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                allowed_sort_fields=frozenset({"created_at", "status", "workflow_id"}),
+            )
+            status_filter: ResearchJobStatus | None = None
+            if filter_status is not None:
+                try:
+                    status_filter = ResearchJobStatus(filter_status)
+                except ValueError as exc:
+                    raise PaginationParameterError("invalid status filter") from exc
+            workflow_filter = (
+                filter_workflow_id.strip() if filter_workflow_id is not None else None
+            )
+            if workflow_filter == "":
+                raise PaginationParameterError("workflow_id filter must not be empty")
+            rows, total = store.list(
+                tenant.workspace_id,
+                limit=query.page_size,
+                offset=query.offset,
+                status=status_filter,
+                workflow_id=workflow_filter,
+                sort_by=query.sort_by,
+                sort_order=query.sort_order,
+            )
+        except PaginationParameterError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
+        return cast(
+            PageResponse,
+            PageResponse.model_validate(
+                pagination_envelope(
+                    data=[
+                        _research_job_response(job).model_dump(mode="json")
+                        for job in rows
+                    ],
+                    page=query.page,
+                    page_size=query.page_size,
+                    total=total,
+                    request_id=request.state.request_id,
+                )
+            ),
         )
 
     @app.post("/v1/datasets", response_model=DatasetResponse, status_code=201, tags=["datasets"])
@@ -921,8 +997,12 @@ def create_app(
     @require_permission("job", "read")
     def get_research_run_logs(
         job_id: UUID,
+        page: int = Query(default=1),
+        page_size: int = Query(default=20),
         tenant: TenantContext = Depends(current_tenant),
     ) -> list[dict[str, object]]:
+        if page < 1 or page_size < 1 or page_size > 100:
+            raise HTTPException(status_code=400, detail="INVALID_PAGINATION")
         if store.get(tenant.workspace_id, job_id) is None:
             raise HTTPException(status_code=404, detail="research run not found")
         return store.logs(tenant.workspace_id, job_id)

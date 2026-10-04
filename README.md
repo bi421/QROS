@@ -99,6 +99,10 @@ Every governed conclusion is intended to remain traceable to its source data, im
 - Versioned `/v1` HTTP API
 - Fail-closed authentication boundary
 - Structured API error metadata with request correlation IDs
+- Deterministic parallel research orchestration with dependency waves
+- Concurrent validation + training after an immutable dataset snapshot
+- Fail-closed parallel wave semantics: branch failure blocks later waves and partial promotion
+- Deterministic branch result ordering independent of completion timing
 
 ## Research Integrity Rules
 
@@ -139,11 +143,21 @@ Auditable Research Result
 
 The production target includes tenant isolation, authenticated access, authorization, durable jobs, object storage, dataset versioning, auditability, observability, billing controls, backup/recovery, and reproducible releases.
 
+The orchestration layer now supports dependency-aware parallel research waves. The first production-code slice runs validation and training concurrently after the immutable dataset snapshot. This does **not** mean every evidence family is parallelized; market structure, macro ingestion, calibration, and final probability synthesis remain separate work.
+
 Not every production capability is complete. The repository roadmap is deliberately conservative: **implemented code, verified integration, and production readiness are separate states.**
 
 ## Current Development Status
 
-The project is in the **research-core → SaaS hardening** stage.
+The project is in the **research-core → SaaS hardening → orchestration expansion** stage.
+
+### Current verified implementation boundary
+
+- Core execution for an already-provisioned tenant exists: authenticated request → workspace membership → entitlement → dataset/version → research run → durable queue → governed worker → evidence/report/API.
+- Parallel orchestration is implemented as a reusable dependency-wave primitive.
+- The first real parallel slice is validation + training after the immutable dataset snapshot.
+- The parallel layer is deterministic and fail-closed; it does not create a second quant core or duplicate scientific modules.
+- Production deployment, public HTTPS behavior, real customer signup, billing checkout/portal, and full operational recovery remain environment-level work.
 
 ### Remaining production gates
 
@@ -156,9 +170,10 @@ The project is in the **research-core → SaaS hardening** stage.
 - Retention/deletion controls
 - Dataset registry hardening
 - Security/threat-model review and red-team isolation tests
-- Structured application observability
-- Production UI
-- Commercial entitlement enforcement
+- Production observability verification
+- Real customer onboarding and workspace creation/join flow verification
+- Commercial checkout/portal and entitlement lifecycle verification
+- Production UI verification
 - Backup/restore and disaster-recovery verification
 - Exact-release CI and final integration gates
 
