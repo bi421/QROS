@@ -150,6 +150,14 @@ class ParallelResearchExecutor:
         if not waves:
             raise ValueError("at least one research wave is required")
 
+        branch_ids = [
+            branch.branch_id
+            for wave in waves
+            for branch in wave.branches
+        ]
+        if len(branch_ids) != len(set(branch_ids)):
+            raise ValueError("branch_id values must be unique across the research plan")
+
         snapshot = _freeze_mapping(context or {})
         completed: list[tuple[ParallelBranchResult[Any], ...]] = []
 
