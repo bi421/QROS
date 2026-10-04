@@ -18,7 +18,7 @@ TEST(EvidencePipelineTest, EnforcesLayerOrder) {
   EXPECT_TRUE(EvidencePipeline::accept_evidence(state, &record, 1));
   EXPECT_TRUE(EvidencePipeline::accept_mathematical_verification(state, &record, 1));
   EXPECT_TRUE(EvidencePipeline::accept_statistical_validation(state, &record, 1));
-  EXPECT_TRUE(EvidencePipeline::accept_calibration(state));
+  EXPECT_FALSE(EvidencePipeline::accept_calibration(state));
   EXPECT_FALSE(EvidencePipeline::probability_synthesis_allowed(state));
 }
 
@@ -61,7 +61,7 @@ TEST(EvidencePipelineTest, OOSValidationCanAdvanceToCalibration) {
   ASSERT_TRUE(EvidencePipeline::accept_evidence(state, &record, 1));
   ASSERT_TRUE(EvidencePipeline::accept_mathematical_verification(state, &record, 1));
   ASSERT_TRUE(EvidencePipeline::accept_statistical_validation(state, &record, 1));
-  EXPECT_TRUE(EvidencePipeline::accept_calibration(state));
+  EXPECT_FALSE(EvidencePipeline::accept_calibration(state));
 }
 
 TEST(EvidencePipelineTest, EvidenceCannotBeAcceptedTwice) {
