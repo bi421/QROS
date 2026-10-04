@@ -54,4 +54,8 @@ def calculate_risk(request: RiskInput) -> RiskCalculation:
         capped=final_fraction < fractional_kelly,
         status="CALCULATED",
         research_id=request.research_id,
+        probability_method=request.probability_method,
+        probability_calculation_version=request.probability_calculation_version,
+        probability_calibration_status=request.probability_calibration_status,
+        assessment_hash=request.assessment_hash,
     )
