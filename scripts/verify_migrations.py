@@ -9,6 +9,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = ROOT / "supabase" / "migrations"
+
+
+def verify_unique_migration_versions() -> None:
+    versions: dict[str, list[str]] = {}
+    for path in sorted(MIGRATIONS.glob("*.sql")):
+        version = path.name.split("_", 1)[0]
+        versions.setdefault(version, []).append(path.name)
+    duplicates = {version: names for version, names in versions.items() if len(names) > 1}
+    if duplicates:
+        details = "; ".join(f"{version}: {', '.join(names)}" for version, names in sorted(duplicates.items()))
+        raise SystemExit("duplicate migration versions: " + details)
+
 TENANT_TABLES = {
     "dataset",
     "dataset_version",
@@ -25,7 +37,7 @@ TENANT_TABLES = {
 
 
 def static_check() -> None:
-    sql = "\n".join(
+    verify_unique_migration_versions()\n    sql = "\n".join(
         path.read_text(encoding="utf-8") for path in sorted(MIGRATIONS.glob("*.sql"))
     )
     for table in sorted(TENANT_TABLES):
