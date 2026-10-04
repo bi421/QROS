@@ -57,6 +57,8 @@ class RiskDecisionArtifact:
         }
 
     def verify(self) -> bool:
+        if self.artifact_version != RISK_DECISION_ARTIFACT_VERSION:
+            return False
         payload = self.to_dict()
         supplied = payload.pop("artifact_hash")
         return deterministic_hash(payload) == supplied
