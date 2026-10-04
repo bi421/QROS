@@ -54,8 +54,23 @@ def test_risk_artifact_golden_path_and_tamper_detection() -> None:
     assert artifact.verify()
     restored = RiskDecisionArtifact.from_dict(artifact.to_dict())
     assert restored == artifact
+    replayed = RiskDecisionArtifact.from_dict(restored.to_dict())
+    assert replayed == artifact
 
     import pytest
     tampered = {**artifact.to_dict(), "report_hash": "report-2"}
     with pytest.raises(ValueError, match="hash"):
         RiskDecisionArtifact.from_dict(tampered)
+
+
+def test_risk_artifact_rejects_unsupported_version_even_with_matching_hash() -> None:
+    import pytest
+    from researchos.core.identity import deterministic_hash
+
+    risk = _risk()
+    decision = _decision(risk)
+    artifact = RiskDecisionArtifact.build(risk, decision, "report-1")
+    payload = {**artifact.to_dict(), "artifact_version": "RISK_DECISION_ARTIFACT_V999"}
+    payload["artifact_hash"] = deterministic_hash({k: v for k, v in payload.items() if k != "artifact_hash"})
+    with pytest.raises(ValueError, match="hash"):
+        RiskDecisionArtifact.from_dict(payload)
