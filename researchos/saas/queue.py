@@ -33,6 +33,7 @@ class InMemoryResearchJobQueue:
     def __init__(self) -> None:
         self.messages: list[tuple[int, UUID, UUID]] = []
         self._received: set[int] = set()
+        self.request_ids: dict[UUID, str] = {}
 
     def enqueue(self, workspace_id: UUID, job_id: UUID, *, request_id: str | None = None) -> int:
         message_id = len(self.messages) + 1
