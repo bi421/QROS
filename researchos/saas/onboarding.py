@@ -89,7 +89,7 @@ async function qrosApi(path, options = {}) {
   const response = await fetch(path, Object.assign({}, options, { headers }));
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.detail || data.message || "Request failed");
+    throw new Error(data.message || data.detail || "Request failed");
   }
   return data;
 }
