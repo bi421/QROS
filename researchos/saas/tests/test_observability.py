@@ -251,4 +251,4 @@ def test_validation_response_does_not_echo_submitted_secret() -> None:
 
     assert response.status_code == 400
     assert secret not in response.text
-    assert "input" not in response.json()["detail"][0]
+    assert response.json()["message"] == "Request validation failed"
