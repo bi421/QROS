@@ -183,9 +183,11 @@ def test_tenant_b_cannot_generate_signed_url_for_tenant_a_file() -> None:
     ).startswith(f"memory://tenant/{tenant_a}/datasets/{digest}/1/")
 
 
-def test_direct_storage_path_without_tenant_prefix_is_rejected() -> None:
+def test_direct_storage_path_without_tenant_prefix_is_rejected_for_tenant_access() -> None:
     storage = InMemoryDatasetStorage()
     tenant = uuid4()
+    path = "datasets/" + "a" * 64 + "/1/"
+    storage.put(path, BytesIO(b"bad"))
 
     with pytest.raises(PermissionError, match="outside tenant context"):
-        storage.put("datasets/" + "a" * 64 + "/1/", BytesIO(b"bad"), tenant_id=tenant)
+        storage.create_signed_download_url(path, 3600, tenant_id=tenant, access_token="tenant-token")
