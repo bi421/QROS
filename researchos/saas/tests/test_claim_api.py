@@ -136,12 +136,12 @@ def test_create_get_and_list_research_claim_is_tenant_scoped() -> None:
     assert fetched.json() == body
 
     listed = client.get(
-        "/v1/research-claims?limit=10&offset=0",
+        "/v1/research-claims?page=1&page_size=10",
         headers={"Authorization": "Bearer test"},
     )
     assert listed.status_code == 200
-    assert listed.json()["total"] == 1
-    assert listed.json()["items"] == [body]
+    assert listed.json()["pagination"]["total"] == 1
+    assert listed.json()["data"] == [body]
     assert store.save_calls == 1
 
 
@@ -186,7 +186,7 @@ def test_cross_tenant_claim_lookup_is_not_visible() -> None:
     assert other_client.get(
         "/v1/research-claims",
         headers={"Authorization": "Bearer test"},
-    ).json()["total"] == 0
+    ).json()["pagination"]["total"] == 0
 
 
 def test_viewer_cannot_create_claim_but_can_read() -> None:
@@ -257,17 +257,17 @@ def test_claim_and_run_identity_remain_workspace_scoped_across_golden_path_bound
     assert other_created.json()["workspace_id"] == str(other.workspace_id)
 
     owner_list = owner_client.get(
-        "/v1/research-claims?limit=100&offset=0",
+        "/v1/research-claims?page=1&page_size=100",
         headers={"Authorization": "Bearer test"},
     )
     other_list = other_client.get(
         "/v1/research-claims?limit=100&offset=0",
         headers={"Authorization": "Bearer test"},
     )
-    assert owner_list.json()["total"] == 1
-    assert other_list.json()["total"] == 1
-    assert owner_list.json()["items"][0]["id"] == claim_id
-    assert other_list.json()["items"][0]["id"] == other_created.json()["id"]
+    assert owner_list.json()["pagination"]["total"] == 1
+    assert other_list.json()["pagination"]["total"] == 1
+    assert owner_list.json()["data"][0]["id"] == claim_id
+    assert other_list.json()["data"][0]["id"] == other_created.json()["id"]
 
 
 def _plan_payload(hypothesis: str) -> dict[str, object]:
