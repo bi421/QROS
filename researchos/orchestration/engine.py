@@ -131,6 +131,9 @@ class ResearchOrchestrator:
         dataset_builder: ``DatasetBuilder`` instance (or None for default).
         validator: ``WalkForwardValidator`` instance (or None for default).
         trainer: ``Trainer`` instance (or None for default).
+        parallel_executor: Optional executor used for dependency-wave orchestration.
+            When omitted, a default two-worker executor is created for the
+            validation/training wave.
     """
 
     def __init__(
@@ -138,10 +141,12 @@ class ResearchOrchestrator:
         dataset_builder: DatasetBuilder | None = None,
         validator: WalkForwardValidator | None = None,
         trainer: Trainer | None = None,
+        parallel_executor: ParallelResearchExecutor | None = None,
     ) -> None:
         self._dataset_builder = dataset_builder
         self._validator = validator
         self._trainer = trainer
+        self._parallel_executor = parallel_executor
 
     # ------------------------------------------------------------------
     # step-by-step pipeline methods
@@ -325,7 +330,9 @@ class ResearchOrchestrator:
             # Step 2: Validation and training are independent after the
             # immutable dataset snapshot exists. Run them as one parallel
             # wave. Result order is fixed by branch declaration, not timing.
-            parallel = ParallelResearchExecutor(max_workers=2)
+            parallel = self._parallel_executor or ParallelResearchExecutor(
+                max_workers=2
+            )
             wave = ResearchWave(
                 wave_id="dataset-derived-analysis",
                 branches=(
