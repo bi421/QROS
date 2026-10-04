@@ -690,6 +690,72 @@ def create_app(
             )
         )
 
+    @app.get("/v1/research-runs", response_model=PageResponse, tags=["research"])
+    @require_permission(Resource.JOB, Action.LIST)
+    def list_research_runs(
+        request: Request,
+        page: str = "1",
+        page_size: str = "20",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        filter_status: str | None = Query(default=None, alias="filter[status]"),
+        filter_workflow_id: str | None = Query(default=None, alias="filter[workflow_id]"),
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> PageResponse:
+        try:
+            validate_filter_keys(
+                {
+                    key.removeprefix("filter[").removesuffix("]"): value
+                    for key, value in request.query_params.items()
+                    if key.startswith("filter[")
+                },
+                allowed=frozenset({"status", "workflow_id"}),
+            )
+            query = parse_list_query(
+                page=page,
+                page_size=page_size,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                allowed_sort_fields=frozenset({"created_at", "status", "workflow_id"}),
+            )
+            status_filter: ResearchJobStatus | None = None
+            if filter_status is not None:
+                try:
+                    status_filter = ResearchJobStatus(filter_status)
+                except ValueError as exc:
+                    raise PaginationParameterError("invalid status filter") from exc
+            workflow_filter = (
+                filter_workflow_id.strip() if filter_workflow_id is not None else None
+            )
+            if workflow_filter == "":
+                raise PaginationParameterError("workflow_id filter must not be empty")
+            rows, total = store.list(
+                tenant.workspace_id,
+                limit=query.page_size,
+                offset=query.offset,
+                status=status_filter,
+                workflow_id=workflow_filter,
+                sort_by=query.sort_by,
+                sort_order=query.sort_order,
+            )
+        except PaginationParameterError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
+        return PageResponse.model_validate(
+            pagination_envelope(
+                data=[
+                    _research_job_response(job).model_dump(mode="json")
+                    for job in rows
+                ],
+                page=query.page,
+                page_size=query.page_size,
+                total=total,
+                request_id=request.state.request_id,
+            )
+        )
+
     @app.post("/v1/datasets", response_model=DatasetResponse, status_code=201, tags=["datasets"])
     @require_permission(Resource.DATASET, Action.CREATE)
     def upload_dataset(
