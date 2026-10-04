@@ -32,6 +32,13 @@
 #include "quant/statistics/rolling.h"
 #include "quant/low_latency/bayesian_signal_filter.h"
 #include "quant/low_latency/zero_copy_monte_carlo.h"
+#include "quant/low_latency/candle_geometry.h"
+#include "quant/low_latency/geometric_null.h"
+#include "quant/low_latency/empirical_edge.h"
+#include "quant/low_latency/diffusion_models.h"
+#include "quant/low_latency/ornstein_uhlenbeck.h"
+#include "quant/low_latency/market_dynamics.h"
+#include "quant/low_latency/shannon_entropy.h"
 #include <nanobind/ndarray.h>
 
 #include "quant_engine.hpp"
@@ -702,6 +709,223 @@ NB_MODULE(cpp_quant_backend, m) {
         nb::arg("time_horizon"),
         nb::arg("terminal_values").noconvert(),
         "Zero-copy GBM terminal Monte Carlo kernel using caller-owned buffers.");
+
+  using GeometryOutput = nb::ndarray<double, nb::ndim<2>, nb::c_contig, nb::device::cpu>;
+
+  m.def("candle_geometry",
+        [](ReadOnly1D open, ReadOnly1D high, ReadOnly1D low, ReadOnly1D close,
+           GeometryOutput output) {
+          const std::size_t n = open.shape(0);
+          if (high.shape(0) != n || low.shape(0) != n || close.shape(0) != n ||
+              output.shape(0) != n || output.shape(1) != 5) {
+            throw std::invalid_argument("OHLC inputs must match and output shape must be (n, 5)");
+          }
+          {
+            nb::gil_scoped_release release;
+            quant::low_latency::CandleGeometryKernel::compute(
+                open.data(), high.data(), low.data(), close.data(), n, output.data());
+          }
+        },
+        nb::arg("open").noconvert(), nb::arg("high").noconvert(),
+        nb::arg("low").noconvert(), nb::arg("close").noconvert(),
+        nb::arg("output").noconvert(),
+        "Compute allocation-free candle geometry into a caller-owned (n,5) buffer.");
+
+  m.def("geometric_interval_probability",
+        [](ReadOnly1D low, ReadOnly1D high, ReadOnly1D p1, ReadOnly1D p2,
+           Writable1D output) {
+          const std::size_t n = low.shape(0);
+          if (high.shape(0) != n || p1.shape(0) != n || p2.shape(0) != n ||
+              output.shape(0) != n)
+            throw std::invalid_argument("geometric interval buffers must have equal length");
+          nb::gil_scoped_release release;
+          quant::low_latency::GeometricNullKernel::interval_probability(
+              low.data(), high.data(), p1.data(), p2.data(), n, output.data());
+        },
+        nb::arg("low").noconvert(), nb::arg("high").noconvert(),
+        nb::arg("p1").noconvert(), nb::arg("p2").noconvert(),
+        nb::arg("output").noconvert(),
+        "Compute 1D geometric interval probabilities without Python-side copies.");
+
+  m.def("first_passage_probability",
+        [](ReadOnly1D open, ReadOnly1D high, ReadOnly1D low,
+           Writable1D hit_high, Writable1D hit_low) {
+          const std::size_t n = open.shape(0);
+          if (high.shape(0) != n || low.shape(0) != n ||
+              hit_high.shape(0) != n || hit_low.shape(0) != n)
+            throw std::invalid_argument("first-passage buffers must have equal length");
+          nb::gil_scoped_release release;
+          quant::low_latency::GeometricNullKernel::first_passage(
+              open.data(), high.data(), low.data(), n, hit_high.data(), hit_low.data());
+        },
+        nb::arg("open").noconvert(), nb::arg("high").noconvert(),
+        nb::arg("low").noconvert(), nb::arg("hit_high").noconvert(),
+        nb::arg("hit_low").noconvert(),
+        "Compute driftless first-passage geometric baselines.");
+
+  m.def("empirical_edge",
+        [](ReadOnly1D empirical, ReadOnly1D geometric, ReadOnly1D sample_size,
+           GeometryOutput output) {
+          const std::size_t n = empirical.shape(0);
+          if (geometric.shape(0) != n || sample_size.shape(0) != n ||
+              output.shape(0) != n || output.shape(1) != 5)
+            throw std::invalid_argument("edge inputs must match and output shape must be (n, 5)");
+          nb::gil_scoped_release release;
+          quant::low_latency::EmpiricalEdgeKernel::compute(
+              empirical.data(), geometric.data(), sample_size.data(), n, output.data());
+        },
+        nb::arg("empirical").noconvert(), nb::arg("geometric").noconvert(),
+        nb::arg("sample_size").noconvert(), nb::arg("output").noconvert(),
+        "Compute empirical-minus-geometric edge statistics into caller-owned memory.");
+
+
+  m.def("heat_density",
+        [](ReadOnly1D x, ReadOnly1D mean, ReadOnly1D diffusion, ReadOnly1D time,
+           Writable1D output) {
+          const std::size_t n = x.shape(0);
+          if (mean.shape(0) != n || diffusion.shape(0) != n ||
+              time.shape(0) != n || output.shape(0) != n)
+            throw std::invalid_argument("heat-density buffers must have equal length");
+          nb::gil_scoped_release release;
+          quant::low_latency::DiffusionModelKernel::heat_density(
+              x.data(), mean.data(), diffusion.data(), time.data(), n, output.data());
+        },
+        nb::arg("x").noconvert(), nb::arg("mean").noconvert(),
+        nb::arg("diffusion").noconvert(), nb::arg("time").noconvert(),
+        nb::arg("output").noconvert(),
+        "Constant-coefficient heat-kernel diffusion density.");
+
+  m.def("heat_interval_probability",
+        [](ReadOnly1D mean, ReadOnly1D diffusion, ReadOnly1D time,
+           ReadOnly1D lower, ReadOnly1D upper, Writable1D output) {
+          const std::size_t n = mean.shape(0);
+          if (diffusion.shape(0) != n || time.shape(0) != n ||
+              lower.shape(0) != n || upper.shape(0) != n || output.shape(0) != n)
+            throw std::invalid_argument("heat-interval buffers must have equal length");
+          nb::gil_scoped_release release;
+          quant::low_latency::DiffusionModelKernel::heat_interval_probability(
+              mean.data(), diffusion.data(), time.data(), lower.data(), upper.data(),
+              n, output.data());
+        },
+        nb::arg("mean").noconvert(), nb::arg("diffusion").noconvert(),
+        nb::arg("time").noconvert(), nb::arg("lower").noconvert(),
+        nb::arg("upper").noconvert(), nb::arg("output").noconvert(),
+        "Diffusion interval probability under the heat kernel.");
+
+  m.def("gbm_lognormal_density",
+        [](ReadOnly1D spot, ReadOnly1D price, ReadOnly1D drift,
+           ReadOnly1D volatility, ReadOnly1D time, Writable1D output) {
+          const std::size_t n = spot.shape(0);
+          if (price.shape(0) != n || drift.shape(0) != n ||
+              volatility.shape(0) != n || time.shape(0) != n ||
+              output.shape(0) != n)
+            throw std::invalid_argument("GBM-density buffers must have equal length");
+          nb::gil_scoped_release release;
+          quant::low_latency::DiffusionModelKernel::gbm_lognormal_density(
+              spot.data(), price.data(), drift.data(), volatility.data(), time.data(),
+              n, output.data());
+        },
+        nb::arg("spot").noconvert(), nb::arg("price").noconvert(),
+        nb::arg("drift").noconvert(), nb::arg("volatility").noconvert(),
+        nb::arg("time").noconvert(), nb::arg("output").noconvert(),
+        "GBM Fokker-Planck lognormal transition density.");
+
+  using OUOutput = nb::ndarray<double, nb::ndim<2>, nb::c_contig, nb::device::cpu>;
+
+  m.def("ou_transition_moments",
+        [](ReadOnly1D x0, ReadOnly1D theta, ReadOnly1D mu, ReadOnly1D sigma,
+           ReadOnly1D time, OUOutput output) {
+          const std::size_t n = x0.shape(0);
+          if (theta.shape(0) != n || mu.shape(0) != n || sigma.shape(0) != n ||
+              time.shape(0) != n || output.shape(0) != n || output.shape(1) != 2)
+            throw std::invalid_argument("OU inputs must match and output shape must be (n, 2)");
+          nb::gil_scoped_release release;
+          quant::low_latency::OrnsteinUhlenbeckKernel::transition_moments(
+              x0.data(), theta.data(), mu.data(), sigma.data(), time.data(),
+              n, output.data());
+        },
+        nb::arg("x0").noconvert(), nb::arg("theta").noconvert(),
+        nb::arg("mu").noconvert(), nb::arg("sigma").noconvert(),
+        nb::arg("time").noconvert(), nb::arg("output").noconvert(),
+        "OU conditional mean and variance.");
+
+  m.def("ou_interval_probability",
+        [](ReadOnly1D x0, ReadOnly1D theta, ReadOnly1D mu, ReadOnly1D sigma,
+           ReadOnly1D time, ReadOnly1D lower, ReadOnly1D upper, Writable1D output) {
+          const std::size_t n = x0.shape(0);
+          if (theta.shape(0) != n || mu.shape(0) != n || sigma.shape(0) != n ||
+              time.shape(0) != n || lower.shape(0) != n || upper.shape(0) != n ||
+              output.shape(0) != n)
+            throw std::invalid_argument("OU interval buffers must have equal length");
+          nb::gil_scoped_release release;
+          quant::low_latency::OrnsteinUhlenbeckKernel::interval_probability(
+              x0.data(), theta.data(), mu.data(), sigma.data(), time.data(),
+              lower.data(), upper.data(), n, output.data());
+        },
+        nb::arg("x0").noconvert(), nb::arg("theta").noconvert(),
+        nb::arg("mu").noconvert(), nb::arg("sigma").noconvert(),
+        nb::arg("time").noconvert(), nb::arg("lower").noconvert(),
+        nb::arg("upper").noconvert(), nb::arg("output").noconvert(),
+        "OU mean-reversion interval probability.");
+
+  using DynamicsOutput = nb::ndarray<double, nb::ndim<2>, nb::c_contig, nb::device::cpu>;
+
+  m.def("market_velocity_momentum",
+        [](ReadOnly1D delta_price, ReadOnly1D volume, ReadOnly1D time_delta,
+           DynamicsOutput output) {
+          const std::size_t n = delta_price.shape(0);
+          if (volume.shape(0) != n || time_delta.shape(0) != n ||
+              output.shape(0) != n || output.shape(1) != 2)
+            throw std::invalid_argument("velocity/momentum inputs must match and output shape must be (n, 2)");
+          nb::gil_scoped_release release;
+          quant::low_latency::MarketDynamicsKernel::velocity_momentum(
+              delta_price.data(), volume.data(), time_delta.data(), n, output.data());
+        },
+        nb::arg("delta_price").noconvert(), nb::arg("volume").noconvert(),
+        nb::arg("time_delta").noconvert(), nb::arg("output").noconvert(),
+        "Price velocity and volume-weighted market momentum.");
+
+  m.def("market_force",
+        [](ReadOnly1D momentum, ReadOnly1D previous_momentum,
+           ReadOnly1D time_delta, Writable1D output) {
+          const std::size_t n = momentum.shape(0);
+          if (previous_momentum.shape(0) != n || time_delta.shape(0) != n ||
+              output.shape(0) != n)
+            throw std::invalid_argument("force buffers must have equal length");
+          nb::gil_scoped_release release;
+          quant::low_latency::MarketDynamicsKernel::force(
+              momentum.data(), previous_momentum.data(), time_delta.data(), n,
+              output.data());
+        },
+        nb::arg("momentum").noconvert(), nb::arg("previous_momentum").noconvert(),
+        nb::arg("time_delta").noconvert(), nb::arg("output").noconvert(),
+        "Momentum derivative as market force.");
+
+  m.def("shannon_entropy",
+        [](ReadOnly2D probabilities, Writable1D output) {
+          const std::size_t rows = probabilities.shape(0);
+          const std::size_t bins = probabilities.shape(1);
+          if (output.shape(0) != rows)
+            throw std::invalid_argument("entropy output length must equal probability rows");
+          nb::gil_scoped_release release;
+          quant::low_latency::ShannonEntropyKernel::entropy(
+              probabilities.data(), rows, bins, output.data());
+        },
+        nb::arg("probabilities").noconvert(), nb::arg("output").noconvert(),
+        "Shannon entropy of each probability distribution.");
+
+  m.def("shannon_normalized_entropy",
+        [](ReadOnly2D probabilities, Writable1D output) {
+          const std::size_t rows = probabilities.shape(0);
+          const std::size_t bins = probabilities.shape(1);
+          if (output.shape(0) != rows)
+            throw std::invalid_argument("entropy output length must equal probability rows");
+          nb::gil_scoped_release release;
+          quant::low_latency::ShannonEntropyKernel::normalized_entropy(
+              probabilities.data(), rows, bins, output.data());
+        },
+        nb::arg("probabilities").noconvert(), nb::arg("output").noconvert(),
+        "Normalized Shannon entropy of each probability distribution.");
 
   m.def("version", []() { return quant::Version::current().to_string(); },
         "Get the C++ Quant Engine version (major.minor.patch)");

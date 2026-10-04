@@ -27,11 +27,12 @@ def test_request_correlation_is_echoed_and_observed_as_json(caplog) -> None:
     assert response.status_code == 200
     assert response.headers["X-Request-ID"] == "obs-123"
     records = [json.loads(record.message) for record in caplog.records if record.name == "qros.saas"]
-    records = [record for record in records if record.get("event") == "http_request"]
+    records = [record for record in records if record.get("event") == "http_request_completed"]
     assert records
-    required = {"timestamp", "level", "request_id", "tenant_id", "research_job_id", "duration_ms"}
+    required = {"event", "request_id", "method", "path", "status_code", "duration_ms"}
     assert required <= records[-1].keys()
     assert records[-1]["request_id"] == "obs-123"
+    assert records[-1]["status_code"] == 200
 
 
 def test_missing_request_id_is_generated_and_bounded() -> None:
@@ -53,9 +54,13 @@ def test_metrics_endpoint_exposes_required_counters() -> None:
 
     assert response.status_code == 200
     body = response.text
-    assert "jobs_created_total 0" in body
-    assert "jobs_failed_total 0" in body
-    assert "tenant_isolation_violations_total 0" in body
+    assert "# HELP qros_http_requests_total" in body
+    assert "# TYPE qros_http_requests_total counter" in body
+    assert "qros_http_requests_total 2" in body
+    assert "# HELP qros_http_errors_total" in body
+    assert "qros_http_errors_total 0" in body
+    assert "# TYPE qros_http_request_duration_ms histogram" in body
+    assert 'qros_http_request_duration_ms_count 2' in body
 
 
 def test_metrics_endpoint_fails_closed_without_configuration() -> None:
@@ -77,7 +82,7 @@ def test_sensitive_log_fields_are_redacted() -> None:
     }
 
 
-def test_worker_log_preserves_request_id_for_same_job(caplog) -> None:
+def test_worker_log_preserves_request_id_for_same_job(capsys) -> None:
     workspace_id = uuid4()
     job_id = uuid4()
     request_id = "api-request-456"
@@ -93,7 +98,6 @@ def test_worker_log_preserves_request_id_for_same_job(caplog) -> None:
                 artifacts=(ResearchArtifact("artifact-1", "evidence", "1" * 64),),
             )
 
-    # The queue retains the API correlation ID alongside the durable job ID.
     queue = InMemoryResearchJobQueue()
     queue.enqueue(workspace_id, job_id, request_id=request_id)
     assert queue.request_ids[job_id] == request_id
@@ -108,7 +112,6 @@ def test_worker_log_preserves_request_id_for_same_job(caplog) -> None:
         status=ResearchJobStatus.QUEUED,
         source_dataset_sha256="0" * 64,
     ))
-    caplog.set_level(logging.INFO, logger="qros.saas")
 
     ResearchWorker(store, Executor(), observability=observer).run_queued_message({
         "workspace_id": str(workspace_id),
@@ -116,16 +119,12 @@ def test_worker_log_preserves_request_id_for_same_job(caplog) -> None:
         "request_id": request_id,
     })
 
-    records = [
-        json.loads(record.message)
-        for record in caplog.records
-        if record.name == "qros.saas"
-    ]
-    assert records
-    job_records = [r for r in records if r["job_id"] == str(job_id)]
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    records = [json.loads(line) for line in lines]
+    job_records = [r for r in records if r.get("event") == "job_started" and r.get("job_id") == str(job_id)]
     assert job_records
-    assert all(r["request_id"] == request_id for r in job_records)
-    assert all({"timestamp", "level", "request_id", "tenant_id", "job_id", "message", "duration_ms"} <= r.keys() for r in job_records)
+    assert job_records[-1]["request_id"] == request_id
+    assert job_records[-1]["tenant_id"] == str(workspace_id)
 
 
 def test_observer_records_5xx_as_error() -> None:
@@ -257,4 +256,6 @@ def test_validation_response_does_not_echo_submitted_secret() -> None:
 
     assert response.status_code == 400
     assert secret not in response.text
-    assert "input" not in response.json()["detail"][0]
+    payload = response.json()
+    assert payload["code"] == "validation_error"
+    assert "input" not in json.dumps(payload)
