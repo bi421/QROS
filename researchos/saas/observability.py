@@ -115,6 +115,12 @@ rls_violations_total = PrometheusCounter(
 tracer = trace.get_tracer("qros.saas")
 
 
+def configure_tracing() -> None:
+    """Ensure the QROS tracer is initialized without forcing a global SDK."""
+    trace.get_tracer("qros.saas")
+
+
+
 def sanitize_log_fields(fields: Mapping[str, object]) -> dict[str, object]:
     """Return a shallow, allow-by-name sanitized mapping for structured logs."""
     sanitized: dict[str, object] = {}
