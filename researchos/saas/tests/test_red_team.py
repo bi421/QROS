@@ -120,7 +120,8 @@ def test_error_leak_is_blocked() -> None:
 
     assert response.status_code == 500
     payload = response.json()
-    assert payload["detail"] == "Internal error"
+    assert payload["code"] == "internal_error"
+    assert payload["message"] == "Internal error"
     assert payload["error"] == {
         "code": "internal_error",
         "message": "Internal error",
