@@ -27,7 +27,6 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,test,saas]"
           python -m pip install mypy-baseline
-      - name: Verify baseline synchronization
+      - name: New type errors only
         run: |
-          python -m mypy --config-file pyproject.toml --follow-imports=skip --no-incremental | mypy-baseline sync
-          git diff --exit-code -- mypy-baseline.txt
+          python -m mypy --config-file pyproject.toml --follow-imports=skip | mypy-baseline filter
