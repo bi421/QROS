@@ -276,6 +276,8 @@ def create_app(
     job_queue: ResearchJobQueue | None = None,
     idempotency_store: IdempotencyStore | None = None,
     billing_store: BillingEventStore | None = None,
+    entitlement_store: EntitlementStore | None = None,
+    plan_rate_limiters: dict[Plan, RateLimiter] | None = None,
     claim_store: ResearchClaimStore | None = None,
     evidence_store: ResearchEvidenceStore | None = None,
     validation_store: ResearchValidationStore | None = None,
@@ -298,7 +300,8 @@ def create_app(
     queue = job_queue or InMemoryResearchJobQueue()
     limiter = rate_limiter or FixedWindowRateLimiter(limit=120, window_seconds=60)
     billing = billing_store
-    entitlements: EntitlementStore = InMemoryEntitlementStore()
+    entitlements: EntitlementStore = entitlement_store or InMemoryEntitlementStore()
+    plan_limiters = plan_rate_limiters or {}
     workspaces = workspace_provisioner
     persistence = InMemoryTenantPersistence()
     retention = RetentionConfig(DEFAULT_RETENTION_DAYS)
@@ -385,8 +388,9 @@ def create_app(
 
     def require_rate_limit(tenant: TenantContext) -> None:
         principal = hashlib.sha256(f"workspace:{tenant.workspace_id}".encode()).hexdigest()
+        effective_limiter = plan_limiters.get(tenant.plan, limiter)
         try:
-            allowed = limiter.allow(principal)
+            allowed = effective_limiter.allow(principal)
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -837,8 +841,11 @@ def create_app(
                 "workflow_id": request.workflow_id,
             }
         )
-        policy = DEFAULT_USAGE_POLICIES[tenant.plan]
-        if not policy.allows_monthly_runs(store.count_monthly(tenant.workspace_id)):
+        try:
+            entitlement = entitlements.get(tenant.workspace_id, tenant.plan.value)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="entitlement service unavailable") from exc
+        if not entitlement.allows_jobs(store.count_monthly(tenant.workspace_id)):
             raise HTTPException(
                 status_code=402,
                 detail={
