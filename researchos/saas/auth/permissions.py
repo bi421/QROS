@@ -79,7 +79,7 @@ POLICY: dict[Role, dict[Resource, frozenset[Action]]] = {
         Resource.FINDING: WRITE,
         Resource.BILLING: frozenset(),
     },
-    Role.VIEWER: {resource: READ for resource in Resource},
+    Role.VIEWER: {\n        **{resource: READ for resource in Resource if resource is not Resource.BILLING},\n        Resource.BILLING: frozenset(),\n    },
     Role.BILLING_ADMIN: {
         Resource.WORKSPACE: READ,
         Resource.DATASET: READ,
