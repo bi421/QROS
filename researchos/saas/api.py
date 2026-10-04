@@ -127,12 +127,16 @@ def _error_code(status_code: int) -> str:
 def _error_payload(
     request: Request, status_code: int, detail: object, details: object | None = None
 ) -> dict[str, object]:
-    message = detail if isinstance(detail, str) else "request failed"
-    code = (
-        detail
-        if isinstance(detail, str) and detail.startswith("INVALID_")
-        else _error_code(status_code)
-    )
+    if isinstance(detail, dict) and isinstance(detail.get("code"), str):
+        code = str(detail["code"])
+        message = str(detail.get("message", "request failed"))
+    else:
+        message = detail if isinstance(detail, str) else "request failed"
+        code = (
+            detail
+            if isinstance(detail, str) and detail.startswith("INVALID_")
+            else _error_code(status_code)
+        )
     return {
         "code": code,
         "message": message,
