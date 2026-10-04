@@ -63,3 +63,27 @@ def test_evidence_validator_rejects_duplicate_inference_hash() -> None:
     )
     errors = EvidenceValidator().validate_collection(collection)
     assert any("Duplicate Bayesian inference evidence" in error for error in errors)
+
+
+def test_probability_calculator_consumes_bayesian_posterior_without_recalculation():
+    from researchos.decision_engine.probability import ProbabilityCalculator
+
+    context = _context()
+    result = _result()
+    items = bayesian_partition_to_evidence(result, context)
+    collection = EvidenceCollection(
+        decision_context_id=context.id,
+        items=items,
+        collection_timestamp=context.decision_timestamp,
+    )
+    assessment = ProbabilityCalculator().calculate(collection)
+
+    assert assessment.bullish_probability == pytest.approx(
+        result.posterior_probabilities[0]
+    )
+    assert assessment.bearish_probability == pytest.approx(
+        result.posterior_probabilities[1]
+    )
+    assert assessment.neutral_probability == pytest.approx(
+        result.posterior_probabilities[2]
+    )
