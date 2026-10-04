@@ -92,7 +92,7 @@ class DecisionPipeline:
         branch = tuple(
             ResearchBranch(
                 branch_id=context.id,
-                operation=lambda _snapshot, context=context: self.run(context),
+                run=lambda _snapshot, context=context: self.run(context),
             )
             for context in contexts
         )
