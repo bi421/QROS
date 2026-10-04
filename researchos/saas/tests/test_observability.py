@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from uuid import uuid4
 
 from researchos.saas.observability import actor_user_id_var, observe_error, tenant_id_var
@@ -59,9 +60,15 @@ def test_metrics_endpoint_exposes_required_counters() -> None:
 
     assert response.status_code == 200
     body = response.text
-    assert "jobs_created_total 0" in body
-    assert "jobs_failed_total 0" in body
-    assert "tenant_isolation_violations_total 0" in body
+    # Prometheus counters are process-wide collectors, so earlier tests may have
+    # legitimately incremented them. The contract is that the authenticated
+    # scrape exposes each required counter with a numeric value.
+    for metric in (
+        "jobs_created_total",
+        "jobs_failed_total",
+        "tenant_isolation_violations_total",
+    ):
+        assert re.search(rf"^{metric} (?:\\d+(?:\\.\\d+)?)$", body, re.MULTILINE)
 
 
 def test_metrics_endpoint_fails_closed_without_configuration() -> None:
