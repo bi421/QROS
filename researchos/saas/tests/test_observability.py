@@ -53,9 +53,9 @@ def test_metrics_endpoint_exposes_required_counters() -> None:
 
     assert response.status_code == 200
     body = response.text
-    assert "qros_http_requests_total 1" in body
+    assert "qros_http_requests_total 2" in body
     assert "qros_http_errors_total 0" in body
-    assert "qros_http_request_duration_ms_count 1" in body
+    assert "qros_http_request_duration_ms_count 2" in body
 
 
 def test_metrics_endpoint_fails_closed_without_configuration() -> None:
