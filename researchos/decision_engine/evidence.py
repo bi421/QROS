@@ -47,7 +47,7 @@ Design Principles:
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol
 
 from researchos.core.base_object import BaseObject
 from researchos.core.identity import deterministic_hash, generate_id
@@ -145,6 +145,22 @@ class EvidenceCollection(BaseObject):
         return obj
 
 
+class EvidenceProvider(Protocol):
+    """Provider contract for directional evidence sourced from canonical objects."""
+    def collect(self, context: DecisionContext) -> list[DecisionEvidenceItem]:
+        """Return canonical evidence for the supplied decision context."""
+
+
+class ReferenceEvidenceProvider:
+    """Fallback provider preserving the existing reference-only behavior."""
+    def __init__(self, source: EvidenceSource, parameters: tuple[float, float, float, str, str], reference_getter: Any) -> None:
+        self.source = source
+        self.parameters = parameters
+        self.reference_getter = reference_getter
+    def collect(self, context: DecisionContext) -> list[DecisionEvidenceItem]:
+        return [EvidenceAggregator._make_item(self.source, reference_id, self.parameters) for reference_id in self.reference_getter(context)]
+
+
 class EvidenceAggregator:
     """Collects canonical DecisionEvidenceItem objects from a DecisionContext.
 
@@ -211,8 +227,9 @@ class EvidenceAggregator:
         "research_cycle",
     )
 
-    def __init__(self, aggregator_version: str = "AGGREGATOR_V1"):
+    def __init__(self, aggregator_version: str = "AGGREGATOR_V1", providers: dict[EvidenceSource, EvidenceProvider] | None = None):
         self.aggregator_version = aggregator_version
+        self.providers = dict(providers or {})
 
     @staticmethod
     def _make_item(
@@ -233,14 +250,24 @@ class EvidenceAggregator:
             supporting_ids=[reference_id],
         )
 
+    def _collect_or_fallback(self, context: DecisionContext, source: EvidenceSource, fallback: list[DecisionEvidenceItem]) -> list[DecisionEvidenceItem]:
+        provider = self.providers.get(source)
+        if provider is None:
+            return fallback
+        items = list(provider.collect(context))
+        for item in items:
+            if item.source is not source:
+                raise ValueError(f"Evidence provider for {source.value} emitted {item.source.value}")
+        return items
+
     def aggregate(self, context: DecisionContext) -> EvidenceCollection:
         items: list[DecisionEvidenceItem] = []
-        items.extend(self._collect_market_memory(context))
-        items.extend(self._collect_experiments(context))
-        items.extend(self._collect_validation(context))
-        items.extend(self._collect_macro(context))
-        items.extend(self._collect_quant_engine(context))
-        items.extend(self._collect_research(context))
+        items.extend(self._collect_or_fallback(context, EvidenceSource.MARKET_MEMORY, self._collect_market_memory(context)))
+        items.extend(self._collect_or_fallback(context, EvidenceSource.EXPERIMENT, self._collect_experiments(context)))
+        items.extend(self._collect_or_fallback(context, EvidenceSource.VALIDATION, self._collect_validation(context)))
+        items.extend(self._collect_or_fallback(context, EvidenceSource.MACRO_INTELLIGENCE, self._collect_macro(context)))
+        items.extend(self._collect_or_fallback(context, EvidenceSource.QUANT_ENGINE, self._collect_quant_engine(context)))
+        items.extend(self._collect_or_fallback(context, EvidenceSource.RESEARCH_OBJECTS, self._collect_research(context)))
         return EvidenceCollection(
             decision_context_id=context.id,
             items=items,
