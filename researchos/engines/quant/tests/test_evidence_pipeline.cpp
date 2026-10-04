@@ -8,6 +8,8 @@ TEST(EvidencePipelineTest, EnforcesLayerOrder) {
   record.branch = Branch::GeometricNull;
   record.quantity = Quantity::Probability;
   record.validation = ValidationStatus::StatisticalCheckPassed;
+  record.model_version = 1;
+  record.data_version = 1;
 
   auto state = EvidencePipeline::begin(1);
   EXPECT_FALSE(EvidencePipeline::accept_evidence(state, &record, 1));
@@ -23,7 +25,11 @@ TEST(EvidencePipelineTest, EnforcesLayerOrder) {
 TEST(EvidencePipelineTest, RejectsUnvalidatedEvidence) {
   EvidenceRecord records[2]{};
   records[0].validation = ValidationStatus::MathematicalCheckPassed;
+  records[0].model_version = 1;
+  records[0].data_version = 1;
   records[1].validation = ValidationStatus::NotValidated;
+  records[1].model_version = 1;
+  records[1].data_version = 1;
 
   auto state = EvidencePipeline::begin(2);
   ASSERT_TRUE(EvidencePipeline::accept_integrity(state));
@@ -34,6 +40,8 @@ TEST(EvidencePipelineTest, RejectsUnvalidatedEvidence) {
 TEST(EvidencePipelineTest, RejectsStatisticallyUnvalidatedEvidence) {
   EvidenceRecord record{};
   record.validation = ValidationStatus::MathematicalCheckPassed;
+  record.model_version = 1;
+  record.data_version = 1;
 
   auto state = EvidencePipeline::begin(1);
   ASSERT_TRUE(EvidencePipeline::accept_integrity(state));
@@ -45,6 +53,8 @@ TEST(EvidencePipelineTest, RejectsStatisticallyUnvalidatedEvidence) {
 TEST(EvidencePipelineTest, OOSValidationCanAdvanceToCalibration) {
   EvidenceRecord record{};
   record.validation = ValidationStatus::OOSValidated;
+  record.model_version = 1;
+  record.data_version = 1;
 
   auto state = EvidencePipeline::begin(1);
   ASSERT_TRUE(EvidencePipeline::accept_integrity(state));
@@ -57,6 +67,8 @@ TEST(EvidencePipelineTest, OOSValidationCanAdvanceToCalibration) {
 TEST(EvidencePipelineTest, EvidenceCannotBeAcceptedTwice) {
   EvidenceRecord record{};
   record.validation = ValidationStatus::StatisticalCheckPassed;
+  record.model_version = 1;
+  record.data_version = 1;
 
   auto state = EvidencePipeline::begin(1);
   ASSERT_TRUE(EvidencePipeline::accept_integrity(state));
@@ -82,4 +94,24 @@ TEST(EvidencePipelineTest, BranchPlanSeparatesImplementedAndMissingLayers) {
   EXPECT_FALSE(plan[3].implemented);   // empirical frequency
   EXPECT_FALSE(plan[10].implemented);  // market structure
   EXPECT_FALSE(plan[11].implemented);  // statistical model
+}
+
+
+TEST(EvidencePipelineTest, RejectsDuplicateOrUnversionedEvidence) {
+  EvidenceRecord records[2]{};
+  records[0].branch = Branch::GeometricNull;
+  records[1].branch = Branch::GeometricNull;
+  records[0].validation = records[1].validation =
+      ValidationStatus::StatisticalCheckPassed;
+  records[0].model_version = records[1].model_version = 1;
+  records[0].data_version = records[1].data_version = 1;
+
+  auto state = EvidencePipeline::begin(2);
+  ASSERT_TRUE(EvidencePipeline::accept_integrity(state));
+  EXPECT_FALSE(EvidencePipeline::accept_evidence(state, records, 2));
+
+  EvidenceRecord unversioned{};
+  unversioned.branch = Branch::CandleGeometry;
+  unversioned.validation = ValidationStatus::StatisticalCheckPassed;
+  EXPECT_FALSE(EvidencePipeline::accept_evidence(state, &unversioned, 1));
 }
