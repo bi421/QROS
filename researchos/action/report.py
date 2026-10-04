@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from researchos.core.identity import deterministic_hash
 from researchos.risk.contracts import RiskCalculation
 from researchos.risk.governance import RiskDecision
 
@@ -35,6 +36,11 @@ class PreTradeReport:
     probability_calculation_version: str | None = None
     probability_calibration_status: str | None = None
     assessment_hash: str | None = None
+
+    @property
+    def report_hash(self) -> str:
+        """Return the deterministic hash of the canonical report payload."""
+        return deterministic_hash(self.to_dict())
 
     def to_dict(self) -> dict[str, Any]:
         return {

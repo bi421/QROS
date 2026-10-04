@@ -1,4 +1,4 @@
-"""Canonical ResearchOS Block 2 -> Block 3 -> Block 4 pipeline."""
+"""Canonical probability -> sizing -> governance -> human-review pipeline."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from researchos.action.report import PreTradeReport, build_pre_trade_report
 from researchos.decision_engine.probability import ProbabilityAssessment
 from researchos.risk.adapters import risk_input_from_probability
 from researchos.risk.contracts import RiskCalculation, RiskPolicy, TradeStatistics
+from researchos.risk.decision_artifact import RiskDecisionArtifact
 from researchos.risk.engine import calculate_risk
 from researchos.risk.governance import (
     RiskAccountState,
@@ -39,6 +40,14 @@ class DecisionPipelineInput:
     strategy_state: StrategyRiskState = StrategyRiskState.RISK_REVIEW
 
 
+@dataclass(frozen=True)
+class DecisionRiskPipelineResult:
+    risk: RiskCalculation
+    risk_decision: RiskDecision
+    report: PreTradeReport
+    artifact: RiskDecisionArtifact
+
+
 def _calibration_status(request: DecisionPipelineInput) -> str | None:
     """Resolve explicit calibration evidence without inventing a status."""
     if request.probability_calibration_status is not None:
@@ -64,13 +73,9 @@ def _risk_decision(
     )
 
 
-def run_decision_pipeline(request: DecisionPipelineInput) -> PreTradeReport:
-    """Run validated probability -> sizing -> governance -> human-review report.
-
-    The probability-to-risk adapter is the fail-closed integrity boundary:
-    serialized assessments are reconstructed, validated, and hash-checked
-    before any risk sizing occurs.
-    """
+def _calculate(
+    request: DecisionPipelineInput,
+) -> tuple[RiskCalculation, RiskDecision | None, PreTradeReport]:
     risk_input = risk_input_from_probability(
         request.assessment,
         asset=request.asset,
@@ -83,9 +88,43 @@ def run_decision_pipeline(request: DecisionPipelineInput) -> PreTradeReport:
     )
     risk = calculate_risk(risk_input)
     decision = _risk_decision(request, risk)
-    return build_pre_trade_report(
+    report = build_pre_trade_report(
         risk,
         research_valid=request.research_valid,
         research_limitations=request.research_limitations,
         risk_decision=decision,
     )
+    return risk, decision, report
+
+
+def run_decision_pipeline(request: DecisionPipelineInput) -> PreTradeReport:
+    """Run validated probability -> sizing -> governance -> human-review report."""
+    return _calculate(request)[2]
+
+
+def run_decision_pipeline_with_artifact(
+    request: DecisionPipelineInput,
+) -> DecisionRiskPipelineResult:
+    """Return the complete hash-linked sizing/governance/review chain.
+
+    A governance decision is mandatory for artifact creation. This prevents an
+    unevaluated report from being mistaken for a governed risk decision.
+    """
+    risk, decision, report = _calculate(request)
+    if decision is None:
+        raise ValueError("risk account is required for governed risk artifact creation")
+    artifact = RiskDecisionArtifact.build(risk, decision, report)
+    return DecisionRiskPipelineResult(
+        risk=risk,
+        risk_decision=decision,
+        report=report,
+        artifact=artifact,
+    )
+
+
+__all__ = [
+    "DecisionPipelineInput",
+    "DecisionRiskPipelineResult",
+    "run_decision_pipeline",
+    "run_decision_pipeline_with_artifact",
+]

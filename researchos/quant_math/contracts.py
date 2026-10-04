@@ -6,8 +6,10 @@ from typing import Any
 class Vector2D:
     x: float
     y: float
-    def magnitude(self) -> float: return (self.x*self.x+self.y*self.y)**0.5
-    def dot(self, other: "Vector2D") -> float: return self.x*other.x+self.y*other.y
+    def magnitude(self) -> float:
+        return (self.x*self.x+self.y*self.y)**0.5
+    def dot(self, other: "Vector2D") -> float:
+        return self.x*other.x+self.y*other.y
 
 @dataclass(frozen=True)
 class GeometryMeasurement:
@@ -23,21 +25,37 @@ class GeometryMeasurement:
 
 @dataclass(frozen=True)
 class StatisticalMeasurement:
-    count:int; mean:float; variance:float; standard_deviation:float
-    minimum:float; maximum:float; z_score_last:float
-    correlation:float|None; regression_slope:float|None
-    regression_intercept:float|None; regression_r2:float|None
+    count:int
+    mean:float
+    variance:float
+    standard_deviation:float
+    minimum:float
+    maximum:float
+    z_score_last:float
+    correlation:float|None
+    regression_slope:float|None
+    regression_intercept:float|None
+    regression_r2:float|None
 
 @dataclass(frozen=True)
 class BayesianMeasurement:
-    prior_alpha:float; prior_beta:float; successes:int; failures:int
-    posterior_alpha:float; posterior_beta:float; posterior_mean:float
+    prior_alpha:float
+    prior_beta:float
+    successes:int
+    failures:int
+    posterior_alpha:float
+    posterior_beta:float
+    posterior_mean:float
 
 @dataclass(frozen=True)
 class MonteCarloMeasurement:
-    simulations:int; seed:int; mean_terminal:float
-    standard_deviation_terminal:float; percentile_05:float
-    percentile_50:float; percentile_95:float
+    simulations:int
+    seed:int
+    mean_terminal:float
+    standard_deviation_terminal:float
+    percentile_05:float
+    percentile_50:float
+    percentile_95:float
 
 @dataclass(frozen=True)
 class QuantMathResult:
