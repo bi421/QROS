@@ -1,5 +1,11 @@
+import pytest
+
+from researchos.core.identity import deterministic_hash
 from researchos.risk.decision_artifact import RiskDecisionArtifact
-from researchos.risk.decision_artifact_store import InMemoryRiskDecisionArtifactStore
+from researchos.risk.decision_artifact_store import (
+    InMemoryRiskDecisionArtifactStore,
+)
+
 
 def _artifact() -> RiskDecisionArtifact:
     payload = {
@@ -9,8 +15,11 @@ def _artifact() -> RiskDecisionArtifact:
         "report_hash": "report-1",
         "artifact_version": "RISK_DECISION_ARTIFACT_V1",
     }
-    from researchos.core.identity import deterministic_hash
-    return RiskDecisionArtifact(**payload, artifact_hash=deterministic_hash(payload))
+    return RiskDecisionArtifact(
+        **payload,
+        artifact_hash=deterministic_hash(payload),
+    )
+
 
 def test_store_is_idempotent_and_replayable() -> None:
     store = InMemoryRiskDecisionArtifactStore()
@@ -19,6 +28,7 @@ def test_store_is_idempotent_and_replayable() -> None:
     assert store.put(artifact) == artifact
     assert len(store) == 1
     assert store.get(artifact.artifact_hash) == artifact
+
 
 def test_store_rejects_tampering() -> None:
     store = InMemoryRiskDecisionArtifactStore()
@@ -31,6 +41,5 @@ def test_store_rejects_tampering() -> None:
         artifact_version=artifact.artifact_version,
         artifact_hash=artifact.artifact_hash,
     )
-    import pytest
     with pytest.raises(ValueError, match="invalid"):
         store.put(tampered)
