@@ -10,6 +10,15 @@ try:
         geometric_interval_probability,
         first_passage_probability,
         empirical_edge,
+        heat_density,
+        heat_interval_probability,
+        gbm_lognormal_density,
+        ou_transition_moments,
+        ou_interval_probability,
+        market_velocity_momentum,
+        market_force,
+        shannon_entropy,
+        shannon_normalized_entropy,
     )
 except ImportError:
     bayesian_filter_binary = None
@@ -18,6 +27,15 @@ except ImportError:
     geometric_interval_probability = None
     first_passage_probability = None
     empirical_edge = None
+    heat_density = None
+    heat_interval_probability = None
+    gbm_lognormal_density = None
+    ou_transition_moments = None
+    ou_interval_probability = None
+    market_velocity_momentum = None
+    market_force = None
+    shannon_entropy = None
+    shannon_normalized_entropy = None
 
 
 pytestmark = pytest.mark.skipif(
@@ -26,7 +44,16 @@ pytestmark = pytest.mark.skipif(
     or candle_geometry is None
     or geometric_interval_probability is None
     or first_passage_probability is None
-    or empirical_edge is None,
+    or empirical_edge is None
+    or heat_density is None
+    or heat_interval_probability is None
+    or gbm_lognormal_density is None
+    or ou_transition_moments is None
+    or ou_interval_probability is None
+    or market_velocity_momentum is None
+    or market_force is None
+    or shannon_entropy is None
+    or shannon_normalized_entropy is None,
     reason="compiled nanobind Quant Engine is unavailable",
 )
 
@@ -108,6 +135,95 @@ def test_empirical_edge():
         [0.8, 0.7, 0.1, 2.1821789023599236, 0.0291363370103729],
         rtol=0.0,
         atol=1e-12,
+    )
+
+
+
+def test_diffusion_heat_kernel_and_gbm_density():
+    x = np.asarray([0.0, 1.0])
+    mean = np.asarray([0.0, 0.0])
+    diffusion = np.asarray([0.5, 0.5])
+    time = np.asarray([1.0, 1.0])
+    density = np.empty(2, dtype=np.float64)
+    heat_density(x, mean, diffusion, time, density)
+    np.testing.assert_allclose(
+        density,
+        [1.0 / np.sqrt(2.0 * np.pi), np.exp(-0.5) / np.sqrt(2.0 * np.pi)],
+        rtol=0.0,
+        atol=1e-14,
+    )
+
+    lower = np.asarray([-1.0])
+    upper = np.asarray([1.0])
+    interval = np.empty(1, dtype=np.float64)
+    heat_interval_probability(
+        np.asarray([0.0]), np.asarray([0.5]), np.asarray([1.0]),
+        lower, upper, interval
+    )
+    np.testing.assert_allclose(interval, [0.682689492137086], rtol=0.0, atol=1e-14)
+
+    gbm = np.empty(1, dtype=np.float64)
+    gbm_lognormal_density(
+        np.asarray([100.0]), np.asarray([100.0]), np.asarray([0.05]),
+        np.asarray([0.2]), np.asarray([1.0]), gbm
+    )
+    assert np.isfinite(gbm[0]) and gbm[0] > 0.0
+
+
+def test_ornstein_uhlenbeck_mean_reversion():
+    x0 = np.asarray([110.0])
+    theta = np.asarray([1.0])
+    mu = np.asarray([100.0])
+    sigma = np.asarray([2.0])
+    time = np.asarray([1.0])
+    moments = np.empty((1, 2), dtype=np.float64)
+    ou_transition_moments(x0, theta, mu, sigma, time, moments)
+
+    expected_mean = 100.0 + 10.0 * np.exp(-1.0)
+    expected_variance = 4.0 * (1.0 - np.exp(-2.0)) / 2.0
+    np.testing.assert_allclose(
+        moments[0], [expected_mean, expected_variance], rtol=0.0, atol=1e-14
+    )
+
+    probability = np.empty(1, dtype=np.float64)
+    ou_interval_probability(
+        x0, theta, mu, sigma, time,
+        np.asarray([100.0]), np.asarray([105.0]), probability
+    )
+    assert 0.0 < probability[0] < 1.0
+
+
+def test_market_momentum_and_force():
+    out = np.empty((2, 2), dtype=np.float64)
+    market_velocity_momentum(
+        np.asarray([2.0, -1.0]),
+        np.asarray([10.0, 20.0]),
+        np.asarray([1.0, 0.5]),
+        out,
+    )
+    np.testing.assert_allclose(out, [[2.0, 20.0], [-2.0, -40.0]], rtol=0.0, atol=0.0)
+
+    force = np.empty(2, dtype=np.float64)
+    market_force(
+        np.asarray([20.0, -40.0]),
+        np.asarray([10.0, -20.0]),
+        np.asarray([2.0, 2.0]),
+        force,
+    )
+    np.testing.assert_array_equal(force, [5.0, -10.0])
+
+
+def test_shannon_entropy_and_normalized_entropy():
+    probabilities = np.asarray([[0.5, 0.5], [1.0, 0.0]], dtype=np.float64)
+    entropy = np.empty(2, dtype=np.float64)
+    normalized = np.empty(2, dtype=np.float64)
+    shannon_entropy(probabilities, entropy)
+    shannon_normalized_entropy(probabilities, normalized)
+    np.testing.assert_allclose(
+        entropy, [np.log(2.0), 0.0], rtol=0.0, atol=1e-14
+    )
+    np.testing.assert_allclose(
+        normalized, [1.0, 0.0], rtol=0.0, atol=1e-14
     )
 
 
