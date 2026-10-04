@@ -25,7 +25,7 @@ def test_phase51_calibration_becomes_canonical_evidence() -> None:
     evidence = CalibrationEvidence.from_result(result, source_hash="phase51-hash")
     assert evidence.status is CalibrationStatus.WELL_CALIBRATED
     assert evidence.source_hash == "phase51-hash"
-    assert evidence.sample_size == 4
+    assert evidence.sample_size == 20
     evidence.validate()
 
 

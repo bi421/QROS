@@ -91,10 +91,10 @@ class DecisionPipeline:
             raise DecisionPipelineError("at least one DecisionContext is required")
         branch = tuple(
             ResearchBranch(
-                branch_id=context.id,
-                operation=lambda _snapshot, context=context: self.run(context),
+                branch_id=f"{context.id}:{index}",
+                run=lambda _snapshot, context=context: self.run(context),
             )
-            for context in contexts
+            for index, context in enumerate(contexts)
         )
         plan = (ResearchWave(wave_id="decision-contexts", branches=branch),)
         result = (executor or ParallelResearchExecutor(max_workers=min(8, len(contexts)))).run(plan)
