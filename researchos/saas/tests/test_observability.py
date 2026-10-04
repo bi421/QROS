@@ -90,7 +90,7 @@ def test_sensitive_log_fields_are_redacted() -> None:
     }
 
 
-def test_worker_log_preserves_request_id_for_same_job(caplog) -> None:
+def test_worker_log_preserves_request_id_for_same_job(capsys) -> None:
     workspace_id = uuid4()
     job_id = uuid4()
     request_id = "api-request-456"
@@ -121,21 +121,20 @@ def test_worker_log_preserves_request_id_for_same_job(caplog) -> None:
         status=ResearchJobStatus.QUEUED,
         source_dataset_sha256="0" * 64,
     ))
-    caplog.set_level(logging.INFO, logger="qros.saas")
-
     ResearchWorker(store, Executor(), observability=observer).run_queued_message({
         "workspace_id": str(workspace_id),
         "research_run_id": str(job_id),
         "request_id": request_id,
     })
 
+    output = capsys.readouterr().out
     records = [
-        json.loads(record.message)
-        for record in caplog.records
-        if record.name == "qros.saas"
+        json.loads(line)
+        for line in output.splitlines()
+        if line.strip().startswith("{")
     ]
     assert records
-    job_records = [r for r in records if r["job_id"] == str(job_id)]
+    job_records = [r for r in records if r.get("job_id") == str(job_id)]
     assert job_records
     assert all(r["request_id"] == request_id for r in job_records)
     assert all({"timestamp", "level", "request_id", "tenant_id", "job_id", "message", "duration_ms"} <= r.keys() for r in job_records)
