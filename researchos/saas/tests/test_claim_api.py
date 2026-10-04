@@ -320,7 +320,7 @@ def test_claim_plan_lock_is_persisted_and_immutable() -> None:
         json=changed,
     )
     assert changed_response.status_code == 422
-    assert "already locked" in changed_response.json()["detail"]
+    assert "already locked" in changed_response.json()["message"]
     assert store.save_calls == 3
 
 
