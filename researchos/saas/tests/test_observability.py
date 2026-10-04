@@ -137,7 +137,8 @@ def test_worker_log_preserves_request_id_for_same_job(capsys) -> None:
     job_records = [r for r in records if r.get("job_id") == str(job_id)]
     assert job_records
     assert all(r["request_id"] == request_id for r in job_records)
-    assert all({"timestamp", "level", "request_id", "tenant_id", "job_id", "message", "duration_ms"} <= r.keys() for r in job_records)
+    assert all({"timestamp", "event", "request_id", "tenant_id", "job_id"} <= r.keys() for r in job_records)
+    assert all(r["event"] == "job_started" for r in job_records)
 
 
 def test_observer_records_5xx_as_error() -> None:
