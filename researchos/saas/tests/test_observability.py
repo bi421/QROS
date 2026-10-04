@@ -28,9 +28,11 @@ def test_request_correlation_is_echoed_and_observed_as_json(caplog) -> None:
     assert response.headers["X-Request-ID"] == "obs-123"
     records = [json.loads(record.message) for record in caplog.records if record.name == "qros.saas"]
     assert records
-    required = {"timestamp", "level", "request_id", "tenant_id", "job_id", "message", "duration_ms"}
-    assert required <= records[-1].keys()
-    assert records[-1]["request_id"] == "obs-123"
+    completed = [record for record in records if record.get("event") == "http_request_completed"]
+    assert completed
+    assert {"event", "request_id", "method", "path", "status_code", "duration_ms"} <= completed[-1].keys()
+    assert completed[-1]["request_id"] == "obs-123"
+    assert completed[-1]["path"] == "/healthz"
 
 
 def test_missing_request_id_is_generated_and_bounded() -> None:
