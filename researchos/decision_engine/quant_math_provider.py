@@ -5,18 +5,23 @@ from researchos.decision_engine.contracts import DecisionEvidenceItem,EvidenceSo
 from researchos.quant_math.contracts import QuantMathResult
 
 class QuantMathEvidenceProvider:
-    """Expose independent quant dimensions; ProbabilityCalculator fuses them later."""
+    """Expose independent quant dimensions
+    ProbabilityCalculator fuses them later."""
     def __init__(self,result:QuantMathResult):
         self.result=result
 
     @staticmethod
     def _direction(value:float)->ProbabilityOutcome:
-        if value>0: return ProbabilityOutcome.BULLISH
-        if value<0: return ProbabilityOutcome.BEARISH
+        if value>0:
+            return ProbabilityOutcome.BULLISH
+        if value<0:
+            return ProbabilityOutcome.BEARISH
         return ProbabilityOutcome.NEUTRAL
 
     def collect(self,context:DecisionContext)->list[DecisionEvidenceItem]:
-        r=self.result; g=r.geometry; s=r.statistics
+        r=self.result
+        g=r.geometry
+        s=r.statistics
         items=[
             DecisionEvidenceItem(
                 source=EvidenceSource.QUANT_ENGINE,source_id=f"{r.result_hash}:geometry",
