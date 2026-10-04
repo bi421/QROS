@@ -12,9 +12,6 @@ import csv
 import io
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Callable
-
-from researchos.data_engine.csv_loader import Candle
 
 from researchos.data_engine.candle import Candle
 from researchos.data_engine.csv_loader import CsvLoader

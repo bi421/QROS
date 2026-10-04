@@ -8,7 +8,6 @@ import json
 import threading
 
 from fastapi.testclient import TestClient
-from starlette.responses import Response
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.api import create_app
@@ -357,6 +356,35 @@ def test_cross_tenant_dataset_and_version_access_returns_not_found() -> None:
     assert run.status_code == 404
 
 
+def test_dataset_download_url_is_authorized_and_short_lived() -> None:
+    client, _, _, _ = _client()
+    created = _upload(client, "downloadable", b"dataset")
+    dataset_id = created.json()["id"]
+    version_id = created.json()["version"]["id"]
+
+    response = client.get(
+        f"/v1/datasets/{dataset_id}/versions/{version_id}/download",
+        headers={"Authorization": "Bearer test"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["expires_in"] == "3600"
+    assert response.json()["url"].startswith("memory://")
+
+
+def test_dataset_download_rejects_dataset_version_mismatch() -> None:
+    client, _, _, _ = _client()
+    first = _upload(client, "first", b"one")
+    second = _upload(client, "second", b"two")
+
+    response = client.get(
+        f"/v1/datasets/{first.json()['id']}/versions/{second.json()['version']['id']}/download",
+        headers={"Authorization": "Bearer test"},
+    )
+
+    assert response.status_code == 404
+
+
 def test_billing_webhook_processes_and_replays_identical_event() -> None:
     billing = InMemoryBillingEventStore()
     client, _, _, _ = _client(billing_store=billing, billing_secret="secret")
@@ -398,8 +426,7 @@ def test_http_errors_include_structured_error_metadata() -> None:
     response = client.get("/v1/me", headers={"Authorization": "Bearer anything", "X-Request-ID": "req-structured"})
     assert response.status_code == 503
     payload = response.json()
-    assert payload["detail"] == "SaaS authentication provider is not configured"
-    assert payload["error"] == {
+    assert payload == {
         "code": "service_unavailable",
         "message": "SaaS authentication provider is not configured",
         "request_id": "req-structured",
@@ -416,9 +443,10 @@ def test_validation_errors_include_structured_error_metadata() -> None:
     )
     assert response.status_code == 400
     payload = response.json()
-    assert payload["error"]["code"] == "validation_error"
-    assert payload["error"]["request_id"]
-    assert isinstance(payload["detail"], list)
+    assert payload["code"] == "validation_error"
+    assert payload["message"] == "Request validation failed"
+    assert payload["request_id"]
+    assert payload["correlation_id"] == payload["request_id"]
 
 
 def test_dataset_versions_reject_invalid_sort_and_filter() -> None:
@@ -441,7 +469,12 @@ def test_readiness_probe_failure_fails_closed() -> None:
     response = client.get("/readyz")
 
     assert response.status_code == 503
-    assert response.json()["detail"] == "SaaS dependency readiness check failed"
+    assert response.json() == {
+        "code": "service_unavailable",
+        "message": "SaaS dependency readiness check failed",
+        "request_id": response.headers["X-Request-ID"],
+        "correlation_id": response.headers["X-Request-ID"],
+    }
 
 
 def test_readiness_probe_success_keeps_endpoint_ready() -> None:

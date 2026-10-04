@@ -41,6 +41,7 @@ from researchos.saas.auth.permissions import Action, Resource, require_permissio
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.contracts import (
     DEFAULT_USAGE_POLICIES,
+    Plan,
     ResearchJob,
     ResearchJobStatus,
     TenantContext,
@@ -61,11 +62,9 @@ from researchos.saas.validation_api import (
 
 from researchos.saas.datasets import (
     Dataset,
-    DatasetReferencedError,
     DatasetStorage,
     DatasetStore,
     DatasetVersion,
-    DatasetReferencedError,
     InMemoryDatasetStorage,
     InMemoryDatasetStore,
     storage_path_for,
@@ -134,20 +133,12 @@ def _error_payload(
         if isinstance(detail, str) and detail.startswith("INVALID_")
         else _error_code(status_code)
     )
-    error: dict[str, object] = {
+    return {
         "code": code,
         "message": message,
         "request_id": getattr(request.state, "request_id", None),
         "correlation_id": request.headers.get("X-Correlation-ID")
         or getattr(request.state, "request_id", None),
-    }
-    if details is not None:
-        error["details"] = details
-    return {
-        "detail": detail,
-        "code": code,
-        "request_id": getattr(request.state, "request_id", None),
-        "error": error,
     }
 
 
@@ -276,6 +267,8 @@ def create_app(
     job_queue: ResearchJobQueue | None = None,
     idempotency_store: IdempotencyStore | None = None,
     billing_store: BillingEventStore | None = None,
+    entitlement_store: EntitlementStore | None = None,
+    plan_rate_limiters: dict[Plan, RateLimiter] | None = None,
     claim_store: ResearchClaimStore | None = None,
     evidence_store: ResearchEvidenceStore | None = None,
     validation_store: ResearchValidationStore | None = None,
@@ -298,7 +291,8 @@ def create_app(
     queue = job_queue or InMemoryResearchJobQueue()
     limiter = rate_limiter or FixedWindowRateLimiter(limit=120, window_seconds=60)
     billing = billing_store
-    entitlements: EntitlementStore = InMemoryEntitlementStore()
+    entitlements: EntitlementStore = entitlement_store or InMemoryEntitlementStore()
+    plan_limiters = plan_rate_limiters or {}
     workspaces = workspace_provisioner
     persistence = InMemoryTenantPersistence()
     retention = RetentionConfig(DEFAULT_RETENTION_DAYS)
@@ -342,12 +336,13 @@ def create_app(
                 "status_code": 400,
             },
         )
-        payload = _error_payload(request, 400, _safe_validation_details(exc))
-        payload["code"] = "validation_error"
-        error = payload["error"]
-        if isinstance(error, dict):
-            error["code"] = "validation_error"
-            error["message"] = "Request validation failed"
+        payload = {
+            "code": "validation_error",
+            "message": "Request validation failed",
+            "request_id": getattr(request.state, "request_id", None),
+            "correlation_id": request.headers.get("X-Correlation-ID")
+            or getattr(request.state, "request_id", None),
+        }
         return JSONResponse(status_code=400, content=payload)
 
     @app.exception_handler(Exception)
@@ -385,8 +380,9 @@ def create_app(
 
     def require_rate_limit(tenant: TenantContext) -> None:
         principal = hashlib.sha256(f"workspace:{tenant.workspace_id}".encode()).hexdigest()
+        effective_limiter = plan_limiters.get(tenant.plan, limiter)
         try:
-            allowed = limiter.allow(principal)
+            allowed = effective_limiter.allow(principal)
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -403,10 +399,6 @@ def create_app(
         *, dataset_id: UUID, tenant: TenantContext, file: UploadFile
     ) -> DatasetVersion:
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
-        try:
-            entitlement = entitlements.get(tenant.workspace_id, tenant.plan.value)
-        except Exception as exc:
-            raise HTTPException(status_code=503, detail="entitlement service unavailable") from exc
         try:
             digest, size = stream_sha256(file.file, policy.max_dataset_bytes)
             if not policy.allows_dataset(size):
@@ -814,17 +806,43 @@ def create_app(
             request_id=getattr(request.state, "request_id", None),
         )
 
+    @app.get(
+        "/v1/datasets/{dataset_id}/versions/{version_id}/download",
+        response_model=dict[str, str],
+        tags=["datasets"],
+    )
+    @require_permission(Resource.DATASET_VERSION, Action.READ)
+    def create_dataset_download_url(
+        dataset_id: UUID,
+        version_id: UUID,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> dict[str, str]:
+        """Authorize tenant ownership before issuing a short-lived private URL."""
+        version = datasets.get_version(tenant.workspace_id, version_id)
+        if version is None or version.dataset_id != dataset_id:
+            raise HTTPException(status_code=404, detail="dataset version not found")
+        try:
+            url = storage.create_signed_download_url(version.storage_path, 3600)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="dataset object not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="dataset download service unavailable") from exc
+        return {"url": url, "expires_in": "3600"}
+
     @app.post(
         "/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"]
     )
     @require_permission(Resource.JOB, Action.CREATE)
     def create_research_run(
-        request: ResearchCreateRequest,
+        payload: ResearchCreateRequest,
+        request: Request,
         tenant: TenantContext = Depends(current_tenant),
         idempotency_key: str | None = Header(default=None, alias=IDEMPOTENCY_HEADER),
     ) -> Response:
         require_rate_limit(tenant)
-        if request.workflow_id != FROZEN_XAUUSD_M1_WORKFLOW:
+        if payload.workflow_id != FROZEN_XAUUSD_M1_WORKFLOW:
             raise HTTPException(status_code=400, detail="unsupported workflow")
         if not idempotency_key:
             raise HTTPException(status_code=400, detail="Idempotency-Key header is required")
@@ -833,12 +851,16 @@ def create_app(
             raise HTTPException(status_code=400, detail="invalid Idempotency-Key")
         fingerprint = request_fingerprint(
             {
-                "dataset_version_id": str(request.dataset_version_id),
-                "workflow_id": request.workflow_id,
+                "dataset_version_id": str(payload.dataset_version_id),
+                "workflow_id": payload.workflow_id,
             }
         )
+        try:
+            entitlement = entitlements.get(tenant.workspace_id, tenant.plan.value)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="entitlement service unavailable") from exc
         policy = DEFAULT_USAGE_POLICIES[tenant.plan]
-        if not policy.allows_monthly_runs(store.count_monthly(tenant.workspace_id)):
+        if not entitlement.allows_jobs(store.count_monthly(tenant.workspace_id)):
             raise HTTPException(
                 status_code=402,
                 detail={
@@ -849,7 +871,7 @@ def create_app(
             )
         if not policy.allows_concurrency(store.count_active(tenant.workspace_id)):
             raise HTTPException(status_code=429, detail="concurrent research run limit reached")
-        version = datasets.get_version(tenant.workspace_id, request.dataset_version_id)
+        version = datasets.get_version(tenant.workspace_id, payload.dataset_version_id)
         if version is None:
             raise HTTPException(status_code=404, detail="dataset version not found")
 
@@ -857,7 +879,7 @@ def create_app(
             id=uuid4(),
             workspace_id=tenant.workspace_id,
             dataset_version_id=version.id,
-            workflow_id=request.workflow_id,
+            workflow_id=payload.workflow_id,
             status=ResearchJobStatus.QUEUED,
             source_dataset_sha256=version.content_sha256,
             created_by=tenant.user_id,

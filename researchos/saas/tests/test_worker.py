@@ -2,7 +2,6 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-import logging
 
 from researchos.research_core.contracts import ResearchArtifact, ResearchResult
 from researchos.saas.contracts import ResearchJob, ResearchJobStatus

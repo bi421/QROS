@@ -134,6 +134,7 @@ files = [
 ]
 warn_return_any = true
 warn_unused_configs = true
+show_error_codes = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
 
@@ -157,3 +158,7 @@ line-ending = "auto"
 [tool.bandit]
 exclude_dirs = ["tests", "archive", "build-nanobind", ".venv", "venv"]
 skips = []
+
+[tool.mypy-baseline]
+baseline_path = "mypy-baseline.txt"
+allow_unsynced = false

@@ -6,9 +6,6 @@ from dataclasses import dataclass, field as dataclass_field
 from datetime import datetime
 from hashlib import sha256
 from typing import Any, BinaryIO, Protocol
-from urllib.error import HTTPError
-from urllib.parse import quote
-from urllib.request import Request, urlopen
 from uuid import UUID
 
 from researchos.core.timestamp import utc_now
@@ -39,12 +36,17 @@ class DatasetReferencedError(RuntimeError):
     """Raised when retention policy prevents dataset deletion."""
 
 
-class DatasetReferencedError(RuntimeError):
-    """Raised when an immutable dataset version is still part of research lineage."""
-
-
 class DatasetStore(Protocol):
-    def list_datasets(self, workspace_id: UUID, *, limit: int = 50, offset: int = 0, name_filter: str | None = None) -> tuple[list[Dataset], int]: ...
+    def list_datasets(
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        name_filter: str | None = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+    ) -> tuple[list[Dataset], int]: ...
     def create_dataset(self, workspace_id: UUID, dataset: Dataset) -> Dataset: ...
     def delete_dataset(self, workspace_id: UUID, dataset_id: UUID) -> None: ...
     def create_version(self, workspace_id: UUID, version: DatasetVersion) -> DatasetVersion: ...
@@ -99,12 +101,16 @@ class InMemoryDatasetStore:
         self._datasets[dataset.id] = dataset
         return dataset
 
-    def list_datasets(self, workspace_id: UUID, *, limit: int = 50, offset: int = 0, name_filter: str | None = None) -> tuple[list[Dataset], int]:
+    def list_datasets(self, workspace_id: UUID, *, limit: int = 50, offset: int = 0, name_filter: str | None = None, sort_by: str = "created_at", sort_order: str = "desc") -> tuple[list[Dataset], int]:
         if not 1 <= limit <= 100 or offset < 0:
             raise ValueError("invalid pagination")
+        if sort_by not in {"created_at", "name"}:
+            raise ValueError("invalid sort field")
+        if sort_order not in {"asc", "desc"}:
+            raise ValueError("invalid sort order")
         needle = name_filter.strip().lower() if name_filter else None
         rows = [d for d in self._datasets.values() if d.workspace_id == workspace_id and (needle is None or needle in d.name.lower())]
-        rows.sort(key=lambda item: item.id.hex)
+        rows.sort(key=lambda item: (item.created_at, item.id.hex) if sort_by == "created_at" else (item.name.lower(), item.id.hex), reverse=sort_order == "desc")
         return rows[offset:offset + limit], len(rows)
 
     def delete_dataset(self, workspace_id: UUID, dataset_id: UUID) -> None:
@@ -265,7 +271,7 @@ class SupabaseDatasetStore:
         )
         if name_filter:
             query = query.ilike("name", f"%{name_filter.strip()}%")
-        result = query.order("id").range(offset, offset + limit - 1).execute()
+        result = query.order(sort_by, desc=sort_order == "desc").range(offset, offset + limit - 1).execute()
         return [self._dataset(row) for row in (result.data or [])], int(result.count or 0)
 
     def delete_dataset(self, workspace_id: UUID, dataset_id: UUID) -> None:
@@ -423,9 +429,15 @@ class SupabaseDatasetStorage:
             raise RuntimeError("storage provider returned invalid dataset bytes")
         return response
 
+    def download_verified(self, storage_path: str, expected_sha256: str) -> bytes:
+        data = self.download(storage_path)
+        if sha256(data).hexdigest() != expected_sha256.lower():
+            raise ValueError("dataset SHA-256 verification failed")
+        return data
+
     def create_signed_download_url(self, storage_path: str, expires_in: int) -> str:
-        if not 1 <= expires_in <= 900:
-            raise ValueError("signed URL expiry must be between 1 and 900 seconds")
+        if expires_in != 3600:
+            raise ValueError("dataset signed URL expiry must be exactly 3600 seconds")
         response = self._client.storage.from_(self._bucket).create_signed_url(
             storage_path,
             expires_in,

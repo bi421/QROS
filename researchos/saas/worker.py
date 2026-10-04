@@ -87,7 +87,7 @@ class ResearchWorker:
         log.info("job_started", timestamp=time.time())
         with job_span(request_id, str(job_id)):
             return self._run_once_traced(workspace_id, job_id, started, log)
-    
+
     def _run_once_traced(self, workspace_id: UUID, job_id: UUID, started: float, log) -> ResearchResult:
         lease = self._store.claim(
             workspace_id,
