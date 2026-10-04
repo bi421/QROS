@@ -141,8 +141,9 @@ class ParallelResearchExecutor:
         """Run waves left-to-right; branches inside a wave run concurrently.
 
         The input context is snapshotted and recursively frozen before
-        dispatch. Results are collected in declared branch order, making
-        output deterministic even when branch completion order differs.
+        dispatch. Branch completion is observed as futures finish so a
+        failure can trigger cancellation promptly, while successful results
+        are still returned in declared branch order.
 
         Any branch failure cancels work that has not started, raises a single
         orchestration error, and prevents all later waves from starting.
