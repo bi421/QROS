@@ -216,11 +216,11 @@ def test_claim_pagination_is_bounded() -> None:
     assert client.get(
         "/v1/research-claims?page=1&page_size=101",
         headers={"Authorization": "Bearer test"},
-    ).status_code == 422
+    ).status_code == 400
     assert client.get(
         "/v1/research-claims?page=0&page_size=1",
         headers={"Authorization": "Bearer test"},
-    ).status_code == 422
+    ).status_code == 400
 
 
 def test_claim_and_run_identity_remain_workspace_scoped_across_golden_path_boundaries() -> None:
@@ -320,7 +320,7 @@ def test_claim_plan_lock_is_persisted_and_immutable() -> None:
         json=changed,
     )
     assert changed_response.status_code == 422
-    assert "already locked" in changed_response.json()["detail"]
+    assert "already locked" in changed_response.json()["message"]
     assert store.save_calls == 3
 
 
