@@ -27,11 +27,12 @@ def test_request_correlation_is_echoed_and_observed_as_json(caplog) -> None:
     assert response.status_code == 200
     assert response.headers["X-Request-ID"] == "obs-123"
     records = [json.loads(record.message) for record in caplog.records if record.name == "qros.saas"]
-    records = [record for record in records if record.get("event") == "http_request"]
+    records = [record for record in records if record.get("event") == "http_request_completed"]
     assert records
-    required = {"timestamp", "level", "request_id", "tenant_id", "research_job_id", "duration_ms"}
+    required = {"event", "request_id", "method", "path", "status_code", "duration_ms"}
     assert required <= records[-1].keys()
     assert records[-1]["request_id"] == "obs-123"
+    assert records[-1]["status_code"] == 200
 
 
 def test_missing_request_id_is_generated_and_bounded() -> None:
@@ -93,7 +94,6 @@ def test_worker_log_preserves_request_id_for_same_job(caplog) -> None:
                 artifacts=(ResearchArtifact("artifact-1", "evidence", "1" * 64),),
             )
 
-    # The queue retains the API correlation ID alongside the durable job ID.
     queue = InMemoryResearchJobQueue()
     queue.enqueue(workspace_id, job_id, request_id=request_id)
     assert queue.request_ids[job_id] == request_id
