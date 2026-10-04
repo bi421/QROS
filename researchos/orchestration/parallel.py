@@ -19,7 +19,7 @@ and prevents later waves from starting.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence, Set
-from concurrent.futures import Executor, Future, ThreadPoolExecutor
+from concurrent.futures import Executor, Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Generic, TypeVar
@@ -174,14 +174,23 @@ class ParallelResearchExecutor:
                     executor.submit(branch.run, snapshot)
                     for branch in wave.branches
                 ]
-                values: list[Any] = []
+                values: list[Any] = [None] * len(futures)
                 failures: list[tuple[str, BaseException]] = []
+                branch_by_future = {
+                    future: index for index, future in enumerate(futures)
+                }
 
-                for branch, future in zip(wave.branches, futures, strict=True):
+                for future in as_completed(futures):
+                    index = branch_by_future[future]
+                    branch = wave.branches[index]
                     try:
-                        values.append(future.result())
+                        values[index] = future.result()
                     except Exception as exc:
                         failures.append((branch.branch_id, exc))
+                        for pending in futures:
+                            if pending is not future:
+                                pending.cancel()
+                        break
 
                 if failures:
                     for future in futures:
