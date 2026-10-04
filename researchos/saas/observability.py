@@ -112,6 +112,17 @@ rls_violations_total = PrometheusCounter(
     "RLS violations",
 )
 
+# Export zero-valued counters from the first scrape so the documented
+# observability contract is present even before the first corresponding event.
+for _counter in (
+    jobs_created_total,
+    jobs_failed_total,
+    jobs_retries_total,
+    tenant_isolation_violations_total,
+    rls_violations_total,
+):
+    _counter.inc(0)
+
 tracer = trace.get_tracer("qros.saas")
 
 
