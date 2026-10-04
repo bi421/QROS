@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from researchos.decision_engine.probability import ProbabilityAssessment
+from researchos.decision_engine.probability import ProbabilityAssessment, ProbabilityValidator
 from researchos.risk.contracts import RiskInput, RiskPolicy, TradeStatistics
 
 
@@ -41,7 +41,15 @@ def risk_input_from_probability(
     otherwise the serialized ``probability_calibration_status`` value is
     preserved.
     """
-    data = assessment.to_dict() if isinstance(assessment, ProbabilityAssessment) else assessment
+    if isinstance(assessment, ProbabilityAssessment):
+        normalized_assessment = assessment
+    else:
+        normalized_assessment = ProbabilityAssessment.from_dict(dict(assessment))
+    normalized_assessment.validate_integrity()
+    validation_errors = ProbabilityValidator().validate(normalized_assessment)
+    if validation_errors:
+        raise ValueError("invalid probability assessment: " + "; ".join(validation_errors))
+    data = normalized_assessment.to_dict()
     normalized_direction = direction.strip().lower()
 
     try:
@@ -75,9 +83,11 @@ def risk_input_from_probability(
         risk_per_unit=risk_per_unit,
         research_id=str(data["decision_context_id"]),
         probability_method=probability_method,
+        probability_calculation_version=normalized_assessment.calculation_version,
         probability_calibration_status=(
             str(calibration_status) if calibration_status is not None else None
         ),
+        assessment_hash=normalized_assessment.assessment_hash,
     )
     request.validate()
     return request
