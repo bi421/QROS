@@ -43,16 +43,35 @@ class FakeClaimStore:
         return self.rows.get((workspace_id, claim_id))
 
     def list(
-        self, workspace_id: UUID, *, limit: int = 100, offset: int = 0
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        status: str | None = None,
     ) -> tuple[list[ResearchClaim], int]:
-        values = sorted(
-            (
-                claim
-                for (row_workspace, _), claim in self.rows.items()
-                if row_workspace == workspace_id
-            ),
-            key=lambda claim: claim.id,
+        if not 1 <= limit <= 100 or offset < 0:
+            raise ValueError("invalid pagination")
+        if sort_by not in {"created_at", "status", "statement"}:
+            raise ValueError("invalid sort field")
+        if sort_order not in {"asc", "desc"}:
+            raise ValueError("invalid sort order")
+        values = [
+            claim
+            for (row_workspace, _), claim in self.rows.items()
+            if row_workspace == workspace_id
+            and (status is None or claim.evidence_state.value == status)
+        ]
+        key = (
+            (lambda claim: claim.evidence_state.value)
+            if sort_by == "status"
+            else (lambda claim: claim.statement)
+            if sort_by == "statement"
+            else (lambda claim: claim.id)
         )
+        values.sort(key=key, reverse=sort_order == "desc")
         return values[offset : offset + limit], len(values)
 
 
