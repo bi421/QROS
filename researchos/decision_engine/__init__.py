@@ -1,5 +1,6 @@
 """Public API for the complete Decision Intelligence Engine."""
 
+from researchos.decision_engine.calibration import CalibrationEvidence, CalibrationGovernanceError, CalibrationStatus
 from researchos.decision_engine.context import DecisionContext, DecisionContextValidator
 from researchos.decision_engine.contracts import (
     CalculationMethod, DecisionEvidenceItem, DecisionStatus, DecisionVersion,
@@ -13,7 +14,7 @@ from researchos.decision_engine.report import DecisionReport, generate_decision_
 from researchos.decision_engine.score import EvidenceScore, compute_evidence_score
 
 __all__ = [
-    "CalculationMethod", "DecisionContext", "DecisionContextValidator",
+    "CalculationMethod", "CalibrationEvidence", "CalibrationGovernanceError", "CalibrationStatus", "DecisionContext", "DecisionContextValidator",
     "DecisionEvidenceItem", "DecisionPipeline", "DecisionPipelineError",
     "DecisionPipelineResult", "DecisionReasoner", "DecisionReport",
     "DecisionStatus", "DecisionVersion", "EvidenceAggregator",

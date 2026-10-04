@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from researchos.orchestration.parallel import ParallelResearchExecutor, ResearchBranch, ResearchWave
+from researchos.decision_engine.calibration import CalibrationEvidence
 from researchos.decision_engine.context import DecisionContext, DecisionContextValidator
 from researchos.decision_engine.contracts import WeightConfiguration
 from researchos.decision_engine.evidence import EvidenceAggregator, EvidenceCollection, EvidenceValidator
@@ -61,11 +62,15 @@ class DecisionPipeline:
         weight_config: WeightConfiguration | None = None,
         probability_calculator: ProbabilityCalculator | None = None,
         reasoner: DecisionReasoner | None = None,
+        calibration_evidence: CalibrationEvidence | None = None,
     ) -> None:
         self.aggregator = aggregator or EvidenceAggregator()
         self.weight_config = weight_config or WeightConfiguration()
         self.probability_calculator = probability_calculator or ProbabilityCalculator()
         self.reasoner = reasoner or DecisionReasoner()
+        if calibration_evidence is not None:
+            calibration_evidence.validate()
+        self.calibration_evidence = calibration_evidence
         self.context_validator = DecisionContextValidator()
         self.evidence_validator = EvidenceValidator()
         self.probability_validator = ProbabilityValidator()
@@ -105,6 +110,8 @@ class DecisionPipeline:
         score = compute_evidence_score(context.id, evidence.items, self.weight_config)
 
         probability = self.probability_calculator.calculate(evidence)
+        if self.calibration_evidence is not None:
+            probability = probability.with_calibration_status(self.calibration_evidence.status.value)
         self._raise_if_errors("ProbabilityAssessment", self.probability_validator.validate(probability))
 
         report = generate_decision_report(context, score, probability, reasoner=self.reasoner)
