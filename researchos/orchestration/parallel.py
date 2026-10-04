@@ -108,6 +108,12 @@ class ParallelResearchResult:
         if len(self.wave_ids) not in (0, len(self.waves)):
             raise ValueError("wave_ids must align one-to-one with completed waves")
 
+    def by_wave_id(self) -> dict[str, tuple[ParallelBranchResult[Any], ...]]:
+        """Return completed wave results keyed by dependency-wave identity."""
+        if self.wave_ids:
+            return dict(zip(self.wave_ids, self.waves, strict=True))
+        return {str(index): wave for index, wave in enumerate(self.waves)}
+
     def by_branch_id(self) -> dict[str, Any]:
         """Return a deterministic branch-id -> value mapping."""
         result: dict[str, Any] = {}

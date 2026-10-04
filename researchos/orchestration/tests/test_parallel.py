@@ -234,3 +234,17 @@ def test_result_preserves_dependency_wave_identity() -> None:
 
     assert result.wave_ids == ("snapshot-derived", "evidence-derived")
     assert len(result.wave_ids) == len(result.waves)
+
+
+def test_result_can_be_indexed_by_wave_id() -> None:
+    result = ParallelResearchExecutor(max_workers=1).run(
+        (
+            ResearchWave("wave-a", (ResearchBranch("a", lambda _ctx: 1),)),
+            ResearchWave("wave-b", (ResearchBranch("b", lambda _ctx: 2),)),
+        )
+    )
+
+    grouped = result.by_wave_id()
+    assert tuple(grouped) == ("wave-a", "wave-b")
+    assert grouped["wave-a"][0].value == 1
+    assert grouped["wave-b"][0].value == 2
