@@ -18,8 +18,10 @@ void EmpiricalEdgeKernel::compute(const double* empirical_probability,
       throw std::invalid_argument("invalid empirical-edge inputs");
     const double delta=empirical-geometric;
     const double variance=geometric*(1.0-geometric)/count;
-    const double z=variance>0.0 ? delta/std::sqrt(variance) : 0.0;
-    const double p=variance>0.0 ? std::erfc(std::abs(z)/std::sqrt(2.0)) : 0.0;
+    if (!(variance > 0.0))
+      throw std::invalid_argument("normal approximation requires geometric probability strictly between 0 and 1");
+    const double z=delta/std::sqrt(variance);
+    const double p=std::erfc(std::abs(z)/std::sqrt(2.0));
     const std::size_t j=i*5;
     out[j]=empirical;
     out[j+1]=geometric;
