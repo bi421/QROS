@@ -319,7 +319,7 @@ def test_claim_plan_lock_is_persisted_and_immutable() -> None:
         headers={"Authorization": "Bearer test"},
         json=changed,
     )
-    assert changed_response.status_code == 400
+    assert changed_response.status_code == 422
     assert "already locked" in changed_response.json()["detail"]
     assert store.save_calls == 3
 
