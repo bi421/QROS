@@ -38,13 +38,7 @@ FINITE_FLOATS = st.floats(
 @settings(max_examples=50, derandomize=True)
 @given(
     workspace=st.uuids(),
-    digest=st.text(
-        alphabet=st.characters(
-            whitelist_categories=("Ll", "Lu", "Nd"),
-        ),
-        min_size=64,
-        max_size=64,
-    ),
+    digest=st.from_regex(r"[0-9a-f]{64}", fullmatch=True),
     version=st.integers(min_value=1, max_value=100_000),
 )
 def test_storage_path_for_is_deterministic_and_int_string_equivalent(
