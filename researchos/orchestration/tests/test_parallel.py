@@ -42,6 +42,45 @@ def test_branches_in_one_wave_execute_concurrently_and_preserve_plan_order() -> 
     assert result.by_branch_id() == {"a": "a", "b": "b"}
 
 
+def test_context_nested_containers_are_immutable() -> None:
+    def branch(context):
+        with pytest.raises(TypeError):
+            context["nested"]["value"] = 2
+        with pytest.raises(TypeError):
+            context["values"][0] = "changed"
+        with pytest.raises(AttributeError):
+            context["flags"].add("changed")
+        return (
+            dict(context["nested"]),
+            context["values"],
+            context["flags"],
+        )
+
+    source = {
+        "nested": {"value": 1},
+        "values": ["a", "b"],
+        "flags": {"x"},
+    }
+
+    result = ParallelResearchExecutor(max_workers=1).run(
+        (ResearchWave("wave-1", (ResearchBranch("branch", branch),)),),
+        source,
+    )
+
+    assert result.by_branch_id() == {
+        "branch": (
+            {"value": 1},
+            ("a", "b"),
+            frozenset({"x"}),
+        )
+    }
+    assert source == {
+        "nested": {"value": 1},
+        "values": ["a", "b"],
+        "flags": {"x"},
+    }
+
+
 def test_later_wave_waits_for_previous_wave() -> None:
     events: list[str] = []
 
