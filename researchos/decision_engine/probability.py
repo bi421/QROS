@@ -169,6 +169,14 @@ class ProbabilityAssessment(BaseObject):
             base["probability_calibration_status"] = self.probability_calibration_status
         return base
 
+    def validate_integrity(self) -> None:
+        """Fail closed when the serialized assessment hash does not match its content."""
+        expected = deterministic_hash(self._to_hashable_dict())
+        if not self._assessment_hash:
+            raise ValueError("probability assessment is missing assessment_hash")
+        if self._assessment_hash != expected:
+            raise ValueError("probability assessment assessment_hash does not match content")
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ProbabilityAssessment":
         obj = super().from_dict(data)  # type: ignore[assignment]
@@ -191,6 +199,8 @@ class ProbabilityAssessment(BaseObject):
         obj.timestamp = parse_timestamp(ts) if ts else utc_now()
         obj.probability_calibration_status = data.get("probability_calibration_status")
         obj._assessment_hash = data.get("assessment_hash", "")
+        if obj._assessment_hash:
+            obj.validate_integrity()
         return obj
 
 
