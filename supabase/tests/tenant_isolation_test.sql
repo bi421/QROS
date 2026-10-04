@@ -224,13 +224,15 @@ select is(
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated","tenant_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
 
-select is_empty(
-  $$
+select throws_ok(
+  $
     update public.dataset
        set workspace_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
      where id = 'aaaaaaaa-0000-0000-0000-aaaaaaaaaaaa'
      returning id
-  $$,
+  $,
+  '42501',
+  null,
   'tenant A cannot rebind its dataset to tenant B'
 );
 
