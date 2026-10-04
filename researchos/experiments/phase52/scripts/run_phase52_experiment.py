@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import sys
+from typing import Any
 from datetime import datetime, timezone
 
 from researchos.data_engine.loader import CsvLoader
