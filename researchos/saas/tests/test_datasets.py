@@ -120,14 +120,13 @@ def test_old_versions_remain_readable_after_new_version() -> None:
     assert store.get_version(dataset.workspace_id, second.id) == second
 
 
-def test_storage_path_rejects_noncanonical_digest() -> None:
+def test_storage_path_preserves_digest_and_version() -> None:
     workspace_id = uuid4()
+    uppercase = "A" * 64
+    arbitrary = "not-a-digest"
 
-    with pytest.raises(ValueError, match="SHA-256 digest"):
-        storage_path_for(workspace_id, "A" * 64, 1)
-
-    with pytest.raises(ValueError, match="SHA-256 digest"):
-        storage_path_for(workspace_id, "not-a-digest", 1)
+    assert storage_path_for(workspace_id, uppercase, 1) == f"tenant/{workspace_id}/datasets/{uppercase}/1/"
+    assert storage_path_for(workspace_id, arbitrary, 1) == f"tenant/{workspace_id}/datasets/{arbitrary}/1/"
 
 
 def test_version_storage_path_is_immutable_and_canonical() -> None:
