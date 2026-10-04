@@ -31,6 +31,10 @@ class PreTradeReport:
     risk_governance_status: str = "NOT_EVALUATED"
     risk_violations: tuple[str, ...] = ()
     risk_decision_hash: str | None = None
+    probability_method: str | None = None
+    probability_calculation_version: str | None = None
+    probability_calibration_status: str | None = None
+    assessment_hash: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -50,6 +54,10 @@ class PreTradeReport:
             "risk_governance_status": self.risk_governance_status,
             "risk_violations": list(self.risk_violations),
             "risk_decision_hash": self.risk_decision_hash,
+            "probability_method": self.probability_method,
+            "probability_calculation_version": self.probability_calculation_version,
+            "probability_calibration_status": self.probability_calibration_status,
+            "assessment_hash": self.assessment_hash,
         }
 
 
@@ -104,4 +112,8 @@ def build_pre_trade_report(
         risk_decision_hash=(
             risk_decision.audit_hash if risk_decision is not None else None
         ),
+        probability_method=risk.probability_method,
+        probability_calculation_version=risk.probability_calculation_version,
+        probability_calibration_status=risk.probability_calibration_status,
+        assessment_hash=risk.assessment_hash,
     )
