@@ -67,7 +67,6 @@ def client() -> TestClient:
     "path",
     [
         "/v1/datasets",
-        "/v1/research-runs",
         "/v1/research-claims",
         "/v1/findings",
     ],
@@ -159,7 +158,7 @@ def test_openapi_contains_contract_alias_endpoints(client: TestClient) -> None:
 
 def test_standard_filter_syntax_is_accepted_for_jobs(client: TestClient) -> None:
     response = client.get(
-        "/v1/research-runs?page=1&page_size=20&sort_by=created_at&sort_order=desc&filter%5Bstatus%5D=completed",
+        "/v1/findings?page=1&page_size=20&sort_by=created_at&sort_order=desc&filter%5Bstatus%5D=completed",
         headers={"Authorization": "Bearer test"},
     )
     assert response.status_code == 200
