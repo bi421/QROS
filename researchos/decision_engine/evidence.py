@@ -347,6 +347,7 @@ class EvidenceValidator:
         if not collection.decision_context_id:
             errors.append("EvidenceCollection decision_context_id is empty")
         seen_source_ids: dict[str, int] = {}
+        seen_evidence_hashes: dict[str, int] = {}
         for i, item in enumerate(collection.items):
             item_errors = self.validate_item(item)
             errors.extend(f"Item[{i}]: {e}" for e in item_errors)
@@ -354,6 +355,15 @@ class EvidenceValidator:
                 if item.source_id in seen_source_ids:
                     errors.append(f"Duplicate source_id at items {seen_source_ids[item.source_id]} and {i}")
                 seen_source_ids[item.source_id] = i
+            evidence_hash = item.provenance.get("evidence_hash") if item.provenance else None
+            if evidence_hash:
+                evidence_hash = str(evidence_hash)
+                if evidence_hash in seen_evidence_hashes:
+                    errors.append(
+                        "Duplicate evidence_hash at items "
+                        f"{seen_evidence_hashes[evidence_hash]} and {i}"
+                    )
+                seen_evidence_hashes[evidence_hash] = i
         return errors
 
     def is_valid_item(self, item: DecisionEvidenceItem) -> bool:
