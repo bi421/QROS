@@ -53,6 +53,11 @@ from .contracts import (
     PipelineReport,
     PipelineStatus,
 )
+from .parallel import (
+    ParallelResearchExecutor,
+    ResearchBranch,
+    ResearchWave,
+)
 
 # ---------------------------------------------------------------------------
 # deterministic helpers
@@ -317,26 +322,48 @@ class ResearchOrchestrator:
             )
             dhash = _dataset_hash(dataset)
 
-            # Step 2: Walk-forward validation.
-            validation = self.validate(
-                dataset,
-                train_size=train_size,
-                validation_size=validation_size,
-                step_size=step_size,
+            # Step 2: Validation and training are independent after the
+            # immutable dataset snapshot exists. Run them as one parallel
+            # wave. Result order is fixed by branch declaration, not timing.
+            parallel = ParallelResearchExecutor(max_workers=2)
+            wave = ResearchWave(
+                wave_id="dataset-derived-analysis",
+                branches=(
+                    ResearchBranch(
+                        branch_id="validation",
+                        run=lambda _ctx: self.validate(
+                            dataset,
+                            train_size=train_size,
+                            validation_size=validation_size,
+                            step_size=step_size,
+                        ),
+                    ),
+                    ResearchBranch(
+                        branch_id="training",
+                        run=lambda _ctx: self.train(
+                            dataset,
+                            model_id=model_id,
+                            name=model_name or model_id,
+                            model_type=model_type,
+                            version=model_version,
+                            created_at=created_at,
+                        ),
+                    ),
+                ),
             )
-            validation_hash_str = hashlib.sha256(json.dumps(validation.to_dict(), sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+            parallel_result = parallel.run((wave,))
+            branch_results = parallel_result.by_branch_id()
+            validation = branch_results["validation"]
+            training = branch_results["training"]
+            validation_hash_str = hashlib.sha256(
+                json.dumps(
+                    validation.to_dict(),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
 
-            # Step 3: Train deterministic model.
-            training = self.train(
-                dataset,
-                model_id=model_id,
-                name=model_name or model_id,
-                model_type=model_type,
-                version=model_version,
-                created_at=created_at,
-            )
-
-            # Step 4: Build registry-style ModelContract.
+            # Step 3: Build registry-style ModelContract.
             # The training module's ModelContract has .parameters, .training_hash
             # The registry module's ModelContract has .algorithm, .dataset_hash, .validation_hash
             training_model = training.model
