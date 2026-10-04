@@ -50,7 +50,7 @@ TEST(EvidencePipelineTest, RejectsStatisticallyUnvalidatedEvidence) {
   EXPECT_FALSE(EvidencePipeline::accept_statistical_validation(state, &record, 1));
 }
 
-TEST(EvidencePipelineTest, OOSValidationCanAdvanceToCalibration) {
+TEST(EvidencePipelineTest, OOSValidationReachesCalibrationGateButCannotAdvance) {
   EvidenceRecord record{};
   record.validation = ValidationStatus::OOSValidated;
   record.model_version = 1;
