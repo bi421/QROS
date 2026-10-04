@@ -718,14 +718,8 @@ NB_MODULE(cpp_quant_backend, m) {
           }
           {
             nb::gil_scoped_release release;
-            std::vector<quant::low_latency::CandleGeometry> scratch(n);
             quant::low_latency::CandleGeometryKernel::compute(
-                open.data(), high.data(), low.data(), close.data(), n, scratch.data());
-            double* dst = output.data();
-            for (std::size_t i = 0; i < n; ++i) {
-              for (std::size_t j = 0; j < 5; ++j)
-                dst[i * 5 + j] = (&scratch[i].range)[j];
-            }
+                open.data(), high.data(), low.data(), close.data(), n, output.data());
           }
         },
         nb::arg("open").noconvert(), nb::arg("high").noconvert(),
@@ -773,17 +767,8 @@ NB_MODULE(cpp_quant_backend, m) {
               output.shape(0) != n || output.shape(1) != 5)
             throw std::invalid_argument("edge inputs must match and output shape must be (n, 5)");
           nb::gil_scoped_release release;
-          std::vector<quant::low_latency::EmpiricalEdge> scratch(n);
           quant::low_latency::EmpiricalEdgeKernel::compute(
-              empirical.data(), geometric.data(), sample_size.data(), n, scratch.data());
-          double* dst = output.data();
-          for (std::size_t i = 0; i < n; ++i) {
-            dst[i * 5 + 0] = scratch[i].empirical_probability;
-            dst[i * 5 + 1] = scratch[i].geometric_probability;
-            dst[i * 5 + 2] = scratch[i].delta_probability;
-            dst[i * 5 + 3] = scratch[i].z_score;
-            dst[i * 5 + 4] = scratch[i].two_sided_p_value;
-          }
+              empirical.data(), geometric.data(), sample_size.data(), n, output.data());
         },
         nb::arg("empirical").noconvert(), nb::arg("geometric").noconvert(),
         nb::arg("sample_size").noconvert(), nb::arg("output").noconvert(),
