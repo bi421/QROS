@@ -685,11 +685,12 @@ def create_app(
             PageResponse.model_validate(
                 pagination_envelope(
                     data=[item.model_dump(mode="json") for item in items],
-                page=query.page,
-                page_size=query.page_size,
-                total=total,
-                request_id=request.state.request_id if request is not None else "",
-            )
+                    page=query.page,
+                    page_size=query.page_size,
+                    total=total,
+                    request_id=request.state.request_id if request is not None else "",
+                )
+            ),
         )
 
     @app.get("/v1/research-runs", response_model=PageResponse, tags=["research"])
@@ -745,18 +746,20 @@ def create_app(
                 status_code=400,
                 detail={"code": exc.code, "message": str(exc)},
             ) from exc
-        return PageResponse.model_validate(
-            pagination_envelope(
-                data=[
-                    _research_job_response(job).model_dump(mode="json")
-                    for job in rows
-                ],
-                page=query.page,
-                page_size=query.page_size,
-                total=total,
-                request_id=request.state.request_id,
+        return cast(
+            PageResponse,
+            PageResponse.model_validate(
+                pagination_envelope(
+                    data=[
+                        _research_job_response(job).model_dump(mode="json")
+                        for job in rows
+                    ],
+                    page=query.page,
+                    page_size=query.page_size,
+                    total=total,
+                    request_id=request.state.request_id,
                 )
-            )
+            ),
         )
 
     @app.post("/v1/datasets", response_model=DatasetResponse, status_code=201, tags=["datasets"])
