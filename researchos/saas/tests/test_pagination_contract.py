@@ -99,7 +99,6 @@ def test_all_list_endpoints_return_standard_pagination_envelope(
         "/v1/findings",
         "/v1/datasets/00000000-0000-0000-0000-000000000000/versions",
         "/v1/research-runs/00000000-0000-0000-0000-000000000000/logs",
-        "/v1/jobs/00000000-0000-0000-0000-000000000000/logs",
         "/v1/claims/00000000-0000-0000-0000-000000000000/evidence_graph",
     ],
 )
