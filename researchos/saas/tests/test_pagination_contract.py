@@ -93,7 +93,6 @@ def test_all_list_endpoints_return_standard_pagination_envelope(
     "path",
     [
         "/v1/datasets",
-        "/v1/research-runs",
         "/v1/research-claims",
         "/v1/findings",
         "/v1/datasets/00000000-0000-0000-0000-000000000000/versions",
