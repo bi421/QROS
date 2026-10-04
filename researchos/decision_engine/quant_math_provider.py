@@ -1,7 +1,9 @@
 """Directional evidence adapter for the quantitative mathematics layer."""
 from __future__ import annotations
+from researchos.decision_engine.bayesian_partition_provider import bayesian_partition_to_evidence
 from researchos.decision_engine.context import DecisionContext
 from researchos.decision_engine.contracts import DecisionEvidenceItem,EvidenceSource,ProbabilityOutcome
+from researchos.quant_math.bayesian_update import BayesianUpdateResult
 from researchos.quant_math.contracts import QuantMathResult
 
 class QuantMathEvidenceProvider:
@@ -56,7 +58,7 @@ class QuantMathEvidenceProvider:
                              "successes":r.bayesian.successes,"failures":r.bayesian.failures,
                              "posterior_mean":posterior},
             ))
-        if r.monte_carlo is not None:
+        if self.bayesian_partition is not None:\n            items.extend(bayesian_partition_to_evidence(self.bayesian_partition, context))\n        if r.monte_carlo is not None:
             median=r.monte_carlo.percentile_50
             spread=r.monte_carlo.percentile_95-r.monte_carlo.percentile_05
             direction=self._direction(r.monte_carlo.mean_terminal-median)
