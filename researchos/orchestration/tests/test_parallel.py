@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from concurrent.futures import Executor, Future
+from typing import Any, TypeVar
 
 import pytest
+
+_T = TypeVar("_T")
 
 from researchos.orchestration.parallel import (
     ParallelOrchestrationError,
@@ -177,8 +181,14 @@ def test_executor_factory_is_used_and_shutdown_between_waves() -> None:
             self.submissions: list[tuple[object, object]] = []
             self.shutdown_calls = 0
 
-        def submit(self, fn, *args, **kwargs):
-            future: Future[object] = Future()
+        def submit(
+            self,
+            fn: Callable[..., _T],
+            /,
+            *args: Any,
+            **kwargs: Any,
+        ) -> Future[_T]:
+            future: Future[_T] = Future()
             try:
                 future.set_result(fn(*args, **kwargs))
             except BaseException as exc:
