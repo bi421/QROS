@@ -1,24 +1,13 @@
 #ifndef QROS_LOW_LATENCY_CANDLE_GEOMETRY_H
 #define QROS_LOW_LATENCY_CANDLE_GEOMETRY_H
-
 #include <cstddef>
-
 namespace quant::low_latency {
-
-struct CandleGeometry final {
-  double range;
-  double body_ratio;
-  double upper_wick_ratio;
-  double lower_wick_ratio;
-  double close_position;
-};
-
 class CandleGeometryKernel final {
 public:
+  // Writes five values per candle: range, body_ratio, upper_wick_ratio,
+  // lower_wick_ratio, close_position.
   static void compute(const double* open, const double* high, const double* low,
-                      const double* close, std::size_t n, CandleGeometry* out);
+                      const double* close, std::size_t n, double* out);
 };
-
 }  // namespace quant::low_latency
-
 #endif
