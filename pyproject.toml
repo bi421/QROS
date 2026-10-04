@@ -1,4 +1,4 @@
-
+[build-system]\nrequires = [\n    "scikit-build-core>=0.9.0",\n    "nanobind>=1.5.0",\n]\nbuild-backend = "scikit_build_core.build"\n\n
 [project]
 name = "researchos"
 version = "1.0.1"
