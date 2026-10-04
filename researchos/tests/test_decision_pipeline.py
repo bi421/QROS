@@ -93,6 +93,23 @@ def test_pipeline_rejects_invalid_probability_payload() -> None:
         )
 
 
+
+def test_pipeline_rejects_assessment_hash_mismatch() -> None:
+    data = _assessment().to_dict()
+    data["bullish_probability"] = 0.61
+    with pytest.raises(ValueError, match="assessment_hash does not match content"):
+        run_decision_pipeline(
+            DecisionPipelineInput(
+                assessment=data,
+                asset="XAUUSD",
+                direction="bullish",
+                account_equity=10_000,
+                trade_statistics=TradeStatistics(average_win=100, average_loss=100),
+                research_valid=True,
+            )
+        )
+
+
 def test_pipeline_propagates_evidence_backed_calibration_status() -> None:
     report = run_decision_pipeline(
         DecisionPipelineInput(
