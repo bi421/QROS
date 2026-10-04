@@ -91,8 +91,6 @@ class RiskInput:
             raise ValueError("account_equity must be positive")
         if self.risk_per_unit is not None and self.risk_per_unit <= 0:
             raise ValueError("risk_per_unit must be positive when supplied")
-        if not self.assessment_hash:
-            raise ValueError("assessment_hash must be present")
         self.trade_statistics.validate()
         self.risk_policy.validate()
 
