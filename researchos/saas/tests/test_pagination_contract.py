@@ -149,10 +149,10 @@ def test_invalid_filter_returns_structured_400(client: TestClient) -> None:
     assert body["correlation_id"] == body["request_id"]
 
 
-def test_openapi_contains_contract_alias_endpoints(client: TestClient) -> None:
+def test_openapi_contains_contract_endpoints(client: TestClient) -> None:
     paths = client.get("/openapi.json").json()["paths"]
     assert "/v1/datasets/{dataset_id}/versions" in paths
-    assert "/v1/jobs/{job_id}/logs" in paths
+    assert "/v1/research-runs/{job_id}/logs" in paths
     assert "/v1/claims/{claim_id}/evidence_graph" in paths
 
 
