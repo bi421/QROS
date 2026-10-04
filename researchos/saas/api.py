@@ -976,14 +976,15 @@ def create_app(
                     status_code=503,
                     detail="research run persistence unavailable",
                 ) from exc
-        return PageResponse.model_validate(
-            pagination_envelope(
-                data=[_research_job_response(job).model_dump(mode="json") for job in jobs],
+        return PageResponse(
+            data=[_research_job_response(job).model_dump(mode="json") for job in jobs],
+            pagination=PaginationResponse(
                 page=query.page,
                 page_size=query.page_size,
                 total=total,
-                request_id=request.state.request_id,
-            )
+                total_pages=(total + query.page_size - 1) // query.page_size if total else 0,
+            ),
+            request_id=request.state.request_id,
         )
 
     @app.get("/v1/research-runs/{job_id}/logs", response_model=list[dict[str, object]], tags=["research"])
