@@ -1,4 +1,6 @@
-import pytest\n\nfrom researchos.decision_engine.context import DecisionContext
+import pytest
+
+from researchos.decision_engine.context import DecisionContext
 from researchos.decision_engine.quant_math_provider import QuantMathEvidenceProvider
 from researchos.quant_math import QuantMathEngine
 
