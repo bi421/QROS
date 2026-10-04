@@ -61,5 +61,6 @@ class DecisionArtifact:
         missing=[key for key in required if key not in data or not data[key]]
         if missing: raise ValueError(f"decision artifact missing fields: {', '.join(missing)}")
         obj=cls(*(str(data[key]) for key in required))
-        if not obj.verify(): raise ValueError("decision artifact hash does not match content")
+        if not obj.verify():
+            raise ValueError("decision artifact hash does not match content")
         return obj
