@@ -25,9 +25,15 @@ def _assessment(*, calibration_status: str | None = None) -> ProbabilityAssessme
 def test_pipeline_produces_human_review_report() -> None:
     report = run_decision_pipeline(
         DecisionPipelineInput(
-            assessment=_assessment(), asset="XAUUSD", direction="bullish", account_equity=10_000,
-            trade_statistics=TradeStatistics(average_win=150, average_loss=100, sample_size=100),
-            research_valid=True, risk_per_unit=20,
+            assessment=_assessment(),
+            asset="XAUUSD",
+            direction="bullish",
+            account_equity=10_000,
+            trade_statistics=TradeStatistics(
+                average_win=150, average_loss=100, sample_size=100
+            ),
+            research_valid=True,
+            risk_per_unit=20,
             risk_policy=RiskPolicy(max_risk_fraction=0.0025),
             risk_account=RiskAccountState(
                 day_start_equity=10_000,
@@ -46,16 +52,20 @@ def test_pipeline_produces_human_review_report() -> None:
     assert report.position_size is not None
     assert report.research_id == "research-001"
     assert report.assessment_hash == _assessment().assessment_hash
-    assert report.probability_method == "WEIGHTED_EVIDENCE"
+    assert report.probability_method == "WeightedEvidence"
     assert report.probability_calculation_version == "PROBABILITY_V1"
 
 
 def test_pipeline_blocks_invalid_research() -> None:
     report = run_decision_pipeline(
         DecisionPipelineInput(
-            assessment=_assessment(), asset="XAUUSD", direction="bullish", account_equity=10_000,
+            assessment=_assessment(),
+            asset="XAUUSD",
+            direction="bullish",
+            account_equity=10_000,
             trade_statistics=TradeStatistics(average_win=150, average_loss=100),
-            research_valid=False, research_limitations=("validation pending",),
+            research_valid=False,
+            research_limitations=("validation pending",),
         )
     )
     assert report.status == "BLOCKED_RESEARCH_VALIDATION"
@@ -67,14 +77,17 @@ def test_pipeline_accepts_serialized_probability_boundary() -> None:
     data = _assessment().to_dict()
     report = run_decision_pipeline(
         DecisionPipelineInput(
-            assessment=data, asset="XAUUSD", direction="bearish", account_equity=10_000,
-            trade_statistics=TradeStatistics(average_win=100, average_loss=100), research_valid=True,
+            assessment=data,
+            asset="XAUUSD",
+            direction="bearish",
+            account_equity=10_000,
+            trade_statistics=TradeStatistics(average_win=100, average_loss=100),
+            research_valid=True,
         )
     )
     assert report.direction == "bearish"
     assert report.probability == 0.25
     assert report.assessment_hash == data["assessment_hash"]
-
 
 
 def test_pipeline_rejects_missing_probability_provenance() -> None:
@@ -92,7 +105,6 @@ def test_pipeline_rejects_missing_probability_provenance() -> None:
                 research_valid=True,
             )
         )
-
 
 
 def test_pipeline_rejects_assessment_hash_mismatch() -> None:
@@ -115,8 +127,12 @@ def test_pipeline_propagates_evidence_backed_calibration_status() -> None:
     report = run_decision_pipeline(
         DecisionPipelineInput(
             assessment=_assessment(calibration_status="Well-Calibrated"),
-            asset="XAUUSD", direction="bullish", account_equity=10_000,
-            trade_statistics=TradeStatistics(average_win=150, average_loss=100, sample_size=100),
+            asset="XAUUSD",
+            direction="bullish",
+            account_equity=10_000,
+            trade_statistics=TradeStatistics(
+                average_win=150, average_loss=100, sample_size=100
+            ),
             research_valid=True,
         )
     )
@@ -135,8 +151,12 @@ def test_probability_calibration_status_round_trips_through_serialization() -> N
     assert restored.assessment_hash == assessment.assessment_hash
     report = run_decision_pipeline(
         DecisionPipelineInput(
-            assessment=restored, asset="XAUUSD", direction="bullish", account_equity=10_000,
-            trade_statistics=TradeStatistics(average_win=150, average_loss=100), research_valid=True,
+            assessment=restored,
+            asset="XAUUSD",
+            direction="bullish",
+            account_equity=10_000,
+            trade_statistics=TradeStatistics(average_win=150, average_loss=100),
+            research_valid=True,
         )
     )
     assert report.probability == 0.60
