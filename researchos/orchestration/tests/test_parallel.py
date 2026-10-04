@@ -150,3 +150,21 @@ def test_duplicate_branch_ids_across_waves_are_rejected_before_execution() -> No
         ParallelResearchExecutor(max_workers=2).run(plan)
 
     assert started == []
+
+
+def test_duplicate_wave_ids_are_rejected_before_execution() -> None:
+    started: list[str] = []
+
+    def branch(_context):
+        started.append("started")
+        return 1
+
+    plan = (
+        ResearchWave("duplicate-wave", (ResearchBranch("a", branch),)),
+        ResearchWave("duplicate-wave", (ResearchBranch("b", branch),)),
+    )
+
+    with pytest.raises(ValueError, match="wave_id values must be unique"):
+        ParallelResearchExecutor(max_workers=2).run(plan)
+
+    assert started == []
