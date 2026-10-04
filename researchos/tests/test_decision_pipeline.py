@@ -71,6 +71,7 @@ def test_pipeline_accepts_serialized_probability_boundary() -> None:
     )
     assert report.direction == "bearish"
     assert report.probability == 0.25
+    assert report.assessment_hash == data["assessment_hash"]
 
 
 def test_pipeline_propagates_evidence_backed_calibration_status() -> None:
