@@ -65,12 +65,7 @@ class RiskPolicy:
 
 @dataclass(frozen=True)
 class RiskInput:
-    """Cross-block input consumed by the risk engine.
-
-    ``probability`` must be the probability of the supplied direction/event,
-    already defined and validated by the research layer. This boundary does
-    not reinterpret or manufacture research probabilities.
-    """
+    """Cross-block input consumed by the risk engine."""
 
     asset: str
     direction: str
@@ -81,7 +76,9 @@ class RiskInput:
     risk_per_unit: float | None = None
     research_id: str | None = None
     probability_method: str | None = None
+    probability_calculation_version: str | None = None
     probability_calibration_status: str | None = None
+    assessment_hash: str | None = None
 
     def validate(self) -> None:
         if not self.asset.strip():
@@ -118,7 +115,9 @@ class RiskInput:
             "risk_per_unit": self.risk_per_unit,
             "research_id": self.research_id,
             "probability_method": self.probability_method,
+            "probability_calculation_version": self.probability_calculation_version,
             "probability_calibration_status": self.probability_calibration_status,
+            "assessment_hash": self.assessment_hash,
         }
 
     @classmethod
@@ -136,7 +135,9 @@ class RiskInput:
             risk_per_unit=(float(data["risk_per_unit"]) if data.get("risk_per_unit") is not None else None),
             research_id=data.get("research_id"),
             probability_method=data.get("probability_method"),
+            probability_calculation_version=data.get("probability_calculation_version"),
             probability_calibration_status=data.get("probability_calibration_status"),
+            assessment_hash=data.get("assessment_hash"),
         )
         request.validate()
         return request
@@ -159,6 +160,10 @@ class RiskCalculation:
     capped: bool
     status: str
     research_id: str | None = None
+    probability_method: str | None = None
+    probability_calculation_version: str | None = None
+    probability_calibration_status: str | None = None
+    assessment_hash: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -175,4 +180,8 @@ class RiskCalculation:
             "capped": self.capped,
             "status": self.status,
             "research_id": self.research_id,
+            "probability_method": self.probability_method,
+            "probability_calculation_version": self.probability_calculation_version,
+            "probability_calibration_status": self.probability_calibration_status,
+            "assessment_hash": self.assessment_hash,
         }
