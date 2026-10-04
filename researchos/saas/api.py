@@ -41,6 +41,7 @@ from researchos.saas.auth.permissions import Action, Resource, require_permissio
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.contracts import (
     DEFAULT_USAGE_POLICIES,
+    Plan,
     ResearchJob,
     ResearchJobStatus,
     TenantContext,
