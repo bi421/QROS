@@ -11,6 +11,28 @@ ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = ROOT / "supabase" / "migrations"
 
 
+def verify_migration_dependency_order() -> None:
+    files = sorted(MIGRATIONS.glob("*.sql"))
+    positions = {path.name: index for index, path in enumerate(files)}
+    dependencies = {
+        "202609230004_tenant_rls_contract.sql": (
+            "202609230000_saas_tenant_retention_controls.sql",
+            "workspace_retention_policy",
+        ),
+    }
+    for consumer, (provider, relation) in dependencies.items():
+        if consumer in positions and provider not in positions:
+            raise SystemExit(
+                f"migration dependency missing: {consumer} requires {provider} "
+                f"to create {relation}"
+            )
+        if consumer in positions and positions[provider] >= positions[consumer]:
+            raise SystemExit(
+                f"migration dependency order invalid: {consumer} requires "
+                f"{provider} before it creates/references {relation}"
+            )
+
+
 def verify_unique_migration_versions() -> None:
     versions: dict[str, list[str]] = {}
     for path in sorted(MIGRATIONS.glob("*.sql")):
@@ -39,6 +61,7 @@ TENANT_TABLES = {
 
 def static_check() -> None:
     verify_unique_migration_versions()
+    verify_migration_dependency_order()
     sql = "\n".join(
         path.read_text(encoding="utf-8") for path in sorted(MIGRATIONS.glob("*.sql"))
     )
