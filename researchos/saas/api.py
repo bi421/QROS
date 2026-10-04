@@ -133,21 +133,12 @@ def _error_payload(
         if isinstance(detail, str) and detail.startswith("INVALID_")
         else _error_code(status_code)
     )
-    error: dict[str, object] = {
+    return {
         "code": code,
         "message": message,
         "request_id": getattr(request.state, "request_id", None),
         "correlation_id": request.headers.get("X-Correlation-ID")
         or getattr(request.state, "request_id", None),
-    }
-    if details is not None:
-        error["details"] = details
-    return {
-        "detail": detail,
-        "message": message,
-        "code": code,
-        "request_id": getattr(request.state, "request_id", None),
-        "error": error,
     }
 
 
