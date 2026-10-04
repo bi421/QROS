@@ -65,7 +65,12 @@ def _risk_decision(
 
 
 def run_decision_pipeline(request: DecisionPipelineInput) -> PreTradeReport:
-    """Run probability -> sizing -> governance -> human-review report."""
+    """Run validated probability -> sizing -> governance -> human-review report.
+
+    The probability-to-risk adapter is the fail-closed integrity boundary:
+    serialized assessments are reconstructed, validated, and hash-checked
+    before any risk sizing occurs.
+    """
     risk_input = risk_input_from_probability(
         request.assessment,
         asset=request.asset,
