@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from concurrent.futures import Executor, Future
 
 import pytest
 
@@ -171,15 +172,13 @@ def test_duplicate_wave_ids_are_rejected_before_execution() -> None:
 
 
 def test_executor_factory_is_used_and_shutdown_between_waves() -> None:
-    class RecordingExecutor:
+    class RecordingExecutor(Executor):
         def __init__(self) -> None:
             self.submissions: list[tuple[object, object]] = []
             self.shutdown_calls = 0
 
         def submit(self, fn, *args, **kwargs):
-            from concurrent.futures import Future
-
-            future = Future()
+            future: Future[object] = Future()
             try:
                 future.set_result(fn(*args, **kwargs))
             except BaseException as exc:
