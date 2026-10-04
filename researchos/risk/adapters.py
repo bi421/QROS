@@ -87,6 +87,7 @@ def risk_input_from_probability(
         probability_calibration_status=(
             str(calibration_status) if calibration_status is not None else None
         ),
+        assessment_hash=normalized_assessment.assessment_hash,
     )
     request.validate()
     return request
