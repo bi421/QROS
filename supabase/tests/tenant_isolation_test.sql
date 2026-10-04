@@ -224,6 +224,7 @@ select is(
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated","tenant_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
 
+-- RLS tenant-rebind assertion: the UPDATE must be rejected, not silently filtered.
 select throws_ok(
   $
     update public.dataset
