@@ -1,4 +1,5 @@
 """Canonical, hash-linked decision artifact for QROS audit persistence."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -49,8 +50,8 @@ class DecisionArtifact:
         }
         return cls(
             **{
-                k: payload[k]
-                for k in (
+                key: payload[key]
+                for key in (
                     "context_id",
                     "evidence_collection_id",
                     "evidence_collection_hash",
