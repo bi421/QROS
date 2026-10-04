@@ -147,16 +147,17 @@ class ParallelResearchExecutor:
         Any branch failure cancels work that has not started, raises a single
         orchestration error, and prevents all later waves from starting.
         """
-        if not waves:
+        normalized_waves = tuple(waves)
+        if not normalized_waves:
             raise ValueError("at least one research wave is required")
 
-        wave_ids = [wave.wave_id for wave in waves]
+        wave_ids = [wave.wave_id for wave in normalized_waves]
         if len(wave_ids) != len(set(wave_ids)):
             raise ValueError("wave_id values must be unique across the research plan")
 
         branch_ids = [
             branch.branch_id
-            for wave in waves
+            for wave in normalized_waves
             for branch in wave.branches
         ]
         if len(branch_ids) != len(set(branch_ids)):
@@ -165,7 +166,7 @@ class ParallelResearchExecutor:
         snapshot = _freeze_mapping(context or {})
         completed: list[tuple[ParallelBranchResult[Any], ...]] = []
 
-        for wave in waves:
+        for wave in normalized_waves:
             executor = self._executor_factory(self._max_workers)
             futures: list[Future[Any]] = []
             try:
