@@ -479,6 +479,9 @@ def storage_path_for(workspace_id: UUID, digest: str, version_no: int | str) -> 
     if v_no < 1:
         raise ValueError("version_no must be positive")
 
+    if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+        raise ValueError("digest must be a canonical SHA-256 digest")
+
     return f"tenant/{workspace_id}/datasets/{digest}/{v_no}/"
 
 
