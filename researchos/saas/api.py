@@ -814,6 +814,38 @@ def create_app(
             request_id=getattr(request.state, "request_id", None),
         )
 
+    @app.get(
+        "/v1/datasets/{dataset_id}/versions/{version_id}/download",
+        response_class=Response,
+        tags=["datasets"],
+    )
+    @require_permission(Resource.DATASET_VERSION, Action.READ)
+    def download_dataset_version(
+        dataset_id: UUID,
+        version_id: UUID,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> Response:
+        version = datasets.get_version(tenant.workspace_id, version_id)
+        if version is None or version.dataset_id != dataset_id:
+            raise HTTPException(status_code=404, detail="dataset version not found")
+        try:
+            content = storage.download_verified(
+                version.storage_path,
+                version.content_sha256,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="dataset object not found") from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="dataset storage integrity verification failed",
+            ) from exc
+        return Response(
+            content=content,
+            media_type="application/octet-stream",
+            headers={"X-Content-SHA256": version.content_sha256},
+        )
+
     @app.post(
         "/v1/research-runs", response_model=ResearchJobResponse, status_code=202, tags=["research"]
     )
