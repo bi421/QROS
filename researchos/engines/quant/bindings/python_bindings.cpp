@@ -40,6 +40,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <stdexcept>
 #include <unordered_map>
 #include <vector>
 
