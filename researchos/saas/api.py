@@ -144,6 +144,7 @@ def _error_payload(
         error["details"] = details
     return {
         "detail": detail,
+        "message": message,
         "code": code,
         "request_id": getattr(request.state, "request_id", None),
         "error": error,
