@@ -92,6 +92,22 @@ class BillingProvider(Protocol):
     def create_portal_session(self, *, workspace_id: UUID) -> str: ...
 
 
+class BillingCustomerStore(Protocol):
+    def get_customer_id(self, workspace_id: UUID) -> str | None: ...
+    def set_customer_id(self, workspace_id: UUID, customer_id: str) -> None: ...
+
+
+class InMemoryBillingCustomerStore:
+    def __init__(self) -> None:
+        self._rows: dict[UUID, str] = {}
+
+    def get_customer_id(self, workspace_id: UUID) -> str | None:
+        return self._rows.get(workspace_id)
+
+    def set_customer_id(self, workspace_id: UUID, customer_id: str) -> None:
+        self._rows[workspace_id] = customer_id
+
+
 class InMemoryBillingProvider:
     """Deterministic test provider; never used by production composition."""
 
@@ -310,6 +326,8 @@ __all__ = [
     "BillingEvent",
     "BillingProvider",
     "BillingProviderError",
+    "BillingCustomerStore",
+    "InMemoryBillingCustomerStore",
     "InMemoryBillingProvider",
     "StripeBillingProvider",
     "BillingEventConflict",
