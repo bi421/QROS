@@ -260,4 +260,4 @@ def test_parse_deleted_stripe_subscription_without_status_fails_closed() -> None
         json.dumps(payload).encode(),
         require_stripe_subscription_event=True,
     )
-    assert event.status == "canceled"
+    assert event.status == "cancelled"
