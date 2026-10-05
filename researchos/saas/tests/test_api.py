@@ -415,7 +415,7 @@ def test_billing_webhook_rejects_invalid_signature() -> None:
     response = client.post(
         "/v1/billing/webhook",
         content=b'{"event_id":"evt_1","workspace_id":"w","plan":"pro","status":"active"}',
-        headers={"X-Billing-Signature": "bad", "X-Billing-Provider": "test"},
+        headers={"X-Billing-Signature": "bad", "X-Billing-Provider": "hmac"},
     )
     assert response.status_code == 401
 
