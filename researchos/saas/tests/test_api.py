@@ -537,3 +537,32 @@ def test_free_plan_cannot_start_paid_checkout() -> None:
     ))
     response = client.post("/v1/billing/checkout", headers={"Authorization": "Bearer test"}, json={"plan": "free"})
     assert response.status_code == 400
+
+
+def test_free_workspace_can_start_paid_checkout() -> None:
+    context = TenantContext(uuid4(), uuid4(), Plan.FREE, WorkspaceRole.OWNER)
+    client = TestClient(create_app(
+        auth_provider=StaticAuth(context),
+        billing_provider=InMemoryBillingProvider(),
+    ))
+    response = client.post(
+        "/v1/billing/checkout",
+        headers={"Authorization": "Bearer test"},
+        json={"plan": "pro"},
+    )
+    assert response.status_code == 201
+    assert response.json()["url"] == f"https://billing.test/checkout/{context.workspace_id}/pro"
+
+
+def test_checkout_rejects_same_current_plan() -> None:
+    context = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.OWNER)
+    client = TestClient(create_app(
+        auth_provider=StaticAuth(context),
+        billing_provider=InMemoryBillingProvider(),
+    ))
+    response = client.post(
+        "/v1/billing/checkout",
+        headers={"Authorization": "Bearer test"},
+        json={"plan": "pro"},
+    )
+    assert response.status_code == 409
