@@ -148,3 +148,40 @@ def test_stripe_signature_verification_accepts_valid_timestamped_signature() -> 
 def test_stripe_signature_rejects_replay_timestamp() -> None:
     with pytest.raises(BillingSignatureError):
         verify_stripe_signature(b"{}", "t=1,v1=00", "secret", now=1000)
+
+
+def test_parse_stripe_subscription_event_maps_price_id_to_plan() -> None:
+    payload = {
+        "id": "evt_sub_1",
+        "data": {
+            "object": {
+                "metadata": {"workspace_id": "workspace-1"},
+                "status": "active",
+                "items": {"data": [{"price": {"id": "price_pro"}}]},
+            }
+        },
+    }
+    event = parse_billing_event(
+        json.dumps(payload).encode(),
+        plan_by_price_id={"price_pro": "pro"},
+    )
+    assert event.plan == "pro"
+    assert event.workspace_id == "workspace-1"
+
+
+def test_parse_billing_event_rejects_unmapped_price_id() -> None:
+    payload = {
+        "id": "evt_sub_2",
+        "data": {
+            "object": {
+                "metadata": {"workspace_id": "workspace-1"},
+                "status": "active",
+                "items": {"data": [{"price": {"id": "price_unknown"}}]},
+            }
+        },
+    }
+    with pytest.raises(ValueError):
+        parse_billing_event(
+            json.dumps(payload).encode(),
+            plan_by_price_id={"price_pro": "pro"},
+        )
