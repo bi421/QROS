@@ -203,3 +203,38 @@ def test_parse_billing_event_rejects_unmapped_price_id() -> None:
             json.dumps(payload).encode(),
             plan_by_price_id={"price_pro": "pro"},
         )
+
+
+def test_parse_stripe_subscription_event_rejects_checkout_events() -> None:
+    payload = {
+        "id": "evt_checkout_1",
+        "type": "checkout.session.completed",
+        "data": {
+            "object": {
+                "metadata": {"workspace_id": "workspace-1", "plan": "pro"},
+                "status": "complete",
+            }
+        },
+    }
+    with pytest.raises(ValueError, match="unsupported Stripe billing event type"):
+        parse_billing_event(
+            json.dumps(payload).encode(),
+            require_stripe_subscription_event=True,
+        )
+
+
+def test_parse_deleted_stripe_subscription_without_status_fails_closed() -> None:
+    payload = {
+        "id": "evt_deleted_1",
+        "type": "customer.subscription.deleted",
+        "data": {
+            "object": {
+                "metadata": {"workspace_id": "workspace-1", "plan": "pro"},
+            }
+        },
+    }
+    event = parse_billing_event(
+        json.dumps(payload).encode(),
+        require_stripe_subscription_event=True,
+    )
+    assert event.status == "canceled"
