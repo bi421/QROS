@@ -295,7 +295,12 @@ def verify_hmac_signature(payload: bytes, signature: str, secret: str) -> None:
         raise BillingSignatureError("invalid billing webhook signature")
 
 
-def parse_billing_event(\n    payload: bytes,\n    *,\n    plan_by_price_id: dict[str, str] | None = None,\n    require_stripe_subscription_event: bool = False,\n) -> BillingEvent:
+def parse_billing_event(
+    payload: bytes,
+    *,
+    plan_by_price_id: dict[str, str] | None = None,
+    require_stripe_subscription_event: bool = False,
+) -> BillingEvent:
     data: dict[str, Any] = json.loads(payload)
     event_id = data.get("event_id") or data.get("id")
     obj = data.get("data", {}).get("object", {}) if isinstance(data.get("data"), dict) else {}
@@ -308,7 +313,10 @@ def parse_billing_event(\n    payload: bytes,\n    *,\n    plan_by_price_id: dic
             price = items[0].get("price", {})
             price_id = price.get("id") if isinstance(price, dict) else None
             plan = plan_by_price_id.get(str(price_id)) if price_id else None
-    status = data.get("status") or obj.get("status")\n    if not status and stripe_event_type == "customer.subscription.deleted":\n        status = "canceled"\n    status = status or "active"
+    status = data.get("status") or obj.get("status")
+    if not status and event_type == "customer.subscription.deleted":
+        status = "canceled"
+    status = status or "active"
     if not all(str(value or "").strip() for value in (event_id, workspace_id, plan)):
         raise ValueError("billing event missing required fields")
     if str(plan) not in ENTITLEMENTS_BY_PLAN:
