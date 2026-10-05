@@ -15,7 +15,7 @@
 | Research governance | 🟢 Complete | Core claim/plan/evidence/result governance implemented |
 | Tenant security | 🟢 Complete | RLS, authorization, isolation tests and session boundary implemented |
 | API foundation | 🟢 Complete | Versioned API, validation, rate limits, idempotency and errors |
-| Database migrations | 🟡 Verified (staging version-set parity) | 45 staging migration rows; 62 canonical migration files are currently present on main; staging contains the worker execution version `20260928103556` under the historical remote display name `20260928103225_saas_worker_queue_consumer`; the three current M1 reconciliation migrations are not yet applied to staging |
+| Database migrations | 🟡 Verified (staging version-set parity) | 45 staging migration rows; 62 canonical migration files are currently present on main. The staging migration history ends with worker execution version `20260928103556` under the historical remote display name `20260928103225_saas_worker_queue_consumer`. A normalized comparison shows 17 canonical migration names are not represented in the staging history: 9 pre-worker hardening migrations and 8 migrations after the worker reconciliation point. Because historical staging migration names were rewritten, this is a migration-history/schema-parity blocker and does not by itself prove that every SQL change is absent from the live schema. The exact missing set must be reconciled and schema-verified before M1 can pass. |
 | Staging Golden Path | 🟡 Blocked | Auth/application identities and end-to-end operational evidence pending |
 | Disaster Recovery | 🔴 Blocked | Isolated recovery target and recovery storage not provisioned |
 | Observability | 🟡 In progress | Production-grade acceptance evidence pending |
@@ -109,13 +109,13 @@
 - [x] Region: `ap-northeast-1`.
 - [x] PostgreSQL 17.6 / engine 17.
 - [x] 45 migration rows observed; the worker migration is present under its historical remote display name.
-- [ ] Current 62-file repository migration set fully applied to staging.
+- [ ] Current 62-file repository migration set fully reconciled with staging migration history and schema; current audit finds 17 canonical migrations not represented by normalized staging history.
 - [x] 20 public tables observed.
 - [x] 0 public tables with RLS disabled.
 
 ### Remaining
 - [x] Verify the worker execution version `20260928103556` is present; its historical remote display name remains `20260928103225_saas_worker_queue_consumer` and is not rewritten.
-- [ ] Apply/verify the three current M1 reconciliation migrations in staging when the staging deployment gate is provisioned.
+- [ ] Reconcile and verify the 17 canonical migrations not represented by normalized staging history; do not rewrite historical migration names merely to obtain parity.
 - [x] Verify staging QROS tables, RLS state, public policies/triggers, and governed queue function grants.
 - [x] Verify RLS is enabled on all 20 QROS public tables (20/20; 0 disabled).
 - [x] Review staging Security Advisor findings.
@@ -369,22 +369,22 @@ QROS is **not production-ready** until all applicable gates below have independe
 
 ## Code / CI baseline
 
-**Current main SHA:** `ca85d5bd0f554da55b881a2764abf112ddf80171`
+**Current main SHA:** `7a34786ec1a1368819e5f586b64965eae8178bcc`
 
 Latest functional/code change:
 
 `fix(saas): align entitlement plan constraint with billing plans (#525)`
 
-Latest main commit after documentation cleanup:
+Latest main documentation cleanup:
 
-`docs(saas): correct canonical migration count (#528)`
+`docs(saas): bind evidence to current main head (#529)`
 
 Verified on the exact main SHA:
 
 - Git Governance run **#325** — run `37261018120` — **SUCCESS**
 - CI run **#3788** — run `37261018109` — **SUCCESS**
 - Supabase Database Security Tests run **#1543** — run `37261018091` — **SUCCESS**
-- All listed runs have head SHA `b995858fb1859ca5828c834355364be073165213` (the last functional/code baseline).
+- All listed runs have head SHA `b995858fb1859ca5828c834355364be073165213` (the last functional/code baseline before the documentation-only commits).
 
 The two documentation-only merges after that code baseline did not trigger the code CI workflows. These remain the verified code CI evidence for the current main ancestry.
 
@@ -396,6 +396,11 @@ The latest SaaS cleanup aligns the entitlement plan database constraint with the
 
 ## Staging
 
+- Project ref verified by live Supabase migration inspection: `yebwhcntiockckhdvawt`.
+- Live migration history currently contains **45 rows**; repository main contains **62 canonical migration files**.
+- The last staging migration is worker execution version `20260928103556` under historical remote display name `20260928103225_saas_worker_queue_consumer`.
+- Normalized migration-name audit finds **17 canonical migrations not represented in staging history** (9 pre-worker hardening migrations + 8 migrations after the worker reconciliation point).
+- This audit does **not** claim all 17 SQL changes are absent from the schema; schema-object verification is required before applying or declaring them missing.
 - Staging project identity and environment-specific operational state must be re-verified before being presented as current release evidence.
 - Historical migration/security observations in this document are retained only as historical evidence unless their current SHA/environment is independently re-verified.
 - Real Auth/API Golden Path: **NOT VERIFIED on current main SHA**.
