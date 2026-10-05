@@ -39,12 +39,45 @@ ONBOARDING_HTML = """<!doctype html>
 
 ONBOARDING_JS = """let config = null;
 let accessToken = null;
+const WORKSPACE_NAME_KEY = "qros:onboarding:workspace-name";
 
 const statusElement = document.getElementById("status");
 const resultElement = document.getElementById("result");
+const workspaceNameElement = document.getElementById("workspace-name");
 
 function setStatus(message) {
   statusElement.textContent = message;
+}
+
+function rememberWorkspaceName() {
+  const workspaceName = workspaceNameElement.value.trim();
+  if (workspaceName) {
+    localStorage.setItem(WORKSPACE_NAME_KEY, workspaceName);
+  }
+  return workspaceName;
+}
+
+function restoreWorkspaceName() {
+  const workspaceName = localStorage.getItem(WORKSPACE_NAME_KEY);
+  if (workspaceName) {
+    workspaceNameElement.value = workspaceName;
+  }
+  return workspaceName || "";
+}
+
+function consumeSupabaseAccessToken() {
+  const fragment = new URLSearchParams(location.hash.replace(/^#/, ""));
+  const token = fragment.get("access_token");
+  if (!token) {
+    return false;
+  }
+  accessToken = token;
+  history.replaceState(null, document.title, location.pathname + location.search);
+  return true;
+}
+
+function clearRememberedWorkspaceName() {
+  localStorage.removeItem(WORKSPACE_NAME_KEY);
 }
 
 async function loadConfig() {
@@ -95,11 +128,16 @@ async function qrosApi(path, options = {}) {
 }
 
 async function finishOnboarding(workspaceName) {
+  const normalizedName = workspaceName.trim();
+  if (!normalizedName) {
+    throw new Error("Workspace name is required");
+  }
   const workspace = await qrosApi("/v1/workspaces", {
     method: "POST",
-    body: JSON.stringify({ name: workspaceName }),
+    body: JSON.stringify({ name: normalizedName }),
   });
   const me = await qrosApi("/v1/me");
+  clearRememberedWorkspaceName();
   resultElement.textContent = JSON.stringify({ workspace, me }, null, 2);
   setStatus("Onboarding complete.");
 }
@@ -108,6 +146,10 @@ async function handleSignup(event) {
   event.preventDefault();
   try {
     setStatus("Creating account...");
+    const workspaceName = rememberWorkspaceName();
+    if (!workspaceName) {
+      throw new Error("Workspace name is required");
+    }
     await loadConfig();
     const data = await supabaseAuth("/signup", {
       email: document.getElementById("signup-email").value,
@@ -115,11 +157,11 @@ async function handleSignup(event) {
       options: { emailRedirectTo: location.origin + "/onboarding" },
     });
     if (!data.access_token) {
-      setStatus("Account created. Check your email, confirm it, then sign in below.");
+      setStatus("Account created. Check your email and confirm it. QROS will resume onboarding automatically.");
       return;
     }
     accessToken = data.access_token;
-    await finishOnboarding(document.getElementById("workspace-name").value.trim());
+    await finishOnboarding(workspaceName);
   } catch (error) {
     setStatus(error.message);
   }
@@ -136,23 +178,45 @@ async function handleSignin(event) {
     });
     accessToken = data.access_token;
     const workspaceName =
-      document.getElementById("workspace-name").value.trim() || "My QROS Workspace";
-    try {
-      await finishOnboarding(workspaceName);
-    } catch (error) {
-      if (error.message === "workspace already provisioned") {
+      workspaceNameElement.value.trim() || "My QROS Workspace";
+    await finishOnboarding(workspaceName);
+  } catch (error) {
+    if (error.message === "workspace already provisioned") {
+      try {
         const me = await qrosApi("/v1/me");
+        clearRememberedWorkspaceName();
         resultElement.textContent = JSON.stringify({ me }, null, 2);
         setStatus("Signed in. Your workspace is already provisioned.");
         return;
+      } catch (meError) {
+        setStatus(meError.message);
+        return;
       }
-      throw error;
     }
+    setStatus(error.message);
+  }
+}
+
+async function resumeConfirmedSignup() {
+  if (!consumeSupabaseAccessToken()) {
+    return;
+  }
+  try {
+    await loadConfig();
+    const workspaceName = restoreWorkspaceName();
+    if (!workspaceName) {
+      setStatus("Email confirmed. Enter your workspace name to finish onboarding.");
+      return;
+    }
+    setStatus("Email confirmed. Finishing onboarding...");
+    await finishOnboarding(workspaceName);
   } catch (error) {
     setStatus(error.message);
   }
 }
 
+restoreWorkspaceName();
 document.getElementById("signup").addEventListener("submit", handleSignup);
 document.getElementById("signin").addEventListener("submit", handleSignin);
+resumeConfirmedSignup();
 """
