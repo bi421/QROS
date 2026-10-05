@@ -46,6 +46,22 @@ def _event() -> BillingEvent:
     )
 
 
+def test_billing_event_preserves_optional_provider_and_ordering_identity() -> None:
+    event = BillingEvent(
+        event_id="evt_1",
+        workspace_id="workspace-1",
+        plan="pro",
+        status="active",
+        current_period_end=None,
+        provider_customer_id="cus_1",
+        provider_subscription_id="sub_1",
+        event_created_at="2026-10-05T02:20:00+00:00",
+    )
+    assert event.provider_customer_id == "cus_1"
+    assert event.provider_subscription_id == "sub_1"
+    assert event.event_created_at == "2026-10-05T02:20:00+00:00"
+
+
 def test_billing_signature_is_verified() -> None:
     body = b'{"event_id":"evt_1","workspace_id":"w","plan":"pro","status":"active"}'
     sig = hmac.new(b"secret", body, hashlib.sha256).hexdigest()
