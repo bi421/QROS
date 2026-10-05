@@ -3,11 +3,14 @@ name: Supabase Database Security Tests
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
-  group: qros-supabase-db-tests-${{ github.event.pull_request.head.ref || github.ref }}
+  group: qros-supabase-db-tests-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
