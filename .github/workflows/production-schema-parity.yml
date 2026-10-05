@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: production-schema-parity
+  cancel-in-progress: false
+
 jobs:
   schema-parity:
     name: Production Schema / Migration Parity

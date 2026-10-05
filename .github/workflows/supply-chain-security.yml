@@ -4,7 +4,21 @@ name: Supply Chain Security
 on:
   push:
     branches: [main]
+    paths:
+      - "pyproject.toml"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "uv.lock"
+      - "requirements*.txt"
+      - ".github/workflows/supply-chain-security.yml"
   pull_request:
+    paths:
+      - "pyproject.toml"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "uv.lock"
+      - "requirements*.txt"
+      - ".github/workflows/supply-chain-security.yml"
 
 permissions:
   contents: read

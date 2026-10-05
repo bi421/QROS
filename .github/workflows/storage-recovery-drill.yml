@@ -12,6 +12,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: storage-recovery-drill
+  cancel-in-progress: false
+
 jobs:
   storage-recovery:
     runs-on: ubuntu-latest

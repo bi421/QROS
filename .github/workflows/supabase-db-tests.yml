@@ -4,7 +4,21 @@ name: Supabase Database Security Tests
 on:
   push:
     branches: [main]
+    paths:
+      - "supabase/**"
+      - "researchos/saas/**"
+      - "scripts/verify_migrations.py"
+      - "tests/test_production_forward_migration_governance.py"
+      - ".github/workflows/supabase-db-tests.yml"
+      - "pyproject.toml"
   pull_request:
+    paths:
+      - "supabase/**"
+      - "researchos/saas/**"
+      - "scripts/verify_migrations.py"
+      - "tests/test_production_forward_migration_governance.py"
+      - ".github/workflows/supabase-db-tests.yml"
+      - "pyproject.toml"
 
 permissions:
   contents: read
