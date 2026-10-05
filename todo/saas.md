@@ -369,18 +369,24 @@ QROS is **not production-ready** until all applicable gates below have independe
 
 ## Code / CI baseline
 
-**Current main SHA:** `b995858fb1859ca5828c834355364be073165213`
+**Current main SHA:** `ca85d5bd0f554da55b881a2764abf112ddf80171`
 
-Latest merged change:
+Latest functional/code change:
 
 `fix(saas): align entitlement plan constraint with billing plans (#525)`
+
+Latest main commit after documentation cleanup:
+
+`docs(saas): correct canonical migration count (#528)`
 
 Verified on the exact main SHA:
 
 - Git Governance run **#325** — run `37261018120` — **SUCCESS**
 - CI run **#3788** — run `37261018109` — **SUCCESS**
 - Supabase Database Security Tests run **#1543** — run `37261018091` — **SUCCESS**
-- All listed runs have head SHA `b995858fb1859ca5828c834355364be073165213`.
+- All listed runs have head SHA `b995858fb1859ca5828c834355364be073165213` (the last functional/code baseline).
+
+The two documentation-only merges after that code baseline did not trigger the code CI workflows. These remain the verified code CI evidence for the current main ancestry.
 
 These are repository/CI evidence only; they do **not** prove staging or production readiness.
 
