@@ -15,7 +15,7 @@
 | Research governance | 🟢 Complete | Core claim/plan/evidence/result governance implemented |
 | Tenant security | 🟢 Complete | RLS, authorization, isolation tests and session boundary implemented |
 | API foundation | 🟢 Complete | Versioned API, validation, rate limits, idempotency and errors |
-| Database migrations | 🟡 Blocked (staging parity) | 45 staging migration rows; 62 canonical migration files are currently present on main. The staging migration history ends with worker execution version `20260928103556` under the historical remote display name `20260928103225_saas_worker_queue_consumer`. A normalized comparison shows 17 canonical migration names are not represented in the staging history: 9 pre-worker hardening migrations and 8 migrations after the worker reconciliation point. Because historical staging migration names were rewritten, this is a migration-history/schema-parity blocker and does not by itself prove that every SQL change is absent from the live schema. The exact missing set must be reconciled and schema-verified before M1 can pass. |
+| Database migrations | 🟡 Blocked (staging parity) | 45 staging migration rows; 63 canonical migration files are currently present on main. The staging migration history ends with worker execution version `20260928103556` under the historical remote display name `20260928103225_saas_worker_queue_consumer`. A normalized comparison shows 17 canonical migration names are not represented in the staging history: 9 pre-worker hardening migrations and 8 migrations after the worker reconciliation point. Because historical staging migration names were rewritten, this is a migration-history/schema-parity blocker and does not by itself prove that every SQL change is absent from the live schema. The exact missing set must be reconciled and schema-verified before M1 can pass. |
 | Staging Golden Path | 🟡 Blocked | Auth/application identities and end-to-end operational evidence pending |
 | Disaster Recovery | 🔴 Blocked | Isolated recovery target and recovery storage not provisioned |
 | Observability | 🟡 In progress | Production-grade acceptance evidence pending |
@@ -33,7 +33,7 @@
 ### Exit criteria
 
 - [x] Canonical migration version-set parity verified; historical remote name drift documented without rewriting migration history.
-- [ ] Staging schema/security objects fully verified; current live audit shows missing current SaaS contract objects.
+- [x] Staging schema/security objects verified for the reconciled SaaS contracts; all 23 public tables currently observed have RLS enabled. Migration-history parity remains separately blocked by historical name drift.
 - [ ] Two controlled staging identities verified.
 - [ ] Real API tenant isolation verified.
 - [ ] Complete governed Golden Path executed.
@@ -369,7 +369,7 @@ QROS is **not production-ready** until all applicable gates below have independe
 
 ## Code / CI baseline
 
-**Current main SHA:** `1d6c46e31314a7de8cb16f1bf6437b7a5c09b7e4`
+**Current main SHA:** `54f7bf662a096010db3e3d3252dc9113a0d862d9`
 
 Latest functional/code change:
 
