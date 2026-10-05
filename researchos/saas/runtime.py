@@ -73,7 +73,8 @@ def build_production_app() -> FastAPI:
         evidence_store=SupabaseResearchEvidenceStore(client),
         validation_store=SupabaseResearchValidationStore(client),
         finding_store=SupabaseResearchFindingStore(client),
-        billing_store=SupabaseBillingEventStore(client),\n        billing_provider=billing_provider,
+        billing_store=SupabaseBillingEventStore(client),
+        billing_provider=billing_provider,
         entitlement_store=SupabaseEntitlementStore(client),
         plan_rate_limiters={
             Plan.FREE: SupabaseRateLimiter(client, limit=100, window_seconds=60),
