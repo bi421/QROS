@@ -96,8 +96,6 @@ from researchos.saas.billing import (
     BillingSignatureError,
     BillingProvider,
     BillingProviderError,
-    BillingCustomerStore,
-    InMemoryBillingCustomerStore,
     parse_billing_event,
     verify_hmac_signature,
     verify_stripe_signature,
@@ -292,7 +290,6 @@ def create_app(
     finding_store: ResearchFindingStore | None = None,
     billing_webhook_secret: str | None = None,
     billing_provider: BillingProvider | None = None,
-    billing_customer_store: BillingCustomerStore | None = None,
     rate_limiter: RateLimiter | None = None,
     metrics_token: str | None = None,
     readiness_probe: Callable[[], None] | None = None,
@@ -316,7 +313,6 @@ def create_app(
     plan_limiters = plan_rate_limiters or {}
     workspaces = workspace_provisioner
     persistence = tenant_persistence or InMemoryTenantPersistence()
-    customer_store = billing_customer_store or InMemoryBillingCustomerStore()
     retention = RetentionConfig(DEFAULT_RETENTION_DAYS)
     app = FastAPI(
         title="QROS SaaS API",
