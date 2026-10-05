@@ -203,6 +203,10 @@ class ResearchJobResponse(BaseModel):
     status: ResearchJobStatus
 
 
+class BillingCheckoutRequest(BaseModel):
+    plan: Plan
+
+
 class BillingActionResponse(BaseModel):
     url: str
 
@@ -529,18 +533,21 @@ def create_app(
         tags=["billing"],
     )
     def billing_checkout(
+        request: BillingCheckoutRequest,
         tenant: TenantContext = Depends(current_tenant),
     ) -> BillingActionResponse:
         require_active_workspace(tenant)
         require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.BILLING_ADMIN)
         if billing_provider is None:
             raise HTTPException(status_code=503, detail="billing checkout is not configured")
-        if tenant.plan is Plan.FREE:
+        if request.plan is Plan.FREE:
             raise HTTPException(status_code=400, detail="free plan does not require checkout")
+        if request.plan is tenant.plan:
+            raise HTTPException(status_code=409, detail="workspace is already on the requested plan")
         try:
             url = billing_provider.create_checkout_session(
                 workspace_id=tenant.workspace_id,
-                plan=tenant.plan.value,
+                plan=request.plan.value,
             )
         except BillingProviderError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
