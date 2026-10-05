@@ -20,7 +20,7 @@ from researchos.saas.evidence_api import SupabaseResearchEvidenceStore
 from researchos.saas.supabase_validation_store import SupabaseResearchValidationStore
 from researchos.saas.supabase_finding_store import SupabaseResearchFindingStore
 from researchos.saas.idempotency import SupabaseIdempotencyStore
-from researchos.saas.billing import SupabaseBillingEventStore, SupabaseEntitlementStore
+from researchos.saas.billing import SupabaseBillingEventStore, SupabaseEntitlementStore, StripeBillingProvider
 from researchos.saas.rate_limit import SupabaseRateLimiter
 from researchos.saas.workspace import SupabaseWorkspaceProvisioner
 from researchos.saas.persistence import SupabaseTenantPersistence
@@ -43,6 +43,21 @@ def build_production_app() -> FastAPI:
         if response.data is None:
             raise RuntimeError("Supabase readiness query returned no data")
 
+    stripe_secret = os.environ.get("STRIPE_SECRET_KEY")
+    public_base_url = os.environ.get("QROS_PUBLIC_BASE_URL")
+    stripe_prices = {
+        Plan.PRO.value: os.environ.get("STRIPE_PRICE_PRO", ""),
+        Plan.TEAM.value: os.environ.get("STRIPE_PRICE_TEAM", ""),
+        Plan.ENTERPRISE.value: os.environ.get("STRIPE_PRICE_ENTERPRISE", ""),
+    }
+    billing_provider = None
+    if stripe_secret and public_base_url and all(stripe_prices.values()):
+        billing_provider = StripeBillingProvider(
+            secret_key=stripe_secret,
+            public_base_url=public_base_url,
+            price_ids=stripe_prices,
+        )
+
     return create_app(
         auth_provider=auth,
         job_store=SupabaseResearchJobStore(client),
@@ -58,7 +73,7 @@ def build_production_app() -> FastAPI:
         evidence_store=SupabaseResearchEvidenceStore(client),
         validation_store=SupabaseResearchValidationStore(client),
         finding_store=SupabaseResearchFindingStore(client),
-        billing_store=SupabaseBillingEventStore(client),
+        billing_store=SupabaseBillingEventStore(client),\n        billing_provider=billing_provider,
         entitlement_store=SupabaseEntitlementStore(client),
         plan_rate_limiters={
             Plan.FREE: SupabaseRateLimiter(client, limit=100, window_seconds=60),
