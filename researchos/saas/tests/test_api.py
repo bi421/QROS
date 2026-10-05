@@ -409,6 +409,28 @@ def test_billing_webhook_processes_and_replays_identical_event() -> None:
     assert replay.json() == {"status": "replayed"}
 
 
+
+def test_billing_webhook_binds_signature_scheme_to_declared_provider() -> None:
+    billing = InMemoryBillingEventStore()
+    client, _, _, _ = _client(billing_store=billing, billing_secret="secret")
+    payload = json.dumps({
+        "event_id": "evt_provider_mismatch",
+        "workspace_id": str(uuid4()),
+        "plan": "pro",
+        "status": "active",
+    }).encode()
+    signature = hmac.new(b"secret", payload, hashlib.sha256).hexdigest()
+    response = client.post(
+        "/v1/billing/webhook",
+        content=payload,
+        headers={
+            "X-Billing-Signature": signature,
+            "X-Billing-Provider": "stripe",
+        },
+    )
+    assert response.status_code == 401
+
+
 def test_billing_webhook_rejects_invalid_signature() -> None:
     billing = InMemoryBillingEventStore()
     client, _, _, _ = _client(billing_store=billing, billing_secret="secret")
