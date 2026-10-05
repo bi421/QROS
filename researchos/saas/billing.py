@@ -307,13 +307,19 @@ def verify_hmac_signature(payload: bytes, signature: str, secret: str) -> None:
         raise BillingSignatureError("invalid billing webhook signature")
 
 
-def parse_billing_event(payload: bytes) -> BillingEvent:
+def parse_billing_event(payload: bytes, *, plan_by_price_id: dict[str, str] | None = None) -> BillingEvent:
     data: dict[str, Any] = json.loads(payload)
     event_id = data.get("event_id") or data.get("id")
     obj = data.get("data", {}).get("object", {}) if isinstance(data.get("data"), dict) else {}
     metadata = obj.get("metadata", {}) if isinstance(obj, dict) else {}
     workspace_id = data.get("workspace_id") or metadata.get("workspace_id") or obj.get("workspace_id")
     plan = data.get("plan") or metadata.get("plan") or obj.get("plan")
+    if not plan and isinstance(obj, dict) and plan_by_price_id:
+        items = obj.get("items", {}).get("data", []) if isinstance(obj.get("items"), dict) else []
+        if isinstance(items, list) and items and isinstance(items[0], dict):
+            price = items[0].get("price", {})
+            price_id = price.get("id") if isinstance(price, dict) else None
+            plan = plan_by_price_id.get(str(price_id)) if price_id else None
     status = data.get("status") or obj.get("status") or "active"
     if not all(str(value or "").strip() for value in (event_id, workspace_id, plan)):
         raise ValueError("billing event missing required fields")
