@@ -110,14 +110,14 @@
 - [x] PostgreSQL 17.6 / engine 17.
 - [x] 45 migration rows observed; the worker migration is present under its historical remote display name.
 - [ ] Current repository migration set must be fully reconciled with staging migration history and schema; current audit finds 17 canonical migrations not represented by normalized staging history.
-- [x] 20 public tables observed.
-- [x] 0 public tables with RLS disabled.
+- [x] 23 public tables observed.
+- [x] 23/23 public tables have RLS enabled; 0 disabled.
 
 ### Remaining
 - [x] Verify the worker execution version `20260928103556` is present; its historical remote display name remains `20260928103225_saas_worker_queue_consumer` and is not rewritten.
 - [ ] Reconcile and verify the 17 canonical migrations not represented by normalized staging history; do not rewrite historical migration names merely to obtain parity.
 - [x] Verify staging QROS tables, RLS state, public policies/triggers, and governed queue function grants.
-- [x] Verify RLS is enabled on all 20 QROS public tables (20/20; 0 disabled).
+- [x] Verify RLS is enabled on all 23 QROS public tables (23/23; 0 disabled).
 - [x] Review staging Security Advisor findings.
 - [x] Document the existing `pgtap`-in-public-schema warning; no live schema mutation performed.
 
@@ -369,13 +369,17 @@ QROS is **not production-ready** until all applicable gates below have independe
 
 ## Code / CI baseline
 
-**Current main SHA:** `ccd67374dad1b9dcfe00c89682b960f34fa74fc2`
+**Current main SHA:** `415d010f56560cd74c21028c908ee7681d9fffd1`
+
+Latest merged repository change:
+
+`docs(saas): remove remaining stale baseline references (#540)`
 
 Latest merged functional/code change:
 
 `fix(ci): harden staging endpoint preflight (#538)`
 
-Current main SHA was verified directly from the GitHub repository history as `ccd67374dad1b9dcfe00c89682b960f34fa74fc2`.
+Current main SHA was verified directly from the GitHub repository history as `415d010f56560cd74c21028c908ee7681d9fffd1`.
 
 Post-merge CI for this exact SHA is **NOT YET VERIFIED**: the GitHub workflow-run and combined-status queries currently return no runs/statuses for this commit. Therefore this document does not claim green post-merge CI for the current SHA.
 
@@ -392,7 +396,7 @@ The latest merged change hardens staging endpoint preflight validation so stagin
 - The last staging migration is worker execution version `20260928103556` under historical remote display name `20260928103225_saas_worker_queue_consumer`.
 - Normalized migration-name audit finds **17 canonical migrations not represented in staging history** (9 pre-worker hardening migrations + 8 migrations after the worker reconciliation point).
 - This audit does **not** claim all 17 SQL changes are absent from the schema; schema-object verification is required before applying or declaring them missing.
-- Read-only live schema audit on 2026-10-05 confirms current contract gaps: `public.entitlement` table absent; `provision_workspace()` absent; 10-argument `process_billing_event()` absent; `billing_event.provider_event_created_at` absent; `subscription.last_billing_event_at` absent; `dataset_version_storage_path_contract` absent; workspace retention controls (`workspace.deleted_at`, `workspace.purge_at`, `soft_delete_workspace()`, `purge_deleted_workspaces()`) absent.
+- Read-only live schema audit on 2026-10-05 confirms several reconciled SaaS objects are present despite their migration names being absent from staging history: `public.entitlement` exists; `provision_workspace(uuid,text)` exists; both 9-argument and 10-argument `process_billing_event()` overloads exist; `billing_event.provider_event_created_at` exists; `subscription.last_billing_event_at` exists; workspace retention controls (`workspace.deleted_at`, `workspace.purge_at`, `soft_delete_workspace(uuid,timestamptz,integer)`, `purge_deleted_workspaces(timestamptz)`) exist. `public.dataset_version_storage_path_contract` is still absent.
 - Storage object policies are present under the live names `qros_datasets_tenant_{insert,select,update,delete}`; no legacy `tenant_id` predicate was found. The earlier policy-name-only check must not be interpreted as a storage-policy absence.
 - Staging project identity and environment-specific operational state must be re-verified before being presented as current release evidence.
 - Historical migration/security observations in this document are retained only as historical evidence unless their current SHA/environment is independently re-verified.
