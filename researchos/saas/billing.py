@@ -89,110 +89,22 @@ class BillingProviderError(RuntimeError):
 
 class BillingProvider(Protocol):
     def create_checkout_session(self, *, workspace_id: UUID, plan: str) -> str: ...
-    def create_portal_session(self, *, workspace_id: UUID) -> str: ...
-
-
-class BillingCustomerStore(Protocol):
-    def get_customer_id(self, workspace_id: UUID) -> str | None: ...
-    def set_customer_id(self, workspace_id: UUID, customer_id: str) -> None: ...
-
-
-class InMemoryBillingCustomerStore:
-    def __init__(self) -> None:
-        self._rows: dict[UUID, str] = {}
-
-    def get_customer_id(self, workspace_id: UUID) -> str | None:
-        return self._rows.get(workspace_id)
-
-    def set_customer_id(self, workspace_id: UUID, customer_id: str) -> None:
-        self._rows[workspace_id] = customer_id
-
-
-class InMemoryBillingProvider:
-    """Deterministic test provider; never used by production composition."""
-
-    def create_checkout_session(self, *, workspace_id: UUID, plan: str) -> str:
-        if plan == "free":
-            raise BillingProviderError("free plan does not require checkout")
-        return f"https://billing.test/checkout/{workspace_id}/{plan}"
-
-    def create_portal_session(self, *, workspace_id: UUID) -> str:
-        return f"https://billing.test/portal/{workspace_id}"
-
-
-class StripeBillingProvider:
-    """Small Stripe REST adapter; production wiring is explicit and fail-closed."""
-
-    def __init__(self, *, secret_key: str, public_base_url: str, price_ids: dict[str, str]) -> None:
-        from urllib.parse import urlparse
-        parsed = urlparse(public_base_url)
-        if parsed.scheme != "https" or not parsed.netloc:
-            raise ValueError("billing public base URL must be HTTPS")
-        if not secret_key.startswith("sk_"):
-            raise ValueError("invalid Stripe secret key configuration")
-        self._secret_key = secret_key
-        self._public_base_url = public_base_url.rstrip("/")
-        self._price_ids = dict(price_ids)
-
-    def _post(self, path: str, fields: dict[str, str]) -> dict[str, Any]:
-        from urllib.parse import urlencode
-        from urllib.request import Request, urlopen
-        request = Request(
-            "https://api.stripe.com" + path,
-            data=urlencode(fields).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self._secret_key}",
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-            method="POST",
-        )
-        try:
-            with urlopen(request, timeout=15) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except Exception as exc:
-            raise BillingProviderError("billing provider request failed") from exc
-        if not isinstance(payload, dict):
-            raise BillingProviderError("billing provider returned an invalid response")
-        return payload
-
-    def create_checkout_session(self, *, workspace_id: UUID, plan: str) -> str:
-        if plan == "free":
-            raise BillingProviderError("free plan does not require checkout")
-        price_id = self._price_ids.get(plan)
-        if not price_id:
-            raise BillingProviderError("billing price is not configured")
-        payload = self._post("/v1/checkout/sessions", {
-            "mode": "subscription",
-            "line_items[0][price]": price_id,
-            "line_items[0][quantity]": "1",
-            "success_url": f"{self._public_base_url}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
-            "cancel_url": f"{self._public_base_url}/billing",
-            "client_reference_id": str(workspace_id),
-            "metadata[workspace_id]": str(workspace_id),
-            "metadata[plan]": plan,
-            "customer_creation": "always",
-        })
-        url = payload.get("url")
-        if not isinstance(url, str) or not url.startswith("https://checkout.stripe.com/"):
-            raise BillingProviderError("billing provider returned no valid checkout URL")
-        return url
-
     def create_portal_session(self, *, workspace_id: UUID) -> str:
         from urllib.parse import urlencode
         from urllib.request import Request, urlopen
         query = urlencode({"query": f"metadata['workspace_id']:'{workspace_id}'", "limit": "1"})
         request = Request(
-            "https://api.stripe.com/v1/customers/search?" + query,
+            "https://api.stripe.com/v1/subscriptions/search?" + query,
             headers={"Authorization": f"Bearer {self._secret_key}"},
             method="GET",
         )
         try:
             with urlopen(request, timeout=15) as response:
-                customers = json.loads(response.read().decode("utf-8"))
+                subscriptions = json.loads(response.read().decode("utf-8"))
         except Exception as exc:
             raise BillingProviderError("billing provider request failed") from exc
-        data = customers.get("data") if isinstance(customers, dict) else None
-        customer_id = data[0].get("id") if isinstance(data, list) and data and isinstance(data[0], dict) else None
+        data = subscriptions.get("data") if isinstance(subscriptions, dict) else None
+        customer_id = data[0].get("customer") if isinstance(data, list) and data and isinstance(data[0], dict) else None
         if not isinstance(customer_id, str) or not customer_id.startswith("cus_"):
             raise BillingProviderError("billing customer is not configured")
         payload = self._post("/v1/billing_portal/sessions", {
