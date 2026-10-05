@@ -50,8 +50,17 @@ def _required(profile: str) -> list[str]:
 def _validate_staging() -> None:
     value = os.environ["QROS_STAGING_BASE_URL"].strip()
     parsed = urlparse(value)
-    if parsed.scheme != "https" or not parsed.netloc:
-        raise SystemExit("staging preflight failed: QROS_STAGING_BASE_URL must be an HTTPS URL")
+    if (
+        parsed.scheme != "https"
+        or not parsed.netloc
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise SystemExit(
+            "staging preflight failed: QROS_STAGING_BASE_URL must be a bare HTTPS origin without credentials, query, or fragment"
+        )
     if os.environ["QROS_STAGING_JWT"].strip() == os.environ["QROS_STAGING_ISOLATION_JWT"].strip():
         raise SystemExit(
             "staging preflight failed: primary and isolation JWTs must be distinct controlled identities"
