@@ -101,7 +101,7 @@
 - [x] Canonical migrations under `supabase/migrations/`.
 - [x] Migration filename/order validation.
 - [x] Migration security invariants.
-- [x] 62 canonical migration files at current baseline.
+- [x] Canonical migration-file count is tracked by repository tooling; do not hard-code a stale count in roadmap evidence.
 
 ### QROS Staging
 - [x] Staging project exists.
