@@ -369,17 +369,17 @@ QROS is **not production-ready** until all applicable gates below have independe
 
 ## Code / CI baseline
 
-**Current main SHA:** `415d010f56560cd74c21028c908ee7681d9fffd1`
+**Current main SHA:** `309439f1f640c993cceabd403cf36604f1ab5457`
 
 Latest merged repository change:
 
-`docs(saas): remove remaining stale baseline references (#540)`
+`docs(saas): refresh live staging schema evidence (#541)`
 
 Latest merged functional/code change:
 
 `fix(ci): harden staging endpoint preflight (#538)`
 
-Current main SHA was verified directly from the GitHub repository history as `415d010f56560cd74c21028c908ee7681d9fffd1`.
+Current main SHA was verified directly from the GitHub repository history as `309439f1f640c993cceabd403cf36604f1ab5457`.
 
 Post-merge CI for this exact SHA is **NOT YET VERIFIED**: the GitHub workflow-run and combined-status queries currently return no runs/statuses for this commit. Therefore this document does not claim green post-merge CI for the current SHA.
 
@@ -396,7 +396,7 @@ The latest merged change hardens staging endpoint preflight validation so stagin
 - The last staging migration is worker execution version `20260928103556` under historical remote display name `20260928103225_saas_worker_queue_consumer`.
 - Normalized migration-name audit finds **17 canonical migrations not represented in staging history** (9 pre-worker hardening migrations + 8 migrations after the worker reconciliation point).
 - This audit does **not** claim all 17 SQL changes are absent from the schema; schema-object verification is required before applying or declaring them missing.
-- Read-only live schema audit on 2026-10-05 confirms several reconciled SaaS objects are present despite their migration names being absent from staging history: `public.entitlement` exists; `provision_workspace(uuid,text)` exists; both 9-argument and 10-argument `process_billing_event()` overloads exist; `billing_event.provider_event_created_at` exists; `subscription.last_billing_event_at` exists; workspace retention controls (`workspace.deleted_at`, `workspace.purge_at`, `soft_delete_workspace(uuid,timestamptz,integer)`, `purge_deleted_workspaces(timestamptz)`) exist. `public.dataset_version_storage_path_contract` is still absent.
+- Read-only live schema audit on 2026-10-05 confirms several reconciled SaaS objects are present despite their migration names being absent from staging history: `public.entitlement` exists; `provision_workspace(uuid,text)` exists; both 9-argument and 10-argument `process_billing_event()` overloads exist; `billing_event.provider_event_created_at` exists; `subscription.last_billing_event_at` exists; workspace retention controls (`workspace.deleted_at`, `workspace.purge_at`, `soft_delete_workspace(uuid,timestamptz,integer)`, `purge_deleted_workspaces(timestamptz)`) exist. The same live audit now confirms `dataset_version_storage_path_contract` is present; the constraint definition is `CHECK ((storage_path ~ '^tenant/[0-9a-f-]{36}/datasets/[0-9a-f]{64}/[1-9][0-9]*/ `public.dataset_version_storage_path_contract` is present and currently verifies as a CHECK constraint on `public.dataset_version` requiring `tenant/<uuid>/datasets/<sha256>/<positive-version>/`.
 - Storage object policies are present under the live names `qros_datasets_tenant_{insert,select,update,delete}`; no legacy `tenant_id` predicate was found. The earlier policy-name-only check must not be interpreted as a storage-policy absence.
 - Staging project identity and environment-specific operational state must be re-verified before being presented as current release evidence.
 - Historical migration/security observations in this document are retained only as historical evidence unless their current SHA/environment is independently re-verified.
@@ -417,7 +417,70 @@ The latest merged change hardens staging endpoint preflight validation so stagin
 
 ### P0 — Staging database proof
 - [ ] Prove canonical migration-history parity.
-- [ ] Verify schema, RLS policies, functions, grants and constraints.
+- [x] Verify schema, RLS policies, functions, grants and required SaaS constraints against the live staging database; the full `verify_saas_contract.py` contract audit currently passes.
+- [ ] Review/document pgtap warning.
+
+### P0 — Staging identity & API
+- [ ] Verify two controlled Auth identities.
+- [ ] Verify application endpoint.
+- [ ] Execute real tenant-isolation API tests.
+
+### P0 — Golden Path
+- [ ] Execute Claim → Plan → Dataset → Run → Result → Evidence → Finding.
+- [ ] Capture exact SHA and reproducible evidence bundle.
+
+### P1 — DR infrastructure
+- [ ] Provision isolated recovery target.
+- [ ] Provision dedicated recovery storage.
+- [ ] Configure scoped GitHub Environment secrets.
+- [ ] Pass the complete DR infrastructure gate.
+
+### P2 — Product
+- [ ] Build tenant/workspace UI.
+- [ ] Build research workflow UI.
+- [ ] Build evidence/audit views.
+
+### P2 — Commercial
+- [ ] External-user validation.
+- [ ] Paid pilot.
+- [ ] Record actual commercial evidence.
+
+---
+
+## Engineering Rules
+
+1. Never claim PASS without the required evidence.
+2. Never use production as a substitute for staging or recovery.
+3. Never use staging as a substitute for an isolated recovery target.
+4. Never expose or commit secrets.
+5. Never weaken security, typing, governance or tests to obtain green CI.
+6. Never use broad `Any`, blanket ignores or skipped tests as failure suppression.
+7. Never fabricate or rewrite migration history to make parity green.
+8. Never dispatch destructive/recovery workflows while their gate is blocked.
+9. Every release claim must include the exact commit SHA and environment.
+10. `BLOCKED`, `NOT_EXECUTED`, and `NOT_VERIFIED` are valid states and must remain explicit.
+))`. The complete contract audit returns all required booleans true and zero legacy `tenant_id` storage policies. `public.dataset_version_storage_path_contract` is present and currently verifies as a CHECK constraint on `public.dataset_version` requiring `tenant/<uuid>/datasets/<sha256>/<positive-version>/`.
+- Storage object policies are present under the live names `qros_datasets_tenant_{insert,select,update,delete}`; no legacy `tenant_id` predicate was found. The earlier policy-name-only check must not be interpreted as a storage-policy absence.
+- Staging project identity and environment-specific operational state must be re-verified before being presented as current release evidence.
+- Historical migration/security observations in this document are retained only as historical evidence unless their current SHA/environment is independently re-verified.
+- Real Auth/API Golden Path: **NOT VERIFIED on current main SHA**.
+- Two controlled staging identities: **NOT VERIFIED on current main SHA**.
+- Staging worker-loss/restart and queue recovery: **NOT VERIFIED on current main SHA**.
+
+## DR
+
+- Recovery target: **NOT PROVISIONED / NOT VERIFIED**
+- Recovery S3: **NOT PROVISIONED / NOT VERIFIED**
+- DR infrastructure gate: **BLOCKED**
+- Full DR drill: **NOT EXECUTED**
+
+---
+
+# Immediate Next Actions
+
+### P0 — Staging database proof
+- [ ] Prove canonical migration-history parity.
+- [x] Verify schema, RLS policies, functions, grants and required SaaS constraints against the live staging database; the full `verify_saas_contract.py` contract audit currently passes.
 - [ ] Review/document pgtap warning.
 
 ### P0 — Staging identity & API
