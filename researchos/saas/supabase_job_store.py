@@ -181,7 +181,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
     def get(self, workspace_id: UUID, job_id: UUID) -> ResearchJob | None:
         result = (
             self._client.table("research_run")
-            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash,created_at")
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash")
             .eq("workspace_id", str(workspace_id))
             .eq("id", str(job_id))
             .is_("deleted_at", "null")
@@ -200,7 +200,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
             raise ValueError("invalid sort order")
         query = (
             self._client.table("research_run")
-            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash,created_at", count="exact")
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash", count="exact")
             .eq("workspace_id", str(workspace_id))
             .is_("deleted_at", "null")
         )
@@ -318,7 +318,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
             .eq("id", str(job_id))
             .is_("deleted_at", "null")
             .eq("status", expected.value)
-            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash,created_at")
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash")
             .execute()
         )
         rows = result.data or []
