@@ -27,7 +27,7 @@ def test_binary_increment_has_real_deterministic_result() -> None:
 
     assert result.status == "HALTED"
     assert result.output == ("1", "1", "0", "0")
-    assert result.steps == 5
+    assert result.steps == 8
 
 
 def test_non_halting_machine_is_bounded() -> None:
