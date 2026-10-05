@@ -317,8 +317,6 @@ __all__ = [
     "BillingEvent",
     "BillingProvider",
     "BillingProviderError",
-    "BillingCustomerStore",
-    "InMemoryBillingCustomerStore",
     "InMemoryBillingProvider",
     "StripeBillingProvider",
     "BillingEventConflict",
