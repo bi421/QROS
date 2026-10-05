@@ -26,7 +26,7 @@ class _InsertQuery:
 
     def execute(self):
         row = self._rows[-1]
-        return _Response([{**row, "attempt_count": 0, "max_attempts": 3, "error_code": None, "created_at": "2026-10-05T00:00:00+00:00"}])
+        return _Response([{**row, "attempt_count": 0, "max_attempts": 3, "error_code": None}])
 
 
 class _Client:
