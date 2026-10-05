@@ -45,6 +45,8 @@ The authenticated context contains:
 
 - `GET /healthz` — process health.
 - `POST /v1/billing/webhook` — provider-signed billing event callback.
+- `POST /v1/billing/checkout` — create a checkout session for an explicitly requested paid plan; restricted to workspace owner/billing-admin.
+- `POST /v1/billing/portal` — create the provider billing-portal session for the authenticated workspace; restricted to workspace owner/billing-admin.
 - `GET /readyz` — dependency/readiness boundary.
 
 ### Identity
@@ -53,6 +55,8 @@ The authenticated context contains:
 - `GET /v1/me` — returns the authenticated user, workspace, and effective plan.
 
 Workspace provisioning derives the owner from the verified authentication context and creates the workspace, owner membership, and initial subscription atomically. The request body cannot supply an owner identity. A user who already has a workspace receives HTTP 409; multi-workspace management remains outside this onboarding endpoint.
+
+Billing checkout is fail-closed when no production billing provider is configured. Paid checkout accepts only the plans `pro`, `team`, or `enterprise`; requesting the current plan returns HTTP 409 and requesting `free` returns HTTP 400. The Stripe production adapter is configured only when `STRIPE_SECRET_KEY`, `QROS_PUBLIC_BASE_URL`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_TEAM`, and `STRIPE_PRICE_ENTERPRISE` are present. The public base URL must be HTTPS. No Stripe secret or provider credential is exposed to browser clients.
 
 ### Datasets
 

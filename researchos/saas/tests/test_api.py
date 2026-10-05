@@ -11,8 +11,8 @@ from fastapi.testclient import TestClient
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.api import create_app
-from researchos.saas.billing import InMemoryBillingEventStore
-from researchos.saas.contracts import Plan, TenantContext
+from researchos.saas.billing import InMemoryBillingEventStore, InMemoryBillingProvider
+from researchos.saas.contracts import Plan, TenantContext, WorkspaceRole
 from researchos.saas.datasets import InMemoryDatasetStorage, InMemoryDatasetStore
 from researchos.saas.store import InMemoryResearchJobStore
 
@@ -489,3 +489,80 @@ def test_readiness_probe_success_keeps_endpoint_ready() -> None:
     assert response.status_code == 200
     assert response.json() == {"status": "ready"}
     assert calls == ["checked"]
+
+
+def test_billing_checkout_requires_configured_provider() -> None:
+    client, _, _, _ = _client()
+    response = client.post("/v1/billing/checkout", headers={"Authorization": "Bearer test"}, json={"plan": "pro"})
+    assert response.status_code == 503
+
+
+def test_billing_checkout_returns_provider_url_for_owner() -> None:
+    context = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.OWNER)
+    client = TestClient(create_app(
+        auth_provider=StaticAuth(context),
+        billing_provider=InMemoryBillingProvider(),
+    ))
+    response = client.post("/v1/billing/checkout", headers={"Authorization": "Bearer test"}, json={"plan": "team"})
+    assert response.status_code == 201
+    assert response.json()["url"] == f"https://billing.test/checkout/{context.workspace_id}/team"
+
+
+def test_billing_portal_is_billing_admin_only() -> None:
+    context = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
+    client = TestClient(create_app(
+        auth_provider=StaticAuth(context),
+        billing_provider=InMemoryBillingProvider(),
+    ))
+    response = client.post("/v1/billing/portal", headers={"Authorization": "Bearer test"})
+    assert response.status_code == 403
+
+
+def test_billing_portal_returns_provider_url_for_billing_admin() -> None:
+    context = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.BILLING_ADMIN)
+    client = TestClient(create_app(
+        auth_provider=StaticAuth(context),
+        billing_provider=InMemoryBillingProvider(),
+    ))
+    response = client.post("/v1/billing/portal", headers={"Authorization": "Bearer test"})
+    assert response.status_code == 201
+    assert response.json()["url"] == f"https://billing.test/portal/{context.workspace_id}"
+
+
+def test_free_plan_cannot_start_paid_checkout() -> None:
+    context = TenantContext(uuid4(), uuid4(), Plan.FREE, WorkspaceRole.OWNER)
+    client = TestClient(create_app(
+        auth_provider=StaticAuth(context),
+        billing_provider=InMemoryBillingProvider(),
+    ))
+    response = client.post("/v1/billing/checkout", headers={"Authorization": "Bearer test"}, json={"plan": "free"})
+    assert response.status_code == 400
+
+
+def test_free_workspace_can_start_paid_checkout() -> None:
+    context = TenantContext(uuid4(), uuid4(), Plan.FREE, WorkspaceRole.OWNER)
+    client = TestClient(create_app(
+        auth_provider=StaticAuth(context),
+        billing_provider=InMemoryBillingProvider(),
+    ))
+    response = client.post(
+        "/v1/billing/checkout",
+        headers={"Authorization": "Bearer test"},
+        json={"plan": "pro"},
+    )
+    assert response.status_code == 201
+    assert response.json()["url"] == f"https://billing.test/checkout/{context.workspace_id}/pro"
+
+
+def test_checkout_rejects_same_current_plan() -> None:
+    context = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.OWNER)
+    client = TestClient(create_app(
+        auth_provider=StaticAuth(context),
+        billing_provider=InMemoryBillingProvider(),
+    ))
+    response = client.post(
+        "/v1/billing/checkout",
+        headers={"Authorization": "Bearer test"},
+        json={"plan": "pro"},
+    )
+    assert response.status_code == 409
