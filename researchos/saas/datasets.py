@@ -385,24 +385,21 @@ class SupabaseDatasetStore:
         )
 
 class SupabaseDatasetStorage:
-    """Tenant-scoped Supabase Storage adapter.
+    """Tenant-scoped server-side Supabase Storage adapter.
 
-    Production calls require a verified tenant bearer token so Storage RLS,
-    rather than service_role, authorizes object access.
+    Authorization is enforced by the QROS API/worker before resolving the
+    canonical tenant storage path. The production client is service-role
+    backed, so this adapter must not claim that Storage RLS authorizes these
+    server-side calls.
     """
 
     def __init__(
         self,
         supabase_client: object,
         bucket: str = "qros-datasets",
-        *,
-        supabase_url: str | None = None,
-        publishable_key: str | None = None,
     ) -> None:
         self._client = supabase_client
         self._bucket = bucket
-        self._supabase_url = supabase_url
-        self._publishable_key = publishable_key
 
     def exists(self, storage_path: str) -> bool:
         parent = storage_path.rstrip("/")
