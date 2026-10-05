@@ -30,7 +30,6 @@ class SupabaseResearchJobStore(ResearchJobStore):
             error_code=str(row["error_code"]) if row.get("error_code") else None,
             claim_id=str(row["claim_id"]) if row.get("claim_id") else None,
             plan_hash=str(row["plan_hash"]) if row.get("plan_hash") else None,
-            created_at=datetime.fromisoformat(str(row["created_at"]).replace("Z", "+00:00")),
         )
 
     def create_idempotent(
@@ -91,7 +90,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
                     "plan_hash": job.plan_hash,
                 }
             )
-            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash,created_at")
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash")
             .execute()
         )
         rows = result.data or []
@@ -182,7 +181,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
     def get(self, workspace_id: UUID, job_id: UUID) -> ResearchJob | None:
         result = (
             self._client.table("research_run")
-            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash,created_at")
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash")
             .eq("workspace_id", str(workspace_id))
             .eq("id", str(job_id))
             .is_("deleted_at", "null")
@@ -201,7 +200,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
             raise ValueError("invalid sort order")
         query = (
             self._client.table("research_run")
-            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash,created_at", count="exact")
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash", count="exact")
             .eq("workspace_id", str(workspace_id))
             .is_("deleted_at", "null")
         )
@@ -319,7 +318,7 @@ class SupabaseResearchJobStore(ResearchJobStore):
             .eq("id", str(job_id))
             .is_("deleted_at", "null")
             .eq("status", expected.value)
-            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash,created_at")
+            .select("id,workspace_id,dataset_version_id,workflow_id,status,source_dataset_sha256,created_by,attempt_count,max_attempts,error_code,claim_id,plan_hash")
             .execute()
         )
         rows = result.data or []
