@@ -597,9 +597,13 @@ def create_app(
             raise HTTPException(status_code=400, detail="unsupported billing provider")
         payload = await request.body()
         try:
-            if signature.startswith("t="):
+            if provider == "stripe":
+                if stripe_signature is None or signature != stripe_signature:
+                    raise BillingSignatureError("Stripe provider requires Stripe-Signature")
                 verify_stripe_signature(payload, signature, billing_webhook_secret)
             else:
+                if x_billing_signature is None or signature != x_billing_signature:
+                    raise BillingSignatureError("HMAC provider requires X-Billing-Signature")
                 verify_hmac_signature(payload, signature, billing_webhook_secret)
             event = parse_billing_event(payload, plan_by_price_id=billing_plan_by_price_id)
         except BillingSignatureError as exc:
