@@ -32,7 +32,7 @@ def test_binary_increment_has_real_deterministic_result() -> None:
 
 def test_non_halting_machine_is_bounded() -> None:
     machine = TuringMachine(
-        {("loop", "0"): Transition("loop", "0", 1)},
+        {("loop", "0"): Transition("loop", "0", 0)},
         initial_state="loop",
         halt_states=frozenset({"halt"}),
         blank="_",
