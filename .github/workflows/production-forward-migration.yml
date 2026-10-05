@@ -25,6 +25,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: production-forward-migration
+  cancel-in-progress: false
+
 jobs:
   forward-migration:
     name: Governed Production Forward Migration
