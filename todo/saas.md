@@ -109,7 +109,7 @@
 - [x] Region: `ap-northeast-1`.
 - [x] PostgreSQL 17.6 / engine 17.
 - [x] 45 migration rows observed; the worker migration is present under its historical remote display name.
-- [ ] Current 62-file repository migration set fully reconciled with staging migration history and schema; current audit finds 17 canonical migrations not represented by normalized staging history.
+- [ ] Current repository migration set must be fully reconciled with staging migration history and schema; current audit finds 17 canonical migrations not represented by normalized staging history.
 - [x] 20 public tables observed.
 - [x] 0 public tables with RLS disabled.
 
@@ -369,13 +369,13 @@ QROS is **not production-ready** until all applicable gates below have independe
 
 ## Code / CI baseline
 
-**Current main SHA:** `5b98a9c874d8231d2f703914e5625725c7156aef`
+**Current main SHA:** `ccd67374dad1b9dcfe00c89682b960f34fa74fc2`
 
 Latest merged functional/code change:
 
 `fix(ci): harden staging endpoint preflight (#538)`
 
-Current main SHA was verified directly from the GitHub repository history as `5b98a9c874d8231d2f703914e5625725c7156aef`.
+Current main SHA was verified directly from the GitHub repository history as `ccd67374dad1b9dcfe00c89682b960f34fa74fc2`.
 
 Post-merge CI for this exact SHA is **NOT YET VERIFIED**: the GitHub workflow-run and combined-status queries currently return no runs/statuses for this commit. Therefore this document does not claim green post-merge CI for the current SHA.
 
@@ -388,7 +388,7 @@ The latest merged change hardens staging endpoint preflight validation so stagin
 ## Staging
 
 - Project ref verified by live Supabase migration inspection: `yebwhcntiockckhdvawt`.
-- Live migration history currently contains **45 rows**; repository main contains **62 canonical migration files**.
+- Live migration history currently contains **45 rows**; the canonical migration-file count must be derived from the exact current main SHA rather than hard-coded in this roadmap.
 - The last staging migration is worker execution version `20260928103556` under historical remote display name `20260928103225_saas_worker_queue_consumer`.
 - Normalized migration-name audit finds **17 canonical migrations not represented in staging history** (9 pre-worker hardening migrations + 8 migrations after the worker reconciliation point).
 - This audit does **not** claim all 17 SQL changes are absent from the schema; schema-object verification is required before applying or declaring them missing.
