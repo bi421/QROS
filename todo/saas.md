@@ -379,7 +379,7 @@ Latest merged functional/code change:
 
 `fix(ci): harden staging endpoint preflight (#538)`
 
-Current main SHA was verified directly from the GitHub repository history as `efd945688419aca74462adf14cb14052e255e61d`.
+Current main SHA was verified directly from the GitHub repository history as `7d4a04272aac29a48a66822e20fd737876d8a979`.
 
 Post-merge CI for this exact SHA is **NOT YET VERIFIED**: the GitHub workflow-run and combined-status queries currently return no runs/statuses for this commit. Therefore this document does not claim green post-merge CI for the current SHA.
 
@@ -391,15 +391,24 @@ The latest merged change hardens staging endpoint preflight validation so stagin
 
 ## Staging
 
-- Project ref verified by live Supabase migration inspection: `yebwhcntiockckhdvawt`.
-- Live migration history currently contains **45 rows**; the canonical migration-file count must be derived from the exact current main SHA rather than hard-coded in this roadmap.
-- The last staging migration is worker execution version `20260928103556` under historical remote display name `20260928103225_saas_worker_queue_consumer`.
-- Exact canonical-vs-live audit finds **20 canonical migration names not represented in staging history**. The repository contains **63** canonical migration files; staging reports **45** migration rows. This includes the worker migration under a historical remote display name and 19 other canonical names absent from the live history.
-- This audit does **not** claim all 20 SQL changes are absent from the schema; schema-object verification is required before applying or declaring them missing.
-- Read-only live schema audit on 2026-10-05 confirms several reconciled SaaS objects are present despite their migration names being absent from staging history: `public.entitlement` exists; `provision_workspace(uuid,text)` exists; both 9-argument and 10-argument `process_billing_event()` overloads exist; `billing_event.provider_event_created_at` exists; `subscription.last_billing_event_at` exists; workspace retention controls (`workspace.deleted_at`, `workspace.purge_at`, `soft_delete_workspace(uuid,timestamptz,integer)`, `purge_deleted_workspaces(timestamptz)`) exist. The same live audit now confirms `dataset_version_storage_path_contract` is present; the constraint definition is `CHECK ((storage_path ~ '^tenant/[0-9a-f-]{36}/datasets/[0-9a-f]{64}/[1-9][0-9]*/ `public.dataset_version_storage_path_contract` is present and currently verifies as a CHECK constraint on `public.dataset_version` requiring `tenant/<uuid>/datasets/<sha256>/<positive-version>`. `public.dataset_version_feed` and its `dataset_retention_guard` are now also present after forward-only staging reconciliation migration `20261005050000_dataset_version_feed_reconciliation`.
-- Storage object policies are present under the live names `qros_datasets_tenant_{insert,select,update,delete}`; no legacy `tenant_id` predicate was found. The earlier policy-name-only check must not be interpreted as a storage-policy absence.
-- Staging project identity and environment-specific operational state must be re-verified before being presented as current release evidence.
-- Historical migration/security observations in this document are retained only as historical evidence unless their current SHA/environment is independently re-verified.
+- Project ref: `yebwhcntiockckhdvawt`.
+- Exact migration-name audit at current main `7d4a04272aac29a48a66822e20fd737876d8a979`: **64 canonical migration files / 46 live migration rows / 20 literal-name gaps**.
+- The 20 literal-name gaps were semantically reconciled against the live staging catalog. **No additional schema gap requiring a new forward-only migration was found.**
+- Classification summary:
+  - retention controls: **PRESENT_EQUIVALENT**
+  - tenant isolation/RLS hardening: **SUPERSEDED_BY_CURRENT_POLICIES**
+  - billing workspace-role migrations: **PRESENT_EQUIVALENT**
+  - legacy tenant-RLS contract: **SUPERSEDED_BY_WORKSPACE_MEMBERSHIP_MODEL**
+  - queue correlation: **PRESENT_EQUIVALENT**
+  - commercial entitlements: **PRESENT_EQUIVALENT**
+  - dataset registry hardening: **PRESENT_EQUIVALENT** after forward-only feed/retention reconciliation
+  - storage registry hardening: **SUPERSEDED_BY_MEMBERSHIP_STORAGE_POLICIES**
+  - worker queue consumer: **PRESENT_EQUIVALENT** under historical live migration name `20260928103225_saas_worker_queue_consumer`
+  - workspace provisioning: **PRESENT_EQUIVALENT**
+  - billing atomic processing/order/team-plan/subscription identity: **PRESENT_EQUIVALENT**
+- Verified live objects include `workspace_retention_policy`, `tenant_deletion_tombstone`, `soft_delete_workspace`, `purge_deleted_workspaces`, `entitlement`, `provision_workspace(uuid,text)`, both 9- and 10-argument `process_billing_event()` overloads, `billing_event.provider_event_created_at`, `subscription.last_billing_event_at`, `dataset_version_feed`, `dataset_retention_guard`, `dataset_version_storage_path_contract`, `receive_research_run(integer)`, `ack_research_run(bigint)`, and `subscription_provider_subscription_id_key`.
+- Live storage policies are present under `storage.objects` as `qros_datasets_tenant_{insert,select,update,delete}`; legacy `tenant_id` authorization predicates are absent.
+- **Do not apply the 20 historical migrations wholesale and do not rewrite migration history.** The remaining migration-name drift is historical/semantic reconciliation, not an unproven missing-SQL claim.
 - Real Auth/API Golden Path: **NOT VERIFIED on current main SHA**.
 - Two controlled staging identities: **NOT VERIFIED on current main SHA**.
 - Staging worker-loss/restart and queue recovery: **NOT VERIFIED on current main SHA**.
