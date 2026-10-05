@@ -259,6 +259,8 @@ class SupabaseBillingEventStore:
                 "plan": event.plan,
                 "status": event.status,
                 "provider": provider,
+                "provider_customer_id": event.provider_customer_id,
+                "provider_subscription_id": event.provider_subscription_id,
                 "current_period_end": event.current_period_end,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             },
@@ -295,9 +297,21 @@ def verify_hmac_signature(payload: bytes, signature: str, secret: str) -> None:
         raise BillingSignatureError("invalid billing webhook signature")
 
 
-def parse_billing_event(\n    payload: bytes,\n    *,\n    plan_by_price_id: dict[str, str] | None = None,\n    require_stripe_subscription_event: bool = False,\n) -> BillingEvent:
+def parse_billing_event(
+    payload: bytes,
+    *,
+    plan_by_price_id: dict[str, str] | None = None,
+    require_stripe_subscription_event: bool = False,
+) -> BillingEvent:
     data: dict[str, Any] = json.loads(payload)
     event_id = data.get("event_id") or data.get("id")
+    event_type = data.get("type")
+    if require_stripe_subscription_event and event_type not in {
+        "customer.subscription.created",
+        "customer.subscription.updated",
+        "customer.subscription.deleted",
+    }:
+        raise ValueError("unsupported Stripe billing event type")
     obj = data.get("data", {}).get("object", {}) if isinstance(data.get("data"), dict) else {}
     metadata = obj.get("metadata", {}) if isinstance(obj, dict) else {}
     workspace_id = data.get("workspace_id") or metadata.get("workspace_id") or obj.get("workspace_id")
@@ -308,13 +322,40 @@ def parse_billing_event(\n    payload: bytes,\n    *,\n    plan_by_price_id: dic
             price = items[0].get("price", {})
             price_id = price.get("id") if isinstance(price, dict) else None
             plan = plan_by_price_id.get(str(price_id)) if price_id else None
-    status = data.get("status") or obj.get("status")\n    if not status and stripe_event_type == "customer.subscription.deleted":\n        status = "canceled"\n    status = status or "active"
+    status = data.get("status") or obj.get("status")
+    if not status and event_type == "customer.subscription.deleted":
+        status = "canceled"
+    status = status or "active"
     if not all(str(value or "").strip() for value in (event_id, workspace_id, plan)):
         raise ValueError("billing event missing required fields")
     if str(plan) not in ENTITLEMENTS_BY_PLAN:
         raise ValueError("unsupported billing entitlement plan")
-    return BillingEvent(str(event_id), str(workspace_id), str(plan), str(status), data.get("current_period_end") or obj.get("current_period_end"))
 
+    raw_period_end = data.get("current_period_end") or obj.get("current_period_end")
+    current_period_end: str | None
+    if raw_period_end is None:
+        current_period_end = None
+    elif isinstance(raw_period_end, (int, float)) and not isinstance(raw_period_end, bool):
+        current_period_end = datetime.fromtimestamp(raw_period_end, tz=timezone.utc).isoformat()
+    elif isinstance(raw_period_end, str) and raw_period_end.strip():
+        current_period_end = raw_period_end.strip()
+    else:
+        raise ValueError("invalid billing current_period_end")
+
+    provider_customer_id = data.get("provider_customer_id") or obj.get("customer")
+    provider_subscription_id = data.get("provider_subscription_id")
+    if not provider_subscription_id and isinstance(obj, dict):
+        provider_subscription_id = obj.get("id") if str(obj.get("id") or "").startswith("sub_") else None
+
+    return BillingEvent(
+        str(event_id),
+        str(workspace_id),
+        str(plan),
+        str(status),
+        current_period_end,
+        str(provider_customer_id) if provider_customer_id else None,
+        str(provider_subscription_id) if provider_subscription_id else None,
+    )
 
 __all__ = [
     "BillingEvent",
