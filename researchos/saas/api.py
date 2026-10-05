@@ -535,6 +535,7 @@ def create_app(
         status_code=201,
         tags=["billing"],
     )
+    @require_permission("billing", "create")
     def billing_checkout(
         request: BillingCheckoutRequest,
         tenant: TenantContext = Depends(current_tenant),
@@ -562,6 +563,7 @@ def create_app(
         status_code=201,
         tags=["billing"],
     )
+    @require_permission("billing", "read")
     def billing_portal(
         tenant: TenantContext = Depends(current_tenant),
     ) -> BillingActionResponse:
