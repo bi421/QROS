@@ -39,7 +39,11 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.QROS_STAGING_SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_ANON_KEY: ${{ secrets.QROS_STAGING_SUPABASE_ANON_KEY }}
         run: python -m pytest researchos/tests/ researchos/research_core/tests/ researchos/saas/tests/ --real-db -v --tb=short
-      - name: Verify staging SaaS contract\n        env:\n          QROS_STAGING_DATABASE_URL: ${{ secrets.QROS_STAGING_DATABASE_URL }}\n        run: python scripts/verify_saas_contract.py --database-url "$QROS_STAGING_DATABASE_URL"\n      - name: Backup and restore verification
+      - name: Verify staging SaaS contract
+        env:
+          QROS_STAGING_DATABASE_URL: ${{ secrets.QROS_STAGING_DATABASE_URL }}
+        run: python scripts/verify_saas_contract.py --database-url "$QROS_STAGING_DATABASE_URL"
+      - name: Backup and restore verification
         env:
           QROS_BACKUP_DATABASE_URL: ${{ secrets.QROS_STAGING_DATABASE_URL }}
         run: python scripts/backup_verify.py
