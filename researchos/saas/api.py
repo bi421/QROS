@@ -203,6 +203,10 @@ class ResearchJobResponse(BaseModel):
     status: ResearchJobStatus
 
 
+class BillingActionResponse(BaseModel):
+    url: str
+
+
 class WorkspaceCreateRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
@@ -278,7 +282,7 @@ def create_app(
     evidence_store: ResearchEvidenceStore | None = None,
     validation_store: ResearchValidationStore | None = None,
     finding_store: ResearchFindingStore | None = None,
-    billing_webhook_secret: str | None = None,
+    billing_webhook_secret: str | None = None,\n    billing_provider: BillingProvider | None = None,
     rate_limiter: RateLimiter | None = None,
     metrics_token: str | None = None,
     readiness_probe: Callable[[], None] | None = None,
@@ -516,6 +520,49 @@ def create_app(
                     detail="SaaS dependency readiness check failed",
                 ) from exc
         return {"status": "ready"}
+
+    @app.post(
+        "/v1/billing/checkout",
+        response_model=BillingActionResponse,
+        status_code=201,
+        tags=["billing"],
+    )
+    def billing_checkout(
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> BillingActionResponse:
+        require_active_workspace(tenant)
+        require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.BILLING_ADMIN)
+        if billing_provider is None:
+            raise HTTPException(status_code=503, detail="billing checkout is not configured")
+        if tenant.plan is Plan.FREE:
+            raise HTTPException(status_code=400, detail="free plan does not require checkout")
+        try:
+            url = billing_provider.create_checkout_session(
+                workspace_id=tenant.workspace_id,
+                plan=tenant.plan.value,
+            )
+        except BillingProviderError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return BillingActionResponse(url=url)
+
+    @app.post(
+        "/v1/billing/portal",
+        response_model=BillingActionResponse,
+        status_code=201,
+        tags=["billing"],
+    )
+    def billing_portal(
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> BillingActionResponse:
+        require_active_workspace(tenant)
+        require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.BILLING_ADMIN)
+        if billing_provider is None:
+            raise HTTPException(status_code=503, detail="billing portal is not configured")
+        try:
+            url = billing_provider.create_portal_session(workspace_id=tenant.workspace_id)
+        except BillingProviderError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return BillingActionResponse(url=url)
 
     @app.post("/v1/billing/webhook", status_code=200, tags=["billing"])
     @require_permission("billing", "create", service_principal=True)
