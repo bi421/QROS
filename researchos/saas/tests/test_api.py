@@ -397,7 +397,7 @@ def test_billing_webhook_processes_and_replays_identical_event() -> None:
     signature = hmac.new(b"secret", payload, hashlib.sha256).hexdigest()
     headers = {
         "X-Billing-Signature": signature,
-        "X-Billing-Provider": "test",
+        "X-Billing-Provider": "hmac",
     }
 
     first = client.post("/v1/billing/webhook", content=payload, headers=headers)
