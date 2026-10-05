@@ -33,7 +33,7 @@
 ### Exit criteria
 
 - [x] Canonical migration version-set parity verified; historical remote name drift documented without rewriting migration history.
-- [x] Staging schema/security objects verified.
+- [ ] Staging schema/security objects fully verified; current live audit shows missing current SaaS contract objects.
 - [ ] Two controlled staging identities verified.
 - [ ] Real API tenant isolation verified.
 - [ ] Complete governed Golden Path executed.
@@ -401,6 +401,8 @@ The latest SaaS cleanup aligns the entitlement plan database constraint with the
 - The last staging migration is worker execution version `20260928103556` under historical remote display name `20260928103225_saas_worker_queue_consumer`.
 - Normalized migration-name audit finds **17 canonical migrations not represented in staging history** (9 pre-worker hardening migrations + 8 migrations after the worker reconciliation point).
 - This audit does **not** claim all 17 SQL changes are absent from the schema; schema-object verification is required before applying or declaring them missing.
+- Read-only live schema audit on 2026-10-05 confirms current contract gaps: `public.entitlement` table absent; `provision_workspace()` absent; 10-argument `process_billing_event()` absent; `billing_event.provider_event_created_at` absent; `subscription.last_billing_event_at` absent; `dataset_version_storage_path_contract` absent; workspace retention columns/function absent.
+- Storage object policies are present under the live names `qros_datasets_tenant_{insert,select,update,delete}`; no legacy `tenant_id` predicate was found. The earlier policy-name-only check must not be interpreted as a storage-policy absence.
 - Staging project identity and environment-specific operational state must be re-verified before being presented as current release evidence.
 - Historical migration/security observations in this document are retained only as historical evidence unless their current SHA/environment is independently re-verified.
 - Real Auth/API Golden Path: **NOT VERIFIED on current main SHA**.
