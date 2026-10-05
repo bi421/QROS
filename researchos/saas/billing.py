@@ -334,6 +334,9 @@ def parse_billing_event(
     else:
         raise ValueError("invalid billing event created timestamp")
 
+    if require_stripe_subscription_event and event_created_at is None:
+        raise ValueError("Stripe billing event missing created timestamp")
+
     return BillingEvent(
         str(event_id),
         str(workspace_id),
