@@ -16,6 +16,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: staging-performance
+  cancel-in-progress: true
+
 jobs:
   load:
     runs-on: ubuntu-24.04
