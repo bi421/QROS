@@ -50,6 +50,9 @@ def build_production_app() -> FastAPI:
         Plan.TEAM.value: os.environ.get("STRIPE_PRICE_TEAM", ""),
         Plan.ENTERPRISE.value: os.environ.get("STRIPE_PRICE_ENTERPRISE", ""),
     }
+    billing_plan_by_price_id = {
+        price_id: plan for plan, price_id in stripe_prices.items() if price_id
+    }
     billing_provider = None
     if stripe_secret and public_base_url and all(stripe_prices.values()):
         billing_provider = StripeBillingProvider(
@@ -75,6 +78,7 @@ def build_production_app() -> FastAPI:
         finding_store=SupabaseResearchFindingStore(client),
         billing_store=SupabaseBillingEventStore(client),
         billing_provider=billing_provider,
+        billing_plan_by_price_id=billing_plan_by_price_id,
         entitlement_store=SupabaseEntitlementStore(client),
         plan_rate_limiters={
             Plan.FREE: SupabaseRateLimiter(client, limit=100, window_seconds=60),
