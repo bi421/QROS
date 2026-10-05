@@ -326,6 +326,8 @@ def parse_billing_event(
     if not status and event_type == "customer.subscription.deleted":
         status = "canceled"
     status = status or "active"
+    if str(status) == "canceled":
+        status = "cancelled"
     if not all(str(value or "").strip() for value in (event_id, workspace_id, plan)):
         raise ValueError("billing event missing required fields")
     if str(plan) not in ENTITLEMENTS_BY_PLAN:
