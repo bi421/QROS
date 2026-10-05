@@ -234,6 +234,7 @@ class SupabaseBillingEventStore:
                 "p_current_period_end": event.current_period_end,
                 "p_provider_customer_id": event.provider_customer_id,
                 "p_provider_subscription_id": event.provider_subscription_id,
+                "p_event_created_at": event.event_created_at,
             },
         ).execute()
         data = result.data
@@ -322,6 +323,17 @@ def parse_billing_event(
     if not provider_subscription_id and isinstance(obj, dict):
         provider_subscription_id = obj.get("id") if str(obj.get("id") or "").startswith("sub_") else None
 
+    raw_event_created = data.get("created")
+    event_created_at: str | None
+    if raw_event_created is None:
+        event_created_at = None
+    elif isinstance(raw_event_created, (int, float)) and not isinstance(raw_event_created, bool):
+        event_created_at = datetime.fromtimestamp(raw_event_created, tz=timezone.utc).isoformat()
+    elif isinstance(raw_event_created, str) and raw_event_created.strip():
+        event_created_at = raw_event_created.strip()
+    else:
+        raise ValueError("invalid billing event created timestamp")
+
     return BillingEvent(
         str(event_id),
         str(workspace_id),
@@ -330,6 +342,7 @@ def parse_billing_event(
         current_period_end,
         str(provider_customer_id) if provider_customer_id else None,
         str(provider_subscription_id) if provider_subscription_id else None,
+        event_created_at,
     )
 
 __all__ = [
