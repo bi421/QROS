@@ -32,7 +32,7 @@
 
 ### Exit criteria
 
-- [x] Canonical migration version-set parity verified; historical remote name drift documented without rewriting migration history.
+- [ ] Canonical migration version-set parity verified; historical remote name drift documented without rewriting migration history.
 - [x] Staging schema/security objects verified for the reconciled SaaS contracts; all 23 public tables currently observed have RLS enabled. Migration-history parity remains separately blocked by historical name drift.
 - [ ] Two controlled staging identities verified.
 - [ ] Real API tenant isolation verified.
