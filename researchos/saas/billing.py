@@ -83,6 +83,27 @@ class BillingSignatureError(ValueError):
     pass
 
 
+class BillingProviderError(RuntimeError):
+    """Billing provider is unavailable or rejected a customer action."""
+
+
+class BillingProvider(Protocol):
+    def create_checkout_session(self, *, workspace_id: UUID, plan: str) -> str: ...
+    def create_portal_session(self, *, workspace_id: UUID) -> str: ...
+
+
+class InMemoryBillingProvider:
+    """Deterministic test provider; never used by production composition."""
+
+    def create_checkout_session(self, *, workspace_id: UUID, plan: str) -> str:
+        if plan == "free":
+            raise BillingProviderError("free plan does not require checkout")
+        return f"https://billing.test/checkout/{workspace_id}/{plan}"
+
+    def create_portal_session(self, *, workspace_id: UUID) -> str:
+        return f"https://billing.test/portal/{workspace_id}"
+
+
 class BillingEventConflict(ValueError):
     """A provider reused an event id for different payload bytes."""
 
@@ -201,7 +222,7 @@ def parse_billing_event(payload: bytes) -> BillingEvent:
 
 
 __all__ = [
-    "BillingEvent",
+    "BillingEvent",\n    "BillingProvider",\n    "BillingProviderError",\n    "InMemoryBillingProvider",
     "BillingEventConflict",
     "BillingEventStore",
     "BillingSignatureError",
