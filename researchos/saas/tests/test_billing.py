@@ -152,7 +152,7 @@ def test_parse_stripe_subscription_event_persists_provider_ids_and_normalizes_ep
                 "customer": "cus_123",
                 "metadata": {"workspace_id": "workspace-1", "plan": "pro"},
                 "status": "active",
-                "current_period_end": 1790812800,
+                "current_period_end": 1793404800,
             }
         },
     }
