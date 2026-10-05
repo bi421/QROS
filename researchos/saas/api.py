@@ -94,6 +94,10 @@ from researchos.saas.billing import (
     BillingEventConflict,
     BillingEventStore,
     BillingSignatureError,
+    BillingProvider,
+    BillingProviderError,
+    BillingCustomerStore,
+    InMemoryBillingCustomerStore,
     parse_billing_event,
     verify_hmac_signature,
     verify_stripe_signature,
@@ -203,6 +207,14 @@ class ResearchJobResponse(BaseModel):
     status: ResearchJobStatus
 
 
+class BillingCheckoutRequest(BaseModel):
+    plan: Plan
+
+
+class BillingActionResponse(BaseModel):
+    url: str
+
+
 class WorkspaceCreateRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
@@ -279,6 +291,8 @@ def create_app(
     validation_store: ResearchValidationStore | None = None,
     finding_store: ResearchFindingStore | None = None,
     billing_webhook_secret: str | None = None,
+    billing_provider: BillingProvider | None = None,
+    billing_customer_store: BillingCustomerStore | None = None,
     rate_limiter: RateLimiter | None = None,
     metrics_token: str | None = None,
     readiness_probe: Callable[[], None] | None = None,
@@ -286,6 +300,7 @@ def create_app(
     tenant_persistence: TenantPersistence | None = None,
     supabase_url: str | None = None,
     supabase_publishable_key: str | None = None,
+    billing_plan_by_price_id: dict[str, str] | None = None,
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
@@ -301,6 +316,7 @@ def create_app(
     plan_limiters = plan_rate_limiters or {}
     workspaces = workspace_provisioner
     persistence = tenant_persistence or InMemoryTenantPersistence()
+    customer_store = billing_customer_store or InMemoryBillingCustomerStore()
     retention = RetentionConfig(DEFAULT_RETENTION_DAYS)
     app = FastAPI(
         title="QROS SaaS API",
@@ -517,6 +533,52 @@ def create_app(
                 ) from exc
         return {"status": "ready"}
 
+    @app.post(
+        "/v1/billing/checkout",
+        response_model=BillingActionResponse,
+        status_code=201,
+        tags=["billing"],
+    )
+    def billing_checkout(
+        request: BillingCheckoutRequest,
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> BillingActionResponse:
+        require_active_workspace(tenant)
+        require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.BILLING_ADMIN)
+        if billing_provider is None:
+            raise HTTPException(status_code=503, detail="billing checkout is not configured")
+        if request.plan is Plan.FREE:
+            raise HTTPException(status_code=400, detail="free plan does not require checkout")
+        if request.plan is tenant.plan:
+            raise HTTPException(status_code=409, detail="workspace is already on the requested plan")
+        try:
+            url = billing_provider.create_checkout_session(
+                workspace_id=tenant.workspace_id,
+                plan=request.plan.value,
+            )
+        except BillingProviderError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return BillingActionResponse(url=url)
+
+    @app.post(
+        "/v1/billing/portal",
+        response_model=BillingActionResponse,
+        status_code=201,
+        tags=["billing"],
+    )
+    def billing_portal(
+        tenant: TenantContext = Depends(current_tenant),
+    ) -> BillingActionResponse:
+        require_active_workspace(tenant)
+        require_role(tenant, WorkspaceRole.OWNER, WorkspaceRole.BILLING_ADMIN)
+        if billing_provider is None:
+            raise HTTPException(status_code=503, detail="billing portal is not configured")
+        try:
+            url = billing_provider.create_portal_session(workspace_id=tenant.workspace_id)
+        except BillingProviderError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return BillingActionResponse(url=url)
+
     @app.post("/v1/billing/webhook", status_code=200, tags=["billing"])
     @require_permission("billing", "create", service_principal=True)
     async def billing_webhook(
@@ -532,13 +594,16 @@ def create_app(
             raise HTTPException(
                 status_code=400, detail="billing signature and provider are required"
             )
+        provider = x_billing_provider.strip().lower()
+        if provider not in {"stripe", "hmac"}:
+            raise HTTPException(status_code=400, detail="unsupported billing provider")
         payload = await request.body()
         try:
             if signature.startswith("t="):
                 verify_stripe_signature(payload, signature, billing_webhook_secret)
             else:
                 verify_hmac_signature(payload, signature, billing_webhook_secret)
-            event = parse_billing_event(payload)
+            event = parse_billing_event(payload, plan_by_price_id=billing_plan_by_price_id)
         except BillingSignatureError as exc:
             raise HTTPException(
                 status_code=401, detail="invalid billing webhook signature"
@@ -547,7 +612,7 @@ def create_app(
             raise HTTPException(status_code=400, detail="invalid billing event") from exc
         payload_sha256 = hashlib.sha256(payload).hexdigest()
         try:
-            processed = billing.process(event, x_billing_provider.strip()[:64], payload_sha256)
+            processed = billing.process(event, provider, payload_sha256)
         except BillingEventConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except Exception as exc:
