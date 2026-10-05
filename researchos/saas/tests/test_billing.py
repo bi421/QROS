@@ -71,6 +71,8 @@ def test_supabase_billing_store_uses_atomic_rpc() -> None:
     assert client.rpc_payload["p_event_id"] == "evt_1"
     assert client.rpc_payload["p_workspace_id"] == "workspace-1"
     assert client.rpc_payload["p_payload_sha256"] == "a" * 64
+    assert client.rpc_payload["p_provider_customer_id"] is None
+    assert client.rpc_payload["p_provider_subscription_id"] is None
 
 
 def test_supabase_billing_store_returns_duplicate_result() -> None:
