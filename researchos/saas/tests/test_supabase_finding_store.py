@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from researchos.saas.finding import ResearchFindingRecord, VALIDATED_STATUS
@@ -75,6 +76,7 @@ def _row(record: ResearchFindingRecord) -> dict[str, object]:
         "status": record.status,
         "payload": dict(record.payload),
         "contract_version": record.contract_version,
+        "created_at": record.created_at.isoformat(),
     }
 
 
