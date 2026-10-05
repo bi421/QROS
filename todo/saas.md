@@ -15,7 +15,7 @@
 | Research governance | 🟢 Complete | Core claim/plan/evidence/result governance implemented |
 | Tenant security | 🟢 Complete | RLS, authorization, isolation tests and session boundary implemented |
 | API foundation | 🟢 Complete | Versioned API, validation, rate limits, idempotency and errors |
-| Database migrations | 🟡 Verified (staging version-set parity) | 45 staging migration rows; 48 canonical migration files are currently present on main; staging contains the worker execution version `20260928103556` under the historical remote display name `20260928103225_saas_worker_queue_consumer`; the three current M1 reconciliation migrations are not yet applied to staging |
+| Database migrations | 🟡 Verified (staging version-set parity) | 45 staging migration rows; 62 canonical migration files are currently present on main; staging contains the worker execution version `20260928103556` under the historical remote display name `20260928103225_saas_worker_queue_consumer`; the three current M1 reconciliation migrations are not yet applied to staging |
 | Staging Golden Path | 🟡 Blocked | Auth/application identities and end-to-end operational evidence pending |
 | Disaster Recovery | 🔴 Blocked | Isolated recovery target and recovery storage not provisioned |
 | Observability | 🟡 In progress | Production-grade acceptance evidence pending |
@@ -101,7 +101,7 @@
 - [x] Canonical migrations under `supabase/migrations/`.
 - [x] Migration filename/order validation.
 - [x] Migration security invariants.
-- [x] 48 canonical migration files at current baseline.
+- [x] 62 canonical migration files at current baseline.
 
 ### QROS Staging
 - [x] Staging project exists.
@@ -109,7 +109,7 @@
 - [x] Region: `ap-northeast-1`.
 - [x] PostgreSQL 17.6 / engine 17.
 - [x] 45 migration rows observed; the worker migration is present under its historical remote display name.
-- [ ] Current 48-file repository migration set fully applied to staging.
+- [ ] Current 62-file repository migration set fully applied to staging.
 - [x] 20 public tables observed.
 - [x] 0 public tables with RLS disabled.
 
