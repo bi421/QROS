@@ -40,6 +40,37 @@ def test_staging_rejects_shared_identity(monkeypatch: pytest.MonkeyPatch) -> Non
         audit._validate_staging()
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://staging.example",
+        "https://user:pass@staging.example",
+        "https://staging.example?token=secret",
+        "https://staging.example/#secret",
+    ],
+)
+def test_staging_rejects_non_bare_https_origin(
+    monkeypatch: pytest.MonkeyPatch, url: str
+) -> None:
+    audit = load_module()
+    monkeypatch.setenv("QROS_STAGING_BASE_URL", url)
+    monkeypatch.setenv("QROS_STAGING_JWT", "primary")
+    monkeypatch.setenv("QROS_STAGING_ISOLATION_JWT", "isolation")
+    audit._required("staging")
+
+    with pytest.raises(SystemExit, match="bare HTTPS origin"):
+        audit._validate_staging()
+
+
+def test_staging_accepts_bare_https_origin(monkeypatch: pytest.MonkeyPatch) -> None:
+    audit = load_module()
+    monkeypatch.setenv("QROS_STAGING_BASE_URL", "https://staging.example")
+    monkeypatch.setenv("QROS_STAGING_JWT", "primary")
+    monkeypatch.setenv("QROS_STAGING_ISOLATION_JWT", "isolation")
+    audit._required("staging")
+    audit._validate_staging()
+
+
 def test_dr_rejects_production_target(monkeypatch: pytest.MonkeyPatch) -> None:
     audit = load_module()
     values = {
