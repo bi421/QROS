@@ -7,10 +7,7 @@ from typing import Any
 
 from researchos.decision_engine.artifact import DecisionArtifact
 from researchos.decision_engine.calibration import CalibrationEvidence
-from researchos.decision_engine.context import (
-    DecisionContext,
-    DecisionContextValidator,
-)
+from researchos.decision_engine.context import DecisionContext, DecisionContextValidator
 from researchos.decision_engine.contracts import EvidenceSource, WeightConfiguration
 from researchos.decision_engine.evidence import (
     EvidenceAggregator,
@@ -121,10 +118,10 @@ class DecisionPipeline:
             raise DecisionPipelineError("at least one DecisionContext is required")
         branches = tuple(
             ResearchBranch(
-                branch_id=context.id,
+                branch_id=f"{context.id}:{index}",
                 run=lambda _snapshot, context=context: self.run(context),
             )
-            for context in contexts
+            for index, context in enumerate(contexts)
         )
         plan = (
             ResearchWave(

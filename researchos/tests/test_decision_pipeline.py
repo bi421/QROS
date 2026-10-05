@@ -1,5 +1,6 @@
 import pytest
 
+from researchos.decision_engine.contracts import CalculationMethod
 from researchos.decision_engine.probability import ProbabilityAssessment
 from researchos.decision_pipeline import DecisionPipelineInput, run_decision_pipeline
 from researchos.risk.contracts import RiskPolicy, TradeStatistics
@@ -46,7 +47,7 @@ def test_pipeline_produces_human_review_report() -> None:
     assert report.position_size is not None
     assert report.research_id == "research-001"
     assert report.assessment_hash == _assessment().assessment_hash
-    assert report.probability_method == "WEIGHTED_EVIDENCE"
+    assert report.probability_method == CalculationMethod.WEIGHTED_EVIDENCE.value
     assert report.probability_calculation_version == "PROBABILITY_V1"
 
 
@@ -54,7 +55,7 @@ def test_pipeline_blocks_invalid_research() -> None:
     report = run_decision_pipeline(
         DecisionPipelineInput(
             assessment=_assessment(), asset="XAUUSD", direction="bullish", account_equity=10_000,
-            trade_statistics=TradeStatistics(average_win=150, average_loss=100),
+            trade_statistics=TradeStatistics(average_win=150, average_loss=100), 
             research_valid=False, research_limitations=("validation pending",),
         )
     )
@@ -76,7 +77,6 @@ def test_pipeline_accepts_serialized_probability_boundary() -> None:
     assert report.assessment_hash == data["assessment_hash"]
 
 
-
 def test_pipeline_rejects_missing_probability_provenance() -> None:
     data = _assessment().to_dict()
     data["bullish_probability"] = 1.2
@@ -92,7 +92,6 @@ def test_pipeline_rejects_missing_probability_provenance() -> None:
                 research_valid=True,
             )
         )
-
 
 
 def test_pipeline_rejects_assessment_hash_mismatch() -> None:
