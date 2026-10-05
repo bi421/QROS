@@ -7,6 +7,7 @@ from researchos.saas.contracts import ResearchJob, ResearchJobStatus
 from researchos.saas.datasets import (
     Dataset,
     DatasetVersion,
+    storage_path_for,
     InMemoryDatasetStorage,
     InMemoryDatasetStore,
 )
@@ -50,7 +51,7 @@ def test_governed_executor_rejects_cross_tenant_dataset_version():
     dataset = Dataset(uuid4(), owner, "xauusd", uuid4())
     dataset_store.create_dataset(owner, dataset)
     version = DatasetVersion(
-        uuid4(), dataset.id, 1, "0" * 64, "tenant/object", 1, dataset.created_by
+        uuid4(), dataset.id, 1, "0" * 64, storage_path_for(owner, "0" * 64, 1), 1, dataset.created_by
     )
     dataset_store.create_version(owner, version)
     store = InMemoryResearchJobStore()
