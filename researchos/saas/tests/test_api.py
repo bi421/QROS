@@ -519,8 +519,23 @@ def test_billing_checkout_requires_configured_provider() -> None:
     assert response.status_code == 503
 
 
-def test_billing_checkout_returns_provider_url_for_owner() -> None:
+def test_paid_workspace_must_use_portal_for_plan_changes() -> None:
     context = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.OWNER)
+    client = TestClient(create_app(
+        auth_provider=StaticAuth(context),
+        billing_provider=InMemoryBillingProvider(),
+    ))
+    response = client.post(
+        "/v1/billing/checkout",
+        headers={"Authorization": "Bearer test"},
+        json={"plan": "team"},
+    )
+    assert response.status_code == 409
+    assert "billing portal" in response.json()["message"]
+
+
+def test_billing_checkout_returns_provider_url_for_owner() -> None:
+    context = TenantContext(uuid4(), uuid4(), Plan.FREE, WorkspaceRole.OWNER)
     client = TestClient(create_app(
         auth_provider=StaticAuth(context),
         billing_provider=InMemoryBillingProvider(),
