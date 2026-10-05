@@ -187,6 +187,29 @@ def test_parse_stripe_subscription_event_maps_price_id_to_plan() -> None:
     assert event.workspace_id == "workspace-1"
 
 
+def test_parse_stripe_subscription_event_persists_provider_ids_and_normalizes_epoch() -> None:
+    payload = {
+        "id": "evt_sub_ids",
+        "type": "customer.subscription.updated",
+        "data": {
+            "object": {
+                "id": "sub_123",
+                "customer": "cus_123",
+                "metadata": {"workspace_id": "workspace-1", "plan": "pro"},
+                "status": "active",
+                "current_period_end": 1790812800,
+            }
+        },
+    }
+    event = parse_billing_event(
+        json.dumps(payload).encode(),
+        require_stripe_subscription_event=True,
+    )
+    assert event.provider_customer_id == "cus_123"
+    assert event.provider_subscription_id == "sub_123"
+    assert event.current_period_end == "2026-10-31T00:00:00+00:00"
+
+
 def test_parse_billing_event_rejects_unmapped_price_id() -> None:
     payload = {
         "id": "evt_sub_2",
