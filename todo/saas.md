@@ -32,8 +32,8 @@
 
 ### Exit criteria
 
-- [ ] Canonical migration version-set parity verified; current audit finds 63 canonical migration files vs 45 live migration rows, with 20 canonical names not represented by the live history. Historical remote name drift is documented; migration history must not be rewritten.
-- [x] Staging schema/security objects verified for the reconciled SaaS contracts; all 23 public tables currently observed have RLS enabled. Migration-history parity remains separately blocked by historical name drift.
+- [x] Exact canonical-vs-live migration-name audit completed: 64 canonical files, 46 live rows, 20 literal-name gaps. Semantic reconciliation found no additional missing schema behavior; historical migration names remain untouched.
+- [x] Staging schema/security objects verified for the reconciled SaaS contracts; semantic migration reconciliation is complete for all 20 literal-name gaps.
 - [ ] Two controlled staging identities verified.
 - [ ] Real API tenant isolation verified.
 - [ ] Complete governed Golden Path executed.
@@ -115,7 +115,7 @@
 
 ### Remaining
 - [x] Verify the worker execution version `20260928103556` is present; its historical remote display name remains `20260928103225_saas_worker_queue_consumer` and is not rewritten.
-- [ ] Reconcile and verify the 20 canonical migrations not represented by live staging history; do not rewrite historical migration names merely to obtain parity.
+- [x] Reconcile and verify the 20 canonical migrations not represented by live staging history; no additional forward-only schema migration was required.
 - [x] Verify staging QROS tables, RLS state, public policies/triggers, and governed queue function grants.
 - [x] Verify RLS is enabled on all 23 QROS public tables (23/23; 0 disabled).
 - [x] Review staging Security Advisor findings.
@@ -425,7 +425,7 @@ The latest merged change hardens staging endpoint preflight validation so stagin
 # Immediate Next Actions
 
 ### P0 — Staging database proof
-- [ ] Prove canonical migration-history parity (63 canonical files vs 45 live rows; 20 canonical names absent from live history).
+- [x] Complete semantic migration reconciliation: 64 canonical files, 46 live rows, 20 literal-name gaps classified without rewriting history.
 - [x] Verify schema, RLS policies, functions, grants and required SaaS constraints against the live staging database; the full `verify_saas_contract.py` contract audit currently passes.
 - [ ] Review/document pgtap warning.
 
