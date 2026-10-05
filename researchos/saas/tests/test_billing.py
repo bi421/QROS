@@ -136,6 +136,24 @@ def test_supabase_billing_store_replays_identical_processed_event() -> None:
     assert store.process(_event(), "test", "a" * 64) is False
 
 
+
+def test_supabase_billing_store_fails_closed_for_canceled_subscription() -> None:
+    client = BillingClient()
+    store = SupabaseBillingEventStore(client)
+    event = BillingEvent(
+        event_id="evt_cancelled",
+        workspace_id="workspace-1",
+        plan="pro",
+        status="canceled",
+        current_period_end=None,
+    )
+
+    assert store.process(event, "stripe", "c" * 64) is True
+    assert client.tables["entitlement"].payload["plan"] == "free"
+    assert client.tables["subscription"].payload["plan"] == "pro"
+    assert client.tables["subscription"].payload["status"] == "canceled"
+
+
 def test_stripe_signature_verification_accepts_valid_timestamped_signature() -> None:
     import time
     body = b'{"id":"evt_stripe_1","type":"customer.subscription.updated"}'
