@@ -369,50 +369,34 @@ QROS is **not production-ready** until all applicable gates below have independe
 
 ## Code / CI baseline
 
-**Release candidate baseline:** `6263fb25d19175595ff51e495a80e35270ae117e`
+**Current main SHA:** `5d8dc5d98763495260ab7a7053a13f955747561b`
 
-`fix(saas): validate dataset version path inputs`
+Latest merged change:
 
-Observed:
+`fix(saas): align Supabase dataset storage contract (#524)`
 
-- Full pytest: **3002 passed, 9 skipped, 1 warning**
-- SaaS tests: **221 passed, 1 skipped**
-- Ruff: **PASS**
-- Mypy: **PASS**
-- Property-based tests: **PASS**
-- Python 3.11 / 3.12: **PASS**
-- Quant Engine: **PASS**
-- Health Evidence: **PASS**
-- Supabase Security: **PASS**
-- Release Readiness: **PASS**
+Verified on the exact main SHA:
 
-CI:
-- CI #2576 — run `36225256675` — **SUCCESS**
-- PR CI #2577 — run `36225258453` — **SUCCESS**
-- Supabase Security #831 — **SUCCESS**
-- Release Readiness #710 — **SUCCESS**
+- CI run **#3787** — run `37260676718` — **SUCCESS**
+- CI head SHA: `5d8dc5d98763495260ab7a7053a13f955747561b`
+- CI result is repository evidence only; it does **not** prove staging or production readiness.
 
-Local Windows validation: **NOT EXECUTED**.
+The #524 cleanup removed unused Supabase Storage constructor configuration and aligned the adapter documentation with the actual server-side service-role composition. No schema migration or production Storage behavior change was made.
+
+**Operational evidence not claimed:** live public HTTPS deployment, real signup/onboarding against a deployed environment, live Stripe checkout/customer portal, staging Golden Path, DR restore, and production observability remain unverified unless separately evidenced below.
 
 ## Staging
 
-- Project: **QROS Staging**
-- Ref: `yebwhcntiockckhdvawt`
-- Region: `ap-northeast-1`
-- PostgreSQL: **17.6 / engine 17**
-- Status observed: **ACTIVE_HEALTHY**
-- Repository migrations applied: **44/44**
-- Migration rows observed: **44**
-- Public tables observed: **20**
-- Public tables with RLS disabled: **0**
-- pgtap: **installed**
-- Migration-history version-set parity: **VERIFIED**; remote historical display-name drift retained as evidence, not repaired
-- Real Auth/API Golden Path: **NOT EXECUTED**
+- Staging project identity and environment-specific operational state must be re-verified before being presented as current release evidence.
+- Historical migration/security observations in this document are retained only as historical evidence unless their current SHA/environment is independently re-verified.
+- Real Auth/API Golden Path: **NOT VERIFIED on current main SHA**.
+- Two controlled staging identities: **NOT VERIFIED on current main SHA**.
+- Staging worker-loss/restart and queue recovery: **NOT VERIFIED on current main SHA**.
 
 ## DR
 
-- Recovery target: **NOT PROVISIONED**
-- Recovery S3: **NOT PROVISIONED**
+- Recovery target: **NOT PROVISIONED / NOT VERIFIED**
+- Recovery S3: **NOT PROVISIONED / NOT VERIFIED**
 - DR infrastructure gate: **BLOCKED**
 - Full DR drill: **NOT EXECUTED**
 
