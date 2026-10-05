@@ -94,6 +94,8 @@ from researchos.saas.billing import (
     BillingEventConflict,
     BillingEventStore,
     BillingSignatureError,
+    BillingProvider,
+    BillingProviderError,
     parse_billing_event,
     verify_hmac_signature,
     verify_stripe_signature,
