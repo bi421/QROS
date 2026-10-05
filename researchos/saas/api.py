@@ -80,6 +80,7 @@ from researchos.saas.rate_limit import FixedWindowRateLimiter, RateLimiter
 from researchos.saas.persistence import (
     DEFAULT_RETENTION_DAYS,
     InMemoryTenantPersistence,
+    TenantPersistence,
     RetentionConfig,
     TenantPersistenceError,
 )
