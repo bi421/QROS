@@ -127,6 +127,12 @@ class InMemoryTenantPersistence:
         self._rows: list[_TenantRow] = []
         self._receipts: dict[UUID, DeletionReceipt] = {}
 
+    def is_workspace_deleted(self, workspace_id: UUID) -> bool:
+        return any(
+            receipt.workspace_id == workspace_id
+            for receipt in self._receipts.values()
+        )
+
     def add(self, table: str, row_id: str, workspace_id: UUID, payload: dict[str, Any]) -> None:
         self._rows.append(
             _TenantRow(
