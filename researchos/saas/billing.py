@@ -307,7 +307,11 @@ def parse_billing_event(payload: bytes) -> BillingEvent:
 
 
 __all__ = [
-    "BillingEvent",\n    "BillingProvider",\n    "BillingProviderError",\n    "InMemoryBillingProvider",\n    "StripeBillingProvider",
+    "BillingEvent",
+    "BillingProvider",
+    "BillingProviderError",
+    "InMemoryBillingProvider",
+    "StripeBillingProvider",
     "BillingEventConflict",
     "BillingEventStore",
     "BillingSignatureError",
