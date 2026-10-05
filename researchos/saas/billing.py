@@ -18,6 +18,9 @@ class BillingEvent:
     plan: str
     status: str
     current_period_end: str | None
+    provider_customer_id: str | None = None
+    provider_subscription_id: str | None = None
+    event_created_at: str | None = None
 
 
 
