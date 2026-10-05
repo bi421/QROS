@@ -493,7 +493,7 @@ def test_readiness_probe_success_keeps_endpoint_ready() -> None:
 
 def test_billing_checkout_requires_configured_provider() -> None:
     client, _, _, _ = _client()
-    response = client.post("/v1/billing/checkout", headers={"Authorization": "Bearer test"})
+    response = client.post("/v1/billing/checkout", headers={"Authorization": "Bearer test"}, json={"plan": "pro"})
     assert response.status_code == 503
 
 
@@ -503,9 +503,9 @@ def test_billing_checkout_returns_provider_url_for_owner() -> None:
         auth_provider=StaticAuth(context),
         billing_provider=InMemoryBillingProvider(),
     ))
-    response = client.post("/v1/billing/checkout", headers={"Authorization": "Bearer test"})
+    response = client.post("/v1/billing/checkout", headers={"Authorization": "Bearer test"}, json={"plan": "team"})
     assert response.status_code == 201
-    assert response.json()["url"] == f"https://billing.test/checkout/{context.workspace_id}/pro"
+    assert response.json()["url"] == f"https://billing.test/checkout/{context.workspace_id}/team"
 
 
 def test_billing_portal_is_billing_admin_only() -> None:
@@ -535,5 +535,5 @@ def test_free_plan_cannot_start_paid_checkout() -> None:
         auth_provider=StaticAuth(context),
         billing_provider=InMemoryBillingProvider(),
     ))
-    response = client.post("/v1/billing/checkout", headers={"Authorization": "Bearer test"})
+    response = client.post("/v1/billing/checkout", headers={"Authorization": "Bearer test"}, json={"plan": "free"})
     assert response.status_code == 400
