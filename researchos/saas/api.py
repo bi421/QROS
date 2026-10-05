@@ -300,6 +300,7 @@ def create_app(
     tenant_persistence: TenantPersistence | None = None,
     supabase_url: str | None = None,
     supabase_publishable_key: str | None = None,
+    billing_plan_by_price_id: dict[str, str] | None = None,
 ) -> FastAPI:
     """Build the SaaS API with explicit dependency injection for testing/deployment."""
 
@@ -593,13 +594,16 @@ def create_app(
             raise HTTPException(
                 status_code=400, detail="billing signature and provider are required"
             )
+        provider = x_billing_provider.strip().lower()
+        if provider not in {"stripe", "hmac"}:
+            raise HTTPException(status_code=400, detail="unsupported billing provider")
         payload = await request.body()
         try:
             if signature.startswith("t="):
                 verify_stripe_signature(payload, signature, billing_webhook_secret)
             else:
                 verify_hmac_signature(payload, signature, billing_webhook_secret)
-            event = parse_billing_event(payload)
+            event = parse_billing_event(payload, plan_by_price_id=billing_plan_by_price_id)
         except BillingSignatureError as exc:
             raise HTTPException(
                 status_code=401, detail="invalid billing webhook signature"
@@ -608,7 +612,7 @@ def create_app(
             raise HTTPException(status_code=400, detail="invalid billing event") from exc
         payload_sha256 = hashlib.sha256(payload).hexdigest()
         try:
-            processed = billing.process(event, x_billing_provider.strip()[:64], payload_sha256)
+            processed = billing.process(event, provider, payload_sha256)
         except BillingEventConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except Exception as exc:
