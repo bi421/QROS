@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: staging-golden-path
+  cancel-in-progress: true
+
 jobs:
   golden-path:
     runs-on: ubuntu-latest
