@@ -83,6 +83,128 @@ class BillingSignatureError(ValueError):
     pass
 
 
+class BillingProviderError(RuntimeError):
+    """Billing provider is unavailable or rejected a customer action."""
+
+
+class BillingProvider(Protocol):
+    def create_checkout_session(self, *, workspace_id: UUID, plan: str) -> str: ...
+    def create_portal_session(self, *, workspace_id: UUID) -> str: ...
+
+
+class BillingCustomerStore(Protocol):
+    def get_customer_id(self, workspace_id: UUID) -> str | None: ...
+    def set_customer_id(self, workspace_id: UUID, customer_id: str) -> None: ...
+
+
+class InMemoryBillingCustomerStore:
+    def __init__(self) -> None:
+        self._rows: dict[UUID, str] = {}
+
+    def get_customer_id(self, workspace_id: UUID) -> str | None:
+        return self._rows.get(workspace_id)
+
+    def set_customer_id(self, workspace_id: UUID, customer_id: str) -> None:
+        self._rows[workspace_id] = customer_id
+
+
+class InMemoryBillingProvider:
+    """Deterministic test provider; never used by production composition."""
+
+    def create_checkout_session(self, *, workspace_id: UUID, plan: str) -> str:
+        if plan == "free":
+            raise BillingProviderError("free plan does not require checkout")
+        return f"https://billing.test/checkout/{workspace_id}/{plan}"
+
+    def create_portal_session(self, *, workspace_id: UUID) -> str:
+        return f"https://billing.test/portal/{workspace_id}"
+
+
+class StripeBillingProvider:
+    """Small Stripe REST adapter; production wiring is explicit and fail-closed."""
+
+    def __init__(self, *, secret_key: str, public_base_url: str, price_ids: dict[str, str]) -> None:
+        from urllib.parse import urlparse
+        parsed = urlparse(public_base_url)
+        if parsed.scheme != "https" or not parsed.netloc:
+            raise ValueError("billing public base URL must be HTTPS")
+        if not secret_key.startswith("sk_"):
+            raise ValueError("invalid Stripe secret key configuration")
+        self._secret_key = secret_key
+        self._public_base_url = public_base_url.rstrip("/")
+        self._price_ids = dict(price_ids)
+
+    def _post(self, path: str, fields: dict[str, str]) -> dict[str, Any]:
+        from urllib.parse import urlencode
+        from urllib.request import Request, urlopen
+        request = Request(
+            "https://api.stripe.com" + path,
+            data=urlencode(fields).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self._secret_key}",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=15) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except Exception as exc:
+            raise BillingProviderError("billing provider request failed") from exc
+        if not isinstance(payload, dict):
+            raise BillingProviderError("billing provider returned an invalid response")
+        return payload
+
+    def create_checkout_session(self, *, workspace_id: UUID, plan: str) -> str:
+        if plan == "free":
+            raise BillingProviderError("free plan does not require checkout")
+        price_id = self._price_ids.get(plan)
+        if not price_id:
+            raise BillingProviderError("billing price is not configured")
+        payload = self._post("/v1/checkout/sessions", {
+            "mode": "subscription",
+            "line_items[0][price]": price_id,
+            "line_items[0][quantity]": "1",
+            "success_url": f"{self._public_base_url}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
+            "cancel_url": f"{self._public_base_url}/billing",
+            "client_reference_id": str(workspace_id),
+            "metadata[workspace_id]": str(workspace_id),
+            "metadata[plan]": plan,
+            "customer_creation": "always",
+        })
+        url = payload.get("url")
+        if not isinstance(url, str) or not url.startswith("https://checkout.stripe.com/"):
+            raise BillingProviderError("billing provider returned no valid checkout URL")
+        return url
+
+    def create_portal_session(self, *, workspace_id: UUID) -> str:
+        from urllib.parse import urlencode
+        from urllib.request import Request, urlopen
+        query = urlencode({"query": f"metadata['workspace_id']:'{workspace_id}'", "limit": "1"})
+        request = Request(
+            "https://api.stripe.com/v1/customers/search?" + query,
+            headers={"Authorization": f"Bearer {self._secret_key}"},
+            method="GET",
+        )
+        try:
+            with urlopen(request, timeout=15) as response:
+                customers = json.loads(response.read().decode("utf-8"))
+        except Exception as exc:
+            raise BillingProviderError("billing provider request failed") from exc
+        data = customers.get("data") if isinstance(customers, dict) else None
+        customer_id = data[0].get("id") if isinstance(data, list) and data and isinstance(data[0], dict) else None
+        if not isinstance(customer_id, str) or not customer_id.startswith("cus_"):
+            raise BillingProviderError("billing customer is not configured")
+        payload = self._post("/v1/billing_portal/sessions", {
+            "customer": customer_id,
+            "return_url": f"{self._public_base_url}/billing",
+        })
+        url = payload.get("url")
+        if not isinstance(url, str) or not url.startswith("https://billing.stripe.com/"):
+            raise BillingProviderError("billing provider returned no valid portal URL")
+        return url
+
+
 class BillingEventConflict(ValueError):
     """A provider reused an event id for different payload bytes."""
 
@@ -185,13 +307,19 @@ def verify_hmac_signature(payload: bytes, signature: str, secret: str) -> None:
         raise BillingSignatureError("invalid billing webhook signature")
 
 
-def parse_billing_event(payload: bytes) -> BillingEvent:
+def parse_billing_event(payload: bytes, *, plan_by_price_id: dict[str, str] | None = None) -> BillingEvent:
     data: dict[str, Any] = json.loads(payload)
     event_id = data.get("event_id") or data.get("id")
     obj = data.get("data", {}).get("object", {}) if isinstance(data.get("data"), dict) else {}
     metadata = obj.get("metadata", {}) if isinstance(obj, dict) else {}
     workspace_id = data.get("workspace_id") or metadata.get("workspace_id") or obj.get("workspace_id")
     plan = data.get("plan") or metadata.get("plan") or obj.get("plan")
+    if not plan and isinstance(obj, dict) and plan_by_price_id:
+        items = obj.get("items", {}).get("data", []) if isinstance(obj.get("items"), dict) else []
+        if isinstance(items, list) and items and isinstance(items[0], dict):
+            price = items[0].get("price", {})
+            price_id = price.get("id") if isinstance(price, dict) else None
+            plan = plan_by_price_id.get(str(price_id)) if price_id else None
     status = data.get("status") or obj.get("status") or "active"
     if not all(str(value or "").strip() for value in (event_id, workspace_id, plan)):
         raise ValueError("billing event missing required fields")
@@ -202,6 +330,12 @@ def parse_billing_event(payload: bytes) -> BillingEvent:
 
 __all__ = [
     "BillingEvent",
+    "BillingProvider",
+    "BillingProviderError",
+    "BillingCustomerStore",
+    "InMemoryBillingCustomerStore",
+    "InMemoryBillingProvider",
+    "StripeBillingProvider",
     "BillingEventConflict",
     "BillingEventStore",
     "BillingSignatureError",
