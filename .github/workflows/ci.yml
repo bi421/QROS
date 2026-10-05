@@ -182,3 +182,65 @@ jobs:
       - name: Run release-readiness contract audit
         run: python ops/release/readiness_audit.py
 
+  quality-static:
+    name: Quality Static
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest ruff pyyaml pydantic pandas numpy polars plotly
+          python -m pip install fastapi uvicorn python-multipart supabase structlog
+          python -m pip install "opentelemetry-api>=1.27,<2" "opentelemetry-sdk>=1.27,<2"
+          python -m pip install "prometheus-client>=0.21,<1" "msgpack>=1.2.1,<2" httpx
+      - name: Syntax
+        run: python -m compileall -q researchos tools
+      - name: Undefined names and redefinitions
+        run: python -m ruff check researchos --select E9,F82,F811
+      - name: Every SaaS module imports
+        env:
+          SUPABASE_URL: https://example.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: smoke-service-role-key
+          SUPABASE_ANON_KEY: smoke-anon-key
+          QROS_STORAGE_SIGNING_SECRET: smoke-signing-secret
+        run: python tools/import_smoke.py researchos.saas
+      - name: Workflow hygiene
+        run: python tools/check_workflows.py
+
+  mypy-ratchet:
+    name: Mypy Ratchet
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,test,saas]"
+          python -m pip install mypy-baseline
+      - name: New type errors only
+        run: |
+          python -m mypy --config-file pyproject.toml --follow-imports=skip | mypy-baseline filter
+
+  release-readiness-static:
+    name: Static Release Readiness Contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Run release-readiness contract audit
+        run: python ops/release/readiness_audit.py
+
