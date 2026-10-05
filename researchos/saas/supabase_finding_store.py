@@ -104,7 +104,7 @@ class SupabaseResearchFindingStore(ResearchFindingStore):
             self._client.table("research_finding")
             .select(
                 "id,workspace_id,research_run_id,validation_id,result_manifest_sha256,"
-                "validation_sha256,claim_id,plan_hash,finding_sha256,status,payload,contract_version"
+                "validation_sha256,claim_id,plan_hash,finding_sha256,status,payload,contract_version,created_at"
             )
             .eq("workspace_id", str(workspace_id))
             .is_("deleted_at", "null")

@@ -19,6 +19,9 @@ class _Query:
     def eq(self, *_args, **_kwargs):
         return self
 
+    def is_(self, *_args, **_kwargs):
+        return self
+
     def limit(self, *_args, **_kwargs):
         return self
 
