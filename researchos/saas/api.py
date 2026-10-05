@@ -282,6 +282,7 @@ def create_app(
     metrics_token: str | None = None,
     readiness_probe: Callable[[], None] | None = None,
     workspace_provisioner: WorkspaceProvisioner | None = None,
+    tenant_persistence: TenantPersistence | None = None,
     supabase_url: str | None = None,
     supabase_publishable_key: str | None = None,
 ) -> FastAPI:
@@ -298,7 +299,7 @@ def create_app(
     entitlements: EntitlementStore = entitlement_store or InMemoryEntitlementStore()
     plan_limiters = plan_rate_limiters or {}
     workspaces = workspace_provisioner
-    persistence = InMemoryTenantPersistence()
+    persistence = tenant_persistence or InMemoryTenantPersistence()
     retention = RetentionConfig(DEFAULT_RETENTION_DAYS)
     app = FastAPI(
         title="QROS SaaS API",
@@ -381,6 +382,17 @@ def create_app(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="workspace role is not authorized",
             )
+
+    def require_active_workspace(tenant: TenantContext) -> None:
+        try:
+            deleted = persistence.is_workspace_deleted(tenant.workspace_id)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="workspace lifecycle state unavailable",
+            ) from exc
+        if deleted:
+            raise HTTPException(status_code=410, detail="workspace is deleted")
 
     def require_rate_limit(tenant: TenantContext) -> None:
         principal = hashlib.sha256(f"workspace:{tenant.workspace_id}".encode()).hexdigest()
@@ -639,6 +651,7 @@ def create_app(
         tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
         tenant: TenantContext = Depends(current_tenant),
     ) -> PageResponse:
+        require_active_workspace(tenant)
         try:
             if request is not None:
                 validate_filter_keys(
