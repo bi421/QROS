@@ -3,7 +3,7 @@ name: Release Readiness Static Gate
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
 
 permissions:
