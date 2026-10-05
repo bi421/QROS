@@ -145,7 +145,7 @@ def test_parse_stripe_subscription_event_persists_provider_ids_and_normalizes_ep
     payload = {
         "id": "evt_sub_ids",
         "type": "customer.subscription.updated",
-        "created": 1790812800,
+        "created": 1793404800,
         "data": {
             "object": {
                 "id": "sub_123",
