@@ -546,8 +546,11 @@ def create_app(
             raise HTTPException(status_code=503, detail="billing checkout is not configured")
         if request.plan is Plan.FREE:
             raise HTTPException(status_code=400, detail="free plan does not require checkout")
-        if request.plan is tenant.plan:
-            raise HTTPException(status_code=409, detail="workspace is already on the requested plan")
+        if tenant.plan is not Plan.FREE:
+            raise HTTPException(
+                status_code=409,
+                detail="workspace already has an active paid subscription; use the billing portal to change plans",
+            )
         try:
             url = billing_provider.create_checkout_session(
                 workspace_id=tenant.workspace_id,
