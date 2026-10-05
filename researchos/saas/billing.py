@@ -248,8 +248,11 @@ class SupabaseBillingEventStore:
             if rows[0].get("processed_at"):
                 return False
 
-        max_datasets, max_jobs, max_storage = ENTITLEMENTS_BY_PLAN[event.plan]
-        self._client.table("entitlement").upsert({"tenant_id": event.workspace_id, "plan": event.plan, "max_datasets": max_datasets, "max_jobs_per_month": max_jobs, "max_storage_mb": max_storage, "updated_at": datetime.now(timezone.utc).isoformat()}, on_conflict="tenant_id").execute()
+        # Paid access is granted only while the provider reports an active/trialing subscription.
+        # Non-active states fail closed to the free entitlement.
+        effective_plan = event.plan if event.status in {"active", "trialing"} else "free"
+        max_datasets, max_jobs, max_storage = ENTITLEMENTS_BY_PLAN[effective_plan]
+        self._client.table("entitlement").upsert({"tenant_id": event.workspace_id, "plan": effective_plan, "max_datasets": max_datasets, "max_jobs_per_month": max_jobs, "max_storage_mb": max_storage, "updated_at": datetime.now(timezone.utc).isoformat()}, on_conflict="tenant_id").execute()
         self._client.table("subscription").upsert(
             {
                 "workspace_id": event.workspace_id,
