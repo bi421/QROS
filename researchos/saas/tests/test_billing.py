@@ -6,7 +6,6 @@ import pytest
 
 from researchos.saas.billing import (
     BillingEvent,
-    BillingEventConflict,
     BillingSignatureError,
     SupabaseBillingEventStore,
     parse_billing_event,
@@ -15,62 +14,26 @@ from researchos.saas.billing import (
 )
 
 
-class PostgrestError(Exception):
-    def __init__(self, code):
-        self.code = code
-
-
-class TableQuery:
-    def __init__(self, name, *, rows=None, insert_error=None):
-        self.name = name
-        self.rows = rows or []
-        self.insert_error = insert_error
-        self.operation = None
+class RpcQuery:
+    def __init__(self, data):
+        self.data = data
         self.payload = None
 
-    def insert(self, payload):
-        self.operation = "insert"
-        self.payload = payload
-        return self
-
-    def select(self, *_):
-        self.operation = "select"
-        return self
-
-    def upsert(self, payload, **_):
-        self.operation = "upsert"
-        self.payload = payload
-        return self
-
-    def update(self, payload):
-        self.operation = "update"
-        self.payload = payload
-        return self
-
-    def eq(self, *_):
-        return self
-
-    def limit(self, *_):
-        return self
-
     def execute(self):
-        if self.operation == "insert" and self.insert_error is not None:
-            raise self.insert_error
-        return type("Response", (), {"data": self.rows})()
+        return type("Response", (), {"data": self.data})()
 
 
 class BillingClient:
-    def __init__(self, *, billing_rows=None, insert_error=None):
-        self.tables = {
-            "billing_event": TableQuery(
-                "billing_event", rows=billing_rows, insert_error=insert_error
-            ),
-            "subscription": TableQuery("subscription"),
-            "entitlement": TableQuery("entitlement"),
-        }
+    def __init__(self, *, rpc_result=True):
+        self.rpc_result = rpc_result
+        self.rpc_name = None
+        self.rpc_payload = None
 
-    def table(self, name):
-        return self.tables[name]
+    def rpc(self, name, payload):
+        self.rpc_name = name
+        self.rpc_payload = payload
+        return RpcQuery(self.rpc_result)
+
 
 
 def _event() -> BillingEvent:
@@ -99,59 +62,31 @@ def test_billing_event_requires_identity_and_entitlement() -> None:
         parse_billing_event(json.dumps({"event_id": "x"}).encode())
 
 
-def test_supabase_billing_store_propagates_non_unique_insert_errors() -> None:
-    client = BillingClient(insert_error=PostgrestError("42501"))
-    store = SupabaseBillingEventStore(client)
-
-    with pytest.raises(PostgrestError):
-        store.process(_event(), "test", "a" * 64)
-
-
-def test_supabase_billing_store_rejects_same_event_with_different_payload() -> None:
-    client = BillingClient(
-        billing_rows=[{
-            "event_id": "evt_1",
-            "payload_sha256": "b" * 64,
-            "processed_at": "2026-09-18T00:00:00+00:00",
-        }],
-        insert_error=PostgrestError("23505"),
-    )
-    store = SupabaseBillingEventStore(client)
-
-    with pytest.raises(BillingEventConflict):
-        store.process(_event(), "test", "a" * 64)
-
-
-def test_supabase_billing_store_replays_identical_processed_event() -> None:
-    client = BillingClient(
-        billing_rows=[{
-            "event_id": "evt_1",
-            "payload_sha256": "a" * 64,
-            "processed_at": "2026-09-18T00:00:00+00:00",
-        }],
-        insert_error=PostgrestError("23505"),
-    )
-    store = SupabaseBillingEventStore(client)
-
-    assert store.process(_event(), "test", "a" * 64) is False
-
-
-
-def test_supabase_billing_store_fails_closed_for_canceled_subscription() -> None:
+def test_supabase_billing_store_uses_atomic_rpc() -> None:
     client = BillingClient()
     store = SupabaseBillingEventStore(client)
-    event = BillingEvent(
-        event_id="evt_cancelled",
-        workspace_id="workspace-1",
-        plan="pro",
-        status="canceled",
-        current_period_end=None,
-    )
 
-    assert store.process(event, "stripe", "c" * 64) is True
-    assert client.tables["entitlement"].payload["plan"] == "free"
-    assert client.tables["subscription"].payload["plan"] == "pro"
-    assert client.tables["subscription"].payload["status"] == "canceled"
+    assert store.process(_event(), "stripe", "a" * 64) is True
+    assert client.rpc_name == "process_billing_event"
+    assert client.rpc_payload["p_event_id"] == "evt_1"
+    assert client.rpc_payload["p_workspace_id"] == "workspace-1"
+    assert client.rpc_payload["p_payload_sha256"] == "a" * 64
+
+
+def test_supabase_billing_store_returns_duplicate_result() -> None:
+    client = BillingClient(rpc_result=False)
+    store = SupabaseBillingEventStore(client)
+
+    assert store.process(_event(), "stripe", "a" * 64) is False
+
+
+def test_supabase_billing_store_rejects_invalid_rpc_result() -> None:
+    client = BillingClient(rpc_result={"processed": True})
+    store = SupabaseBillingEventStore(client)
+
+    with pytest.raises(RuntimeError, match="invalid result"):
+        store.process(_event(), "stripe", "a" * 64)
+
 
 
 def test_stripe_signature_verification_accepts_valid_timestamped_signature() -> None:

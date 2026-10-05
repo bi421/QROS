@@ -222,54 +222,27 @@ class SupabaseBillingEventStore:
         self._client = supabase_client
 
     def process(self, event: BillingEvent, provider: str, payload_sha256: str) -> bool:
-        row = {
-            "event_id": event.event_id,
-            "workspace_id": event.workspace_id,
-            "provider": provider,
-            "payload_sha256": payload_sha256,
-        }
-        try:
-            self._client.table("billing_event").insert(row).execute()
-        except Exception as exc:
-            if getattr(exc, "code", None) != "23505":
-                raise
-            existing = (
-                self._client.table("billing_event")
-                .select("event_id,payload_sha256,processed_at")
-                .eq("event_id", event.event_id)
-                .limit(1)
-                .execute()
-            )
-            rows = existing.data or []
-            if not rows:
-                raise
-            if rows[0]["payload_sha256"] != payload_sha256:
-                raise BillingEventConflict("billing event id reused with different payload")
-            if rows[0].get("processed_at"):
-                return False
-
-        # Paid access is granted only while the provider reports an active/trialing subscription.
-        # Non-active states fail closed to the free entitlement.
-        effective_plan = event.plan if event.status in {"active", "trialing"} else "free"
-        max_datasets, max_jobs, max_storage = ENTITLEMENTS_BY_PLAN[effective_plan]
-        self._client.table("entitlement").upsert({"tenant_id": event.workspace_id, "plan": effective_plan, "max_datasets": max_datasets, "max_jobs_per_month": max_jobs, "max_storage_mb": max_storage, "updated_at": datetime.now(timezone.utc).isoformat()}, on_conflict="tenant_id").execute()
-        self._client.table("subscription").upsert(
+        result = self._client.rpc(
+            "process_billing_event",
             {
-                "workspace_id": event.workspace_id,
-                "plan": event.plan,
-                "status": event.status,
-                "provider": provider,
-                "provider_customer_id": event.provider_customer_id,
-                "provider_subscription_id": event.provider_subscription_id,
-                "current_period_end": event.current_period_end,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "p_event_id": event.event_id,
+                "p_workspace_id": event.workspace_id,
+                "p_provider": provider,
+                "p_payload_sha256": payload_sha256,
+                "p_plan": event.plan,
+                "p_status": event.status,
+                "p_current_period_end": event.current_period_end,
+                "p_provider_customer_id": event.provider_customer_id,
+                "p_provider_subscription_id": event.provider_subscription_id,
             },
-            on_conflict="workspace_id",
         ).execute()
-        self._client.table("billing_event").update(
-            {"processed_at": datetime.now(timezone.utc).isoformat()}
-        ).eq("event_id", event.event_id).execute()
-        return True
+        data = result.data
+        if isinstance(data, bool):
+            return data
+        if isinstance(data, list) and len(data) == 1 and isinstance(data[0], bool):
+            return data[0]
+        raise RuntimeError("billing event processor returned invalid result")
+
 
 
 def verify_stripe_signature(payload: bytes, signature: str, secret: str, *, tolerance_seconds: int = 300, now: int | None = None) -> None:
