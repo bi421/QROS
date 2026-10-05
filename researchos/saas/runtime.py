@@ -23,6 +23,7 @@ from researchos.saas.idempotency import SupabaseIdempotencyStore
 from researchos.saas.billing import SupabaseBillingEventStore, SupabaseEntitlementStore
 from researchos.saas.rate_limit import SupabaseRateLimiter
 from researchos.saas.workspace import SupabaseWorkspaceProvisioner
+from researchos.saas.persistence import SupabaseTenantPersistence
 
 
 def build_production_app() -> FastAPI:
@@ -70,6 +71,7 @@ def build_production_app() -> FastAPI:
         rate_limiter=SupabaseRateLimiter(client, limit=120, window_seconds=60),
         readiness_probe=readiness_probe,
         workspace_provisioner=SupabaseWorkspaceProvisioner(client),
+        tenant_persistence=SupabaseTenantPersistence(client),
         supabase_url=url,
         supabase_publishable_key=os.environ.get("SUPABASE_PUBLISHABLE_KEY"),
     )
