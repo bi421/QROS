@@ -15,7 +15,7 @@
 | Research governance | 🟢 Complete | Core claim/plan/evidence/result governance implemented |
 | Tenant security | 🟢 Complete | RLS, authorization, isolation tests and session boundary implemented |
 | API foundation | 🟢 Complete | Versioned API, validation, rate limits, idempotency and errors |
-| Database migrations | 🟡 Blocked (staging parity) | 45 staging migration rows; The canonical migration-file count must be re-derived from the current main SHA before being presented as live evidence. The staging migration history ends with worker execution version `20260928103556` under the historical remote display name `20260928103225_saas_worker_queue_consumer`. A normalized comparison shows 17 canonical migration names are not represented in the staging history: 9 pre-worker hardening migrations and 8 migrations after the worker reconciliation point. Because historical staging migration names were rewritten, this is a migration-history/schema-parity blocker and does not by itself prove that every SQL change is absent from the live schema. The exact missing set must be reconciled and schema-verified before M1 can pass. |
+| Database migrations | 🟡 Blocked (staging parity) | 45 staging migration rows; exact current-main audit finds 63 canonical migration files. The staging migration history ends with worker execution version `20260928103556` under the historical remote display name `20260928103225_saas_worker_queue_consumer`. A normalized comparison shows 17 canonical migration names are not represented in the staging history: 9 pre-worker hardening migrations and 8 migrations after the worker reconciliation point. Because historical staging migration names were rewritten, this is a migration-history/schema-parity blocker and does not by itself prove that every SQL change is absent from the live schema. The exact missing set must be reconciled and schema-verified before M1 can pass. |
 | Staging Golden Path | 🟡 Blocked | Auth/application identities and end-to-end operational evidence pending |
 | Disaster Recovery | 🔴 Blocked | Isolated recovery target and recovery storage not provisioned |
 | Observability | 🟡 In progress | Production-grade acceptance evidence pending |
@@ -32,7 +32,7 @@
 
 ### Exit criteria
 
-- [x] Canonical migration version-set parity verified; historical remote name drift documented without rewriting migration history.
+- [ ] Canonical migration version-set parity verified; current audit finds 63 canonical migration files vs 45 live migration rows, with 20 canonical names not represented by the live history. Historical remote name drift is documented; migration history must not be rewritten.
 - [x] Staging schema/security objects verified for the reconciled SaaS contracts; all 23 public tables currently observed have RLS enabled. Migration-history parity remains separately blocked by historical name drift.
 - [ ] Two controlled staging identities verified.
 - [ ] Real API tenant isolation verified.
@@ -109,13 +109,13 @@
 - [x] Region: `ap-northeast-1`.
 - [x] PostgreSQL 17.6 / engine 17.
 - [x] 45 migration rows observed; the worker migration is present under its historical remote display name.
-- [ ] Current repository migration set must be fully reconciled with staging migration history and schema; current audit finds 17 canonical migrations not represented by normalized staging history.
+- [ ] Current repository migration set must be fully reconciled with staging migration history and schema; current exact audit finds 20 canonical migration names not represented by live staging history.
 - [x] 23 public tables observed.
 - [x] 23/23 public tables have RLS enabled; 0 disabled.
 
 ### Remaining
 - [x] Verify the worker execution version `20260928103556` is present; its historical remote display name remains `20260928103225_saas_worker_queue_consumer` and is not rewritten.
-- [ ] Reconcile and verify the 17 canonical migrations not represented by normalized staging history; do not rewrite historical migration names merely to obtain parity.
+- [ ] Reconcile and verify the 20 canonical migrations not represented by live staging history; do not rewrite historical migration names merely to obtain parity.
 - [x] Verify staging QROS tables, RLS state, public policies/triggers, and governed queue function grants.
 - [x] Verify RLS is enabled on all 23 QROS public tables (23/23; 0 disabled).
 - [x] Review staging Security Advisor findings.
@@ -369,17 +369,17 @@ QROS is **not production-ready** until all applicable gates below have independe
 
 ## Code / CI baseline
 
-**Current main SHA:** `309439f1f640c993cceabd403cf36604f1ab5457`
+**Current main SHA:** `efd945688419aca74462adf14cb14052e255e61d`
 
 Latest merged repository change:
 
-`docs(saas): refresh live staging schema evidence (#541)`
+`docs(saas): correct live staging contract evidence (#543)`
 
 Latest merged functional/code change:
 
 `fix(ci): harden staging endpoint preflight (#538)`
 
-Current main SHA was verified directly from the GitHub repository history as `309439f1f640c993cceabd403cf36604f1ab5457`.
+Current main SHA was verified directly from the GitHub repository history as `efd945688419aca74462adf14cb14052e255e61d`.
 
 Post-merge CI for this exact SHA is **NOT YET VERIFIED**: the GitHub workflow-run and combined-status queries currently return no runs/statuses for this commit. Therefore this document does not claim green post-merge CI for the current SHA.
 
@@ -394,8 +394,8 @@ The latest merged change hardens staging endpoint preflight validation so stagin
 - Project ref verified by live Supabase migration inspection: `yebwhcntiockckhdvawt`.
 - Live migration history currently contains **45 rows**; the canonical migration-file count must be derived from the exact current main SHA rather than hard-coded in this roadmap.
 - The last staging migration is worker execution version `20260928103556` under historical remote display name `20260928103225_saas_worker_queue_consumer`.
-- Normalized migration-name audit finds **17 canonical migrations not represented in staging history** (9 pre-worker hardening migrations + 8 migrations after the worker reconciliation point).
-- This audit does **not** claim all 17 SQL changes are absent from the schema; schema-object verification is required before applying or declaring them missing.
+- Exact canonical-vs-live audit finds **20 canonical migration names not represented in staging history**. The repository contains **63** canonical migration files; staging reports **45** migration rows. This includes the worker migration under a historical remote display name and 19 other canonical names absent from the live history.
+- This audit does **not** claim all 20 SQL changes are absent from the schema; schema-object verification is required before applying or declaring them missing.
 - Read-only live schema audit on 2026-10-05 confirms several reconciled SaaS objects are present despite their migration names being absent from staging history: `public.entitlement` exists; `provision_workspace(uuid,text)` exists; both 9-argument and 10-argument `process_billing_event()` overloads exist; `billing_event.provider_event_created_at` exists; `subscription.last_billing_event_at` exists; workspace retention controls (`workspace.deleted_at`, `workspace.purge_at`, `soft_delete_workspace(uuid,timestamptz,integer)`, `purge_deleted_workspaces(timestamptz)`) exist. The same live audit now confirms `dataset_version_storage_path_contract` is present; the constraint definition is `CHECK ((storage_path ~ '^tenant/[0-9a-f-]{36}/datasets/[0-9a-f]{64}/[1-9][0-9]*/ `public.dataset_version_storage_path_contract` is present and currently verifies as a CHECK constraint on `public.dataset_version` requiring `tenant/<uuid>/datasets/<sha256>/<positive-version>/`.
 - Storage object policies are present under the live names `qros_datasets_tenant_{insert,select,update,delete}`; no legacy `tenant_id` predicate was found. The earlier policy-name-only check must not be interpreted as a storage-policy absence.
 - Staging project identity and environment-specific operational state must be re-verified before being presented as current release evidence.
@@ -416,7 +416,7 @@ The latest merged change hardens staging endpoint preflight validation so stagin
 # Immediate Next Actions
 
 ### P0 — Staging database proof
-- [ ] Prove canonical migration-history parity.
+- [ ] Prove canonical migration-history parity (63 canonical files vs 45 live rows; 20 canonical names absent from live history).
 - [x] Verify schema, RLS policies, functions, grants and required SaaS constraints against the live staging database; the full `verify_saas_contract.py` contract audit currently passes.
 - [ ] Review/document pgtap warning.
 
