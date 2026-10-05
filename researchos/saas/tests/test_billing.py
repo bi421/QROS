@@ -206,6 +206,7 @@ def test_parse_deleted_stripe_subscription_without_status_fails_closed() -> None
     payload = {
         "id": "evt_deleted_1",
         "type": "customer.subscription.deleted",
+        "created": 1793404800,
         "data": {
             "object": {
                 "metadata": {"workspace_id": "workspace-1", "plan": "pro"},
