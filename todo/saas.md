@@ -15,7 +15,7 @@
 | Research governance | 🟢 Complete | Core claim/plan/evidence/result governance implemented |
 | Tenant security | 🟢 Complete | RLS, authorization, isolation tests and session boundary implemented |
 | API foundation | 🟢 Complete | Versioned API, validation, rate limits, idempotency and errors |
-| Database migrations | 🟡 Verified (staging version-set parity) | 45 staging migration rows; 62 canonical migration files are currently present on main. The staging migration history ends with worker execution version `20260928103556` under the historical remote display name `20260928103225_saas_worker_queue_consumer`. A normalized comparison shows 17 canonical migration names are not represented in the staging history: 9 pre-worker hardening migrations and 8 migrations after the worker reconciliation point. Because historical staging migration names were rewritten, this is a migration-history/schema-parity blocker and does not by itself prove that every SQL change is absent from the live schema. The exact missing set must be reconciled and schema-verified before M1 can pass. |
+| Database migrations | 🟡 Blocked (staging parity) | 45 staging migration rows; 62 canonical migration files are currently present on main. The staging migration history ends with worker execution version `20260928103556` under the historical remote display name `20260928103225_saas_worker_queue_consumer`. A normalized comparison shows 17 canonical migration names are not represented in the staging history: 9 pre-worker hardening migrations and 8 migrations after the worker reconciliation point. Because historical staging migration names were rewritten, this is a migration-history/schema-parity blocker and does not by itself prove that every SQL change is absent from the live schema. The exact missing set must be reconciled and schema-verified before M1 can pass. |
 | Staging Golden Path | 🟡 Blocked | Auth/application identities and end-to-end operational evidence pending |
 | Disaster Recovery | 🔴 Blocked | Isolated recovery target and recovery storage not provisioned |
 | Observability | 🟡 In progress | Production-grade acceptance evidence pending |
@@ -369,7 +369,7 @@ QROS is **not production-ready** until all applicable gates below have independe
 
 ## Code / CI baseline
 
-**Current main SHA:** `7a34786ec1a1368819e5f586b64965eae8178bcc`
+**Current main SHA:** `1d6c46e31314a7de8cb16f1bf6437b7a5c09b7e4`
 
 Latest functional/code change:
 
@@ -377,7 +377,7 @@ Latest functional/code change:
 
 Latest main documentation cleanup:
 
-`docs(saas): bind evidence to current main head (#529)`
+`docs(saas): reconcile staging migration evidence (#530)`
 
 Verified on the exact main SHA:
 
@@ -386,7 +386,7 @@ Verified on the exact main SHA:
 - Supabase Database Security Tests run **#1543** — run `37261018091` — **SUCCESS**
 - All listed runs have head SHA `b995858fb1859ca5828c834355364be073165213` (the last functional/code baseline before the documentation-only commits).
 
-The two documentation-only merges after that code baseline did not trigger the code CI workflows. These remain the verified code CI evidence for the current main ancestry.
+The three documentation-only merges after that code baseline did not trigger the code CI workflows. These remain the verified code CI evidence for the current main ancestry.
 
 These are repository/CI evidence only; they do **not** prove staging or production readiness.
 
