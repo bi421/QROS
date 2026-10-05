@@ -56,3 +56,13 @@ def test_onboarding_config_exposes_only_public_auth_configuration() -> None:
         "supabase_url": "https://example.supabase.co",
         "supabase_publishable_key": "public-key",
     }
+
+
+def test_onboarding_client_uses_canonical_api_error_message_field() -> None:
+    client = TestClient(create_app())
+    response = client.get("/onboarding/app.js")
+
+    assert response.status_code == 200
+    source = response.text
+    assert 'data.message || data.detail || "Request failed"' in source
+    assert 'data.detail || data.message || "Request failed"' not in source
