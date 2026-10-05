@@ -8,7 +8,7 @@ import subprocess
 REQUIRED_SQL = """
 select json_build_object(
   'entitlement_table', to_regclass('public.entitlement') is not null,
-  'provision_workspace', to_regprocedure('public.provision_workspace(uuid,uuid,text)') is not null,
+  'provision_workspace', to_regprocedure('public.provision_workspace(uuid,text)') is not null,
   'process_billing_event_10', to_regprocedure('public.process_billing_event(uuid,uuid,text,text,text,timestamptz,text,text,text,text)') is not null,
   'billing_event_created_at', exists(select 1 from information_schema.columns where table_schema='public' and table_name='billing_event' and column_name='provider_event_created_at'),
   'subscription_last_billing_event_at', exists(select 1 from information_schema.columns where table_schema='public' and table_name='subscription' and column_name='last_billing_event_at'),
