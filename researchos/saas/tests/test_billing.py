@@ -73,6 +73,7 @@ def test_supabase_billing_store_uses_atomic_rpc() -> None:
     assert client.rpc_payload["p_payload_sha256"] == "a" * 64
     assert client.rpc_payload["p_provider_customer_id"] is None
     assert client.rpc_payload["p_provider_subscription_id"] is None
+    assert client.rpc_payload["p_event_created_at"] is None
 
 
 def test_supabase_billing_store_returns_duplicate_result() -> None:
@@ -128,6 +129,7 @@ def test_parse_stripe_subscription_event_persists_provider_ids_and_normalizes_ep
     payload = {
         "id": "evt_sub_ids",
         "type": "customer.subscription.updated",
+        "created": 1790812800,
         "data": {
             "object": {
                 "id": "sub_123",
@@ -145,6 +147,7 @@ def test_parse_stripe_subscription_event_persists_provider_ids_and_normalizes_ep
     assert event.provider_customer_id == "cus_123"
     assert event.provider_subscription_id == "sub_123"
     assert event.current_period_end == "2026-10-31T00:00:00+00:00"
+    assert event.event_created_at == "2026-10-31T00:00:00+00:00"
 
 
 def test_parse_billing_event_rejects_unmapped_price_id() -> None:
