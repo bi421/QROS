@@ -22,6 +22,7 @@ class RepairProposal:
     allowed: bool
     attempt_limit: int
     rationale: tuple[str, ...]
+    governed_action: tuple[str, str] | None
 
 def propose(classification: dict[str, object], attempt_limit: int = 1) -> RepairProposal:
     if attempt_limit < 0:
@@ -30,14 +31,15 @@ def propose(classification: dict[str, object], attempt_limit: int = 1) -> Repair
     repairable = classification.get("repairable") is True
     evidence = classification.get("evidence")
     if not isinstance(category, str):
-        return RepairProposal("stop", "ambiguous/unsafe", False, False, attempt_limit, ("invalid or missing classification category",))
+        return RepairProposal("stop", "ambiguous/unsafe", False, False, attempt_limit, ("invalid or missing classification category",), None)
     if not isinstance(evidence, list) or not all(isinstance(item, str) for item in evidence):
-        return RepairProposal("stop", category, False, False, attempt_limit, ("missing or invalid machine-readable evidence",))
+        return RepairProposal("stop", category, False, False, attempt_limit, ("missing or invalid machine-readable evidence",), None)
     if not repairable or category not in REPAIRABLE_CATEGORIES:
-        return RepairProposal("stop", category, False, False, attempt_limit, ("classification is not explicitly repairable",))
+        return RepairProposal("stop", category, False, False, attempt_limit, ("classification is not explicitly repairable",), None)
     if attempt_limit == 0:
-        return RepairProposal("stop", category, True, False, 0, ("repair authority is disabled by attempt limit",))
-    return RepairProposal("propose-only", category, True, True, attempt_limit, tuple(evidence))
+        return RepairProposal("stop", category, True, False, 0, ("repair authority is disabled by attempt limit",), None)
+    governed_action = ("ruff", "format") if category == "formatting/static failure" else None
+    return RepairProposal("propose-only", category, True, True, attempt_limit, tuple(evidence), governed_action)
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
