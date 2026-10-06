@@ -45,6 +45,7 @@ def build_production_app() -> FastAPI:
 
     stripe_secret = os.environ.get("STRIPE_SECRET_KEY")
     public_base_url = os.environ.get("QROS_PUBLIC_BASE_URL")
+    billing_webhook_secret = os.environ.get("BILLING_WEBHOOK_SECRET")
     stripe_prices = {
         Plan.PRO.value: os.environ.get("STRIPE_PRICE_PRO", ""),
         Plan.TEAM.value: os.environ.get("STRIPE_PRICE_TEAM", ""),
@@ -54,7 +55,12 @@ def build_production_app() -> FastAPI:
         price_id: plan for plan, price_id in stripe_prices.items() if price_id
     }
     billing_provider = None
-    if stripe_secret and public_base_url and all(stripe_prices.values()):
+    if (
+        stripe_secret
+        and public_base_url
+        and billing_webhook_secret
+        and all(stripe_prices.values())
+    ):
         billing_provider = StripeBillingProvider(
             secret_key=stripe_secret,
             public_base_url=public_base_url,
@@ -82,7 +88,7 @@ def build_production_app() -> FastAPI:
             Plan.TEAM: SupabaseRateLimiter(client, limit=1000, window_seconds=60),
             Plan.ENTERPRISE: SupabaseRateLimiter(client, limit=1000, window_seconds=60),
         },
-        billing_webhook_secret=os.environ.get("BILLING_WEBHOOK_SECRET"),
+        billing_webhook_secret=billing_webhook_secret,
         metrics_token=os.environ.get("QROS_METRICS_TOKEN"),
         rate_limiter=SupabaseRateLimiter(client, limit=120, window_seconds=60),
         readiness_probe=readiness_probe,
