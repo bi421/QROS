@@ -6,6 +6,7 @@ SCRIPT = ROOT / "scripts" / "ci" / "production_forward_migration.sh"
 WORKFLOW = ROOT / ".github" / "workflows" / "production-forward-migration.yml"
 
 ALLOWLIST = (
+    "202610060001_production_forward_reconciliation.sql",
     "20260928123000_dataset_version_storage_path_reconciliation.sql",
     "20260928124500_workspace_billing_admin_role_reconciliation.sql",
     "20260928120000_storage_authorization_workspace_membership_reconciliation.sql",
@@ -59,11 +60,11 @@ def test_workflow_is_manual_and_protected() -> None:
     assert "pvhdsngxyoiqhqwujfjt" in text
 
 
-def test_allowlist_has_exactly_three_entries_and_excludes_worker() -> None:
+def test_allowlist_has_exactly_four_entries_and_excludes_worker() -> None:
     script = SCRIPT.read_text(encoding="utf-8")
     workflow = WORKFLOW.read_text(encoding="utf-8")
     assert all(script.count(migration) == 2 for migration in ALLOWLIST)
-    assert sum(workflow.count(migration) for migration in ALLOWLIST) == 3
+    assert sum(workflow.count(migration) for migration in ALLOWLIST) == 4
     assert "20260928103556_saas_worker_queue_consumer.sql" not in script
     assert "20260928103556_saas_worker_queue_consumer.sql" not in workflow
 
