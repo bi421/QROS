@@ -108,3 +108,44 @@ def test_cli_emits_machine_readable_decision(tmp_path: Path) -> None:
     assert decision["next_boundary"] == "governed-executor"
     assert isinstance(decision["classification"]["evidence"], list)
     assert decision["proposal"]["allowed"] is True
+
+
+def test_executor_requires_human_approval() -> None:
+    agent = load_agent()
+    result = agent.execute_proposal(
+        ["ruff", "format", "scripts/qros_agent.py"],
+        [ROOT / "scripts" / "qros_agent.py"],
+        approved=False,
+        attempt_limit=1,
+    )
+
+    assert result.status == "DRY_RUN"
+    assert result.returncode is None
+    assert result.next_boundary == "human-approval"
+
+
+def test_executor_rejects_scope_escape() -> None:
+    agent = load_agent()
+    result = agent.execute_proposal(
+        ["ruff", "format", "README.md"],
+        [ROOT / "scripts" / "qros_agent.py"],
+        approved=True,
+        attempt_limit=1,
+    )
+
+    assert result.status == "STOP"
+    assert result.returncode is None
+    assert "escapes task scope" in result.stderr
+
+
+def test_executor_rejects_unsupported_command() -> None:
+    agent = load_agent()
+    result = agent.execute_proposal(
+        ["git", "status"],
+        [ROOT / "scripts" / "qros_agent.py"],
+        approved=True,
+        attempt_limit=1,
+    )
+
+    assert result.status == "STOP"
+    assert "allowlist" in result.stderr
