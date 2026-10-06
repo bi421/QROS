@@ -1,21 +1,24 @@
 -- QROS production forward reconciliation (2026-10-06)
 --
--- Purpose: close verified schema gaps between current main and the live Supabase
--- production schema without rewriting historical migration provenance.
+-- Purpose: close verified current-main/live-Supabase schema gaps with one
+-- forward-only migration. Historical migration files and live migration
+-- history are intentionally not rewritten.
 --
--- Source effects intentionally carried forward:
---   202609230000 retention lifecycle controls
---   202609230006 request-correlated enqueue RPC
---   20260928103556 governed queue receive/ack RPCs
---   202609300001 first-workspace provisioning RPC
---   20261005041000 provider subscription uniqueness
---   20261005050000 dataset-version feed/retention guard reconciliation
---   billing_admin workspace-role contract
+-- Required current-main effects proven absent in the live schema:
+--   * tenant retention lifecycle controls
+--   * billing_admin workspace role constraint
+--   * request-correlated enqueue RPC
+--   * governed queue receive/ack RPCs
+--   * provider subscription uniqueness
 --
--- Explicitly NOT carried forward: legacy tenant_id RLS contract and pgTAP
--- extension. Current canonical authorization is workspace-membership based,
--- and live schema already contains the canonical storage/client-deny effects.
-
+-- Effects intentionally excluded because live schema already contains the
+-- current canonical behavior despite historical filename/version drift:
+--   storage membership authorization, dataset registry/feed guard,
+--   dataset-version storage-path reconciliation, research client-deny
+--   policies, team entitlement contract, and first-workspace provisioning.
+--
+-- Legacy tenant_id RLS and pgTAP are intentionally not part of the current
+-- production architecture/remediation.
 
 -- Tenant compliance lifecycle controls.
 -- Soft deletion is the public lifecycle boundary. Physical purge is a
@@ -645,58 +648,6 @@ comment on function public.ack_research_run(bigint)
 is 'Server-only acknowledgement primitive for the fixed qros-research-runs queue.';
 
 
--- Atomically provision the first customer workspace from a verified server identity.
--- The application obtains p_user_id only from Supabase-verified authentication claims.
--- The RPC is callable only by the server-side service role.
-
-create or replace function public.provision_workspace(
-    p_user_id uuid,
-    p_name text
-)
-returns table(workspace_id uuid, role text, plan text)
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-    new_workspace_id uuid;
-    normalized_name text := trim(p_name);
-begin
-    if p_user_id is null then
-        raise exception 'workspace owner identity is required';
-    end if;
-    if not exists (select 1 from auth.users where id = p_user_id) then
-        raise exception 'workspace owner identity does not exist';
-    end if;
-    if normalized_name = '' or length(normalized_name) > 256 then
-        raise exception 'invalid workspace name';
-    end if;
-
-    perform pg_advisory_xact_lock(hashtextextended(p_user_id::text, 0));
-
-    if exists (select 1 from public.workspace_member where user_id = p_user_id) then
-        raise exception 'workspace already provisioned';
-    end if;
-
-    insert into public.workspace (name)
-    values (normalized_name)
-    returning id into new_workspace_id;
-
-    insert into public.workspace_member (workspace_id, user_id, role)
-    values (new_workspace_id, p_user_id, 'owner');
-
-    insert into public.subscription (workspace_id, plan, status)
-    values (new_workspace_id, 'free', 'active');
-
-    return query
-    select new_workspace_id, 'owner'::text, 'free'::text;
-end;
-$$;
-
-revoke all on function public.provision_workspace(uuid, text) from public, anon, authenticated;
-grant execute on function public.provision_workspace(uuid, text) to service_role;
-
-
 -- A provider subscription must identify exactly one QROS workspace.
 -- This prevents a signed webhook for an already-bound Stripe subscription
 -- from being rebound to a second workspace through provider metadata.
@@ -708,51 +659,6 @@ comment on index public.subscription_provider_subscription_id_key is
     'Each non-null provider subscription id may belong to only one workspace.';
 
 
--- Forward-only reconciliation of the dataset-version feed and retention guard contract.
--- Historical dataset-registry migration names are not rewritten.
 
-create table if not exists public.dataset_version_feed (
-    dataset_version_id uuid not null references public.dataset_version(id) on delete restrict,
-    experiment_id text not null,
-    created_at timestamptz not null default now(),
-    primary key (dataset_version_id, experiment_id)
-);
-
-alter table public.dataset_version_feed enable row level security;
-alter table public.dataset_version_feed force row level security;
-
-create index if not exists idx_dataset_version_feed_version
-    on public.dataset_version_feed(dataset_version_id);
-
-create or replace function public.prevent_referenced_dataset_delete()
-returns trigger
-language plpgsql
-set search_path = ''
-as $$
-begin
-    if exists (
-        select 1
-        from public.research_run rr
-        join public.dataset_version dv on dv.id = rr.dataset_version_id
-        join public.research_finding rf on rf.research_run_id = rr.id
-        where dv.dataset_id = old.id
-          and rf.deleted_at is null
-    ) then
-        raise exception 'DATASET_REFERENCED'
-            using errcode = '23514';
-    end if;
-    return old;
-end;
-$$;
-
-drop trigger if exists dataset_retention_guard on public.dataset;
-create trigger dataset_retention_guard
-before delete on public.dataset
-for each row execute function public.prevent_referenced_dataset_delete();
-
-revoke all on table public.dataset_version_feed from anon, authenticated;
-grant all on table public.dataset_version_feed to service_role;
-
-drop policy if exists dataset_version_feed_service_role on public.dataset_version_feed;
 create policy dataset_version_feed_service_role on public.dataset_version_feed
     for all to service_role using (true) with check (true);
