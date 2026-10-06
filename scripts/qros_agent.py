@@ -239,14 +239,7 @@ def _git_diff(paths: Sequence[Path]) -> tuple[bool, str]:
 
 def _command_paths(argv: Sequence[str]) -> tuple[Path, ...]:
     """Extract governed file targets without treating Ruff flags as paths."""
-    paths: list[Path] = []
-    for token in argv[2:]:
-        if token.startswith("-"):
-            if token != "--check":
-                return ()
-            continue
-        paths.append(Path(token).resolve())
-    return tuple(paths)
+    return tuple(Path(token).resolve() for token in argv[2:] if not token.startswith("-"))
 
 
 def _result(
