@@ -1,7 +1,7 @@
 # QROS Architecture v2 — Minimal Cost / Maximum Speed
 
 Status: ACTIVE REFACTOR BASELINE
-Branch: refactor/architecture-simplification-20261006
+Branch: refactor/remove-research-execution-duplicate-20261006
 Base: eb3be146ec70b648db3eee2917c7164fca447f5b
 
 ## Objective
@@ -36,7 +36,7 @@ Forbidden: research_core/data_engine/quant_engine -> saas; scientific modules ->
 One concept gets one authoritative representation: DatasetVersion, ResearchRequest/RunCommand, ResearchRun, ResearchResult, Evidence, Provenance. New wrapper/envelope/resolver types require a real semantic reason.
 
 ## Execution simplification
-`researchos.research_execution.py` is currently live and must not be deleted blindly. It must either become the canonical execution boundary or be migrated into `research_core`, then removed after all references disappear.
+The former `researchos.research_execution.py` boundary has been migrated into `researchos.research_core.provenance` and the obsolete module has been deleted after caller migration and reference verification.
 
 `researchos.pipeline`, `researchos.decision_engine`, and older object/repository systems are legacy candidates only where current runtime/test references no longer exist.
 
@@ -60,7 +60,7 @@ Package `__init__.py` files are lightweight namespaces. Production clients, queu
 No speculative mass deletion.
 
 ## Current known non-deletion candidates
-- `researchos.research_execution.py` — live references.
+- `researchos.research_core.provenance` — canonical provenance-bound execution boundary.
 - `researchos.pipeline` — live callers/tests.
 - `researchos.decision_engine` — live callers/tests.
 - `researchos.objects` / `researchos.repository` — live callers/tests.

@@ -1,4 +1,4 @@
-"""Production execution boundary for deterministic research.
+"""Provenance-bound execution boundary for deterministic research.
 
 The public research API accepts only ``ResearchInput`` plus a resolver that
 materializes the already-validated dataset reference.  Raw ``HistoricalDataset``
