@@ -9,7 +9,7 @@ from typing import Any
 from researchos.quant_engine.machine_learning.dataset_builder import DatasetBuilder
 from researchos.quant_engine.machine_learning.labels import multiclass_label
 from researchos.research_boundary import ResearchInput
-from researchos.research_execution import (
+from researchos.research_core.provenance import (
     ResearchDataResolver,
     ResearchExecutionResult,
     ResearchExecutor,
