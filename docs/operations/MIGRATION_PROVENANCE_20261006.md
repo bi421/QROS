@@ -31,3 +31,5 @@ These effects are bundled in `202610060001_production_forward_reconciliation.sql
 ## Provenance rule
 
 A semantic filename match is evidence of migration identity/name continuity, not a cryptographic proof of historical SQL bytes. A renamed/historical-equivalent row remains explicitly marked as such. Schema-present/history-diverged means the live object contract is present even though the exact historical migration row is absent.
+
+<!-- CI trigger: exact-SHA verification requested after rebase onto main. -->
