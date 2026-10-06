@@ -34,7 +34,6 @@ from researchos.objects.process import AuditEntry, ReasoningChain, ResearchCycle
 from researchos.objects.research import Research, ResearchReport
 from researchos.objects.scenario import Scenario, ScenarioSet
 from researchos.objects.validation import FailureAnalysis, Validation
-from researchos.pipeline.references import ReferenceValidator
 from researchos.repository.interface import RepositoryInterface
 
 T = TypeVar("T")
