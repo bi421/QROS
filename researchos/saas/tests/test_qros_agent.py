@@ -122,6 +122,7 @@ def test_executor_requires_human_approval() -> None:
 
     assert result.status == "DRY_RUN"
     assert result.returncode is None
+    assert result.diff == ""
     assert result.next_boundary == "human-approval"
 
 
@@ -152,6 +153,7 @@ def test_executor_rejects_unsupported_command() -> None:
 
     assert result.status == "STOP"
     assert "allowlist" in result.stderr
+
 
 def test_executor_rejects_unapproved_proposal() -> None:
     agent = load_agent()
