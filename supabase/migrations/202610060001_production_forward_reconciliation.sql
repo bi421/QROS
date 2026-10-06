@@ -453,6 +453,14 @@ begin
         delete from public.usage_event where workspace_id = workspace_row.id and deleted_at is not null;
         delete from public.billing_event where workspace_id = workspace_row.id and deleted_at is not null;
         delete from public.api_idempotency where workspace_id = workspace_row.id and deleted_at is not null;
+        -- dataset_version_feed intentionally uses ON DELETE RESTRICT. Purge owns
+        -- this dependent lineage metadata and must remove it before its version.
+        delete from public.dataset_version_feed dvf
+         using public.dataset_version dv, public.dataset d
+         where dvf.dataset_version_id = dv.id
+           and dv.dataset_id = d.id
+           and d.workspace_id = workspace_row.id
+           and dv.deleted_at is not null;
         delete from public.dataset_version dv
          using public.dataset d
          where dv.dataset_id = d.id and d.workspace_id = workspace_row.id and dv.deleted_at is not null;
