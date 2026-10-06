@@ -21,6 +21,7 @@ v1:
 - fails closed on invalid, empty, ambiguous, or non-repairable evidence;
 - never executes a repair command without explicit human approval;
 - validates command scope before any approved execution;
+- records the exact approved command and resulting git diff in the execution result;
 - never merges;
 - never deploys.
 
@@ -50,6 +51,17 @@ Bounded repair proposal
      |
      v
 PROPOSAL_READY
+     |
+     v
+Human approval
+     |
+     v
+Governed executor
+     |
+     +-- rejected scope/command --> STOP
+     |
+     v
+Execution + diff receipt
 
 ## Output
 
@@ -61,17 +73,27 @@ The CLI emits JSON containing:
 - proposal
 - next_boundary
 
+The governed executor additionally returns:
+
+- exact command
+- process result
+- stdout/stderr
+- resulting git diff
+- next boundary
+
 No output is evidence that a source repair succeeded. Only actual validation and CI can establish that.
 
-## Future boundary
+## Current execution boundary
 
-The governed executor boundary now exists as a bounded adapter. That adapter must:
+The governed executor is a bounded adapter, not autonomous source repair.
 
-1. receive only an accepted proposal;
-2. operate only on files explicitly allowed by the task contract;
-3. record the exact command/patch and resulting diff;
-4. run canonical gates;
-5. stop at the configured attempt limit;
-6. require human approval for protected operations.
+It:
+
+1. receives an accepted proposal;
+2. derives executable paths from the task contract;
+3. allows only Ruff check or format;
+4. requires explicit human approval;
+5. records the exact command and resulting git diff after approved execution;
+6. never merges or deploys.
 
 The model, if one is added, remains subordinate to these deterministic controls.

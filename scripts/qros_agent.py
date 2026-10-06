@@ -36,6 +36,7 @@ class ExecutionResult:
     returncode: int | None
     stdout: str
     stderr: str
+    diff: str
     next_boundary: str
 
 
@@ -84,6 +85,38 @@ def _allowed_paths_from_contract(task_contract: Path) -> tuple[Path, ...]:
     return tuple(paths)
 
 
+def _git_diff(paths: Sequence[Path]) -> tuple[bool, str]:
+    relative_paths = [str(path.resolve().relative_to(ROOT)) for path in paths]
+    result = subprocess.run(
+        ["git", "diff", "--", *relative_paths],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0, result.stdout if result.returncode == 0 else result.stderr
+
+
+def _result(
+    status: str,
+    argv: tuple[str, ...],
+    returncode: int | None,
+    stdout: str = "",
+    stderr: str = "",
+    diff: str = "",
+    next_boundary: str = "human-review",
+) -> ExecutionResult:
+    return ExecutionResult(
+        status,
+        argv,
+        returncode,
+        stdout,
+        stderr,
+        diff,
+        next_boundary,
+    )
+
+
 def execute_proposal(
     task_contract: Path,
     proposal: dict[str, object],
@@ -95,64 +128,52 @@ def execute_proposal(
     argv = tuple(command)
 
     if proposal.get("allowed") is not True:
-        return ExecutionResult(
+        return _result(
             "STOP",
             argv,
             None,
-            "",
-            "proposal is not authorized for execution",
-            "human-review",
+            stderr="proposal is not authorized for execution",
         )
 
     allowed_paths = _allowed_paths_from_contract(task_contract)
     if not allowed_paths:
-        return ExecutionResult(
+        return _result(
             "STOP",
             argv,
             None,
-            "",
-            "task contract has no executable allowed paths",
-            "human-review",
+            stderr="task contract has no executable allowed paths",
         )
 
     if attempt_limit < 1:
-        return ExecutionResult(
+        return _result(
             "STOP",
             argv,
             None,
-            "",
-            "attempt limit exhausted",
-            "human-review",
+            stderr="attempt limit exhausted",
         )
 
     if not argv or Path(argv[0]).name not in EXECUTABLES:
-        return ExecutionResult(
+        return _result(
             "STOP",
             argv,
             None,
-            "",
-            "command is outside governed allowlist",
-            "human-review",
+            stderr="command is outside governed allowlist",
         )
 
     if any(any(char in token for char in SHELL_META) for token in argv):
-        return ExecutionResult(
+        return _result(
             "STOP",
             argv,
             None,
-            "",
-            "shell metacharacters are forbidden",
-            "human-review",
+            stderr="shell metacharacters are forbidden",
         )
 
     if len(argv) < 2 or argv[1] not in {"check", "format"}:
-        return ExecutionResult(
+        return _result(
             "STOP",
             argv,
             None,
-            "",
-            "only ruff check/format is governed",
-            "human-review",
+            stderr="only ruff check/format is governed",
         )
 
     roots = tuple(path.resolve() for path in allowed_paths)
@@ -161,23 +182,19 @@ def execute_proposal(
         not any(path == root or root in path.parents for root in roots)
         for path in paths
     ):
-        return ExecutionResult(
+        return _result(
             "STOP",
             argv,
             None,
-            "",
-            "command path escapes task scope",
-            "human-review",
+            stderr="command path escapes task scope",
         )
 
     if not approved:
-        return ExecutionResult(
+        return _result(
             "DRY_RUN",
             argv,
             None,
-            "",
-            "",
-            "human-approval",
+            next_boundary="human-approval",
         )
 
     result = subprocess.run(
@@ -187,12 +204,24 @@ def execute_proposal(
         text=True,
         check=False,
     )
-    return ExecutionResult(
+    diff_ok, diff = _git_diff(paths)
+    if not diff_ok:
+        return _result(
+            "FAILED",
+            argv,
+            result.returncode,
+            result.stdout,
+            result.stderr,
+            diff,
+        )
+
+    return _result(
         "EXECUTED" if result.returncode == 0 else "FAILED",
         argv,
         result.returncode,
         result.stdout,
         result.stderr,
+        diff,
         "complete" if result.returncode == 0 else "human-review",
     )
 
