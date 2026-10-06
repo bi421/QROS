@@ -42,7 +42,7 @@ TEST(TuringFilterTest, ThresholdMappingMatchesSprtFormula) {
   const auto thresholds =
       TuringFilterEngine::thresholds_from_error_rates(0.05, 0.10);
 
-  EXPECT_NEAR(thresholds.lower_deciban, -9.771212547196624, 1e-12);
+  EXPECT_NEAR(thresholds.lower_deciban, -9.777236052888478, 1e-12);
   EXPECT_NEAR(thresholds.upper_deciban, 12.552725051033061, 1e-12);
 }
 
