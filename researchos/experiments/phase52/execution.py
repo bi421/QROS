@@ -31,12 +31,14 @@ def _model_eval(
     features: Sequence[Sequence[float]],
     labels: Sequence[float],
 ) -> tuple[ModelResult, list[int], list[dict[int, float]]]:
-    predictions: list[int] = []
-    probabilities: list[dict[int, float]] = []
-    for row in features:
-        row_probs = estimator.predict_proba(row)
-        probabilities.append(row_probs)
-        predictions.append(max((1, 0, -1), key=lambda cls: row_probs[cls]))
+    if isinstance(estimator, MultivariateEmpiricalProbabilityEstimator):
+        probabilities = estimator.predict_proba_batch(features)
+    else:
+        probabilities = [estimator.predict_proba(row) for row in features]
+    predictions = [
+        max((1, 0, -1), key=lambda cls: row_probs[cls])
+        for row_probs in probabilities
+    ]
     accuracy = (
         sum(int(p) == int(a) for p, a in zip(predictions, labels)) / len(labels) if labels else 0.0
     )
