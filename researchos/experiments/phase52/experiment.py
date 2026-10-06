@@ -139,4 +139,4 @@ def run_phase52(
 
 
 
-__all__ = ["FEATURE_SET_NAMES", "Phase52Config", "run_phase52", "run_phase52_comparison"]
+__all__ = ["FEATURE_SET_NAMES", "Phase52Config", "run_phase52"]
