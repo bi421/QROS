@@ -461,9 +461,12 @@ begin
         delete from public.dataset where workspace_id = workspace_row.id and deleted_at is not null;
         delete from public.subscription where workspace_id = workspace_row.id and deleted_at is not null;
         delete from public.workspace_member where workspace_id = workspace_row.id and deleted_at is not null;
-        delete from public.workspace where id = workspace_row.id and deleted_at is not null;
-
+        -- Remove the retention policy before deleting its referenced workspace.
+        -- The policy intentionally uses ON DELETE RESTRICT so an active policy
+        -- cannot disappear implicitly; purge explicitly owns this lifecycle.
         delete from public.workspace_retention_policy where workspace_id = workspace_row.id;
+
+        delete from public.workspace where id = workspace_row.id and deleted_at is not null;
         purged_count := purged_count + 1;
     end loop;
 
