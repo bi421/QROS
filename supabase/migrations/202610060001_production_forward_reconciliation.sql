@@ -144,8 +144,7 @@ begin
         'research_finding',
         'research_run_result',
         'research_run_artifact',
-        'audit_event',
-        'retention_deletion_operation'
+        'audit_event'
     ]
     loop
         execute format('drop trigger if exists prevent_deleted_row_resurrection on public.%I', table_name);
@@ -451,7 +450,6 @@ begin
         delete from public.research_claim where workspace_id = workspace_row.id and deleted_at is not null;
         delete from public.research_run where workspace_id = workspace_row.id and deleted_at is not null;
         delete from public.audit_event where workspace_id = workspace_row.id and deleted_at is not null;
-        delete from public.retention_deletion_operation where workspace_id = workspace_row.id and deleted_at is not null;
         delete from public.usage_event where workspace_id = workspace_row.id and deleted_at is not null;
         delete from public.billing_event where workspace_id = workspace_row.id and deleted_at is not null;
         delete from public.api_idempotency where workspace_id = workspace_row.id and deleted_at is not null;
