@@ -136,7 +136,7 @@ def approval_for(
 ) -> ApprovalProvenance:
     governed_action = proposal.get("governed_action")
     if (
-        not isinstance(governed_action, list)
+        not isinstance(governed_action, (list, tuple))
         or len(governed_action) != 2
         or not all(isinstance(item, str) for item in governed_action)
     ):
@@ -323,7 +323,13 @@ def execute_proposal(
         return _result("STOP", argv, None, stderr="command path escapes task scope")
 
     if approval is None:
-        return _result("DRY_RUN", argv, None, next_boundary="human-approval")
+        return _result(
+            "STOP",
+            argv,
+            None,
+            stderr="explicit approval provenance is required",
+            next_boundary="human-review",
+        )
 
     approval_error = _validate_approval(approval, proposal, task_contract, allowed_paths, ledger)
     if approval_error:
