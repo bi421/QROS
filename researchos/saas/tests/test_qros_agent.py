@@ -29,6 +29,7 @@ def test_valid_contract_and_repairable_failure_produce_proposal() -> None:
 
     assert decision.status == "PROPOSAL_READY"
     assert decision.classification["category"] == "formatting/static failure"
+    assert isinstance(decision.classification["evidence"], list)
     assert decision.proposal["allowed"] is True
     assert decision.next_boundary == "governed-executor"
 
