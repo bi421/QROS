@@ -12,7 +12,7 @@ from researchos.data_engine.boundary import (
 )
 from researchos.data_engine.research_reader import ResearchSeries
 from researchos.research_boundary import ResearchInput
-from researchos.research_execution import (
+from researchos.research_core.provenance import (
     ResearchExecutionResult,
     ResearchExecutor,
     execution_hash,
