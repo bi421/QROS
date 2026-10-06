@@ -678,6 +678,10 @@ NB_MODULE(cpp_quant_backend, m) {
       .def_rw("max_samples", &quant::low_latency::TuringFilterConfig::max_samples)
       .def_rw("event_probability_h", &quant::low_latency::TuringFilterConfig::event_probability_h)
       .def_rw("event_probability_not_h", &quant::low_latency::TuringFilterConfig::event_probability_not_h)
+      .def_rw("contradiction_probability_h",
+              &quant::low_latency::TuringFilterConfig::contradiction_probability_h)
+      .def_rw("contradiction_probability_not_h",
+              &quant::low_latency::TuringFilterConfig::contradiction_probability_not_h)
       .def_rw("lower_deciban", &quant::low_latency::TuringFilterConfig::lower_deciban)
       .def_rw("upper_deciban", &quant::low_latency::TuringFilterConfig::upper_deciban);
 
