@@ -33,7 +33,7 @@ def test_valid_contract_and_repairable_failure_produce_proposal() -> None:
     assert decision.classification["category"] == "formatting/static failure"
     assert isinstance(decision.classification["evidence"], list)
     assert decision.proposal["allowed"] is True
-    assert decision.proposal["governed_action"] == ["ruff", "format"]
+    assert decision.proposal["governed_action"] == ("ruff", "format")
     assert decision.next_boundary == "governed-executor"
 
 
