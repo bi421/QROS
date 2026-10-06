@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -79,3 +81,30 @@ def test_invalid_contract_stops_before_classification(tmp_path: Path) -> None:
     assert decision.status == "STOP"
     assert decision.task_contract["valid"] is False
     assert decision.next_boundary == "human-review"
+
+
+def test_cli_emits_machine_readable_decision(tmp_path: Path) -> None:
+    log = tmp_path / "ci.log"
+    log.write_text("ruff check failed: E501 line too long\\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            str(CONTRACT),
+            str(log),
+            "--attempt-limit",
+            "1",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    decision = json.loads(result.stdout)
+    assert decision["status"] == "PROPOSAL_READY"
+    assert decision["next_boundary"] == "governed-executor"
+    assert isinstance(decision["classification"]["evidence"], list)
+    assert decision["proposal"]["allowed"] is True
