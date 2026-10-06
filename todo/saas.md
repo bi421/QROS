@@ -369,7 +369,7 @@ QROS is **not production-ready** until all applicable gates below have independe
 
 ## Code / CI baseline
 
-**Current main SHA:** `efd945688419aca74462adf14cb14052e255e61d`
+**Current main SHA:** `3256da5c1a26ffade7ce0acc2eb2bff228a40c9c`
 
 Latest merged repository change:
 
@@ -379,9 +379,9 @@ Latest merged functional/code change:
 
 `fix(ci): harden staging endpoint preflight (#538)`
 
-Current main SHA was verified directly from the GitHub repository history as `7d4a04272aac29a48a66822e20fd737876d8a979`.
+Current main SHA is `3256da5c1a26ffade7ce0acc2eb2bff228a40c9c`, the merge commit for PR #573. Post-merge workflow/status evidence for this exact SHA is not exposed by the current GitHub integration, so CI PASS is not claimed here.
 
-Post-merge CI for this exact SHA is **NOT YET VERIFIED**: the GitHub workflow-run and combined-status queries currently return no runs/statuses for this commit. Therefore this document does not claim green post-merge CI for the current SHA.
+Post-merge CI for this exact SHA is **NOT VERIFIED through the available GitHub workflow/status integration**. Therefore this document does not claim green post-merge CI for the current SHA.
 
 These are repository/CI evidence only; they do **not** prove staging or production readiness.
 
@@ -488,7 +488,7 @@ The latest merged change hardens staging endpoint preflight validation so stagin
 # Immediate Next Actions
 
 ### P0 — Staging database proof
-- [ ] Prove canonical migration-history parity.
+- [x] Complete semantic migration reconciliation: canonical migration files vs live staging history were classified without rewriting historical migration names.
 - [x] Verify schema, RLS policies, functions, grants and required SaaS constraints against the live staging database; the full `verify_saas_contract.py` contract audit currently passes.
 - [ ] Review/document pgtap warning.
 
