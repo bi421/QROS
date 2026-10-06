@@ -18,6 +18,23 @@ def test_multivariate_estimator_uses_all_selected_features():
     assert one_dim.predict_class((0.0, 1.0)) == -1
 
 
+def test_multivariate_batch_predictions_match_scalar_predictions():
+    features = [
+        (0.0, 0.0),
+        (0.0, 1.0),
+        (1.0, 0.0),
+        (1.0, 1.0),
+        (0.25, 0.75),
+    ]
+    labels = [-1.0, 1.0, 1.0, -1.0, 1.0]
+    estimator = MultivariateEmpiricalProbabilityEstimator(
+        feature_indices=(0, 1), n_neighbors=3
+    ).fit(features, labels)
+    scalar = [estimator.predict_proba(row) for row in features]
+    batch = estimator.predict_proba_batch(features)
+    assert batch == scalar
+
+
 @pytest.mark.frozen
 def test_comparison_has_identical_fold_geometry_and_explicit_feature_sets():
     close, high, low, volume, macro, ts, macro_ts = _run_inputs()
