@@ -113,7 +113,7 @@ def test_wrong_proposal_is_rejected() -> None:
     p = proposal(agent)
     ledger = agent.AttemptLedger(1)
     a = approval(agent, p, ledger)
-    wrong = dict(p, proposal_id="tampered")
+    wrong = dict(p, rationale=("tampered",))
     result = agent.execute_proposal(
         CONTRACT, wrong, ["ruff", "format", "--check", "scripts/qros_agent.py"],
         approval=a, ledger=ledger,
