@@ -90,6 +90,16 @@ def test_missing_approval_fails_closed() -> None:
     assert ledger.consumed_attempts == 0
 
 
+def test_canonical_tuple_action_is_accepted_before_approval_check() -> None:
+    agent = load_agent()
+    p = proposal(agent)
+    ledger = agent.AttemptLedger(1)
+    result = agent.execute_proposal(
+        CONTRACT, p, ["ruff", "format", "--check", "scripts/qros_agent.py"], ledger=ledger
+    )
+    assert result.status == "STOP"
+    assert result.stderr == "explicit approval provenance is required"
+
 def test_invalid_approval_provenance_fails_closed() -> None:
     agent = load_agent()
     p = proposal(agent)
