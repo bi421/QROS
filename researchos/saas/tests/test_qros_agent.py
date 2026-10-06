@@ -27,10 +27,10 @@ def proposal(agent):
     return decision.proposal
 
 
-def approval(agent, proposal):
+def approval(agent, proposal, ledger):
     paths = agent._allowed_paths_from_contract(CONTRACT)
     return agent.approval_for(
-        proposal, CONTRACT, paths,
+        proposal, CONTRACT, paths, ledger=ledger,
         approver_id="test:approver",
         approved_at="2026-10-06T00:00:00+00:00",
     )
@@ -79,81 +79,106 @@ def test_cli_emits_machine_readable_decision(tmp_path: Path) -> None:
 def test_missing_approval_fails_closed() -> None:
     agent = load_agent()
     p = proposal(agent)
-    result = agent.execute_proposal(CONTRACT, p, ["ruff", "format", "scripts/qros_agent.py"], ledger=agent.AttemptLedger(1))
+    ledger = agent.AttemptLedger(1)
+    result = agent.execute_proposal(
+        CONTRACT, p, ["ruff", "format", "--check", "scripts/qros_agent.py"], ledger=ledger
+    )
     assert result.status == "DRY_RUN"
     assert result.next_boundary == "human-approval"
     assert result.receipt is None
+    assert ledger.consumed_attempts == 0
 
 
 def test_invalid_approval_provenance_fails_closed() -> None:
     agent = load_agent()
     p = proposal(agent)
-    paths = agent._allowed_paths_from_contract(CONTRACT)
-    valid = approval(agent, p)
+    ledger = agent.AttemptLedger(1)
+    valid = approval(agent, p, ledger)
     invalid = agent.ApprovalProvenance(
         status="APPROVED", approver_id="", approved_at=valid.approved_at,
         proposal_id=valid.proposal_id, governed_action=valid.governed_action,
         scope_sha256=valid.scope_sha256, attempt_authority=valid.attempt_authority,
     )
     result = agent.execute_proposal(
-        CONTRACT, p, ["ruff", "format", "scripts/qros_agent.py"],
-        approval=invalid, ledger=agent.AttemptLedger(1),
+        CONTRACT, p, ["ruff", "format", "--check", "scripts/qros_agent.py"],
+        approval=invalid, ledger=ledger,
     )
     assert result.status == "STOP"
     assert "approver identity" in result.stderr
+    assert ledger.consumed_attempts == 0
 
 
-def test_wrong_proposal_and_action_are_rejected() -> None:
+def test_wrong_proposal_is_rejected() -> None:
     agent = load_agent()
     p = proposal(agent)
-    a = approval(agent, p)
+    ledger = agent.AttemptLedger(1)
+    a = approval(agent, p, ledger)
     wrong = dict(p, proposal_id="tampered")
     result = agent.execute_proposal(
-        CONTRACT, wrong, ["ruff", "format", "scripts/qros_agent.py"],
-        approval=a, ledger=agent.AttemptLedger(1),
+        CONTRACT, wrong, ["ruff", "format", "--check", "scripts/qros_agent.py"],
+        approval=a, ledger=ledger,
     )
     assert result.status == "STOP"
     assert "proposal identity" in result.stderr
+    assert ledger.consumed_attempts == 0
+
+
+def test_wrong_action_is_rejected() -> None:
+    agent = load_agent()
+    p = proposal(agent)
+    ledger = agent.AttemptLedger(1)
+    a = approval(agent, p, ledger)
+    result = agent.execute_proposal(
+        CONTRACT, p, ["ruff", "check", "scripts/qros_agent.py"],
+        approval=a, ledger=ledger,
+    )
+    assert result.status == "STOP"
+    assert "does not match governed proposal action" in result.stderr
+    assert ledger.consumed_attempts == 0
 
 
 def test_scope_escape_and_traversal_fail_closed() -> None:
     agent = load_agent()
     p = proposal(agent)
-    a = approval(agent, p)
     ledger = agent.AttemptLedger(2)
+    a = approval(agent, p, ledger)
     for path in ("README.md", "../README.md", "/tmp/escape.py"):
         result = agent.execute_proposal(
             CONTRACT, p, ["ruff", "format", path], approval=a, ledger=ledger,
         )
         assert result.status == "STOP"
         assert "scope" in result.stderr
+    assert ledger.consumed_attempts == 0
 
 
 def test_shell_metacharacters_are_rejected() -> None:
     agent = load_agent()
     p = proposal(agent)
-    a = approval(agent, p)
+    ledger = agent.AttemptLedger(1)
+    a = approval(agent, p, ledger)
     result = agent.execute_proposal(
-        CONTRACT, p, ["ruff", "format", "scripts/qros_agent.py;touch", "x"],
-        approval=a, ledger=agent.AttemptLedger(1),
+        CONTRACT, p, ["ruff", "format", "scripts/qros_agent.py;touch"],
+        approval=a, ledger=ledger,
     )
     assert result.status == "STOP"
     assert "metacharacters" in result.stderr
+    assert ledger.consumed_attempts == 0
 
 
 def test_attempt_budget_is_not_reset_by_replay() -> None:
     agent = load_agent()
     p = proposal(agent)
-    a = approval(agent, p)
     ledger = agent.AttemptLedger(1)
+    a = approval(agent, p, ledger)
     first = agent.execute_proposal(
-        CONTRACT, p, ["ruff", "format", "scripts/qros_agent.py"],
+        CONTRACT, p, ["ruff", "format", "--check", "scripts/qros_agent.py"],
         approval=a, ledger=ledger,
     )
     assert first.receipt is not None
     assert first.receipt.attempt_number == 1
+    assert ledger.consumed_attempts == 1
     second = agent.execute_proposal(
-        CONTRACT, p, ["ruff", "format", "scripts/qros_agent.py"],
+        CONTRACT, p, ["ruff", "format", "--check", "scripts/qros_agent.py"],
         approval=a, ledger=ledger,
     )
     assert second.status == "STOP"
@@ -163,49 +188,50 @@ def test_attempt_budget_is_not_reset_by_replay() -> None:
 def test_receipt_binds_required_provenance() -> None:
     agent = load_agent()
     p = proposal(agent)
-    a = approval(agent, p)
     ledger = agent.AttemptLedger(1)
+    a = approval(agent, p, ledger)
     result = agent.execute_proposal(
-        CONTRACT, p, ["ruff", "check", "scripts/qros_agent.py"],
-        approval=a, ledger=ledger,
-    )
-    assert result.status == "STOP"  # action mismatch
-    result = agent.execute_proposal(
-        CONTRACT, p, ["ruff", "format", "scripts/qros_agent.py"],
+        CONTRACT, p, ["ruff", "format", "--check", "scripts/qros_agent.py"],
         approval=a, ledger=ledger,
     )
     assert result.receipt is not None
     receipt = result.receipt
     assert receipt.task_contract_sha256
+    assert receipt.budget_id == ledger.budget_id
     assert receipt.proposal_id == agent.proposal_id(p)
     assert receipt.governed_action == ("ruff", "format")
-    assert receipt.command == ("ruff", "format", "scripts/qros_agent.py")
+    assert receipt.command == ("ruff", "format", "--check", "scripts/qros_agent.py")
     assert receipt.pre_execution_sha
     assert receipt.approval == a
-    assert receipt.next_boundary in {"complete", "human-review"}
+    assert receipt.returncode == 0
+    assert receipt.post_execution_status == "EXECUTED"
+    assert receipt.next_boundary == "complete"
 
 
-def test_execution_failure_and_success_have_receipts() -> None:
+def test_execution_failure_still_consumes_attempt_and_records_receipt() -> None:
     agent = load_agent()
     p = proposal(agent)
-    a = approval(agent, p)
     ledger = agent.AttemptLedger(2)
+    a = approval(agent, p, ledger)
     failed = agent.execute_proposal(
-        CONTRACT, p, ["ruff", "format", "scripts/qros_agent.py"],
+        CONTRACT, p, ["ruff", "format", "--unknown-option", "scripts/qros_agent.py"],
         approval=a, ledger=ledger,
     )
+    assert failed.status == "FAILED"
     assert failed.receipt is not None
-    assert failed.receipt.returncode is not None
-    assert failed.receipt.status if hasattr(failed.receipt, "status") else True
+    assert failed.receipt.attempt_number == 1
+    assert failed.receipt.returncode != 0
+    assert ledger.consumed_attempts == 1
 
 
 def test_unapproved_proposal_stops() -> None:
     agent = load_agent()
     p = dict(proposal(agent), allowed=False)
-    a = approval(agent, p)
+    ledger = agent.AttemptLedger(1)
+    a = approval(agent, p, ledger)
     result = agent.execute_proposal(
-        CONTRACT, p, ["ruff", "format", "scripts/qros_agent.py"],
-        approval=a, ledger=agent.AttemptLedger(1),
+        CONTRACT, p, ["ruff", "format", "--check", "scripts/qros_agent.py"],
+        approval=a, ledger=ledger,
     )
     assert result.status == "STOP"
     assert "not authorized" in result.stderr
