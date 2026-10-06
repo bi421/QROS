@@ -321,7 +321,7 @@ def execute_proposal(
     if approval is None:
         return _result("DRY_RUN", argv, None, next_boundary="human-approval")
 
-    approval_error = _validate_approval(approval, proposal, task_contract, allowed_paths)
+    approval_error = _validate_approval(approval, proposal, task_contract, allowed_paths, ledger)
     if approval_error:
         return _result("STOP", argv, None, stderr=approval_error)
 
