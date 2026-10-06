@@ -30,6 +30,7 @@
 #include "quant/core/engine.h"
 #include "quant/statistics/regression.h"
 #include "quant/statistics/rolling.h"
+#include "quant/low_latency/turing_filter.h"
 
 #include "quant_engine.hpp"
 
@@ -643,6 +644,112 @@ NB_MODULE(cpp_quant_backend, m) {
            nb::arg("data"), nb::arg("window"), nb::arg("ddof") = 1)
       .def("rolling_variance_ext", &CppQuantBackend::rolling_variance_ext,
            nb::arg("data"), nb::arg("window"), nb::arg("ddof") = 1);
+
+  using TuringReadOnly1D =
+      nb::ndarray<const double, nb::ndim<1>, nb::c_contig, nb::device::cpu>;
+  using TuringReadOnlyI64 =
+      nb::ndarray<const std::int64_t, nb::ndim<1>, nb::c_contig, nb::device::cpu>;
+  using TuringWritableU8 =
+      nb::ndarray<std::uint8_t, nb::ndim<1>, nb::c_contig, nb::device::cpu>;
+
+  nb::enum_<quant::low_latency::TuringFilterDecision>(m, "TuringFilterDecision")
+      .value("Drop", quant::low_latency::TuringFilterDecision::Drop)
+      .value("Continue", quant::low_latency::TuringFilterDecision::Continue)
+      .value("Accept", quant::low_latency::TuringFilterDecision::Accept)
+      .value("Reject", quant::low_latency::TuringFilterDecision::Reject);
+
+  nb::class_<quant::low_latency::TuringFilterTick>(m, "TuringFilterTick")
+      .def(nb::init<>())
+      .def_rw("timestamp_ns", &quant::low_latency::TuringFilterTick::timestamp_ns)
+      .def_rw("bid", &quant::low_latency::TuringFilterTick::bid)
+      .def_rw("ask", &quant::low_latency::TuringFilterTick::ask)
+      .def_rw("bid_volume", &quant::low_latency::TuringFilterTick::bid_volume)
+      .def_rw("ask_volume", &quant::low_latency::TuringFilterTick::ask_volume)
+      .def_rw("trade_volume", &quant::low_latency::TuringFilterTick::trade_volume);
+
+  nb::class_<quant::low_latency::TuringFilterConfig>(m, "TuringFilterConfig")
+      .def(nb::init<>())
+      .def_rw("max_spread", &quant::low_latency::TuringFilterConfig::max_spread)
+      .def_rw("min_total_depth", &quant::low_latency::TuringFilterConfig::min_total_depth)
+      .def_rw("min_trade_volume", &quant::low_latency::TuringFilterConfig::min_trade_volume)
+      .def_rw("min_abs_imbalance", &quant::low_latency::TuringFilterConfig::min_abs_imbalance)
+      .def_rw("min_persistence", &quant::low_latency::TuringFilterConfig::min_persistence)
+      .def_rw("max_samples", &quant::low_latency::TuringFilterConfig::max_samples)
+      .def_rw("event_probability_h", &quant::low_latency::TuringFilterConfig::event_probability_h)
+      .def_rw("event_probability_not_h", &quant::low_latency::TuringFilterConfig::event_probability_not_h)
+      .def_rw("lower_deciban", &quant::low_latency::TuringFilterConfig::lower_deciban)
+      .def_rw("upper_deciban", &quant::low_latency::TuringFilterConfig::upper_deciban);
+
+  nb::class_<quant::low_latency::TuringFilterState>(m, "TuringFilterState")
+      .def_ro("log_odds_deciban", &quant::low_latency::TuringFilterState::log_odds_deciban)
+      .def_ro("samples", &quant::low_latency::TuringFilterState::samples)
+      .def_ro("persistence", &quant::low_latency::TuringFilterState::persistence)
+      .def_ro("constraint_mask", &quant::low_latency::TuringFilterState::constraint_mask)
+      .def_ro("last_decision", &quant::low_latency::TuringFilterState::last_decision)
+      .def_ro("has_previous", &quant::low_latency::TuringFilterState::has_previous)
+      .def_ro("last_timestamp_ns", &quant::low_latency::TuringFilterState::last_timestamp_ns)
+      .def_ro("last_mid", &quant::low_latency::TuringFilterState::last_mid)
+      .def_ro("last_directional_imbalance",
+              &quant::low_latency::TuringFilterState::last_directional_imbalance);
+
+  nb::class_<quant::low_latency::TuringSprtThresholds>(m, "TuringSprtThresholds")
+      .def_ro("lower_deciban", &quant::low_latency::TuringSprtThresholds::lower_deciban)
+      .def_ro("upper_deciban", &quant::low_latency::TuringSprtThresholds::upper_deciban);
+
+  nb::class_<quant::low_latency::TuringFilterEngine>(m, "TuringFilterEngine")
+      .def(nb::init<const quant::low_latency::TuringFilterConfig&, bool>(),
+           nb::arg("config"), nb::arg("bullish_hypothesis") = true)
+      .def("process", &quant::low_latency::TuringFilterEngine::process,
+           nb::arg("tick"))
+      .def("reset", &quant::low_latency::TuringFilterEngine::reset)
+      .def("state", &quant::low_latency::TuringFilterEngine::state,
+           nb::rv_policy::reference_internal)
+      .def("bullish_hypothesis",
+           &quant::low_latency::TuringFilterEngine::bullish_hypothesis)
+      .def_static("thresholds_from_error_rates",
+                  &quant::low_latency::TuringFilterEngine::thresholds_from_error_rates,
+                  nb::arg("alpha"), nb::arg("beta"))
+      .def_static("evidence_deciban",
+                  &quant::low_latency::TuringFilterEngine::evidence_deciban,
+                  nb::arg("p_event_h"), nb::arg("p_event_not_h"));
+
+  m.def("turing_filter_batch",
+        [](TuringReadOnlyI64 timestamp_ns, TuringReadOnly1D bid, TuringReadOnly1D ask,
+           TuringReadOnly1D bid_volume, TuringReadOnly1D ask_volume,
+           TuringReadOnly1D trade_volume,
+           const quant::low_latency::TuringFilterConfig& config,
+           bool bullish_hypothesis, TuringWritableU8 decisions) {
+          const std::size_t n = timestamp_ns.shape(0);
+          if (bid.shape(0) != n || ask.shape(0) != n ||
+              bid_volume.shape(0) != n || ask_volume.shape(0) != n ||
+              trade_volume.shape(0) != n || decisions.shape(0) != n) {
+            throw std::invalid_argument(
+                "all Turing filter buffers must have equal length");
+          }
+          quant::low_latency::TuringFilterEngine engine(config, bullish_hypothesis);
+          nb::gil_scoped_release release;
+          for (std::size_t i = 0; i < n; ++i) {
+            quant::low_latency::TuringFilterTick tick;
+            tick.timestamp_ns = timestamp_ns.data()[i];
+            tick.bid = bid.data()[i];
+            tick.ask = ask.data()[i];
+            tick.bid_volume = bid_volume.data()[i];
+            tick.ask_volume = ask_volume.data()[i];
+            tick.trade_volume = trade_volume.data()[i];
+            decisions.data()[i] =
+                static_cast<std::uint8_t>(engine.process(tick));
+          }
+        },
+        nb::arg("timestamp_ns").noconvert(),
+        nb::arg("bid").noconvert(),
+        nb::arg("ask").noconvert(),
+        nb::arg("bid_volume").noconvert(),
+        nb::arg("ask_volume").noconvert(),
+        nb::arg("trade_volume").noconvert(),
+        nb::arg("config"),
+        nb::arg("bullish_hypothesis") = true,
+        nb::arg("decisions").noconvert(),
+        "Zero-copy Turing-inspired structural/anchor/SPRT filter.");
 
   m.def("version", []() { return quant::Version::current().to_string(); },
         "Get the C++ Quant Engine version (major.minor.patch)");
