@@ -36,8 +36,12 @@
 - [ ] CI evidence is classified only by the existing deterministic classifier.
 - [ ] Repair authority is bounded by the configured attempt limit.
 - [ ] Non-repairable, malformed, empty, or ambiguous evidence fails closed.
-- [ ] The controller requires explicit human approval before any governed repair command can execute.
-- [ ] Governed execution is restricted to the command allowlist and explicit allowed paths.
+- [x] The controller requires explicit approval provenance before any governed repair command can execute.
+- [x] Governed execution is restricted to the command allowlist and explicit allowed paths.
+- [x] Approval binds approver identity, approval timestamp, proposal identity, governed action, scope, and attempt authority.
+- [x] Attempt authority is held by a process-local persistent ledger and cannot be reset by replaying the same executor call.
+- [x] Every executed or failed governed attempt emits an immutable receipt containing contract, proposal, command, approval, pre-execution SHA, diff, stdout, stderr, return code, attempt number, and next boundary.
+- [x] Execution stops when the repository worktree is not clean before execution or its base SHA cannot be established.
 - [ ] The controller never merges or deploys.
 - [ ] Machine-readable output records task validation, classification, proposal, and stop/continue state.
 
@@ -60,7 +64,7 @@
 
 ## Autonomy limits
 
-- Maximum repair attempts: 1
+- Maximum repair attempts: configured explicitly at proposal time; execution additionally requires one persistent AttemptLedger for the governed chain.
 - Stop conditions: invalid task contract, ambiguous/unsafe classification, non-repairable classification, malformed evidence, zero attempt limit.
 - Human approval required for: source mutation, production migration, deployment, merge, destructive operation, or scope expansion.
 
@@ -70,4 +74,4 @@
 - PR: required before merge.
 - CI run(s): exact PR head SHA only.
 - Observed final status: must be verified, never inferred.
-- Known limitations: v1 does not generate patches; governed execution is limited to explicit Ruff commands and never bypasses task scope.
+- Known limitations: v1 does not generate patches; governed execution is limited to explicit Ruff commands, the attempt ledger is process-local for v1, and the executor never bypasses task scope.
