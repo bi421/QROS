@@ -11,7 +11,11 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-VALIDATOR = ROOT / "scripts" / "validate_task_contract.py"
+SCRIPTS_DIR = ROOT / "scripts"
+VALIDATOR = SCRIPTS_DIR / "validate_task_contract.py"
+
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
 
 
 @dataclass(frozen=True)
