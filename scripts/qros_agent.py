@@ -234,6 +234,18 @@ def _git_diff(paths: Sequence[Path]) -> tuple[bool, str]:
     return result.returncode == 0, result.stdout if result.returncode == 0 else result.stderr
 
 
+def _command_paths(argv: Sequence[str]) -> tuple[Path, ...]:
+    """Extract governed file targets without treating Ruff flags as paths."""
+    paths: list[Path] = []
+    for token in argv[2:]:
+        if token.startswith("-"):
+            if token != "--check":
+                return ()
+            continue
+        paths.append(Path(token).resolve())
+    return tuple(paths)
+
+
 def _result(
     status: str,
     argv: tuple[str, ...],
@@ -320,7 +332,7 @@ def execute_proposal(
         return _result("STOP", argv, None, stderr="governed proposal action is outside allowlist")
 
     roots = tuple(path.resolve() for path in allowed_paths)
-    paths = tuple(Path(token).resolve() for token in argv[2:])
+    paths = _command_paths(argv)
     if not paths or any(
         not any(path == root or root in path.parents for root in roots) for path in paths
     ):
