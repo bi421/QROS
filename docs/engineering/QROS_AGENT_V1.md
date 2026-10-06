@@ -21,6 +21,7 @@ v1:
 - fails closed on invalid, empty, ambiguous, or non-repairable evidence;
 - never executes a repair command without explicit human approval;
 - validates command scope before any approved execution;
+- requires the approved command to match the proposal's governed action;
 - records the exact approved command and resulting git diff in the execution result;
 - never merges;
 - never deploys.
@@ -91,9 +92,10 @@ It:
 
 1. receives an accepted proposal;
 2. derives executable paths from the task contract;
-3. allows only Ruff check or format;
-4. requires explicit human approval;
-5. records the exact command and resulting git diff after approved execution;
-6. never merges or deploys.
+3. requires an explicit governed action in the accepted proposal;
+4. allows only Ruff check or format when the command exactly matches that action;
+5. requires explicit human approval;
+6. records the exact command and resulting git diff after approved execution;
+7. never merges or deploys.
 
 The model, if one is added, remains subordinate to these deterministic controls.
