@@ -1,8 +1,8 @@
 # QROS Architecture v2 — Minimal Cost / Maximum Speed
 
 Status: ACTIVE REFACTOR BASELINE
-Branch: refactor/remove-research-execution-duplicate-20261006
-Base: eb3be146ec70b648db3eee2917c7164fca447f5b
+Branch: main
+Base: 750aa71370287b7c1defd5c1abb653ef185b9f6c
 
 ## Objective
 Optimize for the smallest implementation and validation cost that preserves scientific correctness, tenant isolation, provenance, fail-closed governance, and release safety.
@@ -38,7 +38,18 @@ One concept gets one authoritative representation: DatasetVersion, ResearchReque
 ## Execution simplification
 The former `researchos.research_execution.py` boundary has been migrated into `researchos.research_core.provenance` and the obsolete module has been deleted after caller migration and reference verification.
 
-`researchos.pipeline`, `researchos.decision_engine`, and older object/repository systems are legacy candidates only where current runtime/test references no longer exist.
+`researchos.pipeline`, `researchos.decision_engine`, `researchos.objects`, and `researchos.repository` are not deletion targets merely because they are old. Each is a live bounded context until an exact canonical replacement is proven.
+
+### Legacy boundary classification — 2026-10-06
+
+The current reference audit establishes the following:
+
+- `researchos.pipeline` is a live 11-stage research-object lifecycle coordinator. It is used by local interfaces, agent tools, and dedicated pipeline verification tests. Its semantics are object creation, reference validation, parent-link maintenance, persistence, and audit recording. `research_core.runner` is **not** a drop-in replacement: it executes the frozen scientific workflow and exposes a different contract.
+- `researchos.objects` is the object graph consumed by the pipeline, storage, attribution, macro, memory, and tests. It is a coherent bounded model, not a proven duplicate of `research_core.contracts`.
+- `researchos.repository` is the repository contract used by that object graph and by multiple domain modules. It is distinct from `researchos.storage.repository` and `researchos.data_engine.repository`; name similarity is not sufficient evidence for consolidation.
+- `researchos.decision_engine` remains a separate decision bounded context until its contracts and callers are proven equivalent to a canonical component.
+
+Therefore this block makes **no speculative deletion**. The next cleanup block must target one concrete boundary only after a caller-by-caller semantic mapping proves a replacement. This is the required constraint-first rule: reduce duplication only where equivalence is demonstrated, not where names merely overlap.
 
 ## Phase 5.2
 Prepare immutable input once: raw input -> PreparedResearchData -> feature-set evaluations. Do not rebuild identical source transformations for every feature set.
