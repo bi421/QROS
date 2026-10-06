@@ -109,7 +109,8 @@ def _canonical_sha(value: object) -> str:
 
 
 def proposal_id(proposal: dict[str, object]) -> str:
-    return _canonical_sha(proposal)
+    payload = {key: value for key, value in proposal.items() if key != "proposal_id"}
+    return _canonical_sha(payload)
 
 
 def _task_contract_sha256(task_contract: Path) -> str:
@@ -129,6 +130,7 @@ def approval_for(
     task_contract: Path,
     allowed_paths: Sequence[Path],
     *,
+    ledger: AttemptLedger,
     approver_id: str,
     approved_at: str,
 ) -> ApprovalProvenance:
@@ -147,7 +149,8 @@ def approval_for(
         governed_action=(governed_action[0], governed_action[1]),
         scope_sha256=_scope_sha256(allowed_paths),
         attempt_authority=_canonical_sha({
-            "budget_id": "approval-bound",
+            "budget_id": ledger.budget_id,
+            "max_attempts": ledger.max_attempts,
             "task_contract_sha256": _task_contract_sha256(task_contract),
         }),
     )
@@ -252,6 +255,7 @@ def _validate_approval(
     proposal: dict[str, object],
     task_contract: Path,
     allowed_paths: Sequence[Path],
+    ledger: AttemptLedger,
 ) -> str | None:
     if approval.status != "APPROVED":
         return "approval status is not APPROVED"
