@@ -1,10 +1,10 @@
 """Execution adapter for context-aware Phase 5.2 rebuild datasets."""
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any
 
-from researchos.experiments.phase52.execution import _run_prepared
+from researchos.experiments.phase52.execution import run_prepared_phase52_comparison
 from researchos.experiments.phase52.experiment import Phase52Config
 from researchos.experiments.phase52.prepared import Phase52PreparedData
 
@@ -134,14 +134,8 @@ def run_context_aware_phase52_comparison(
     )
     build.validate(contract)
 
-    results: dict[str, Any] = {}
     prepared = _prepared_view(build, cfg)
-    for feature_set in FEATURE_SET_NAMES:
-        results[feature_set] = _run_prepared(
-            prepared,
-            replace(cfg, feature_set=_EXECUTION_FEATURE_SET_NAMES[feature_set]),
-        )
-    return results
+    return run_prepared_phase52_comparison(prepared, cfg)
 
 
 __all__ = ["run_context_aware_phase52_comparison"]
