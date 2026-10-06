@@ -84,7 +84,7 @@ def test_missing_approval_fails_closed() -> None:
         CONTRACT, p, ["ruff", "format", "--check", "scripts/qros_agent.py"], ledger=ledger
     )
     assert result.status == "STOP"
-    assert "persistent attempt ledger is required" in result.stderr
+    assert "explicit approval provenance is required" in result.stderr
     assert result.next_boundary == "human-review"
     assert result.receipt is None
     assert ledger.consumed_attempts == 0
