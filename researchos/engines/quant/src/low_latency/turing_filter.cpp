@@ -157,6 +157,7 @@ TuringFilterDecision TuringFilterEngine::process(
     state_.samples = 0;
     state_.persistence = 0;
     state_.log_odds_deciban = 0.0;
+    state_.has_previous = false;
     state_.last_decision = TuringFilterDecision::Drop;
     return TuringFilterDecision::Drop;
   }
@@ -166,6 +167,7 @@ TuringFilterDecision TuringFilterEngine::process(
     state_.samples = 0;
     state_.persistence = 0;
     state_.log_odds_deciban = 0.0;
+    state_.has_previous = false;
     state_.constraint_mask &= static_cast<std::uint8_t>(
         ~ConstraintDirectionalAnchor);
     state_.last_decision = TuringFilterDecision::Drop;
