@@ -657,8 +657,3 @@ create unique index if not exists subscription_provider_subscription_id_key
 
 comment on index public.subscription_provider_subscription_id_key is
     'Each non-null provider subscription id may belong to only one workspace.';
-
-
-
-create policy dataset_version_feed_service_role on public.dataset_version_feed
-    for all to service_role using (true) with check (true);
