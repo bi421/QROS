@@ -77,21 +77,23 @@ def _build(context_count: int = 60, research_count: int = 205) -> ContextAwareFe
 
 def test_context_execution_uses_research_rows_only(monkeypatch) -> None:
     build = _build()
-    calls: list[tuple[str, int, tuple[int, ...], int]] = []
+    calls: list[tuple[int, tuple[int, ...], int]] = []
 
     def fake_run(prepared, config):
-        calls.append((config.feature_set, len(prepared.close), prepared.source_indices, id(prepared)))
-        assert len(prepared.close) == 205
-        assert prepared.source_indices == tuple(range(200))
-        return Phase52Result.blocked(
-            symbol=config.symbol,
-            timeframe=config.timeframe,
-            reason="test",
-            macro_symbols_present=("DXY", "US10Y", "VIX"),
-        )
+        calls.append((len(prepared.close), prepared.source_indices, id(prepared)))
+        assert config.feature_set == "PRICE + DXY"
+        return {
+            feature_set: Phase52Result.blocked(
+                symbol=config.symbol,
+                timeframe=config.timeframe,
+                reason="test",
+                macro_symbols_present=("DXY", "US10Y", "VIX"),
+            )
+            for feature_set in FEATURE_SET_NAMES
+        }
 
     monkeypatch.setattr(
-        "researchos.experiments.phase52_rebuild.context_execution._run_prepared",
+        "researchos.experiments.phase52_rebuild.context_execution.run_prepared_phase52_comparison",
         fake_run,
     )
     results = run_context_aware_phase52_comparison(
@@ -100,10 +102,9 @@ def test_context_execution_uses_research_rows_only(monkeypatch) -> None:
     )
 
     assert set(results) == set(FEATURE_SET_NAMES)
-    assert len(calls) == len(FEATURE_SET_NAMES)
-    assert all(call[1] == 205 for call in calls)
-    assert all(call[2] == tuple(range(200)) for call in calls)
-    assert len({call[3] for call in calls}) == 1
+    assert len(calls) == 1
+    assert calls[0][0] == 205
+    assert calls[0][1] == tuple(range(200))
 
 
 def test_context_execution_rejects_source_index_mismatch(monkeypatch) -> None:
