@@ -108,7 +108,9 @@ TEST(TuringFilterTest, BrokenStructuralCribAbortsPriorSequence) {
 TEST(TuringFilterTest, ContradictoryEvidenceCanHitLowerBoundary) {
   auto config = base_config();
   config.min_persistence = 1;
-  config.lower_deciban = -5.0;
+  config.lower_deciban = -3.0;
+  config.contradiction_probability_h = 0.10;
+  config.contradiction_probability_not_h = 0.90;
   TuringFilterEngine engine(config);
 
   EXPECT_EQ(engine.process(tick(1)), TuringFilterDecision::Continue);
