@@ -109,6 +109,34 @@ def test_invalid_approval_provenance_fails_closed() -> None:
     assert ledger.consumed_attempts == 0
 
 
+
+def test_approval_attempt_authority_is_bound_to_ledger() -> None:
+    agent = load_agent()
+    p = proposal(agent)
+    ledger = agent.AttemptLedger(1)
+    valid = approval(agent, p, ledger)
+    invalid = agent.ApprovalProvenance(
+        status=valid.status,
+        approver_id=valid.approver_id,
+        approved_at=valid.approved_at,
+        proposal_id=valid.proposal_id,
+        governed_action=valid.governed_action,
+        scope_sha256=valid.scope_sha256,
+        attempt_authority=agent._canonical_sha({
+            "budget_id": "wrong-budget",
+            "max_attempts": ledger.max_attempts,
+            "task_contract_sha256": agent._task_contract_sha256(CONTRACT),
+        }),
+    )
+    result = agent.execute_proposal(
+        CONTRACT, p, ["ruff", "format", "--check", "scripts/qros_agent.py"],
+        approval=invalid, ledger=ledger,
+    )
+    assert result.status == "STOP"
+    assert "attempt authority" in result.stderr
+    assert ledger.consumed_attempts == 0
+
+
 def test_wrong_proposal_is_rejected() -> None:
     agent = load_agent()
     p = proposal(agent)

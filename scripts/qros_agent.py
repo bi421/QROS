@@ -266,12 +266,16 @@ def _validate_approval(
     if approval.proposal_id != proposal_id(proposal):
         return "approval does not bind to proposal identity"
     governed_action = proposal.get("governed_action")
-    if not isinstance(governed_action, list) or tuple(governed_action) != approval.governed_action:
+    if (
+        not isinstance(governed_action, (list, tuple))
+        or tuple(governed_action) != approval.governed_action
+    ):
         return "approval does not bind to governed action"
     if approval.scope_sha256 != _scope_sha256(allowed_paths):
         return "approval does not bind to task scope"
     if approval.attempt_authority != _canonical_sha({
-        "budget_id": "approval-bound",
+        "budget_id": ledger.budget_id,
+        "max_attempts": ledger.max_attempts,
         "task_contract_sha256": _task_contract_sha256(task_contract),
     }):
         return "approval attempt authority is invalid"
@@ -305,7 +309,7 @@ def execute_proposal(
 
     governed_action = proposal.get("governed_action")
     if (
-        not isinstance(governed_action, list)
+        not isinstance(governed_action, (list, tuple))
         or len(governed_action) != 2
         or not all(isinstance(item, str) for item in governed_action)
     ):
