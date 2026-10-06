@@ -113,8 +113,9 @@ def test_cli_emits_machine_readable_decision(tmp_path: Path) -> None:
 def test_executor_requires_human_approval() -> None:
     agent = load_agent()
     result = agent.execute_proposal(
+        CONTRACT,
+        {"allowed": True},
         ["ruff", "format", "scripts/qros_agent.py"],
-        [ROOT / "scripts" / "qros_agent.py"],
         approved=False,
         attempt_limit=1,
     )
@@ -127,8 +128,9 @@ def test_executor_requires_human_approval() -> None:
 def test_executor_rejects_scope_escape() -> None:
     agent = load_agent()
     result = agent.execute_proposal(
+        CONTRACT,
+        {"allowed": True},
         ["ruff", "format", "README.md"],
-        [ROOT / "scripts" / "qros_agent.py"],
         approved=True,
         attempt_limit=1,
     )
@@ -141,11 +143,25 @@ def test_executor_rejects_scope_escape() -> None:
 def test_executor_rejects_unsupported_command() -> None:
     agent = load_agent()
     result = agent.execute_proposal(
+        CONTRACT,
+        {"allowed": True},
         ["git", "status"],
-        [ROOT / "scripts" / "qros_agent.py"],
         approved=True,
         attempt_limit=1,
     )
 
     assert result.status == "STOP"
     assert "allowlist" in result.stderr
+
+def test_executor_rejects_unapproved_proposal() -> None:
+    agent = load_agent()
+    result = agent.execute_proposal(
+        CONTRACT,
+        {"allowed": False},
+        ["ruff", "format", "scripts/qros_agent.py"],
+        approved=True,
+        attempt_limit=1,
+    )
+
+    assert result.status == "STOP"
+    assert "not authorized" in result.stderr
