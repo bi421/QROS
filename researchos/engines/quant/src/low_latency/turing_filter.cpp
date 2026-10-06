@@ -25,6 +25,8 @@ bool config_valid(const TuringFilterConfig& c) noexcept {
          c.min_persistence > 0 && c.max_samples > 0 &&
          probability_valid(c.event_probability_h) &&
          probability_valid(c.event_probability_not_h) &&
+         probability_valid(c.contradiction_probability_h) &&
+         probability_valid(c.contradiction_probability_not_h) &&
          std::isfinite(c.lower_deciban) &&
          std::isfinite(c.upper_deciban) &&
          c.lower_deciban < c.upper_deciban;
@@ -197,9 +199,14 @@ TuringFilterDecision TuringFilterEngine::process(
     return TuringFilterDecision::Reject;
   }
 
-  const double evidence =
-      evidence_deciban(config_.event_probability_h,
-                       config_.event_probability_not_h);
+  const bool confirming =
+      !state_.has_previous ||
+      directional_imbalance >= state_.last_directional_imbalance;
+  const double evidence = confirming
+      ? evidence_deciban(config_.event_probability_h,
+                         config_.event_probability_not_h)
+      : evidence_deciban(config_.contradiction_probability_h,
+                         config_.contradiction_probability_not_h);
   if (!std::isfinite(evidence)) {
     state_.samples = 0;
     state_.persistence = 0;
