@@ -54,6 +54,7 @@ struct TuringFilterState final {
   std::uint32_t samples{0};
   std::uint32_t persistence{0};
   std::uint8_t constraint_mask{0};
+  TuringFilterDecision last_decision{TuringFilterDecision::Continue};
   bool has_previous{false};
   std::int64_t last_timestamp_ns{0};
   double last_mid{0.0};
