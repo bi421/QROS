@@ -34,10 +34,39 @@ from researchos.objects.process import AuditEntry, ReasoningChain, ResearchCycle
 from researchos.objects.research import Research, ResearchReport
 from researchos.objects.scenario import Scenario, ScenarioSet
 from researchos.objects.validation import FailureAnalysis, Validation
-from researchos.pipeline.references import ReferenceValidator
 from researchos.repository.interface import RepositoryInterface
 
 T = TypeVar("T")
+
+
+class ReferenceValidator:
+    """Validate object references against the pipeline repository."""
+
+    def __init__(self, repository: RepositoryInterface):
+        self._repo = repository
+
+    def exists(self, obj_id: str) -> bool:
+        if not obj_id:
+            return False
+        return self._repo.get(obj_id) is not None
+
+    def require_exists(self, obj_id: str, label: str = "object") -> str:
+        if not obj_id:
+            raise ValueError(f"{label} ID is empty — cannot validate reference")
+        if self._repo.get(obj_id) is None:
+            raise ValueError(
+                f"{label} with ID '{obj_id}' not found in repository — "
+                "create it before referencing it"
+            )
+        return obj_id
+
+    def require_all_exist(self, ids: list[str], label: str = "object") -> list[str]:
+        missing = [obj_id for obj_id in ids if not self.exists(obj_id)]
+        if missing:
+            raise ValueError(
+                f"{len(missing)} {label}(s) not found in repository: {missing}"
+            )
+        return ids
 
 
 class ResearchPipeline:
