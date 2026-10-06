@@ -105,6 +105,20 @@ TEST(TuringFilterTest, BrokenStructuralCribAbortsPriorSequence) {
   EXPECT_EQ(engine.state().samples, 1u);
 }
 
+TEST(TuringFilterTest, ContradictoryEvidenceCanHitLowerBoundary) {
+  auto config = base_config();
+  config.min_persistence = 1;
+  config.lower_deciban = -5.0;
+  TuringFilterEngine engine(config);
+
+  EXPECT_EQ(engine.process(tick(1)), TuringFilterDecision::Continue);
+
+  // The hard directional crib remains valid, but its strength weakens.
+  EXPECT_EQ(engine.process(tick(2, 6.0, 4.0)),
+            TuringFilterDecision::Reject);
+  EXPECT_LE(engine.state().log_odds_deciban, config.lower_deciban);
+}
+
 TEST(TuringFilterTest, NonMonotonicTimestampDrops) {
   auto config = base_config();
   config.min_persistence = 1;
