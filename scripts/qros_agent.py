@@ -148,11 +148,13 @@ def approval_for(
         proposal_id=proposal_id(proposal),
         governed_action=(governed_action[0], governed_action[1]),
         scope_sha256=_scope_sha256(allowed_paths),
-        attempt_authority=_canonical_sha({
-            "budget_id": ledger.budget_id,
-            "max_attempts": ledger.max_attempts,
-            "task_contract_sha256": _task_contract_sha256(task_contract),
-        }),
+        attempt_authority=_canonical_sha(
+            {
+                "budget_id": ledger.budget_id,
+                "max_attempts": ledger.max_attempts,
+                "task_contract_sha256": _task_contract_sha256(task_contract),
+            }
+        ),
     )
 
 
@@ -285,11 +287,13 @@ def _validate_approval(
         return "approval does not bind to governed action"
     if approval.scope_sha256 != _scope_sha256(allowed_paths):
         return "approval does not bind to task scope"
-    if approval.attempt_authority != _canonical_sha({
-        "budget_id": ledger.budget_id,
-        "max_attempts": ledger.max_attempts,
-        "task_contract_sha256": _task_contract_sha256(task_contract),
-    }):
+    if approval.attempt_authority != _canonical_sha(
+        {
+            "budget_id": ledger.budget_id,
+            "max_attempts": ledger.max_attempts,
+            "task_contract_sha256": _task_contract_sha256(task_contract),
+        }
+    ):
         return "approval attempt authority is invalid"
     return None
 
@@ -364,16 +368,20 @@ def execute_proposal(
 
     head_ok, pre_sha = _git_head()
     if not head_ok or not pre_sha:
-        return _result("STOP", argv, None, stderr="could not establish pre-execution repository SHA")
+        return _result(
+            "STOP", argv, None, stderr="could not establish pre-execution repository SHA"
+        )
 
     try:
         attempt_number = ledger.consume(
-            _canonical_sha({
-                "budget_id": ledger.budget_id,
-                "proposal_id": proposal_id(proposal),
-                "command": argv,
-                "pre_execution_sha": pre_sha,
-            })
+            _canonical_sha(
+                {
+                    "budget_id": ledger.budget_id,
+                    "proposal_id": proposal_id(proposal),
+                    "command": argv,
+                    "pre_execution_sha": pre_sha,
+                }
+            )
         )
     except RuntimeError as exc:
         return _result("STOP", argv, None, stderr=str(exc), pre_execution_sha=pre_sha)
@@ -395,10 +403,20 @@ def execute_proposal(
             result.stderr,
             diff,
             receipt=ExecutionReceipt(
-                str(uuid4()), ledger.budget_id, attempt_number,
-                _task_contract_sha256(task_contract), proposal_id(proposal),
-                (governed_action[0], governed_action[1]), argv, approval, pre_sha,
-                "DIFF_FAILED", diff, result.stdout, result.stderr, result.returncode,
+                str(uuid4()),
+                ledger.budget_id,
+                attempt_number,
+                _task_contract_sha256(task_contract),
+                proposal_id(proposal),
+                (governed_action[0], governed_action[1]),
+                argv,
+                approval,
+                pre_sha,
+                "DIFF_FAILED",
+                diff,
+                result.stdout,
+                result.stderr,
+                result.returncode,
                 "human-review",
             ),
             pre_execution_sha=pre_sha,
@@ -406,15 +424,31 @@ def execute_proposal(
 
     status = "EXECUTED" if result.returncode == 0 else "FAILED"
     receipt = ExecutionReceipt(
-        str(uuid4()), ledger.budget_id, attempt_number,
-        _task_contract_sha256(task_contract), proposal_id(proposal),
-        (governed_action[0], governed_action[1]), argv, approval, pre_sha,
-        status, diff, result.stdout, result.stderr, result.returncode,
+        str(uuid4()),
+        ledger.budget_id,
+        attempt_number,
+        _task_contract_sha256(task_contract),
+        proposal_id(proposal),
+        (governed_action[0], governed_action[1]),
+        argv,
+        approval,
+        pre_sha,
+        status,
+        diff,
+        result.stdout,
+        result.stderr,
+        result.returncode,
         "complete" if result.returncode == 0 else "human-review",
     )
     return _result(
-        status, argv, result.returncode, result.stdout, result.stderr, diff,
-        receipt=receipt, pre_execution_sha=pre_sha,
+        status,
+        argv,
+        result.returncode,
+        result.stdout,
+        result.stderr,
+        diff,
+        receipt=receipt,
+        pre_execution_sha=pre_sha,
         next_boundary=receipt.next_boundary,
     )
 
@@ -424,8 +458,13 @@ def run(task_contract: Path, log: str, attempt_limit: int) -> AgentDecision:
     task_result = {"path": str(task_contract), "valid": valid, "evidence": validation_output}
     if not valid:
         return AgentDecision(
-            "STOP", task_result,
-            {"category": "ambiguous/unsafe", "repairable": False, "evidence": ["invalid task contract"]},
+            "STOP",
+            task_result,
+            {
+                "category": "ambiguous/unsafe",
+                "repairable": False,
+                "evidence": ["invalid task contract"],
+            },
             {"action": "stop", "allowed": False, "attempt_limit": attempt_limit},
             "human-review",
         )
