@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from researchos.experiments.phase52 import Phase52Config
@@ -178,6 +180,55 @@ def test_phase52_holdout_boundaries_and_predictions_are_deterministic() -> None:
     for feature_set in first:
         assert first[feature_set].metadata["wfo_folds"] == second[feature_set].metadata["wfo_folds"]
         assert first[feature_set].metadata["holdout"] == second[feature_set].metadata["holdout"]
+
+
+def test_phase52_parallel_matches_sequential_and_reports_timing() -> None:
+    inputs = _inputs(n=1400)
+    config = Phase52Config(
+        train_size=400,
+        validation_size=100,
+        step_size=100,
+        holdout_size=40,
+    )
+    prepared = Phase52PreparedData.build(
+        *inputs[:4],
+        inputs[4],
+        inputs[5],
+        inputs[6],
+        horizon=config.horizon,
+        threshold=config.threshold,
+        required_macro_symbols=config.required_macro_symbols,
+    )
+
+    from dataclasses import replace
+    from researchos.experiments.phase52.execution import (
+        _run_prepared,
+        run_prepared_phase52_comparison,
+    )
+
+    sequential_start = time.perf_counter()
+    sequential = {
+        feature_set: _run_prepared(prepared, replace(config, feature_set=feature_set))
+        for feature_set in (
+            "PRICE_ONLY",
+            "PRICE + DXY",
+            "PRICE + US10Y",
+            "PRICE + VIX",
+            "PRICE + ALL",
+        )
+    }
+    sequential_seconds = time.perf_counter() - sequential_start
+
+    parallel_start = time.perf_counter()
+    parallel = run_prepared_phase52_comparison(prepared, config)
+    parallel_seconds = time.perf_counter() - parallel_start
+
+    assert parallel == sequential
+    speedup = sequential_seconds / parallel_seconds if parallel_seconds else float("inf")
+    print(
+        f"PHASE52_PERF sequential={sequential_seconds:.6f}s "
+        f"parallel={parallel_seconds:.6f}s speedup={speedup:.3f}x"
+    )
 
 
 def test_phase52_rejects_nonpositive_final_holdout_size() -> None:
