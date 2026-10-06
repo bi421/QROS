@@ -36,7 +36,9 @@
 - [ ] CI evidence is classified only by the existing deterministic classifier.
 - [ ] Repair authority is bounded by the configured attempt limit.
 - [ ] Non-repairable, malformed, empty, or ambiguous evidence fails closed.
-- [ ] The v1 controller never edits repository files, executes repair commands, merges, or deploys.
+- [ ] The controller requires explicit human approval before any governed repair command can execute.
+- [ ] Governed execution is restricted to the command allowlist and explicit allowed paths.
+- [ ] The controller never merges or deploys.
 - [ ] Machine-readable output records task validation, classification, proposal, and stop/continue state.
 
 ## Validation
@@ -46,6 +48,7 @@
 - [ ] python scripts/qros_agent.py <contract> <log> --attempt-limit 1
 - [ ] ruff check scripts/qros_agent.py researchos/saas/tests/test_qros_agent.py
 - [ ] git diff --check
+- [ ] governed executor boundary tests
 
 ## Risk
 
@@ -67,4 +70,4 @@
 - PR: required before merge.
 - CI run(s): exact PR head SHA only.
 - Observed final status: must be verified, never inferred.
-- Known limitations: v1 does not generate patches or execute repair commands.
+- Known limitations: v1 does not generate patches; governed execution is limited to explicit Ruff commands and never bypasses task scope.
