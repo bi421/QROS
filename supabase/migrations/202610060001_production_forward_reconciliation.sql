@@ -448,9 +448,11 @@ begin
         delete from public.evidence where workspace_id = workspace_row.id and deleted_at is not null;
         delete from public.artifact where workspace_id = workspace_row.id and deleted_at is not null;
         delete from public.research_claim where workspace_id = workspace_row.id and deleted_at is not null;
+        -- usage_event.research_run_id uses the default NO ACTION FK. Purge it
+        -- before deleting the referenced research_run row.
+        delete from public.usage_event where workspace_id = workspace_row.id and deleted_at is not null;
         delete from public.research_run where workspace_id = workspace_row.id and deleted_at is not null;
         delete from public.audit_event where workspace_id = workspace_row.id and deleted_at is not null;
-        delete from public.usage_event where workspace_id = workspace_row.id and deleted_at is not null;
         delete from public.billing_event where workspace_id = workspace_row.id and deleted_at is not null;
         delete from public.api_idempotency where workspace_id = workspace_row.id and deleted_at is not null;
         -- dataset_version_feed intentionally uses ON DELETE RESTRICT. Purge owns
