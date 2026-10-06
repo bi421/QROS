@@ -42,7 +42,11 @@ def validate_task_contract(path: Path) -> tuple[bool, list[str]]:
 def classify(log: str) -> dict[str, Any]:
     from classify_ci_failure import classify as classify_failure
 
-    return asdict(classify_failure(log))
+    result = asdict(classify_failure(log))
+    evidence = result.get("evidence")
+    if isinstance(evidence, tuple):
+        result["evidence"] = list(evidence)
+    return result
 
 
 def propose(classification: dict[str, Any], attempt_limit: int) -> dict[str, Any]:
