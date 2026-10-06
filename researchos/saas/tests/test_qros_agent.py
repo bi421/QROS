@@ -131,7 +131,7 @@ def test_executor_rejects_scope_escape() -> None:
     agent = load_agent()
     result = agent.execute_proposal(
         CONTRACT,
-        {"allowed": True},
+        {"allowed": True, "governed_action": ["ruff", "format"]},
         ["ruff", "format", "README.md"],
         approved=True,
         attempt_limit=1,
