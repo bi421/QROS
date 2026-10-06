@@ -6,7 +6,7 @@ set -euo pipefail
 : "${MIGRATION_FILE:?MIGRATION_FILE is required}"
 
 case "${MIGRATION_FILE}" in
-  20260928123000_dataset_version_storage_path_reconciliation.sql|20260928124500_workspace_billing_admin_role_reconciliation.sql|20260928120000_storage_authorization_workspace_membership_reconciliation.sql)
+  202610060001_production_forward_reconciliation.sql|20260928123000_dataset_version_storage_path_reconciliation.sql|20260928124500_workspace_billing_admin_role_reconciliation.sql|20260928120000_storage_authorization_workspace_membership_reconciliation.sql)
     ;;
   *)
     echo "::error::migration is not in the governed M1 forward-migration allowlist: ${MIGRATION_FILE}"
@@ -106,6 +106,23 @@ echo "migration_sha256=${migration_sha}"
 
 echo "== postflight: schema contract =="
 case "$MIGRATION_FILE" in
+  202610060001_production_forward_reconciliation.sql)
+    supabase --workdir "$bundle" db query --linked "
+select 1 / case when
+  exists (select 1 from information_schema.columns where table_schema='public' and table_name='workspace' and column_name='deleted_at')
+  and exists (select 1 from information_schema.columns where table_schema='public' and table_name='workspace' and column_name='purge_at')
+  and to_regclass('public.workspace_retention_policy') is not null
+  and to_regclass('public.tenant_deletion_tombstone') is not null
+  and to_regprocedure('public.soft_delete_workspace(uuid,timestamptz,integer)') is not null
+  and to_regprocedure('public.purge_deleted_workspaces(timestamptz)') is not null
+  and exists (select 1 from pg_constraint where conrelid='public.workspace_member'::regclass and conname='workspace_member_role_check' and position('billing_admin' in pg_get_constraintdef(oid)) > 0)
+  and to_regprocedure('public.enqueue_research_run(uuid,uuid,text)') is not null
+  and to_regprocedure('public.receive_research_run(integer)') is not null
+  and to_regprocedure('public.ack_research_run(bigint)') is not null
+  and exists (select 1 from pg_indexes where schemaname='public' and tablename='subscription' and indexname='subscription_provider_subscription_id_key')
+then 1 else 0 end as postcondition_ok;
+"
+    ;;
   20260928123000_dataset_version_storage_path_reconciliation.sql)
     supabase --workdir "$bundle" db query --linked "
 select 1 / case when
