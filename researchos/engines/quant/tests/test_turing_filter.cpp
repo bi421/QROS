@@ -90,6 +90,21 @@ TEST(TuringFilterTest, SequentialOddsAcceptsOnlyAfterAnchorsAndThreshold) {
   EXPECT_EQ(engine.state().samples, 0u);
 }
 
+TEST(TuringFilterTest, BrokenStructuralCribAbortsPriorSequence) {
+  auto config = base_config();
+  config.min_persistence = 1;
+  TuringFilterEngine engine(config);
+
+  EXPECT_EQ(engine.process(tick(1)), TuringFilterDecision::Continue);
+  auto broken = tick(2);
+  broken.ask = 102.0;
+  EXPECT_EQ(engine.process(broken), TuringFilterDecision::Drop);
+  EXPECT_FALSE(engine.state().has_previous);
+
+  EXPECT_EQ(engine.process(tick(3)), TuringFilterDecision::Continue);
+  EXPECT_EQ(engine.state().samples, 1u);
+}
+
 TEST(TuringFilterTest, NonMonotonicTimestampDrops) {
   auto config = base_config();
   config.min_persistence = 1;
