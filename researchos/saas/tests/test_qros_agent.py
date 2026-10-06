@@ -33,6 +33,7 @@ def test_valid_contract_and_repairable_failure_produce_proposal() -> None:
     assert decision.classification["category"] == "formatting/static failure"
     assert isinstance(decision.classification["evidence"], list)
     assert decision.proposal["allowed"] is True
+    assert decision.proposal["governed_action"] == ["ruff", "format"]
     assert decision.next_boundary == "governed-executor"
 
 
@@ -114,7 +115,7 @@ def test_executor_requires_human_approval() -> None:
     agent = load_agent()
     result = agent.execute_proposal(
         CONTRACT,
-        {"allowed": True},
+        {"allowed": True, "governed_action": ["ruff", "format"]},
         ["ruff", "format", "scripts/qros_agent.py"],
         approved=False,
         attempt_limit=1,
@@ -155,11 +156,25 @@ def test_executor_rejects_unsupported_command() -> None:
     assert "allowlist" in result.stderr
 
 
+def test_executor_rejects_command_action_mismatch() -> None:
+    agent = load_agent()
+    result = agent.execute_proposal(
+        CONTRACT,
+        {"allowed": True, "governed_action": ["ruff", "check"]},
+        ["ruff", "format", "scripts/qros_agent.py"],
+        approved=True,
+        attempt_limit=1,
+    )
+
+    assert result.status == "STOP"
+    assert "does not match governed proposal action" in result.stderr
+
+
 def test_executor_rejects_unapproved_proposal() -> None:
     agent = load_agent()
     result = agent.execute_proposal(
         CONTRACT,
-        {"allowed": False},
+        {"allowed": False, "governed_action": ["ruff", "format"]},
         ["ruff", "format", "scripts/qros_agent.py"],
         approved=True,
         attempt_limit=1,
