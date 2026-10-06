@@ -9,7 +9,7 @@ from researchos.experiments.phase52.experiment import Phase52Config
 from researchos.experiments.phase52.prepared import Phase52PreparedData
 
 from .context_pipeline import ContextAwareFeatureBuild
-from .feature_contract import FEATURE_SET_NAMES, Phase52FeatureContract
+from .feature_contract import Phase52FeatureContract
 
 _EXECUTION_FEATURE_SET_NAMES = {
     "PRICE_ONLY": "PRICE_ONLY",
