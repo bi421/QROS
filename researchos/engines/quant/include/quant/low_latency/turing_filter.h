@@ -44,6 +44,11 @@ struct TuringFilterConfig final {
   double event_probability_h{0.80};
   double event_probability_not_h{0.20};
 
+  // Likelihoods for confirming vs. contradicting sequential microstructure
+  // evidence while the hard anchors remain satisfied.
+  double contradiction_probability_h{0.20};
+  double contradiction_probability_not_h{0.80};
+
   // SPRT boundaries in decibans. Prefer thresholds_from_error_rates().
   double lower_deciban{-10.0};
   double upper_deciban{10.0};
