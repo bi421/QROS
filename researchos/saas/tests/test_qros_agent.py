@@ -180,6 +180,20 @@ def test_scope_escape_and_traversal_fail_closed() -> None:
     assert ledger.consumed_attempts == 0
 
 
+def test_disallowed_command_option_fails_closed() -> None:
+    agent = load_agent()
+    p = proposal(agent)
+    ledger = agent.AttemptLedger(1)
+    a = approval(agent, p, ledger)
+    result = agent.execute_proposal(
+        CONTRACT, p, ["ruff", "format", "--unsafe", "scripts/qros_agent.py"],
+        approval=a, ledger=ledger,
+    )
+    assert result.status == "STOP"
+    assert "option" in result.stderr
+    assert ledger.consumed_attempts == 0
+
+
 def test_shell_metacharacters_are_rejected() -> None:
     agent = load_agent()
     p = proposal(agent)
