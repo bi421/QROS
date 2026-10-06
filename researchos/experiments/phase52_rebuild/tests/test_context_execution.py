@@ -77,10 +77,10 @@ def _build(context_count: int = 60, research_count: int = 205) -> ContextAwareFe
 
 def test_context_execution_uses_research_rows_only(monkeypatch) -> None:
     build = _build()
-    calls: list[tuple[str, int, tuple[int, ...]]] = []
+    calls: list[tuple[str, int, tuple[int, ...], int]] = []
 
     def fake_run(prepared, config):
-        calls.append((config.feature_set, len(prepared.close), prepared.source_indices))
+        calls.append((config.feature_set, len(prepared.close), prepared.source_indices, id(prepared)))
         assert len(prepared.close) == 205
         assert prepared.source_indices == tuple(range(200))
         return Phase52Result.blocked(
@@ -103,6 +103,7 @@ def test_context_execution_uses_research_rows_only(monkeypatch) -> None:
     assert len(calls) == len(FEATURE_SET_NAMES)
     assert all(call[1] == 205 for call in calls)
     assert all(call[2] == tuple(range(200)) for call in calls)
+    assert len({call[3] for call in calls}) == 1
 
 
 def test_context_execution_rejects_source_index_mismatch(monkeypatch) -> None:
