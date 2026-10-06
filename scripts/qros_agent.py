@@ -8,11 +8,13 @@ import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = ROOT / "scripts"
 VALIDATOR = SCRIPTS_DIR / "validate_task_contract.py"
+EXECUTABLES = frozenset({"ruff"})
+SHELL_META = frozenset({"&", "|", ";", ">", "<", "$", "`"})
 
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))

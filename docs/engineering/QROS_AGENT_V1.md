@@ -1,6 +1,6 @@
 # QROS Agent v1
 
-Status: ACTIVE CONTROL-PLANE BOUNDARY
+Status: ACTIVE CONTROL-PLANE + GOVERNED EXECUTION BOUNDARY
 
 ## Purpose
 
@@ -19,12 +19,12 @@ v1:
 - delegates repairability to scripts/propose_ci_repair.py;
 - enforces an explicit attempt limit;
 - fails closed on invalid, empty, ambiguous, or non-repairable evidence;
-- never edits files;
-- never executes repair commands;
+- never executes a repair command without explicit human approval;
+- validates command scope before any approved execution;
 - never merges;
 - never deploys.
 
-A proposal is not execution authority.
+A proposal is not execution authority. The governed executor requires an explicit approval flag, a bounded command allowlist, explicit allowed paths, and a positive attempt budget.
 
 ## Decision model
 
@@ -65,7 +65,7 @@ No output is evidence that a source repair succeeded. Only actual validation and
 
 ## Future boundary
 
-A later version may add a governed executor adapter. That adapter must:
+The governed executor boundary now exists as a bounded adapter. That adapter must:
 
 1. receive only an accepted proposal;
 2. operate only on files explicitly allowed by the task contract;
