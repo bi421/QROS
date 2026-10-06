@@ -19,6 +19,10 @@ SCRIPTS_DIR = ROOT / "scripts"
 VALIDATOR = SCRIPTS_DIR / "validate_task_contract.py"
 EXECUTABLES = frozenset({"ruff"})
 ALLOWED_ACTIONS = frozenset({("ruff", "check"), ("ruff", "format")})
+ALLOWED_OPTIONS = {
+    ("ruff", "check"): frozenset(),
+    ("ruff", "format"): frozenset({"--check"}),
+}
 SHELL_META = frozenset({"&", "|", ";", ">", "<", "$", "`"})
 
 if str(SCRIPTS_DIR) not in sys.path:
@@ -320,7 +324,15 @@ def execute_proposal(
         return _result("STOP", argv, None, stderr="governed proposal action is outside allowlist")
 
     roots = tuple(path.resolve() for path in allowed_paths)
-    paths = tuple(Path(token).resolve() for token in argv[2:])
+    option_allowlist = ALLOWED_OPTIONS[tuple(governed_action)]
+    operands: list[str] = []
+    for token in argv[2:]:
+        if token.startswith("-"):
+            if token not in option_allowlist:
+                return _result("STOP", argv, None, stderr="command option is outside governed allowlist")
+        else:
+            operands.append(token)
+    paths = tuple(Path(token).resolve() for token in operands)
     if not paths or any(
         not any(path == root or root in path.parents for root in roots) for path in paths
     ):
