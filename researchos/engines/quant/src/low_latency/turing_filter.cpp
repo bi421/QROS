@@ -138,17 +138,15 @@ bool TuringFilterEngine::persistence_anchor(
 
 TuringFilterDecision TuringFilterEngine::process(
     const TuringFilterTick& tick) noexcept {
-  if (state_.constraint_mask != 0 &&
-      (state_.constraint_mask == kStructuralMask ||
-       state_.samples == config_.max_samples)) {
-    // A terminal decision is represented by a completed sample sequence.
-    // Start a fresh sequence on the next tick while preserving no stale odds.
+  if (state_.last_decision == TuringFilterDecision::Accept ||
+      state_.last_decision == TuringFilterDecision::Reject) {
     reset();
   }
 
   if (!config_valid(config_)) {
     reset();
     state_.constraint_mask = 0;
+    state_.last_decision = TuringFilterDecision::Reject;
     return TuringFilterDecision::Reject;
   }
 
@@ -159,6 +157,7 @@ TuringFilterDecision TuringFilterEngine::process(
     state_.samples = 0;
     state_.persistence = 0;
     state_.log_odds_deciban = 0.0;
+    state_.last_decision = TuringFilterDecision::Drop;
     return TuringFilterDecision::Drop;
   }
 
@@ -169,6 +168,7 @@ TuringFilterDecision TuringFilterEngine::process(
     state_.log_odds_deciban = 0.0;
     state_.constraint_mask &= static_cast<std::uint8_t>(
         ~ConstraintDirectionalAnchor);
+    state_.last_decision = TuringFilterDecision::Drop;
     return TuringFilterDecision::Drop;
   }
   state_.constraint_mask |= ConstraintDirectionalAnchor;
@@ -182,6 +182,7 @@ TuringFilterDecision TuringFilterEngine::process(
     state_.last_mid = (tick.bid + tick.ask) * 0.5;
     state_.last_directional_imbalance = directional_imbalance;
     state_.has_previous = true;
+    state_.last_decision = TuringFilterDecision::Drop;
     return TuringFilterDecision::Drop;
   }
   state_.constraint_mask |= ConstraintPersistence;
@@ -190,6 +191,7 @@ TuringFilterDecision TuringFilterEngine::process(
     state_.samples = 0;
     state_.persistence = 0;
     state_.log_odds_deciban = 0.0;
+    state_.last_decision = TuringFilterDecision::Reject;
     return TuringFilterDecision::Reject;
   }
 
@@ -200,6 +202,7 @@ TuringFilterDecision TuringFilterEngine::process(
     state_.samples = 0;
     state_.persistence = 0;
     state_.log_odds_deciban = 0.0;
+    state_.last_decision = TuringFilterDecision::Reject;
     return TuringFilterDecision::Reject;
   }
 
@@ -208,6 +211,7 @@ TuringFilterDecision TuringFilterEngine::process(
     state_.samples = 0;
     state_.persistence = 0;
     state_.log_odds_deciban = 0.0;
+    state_.last_decision = TuringFilterDecision::Reject;
     return TuringFilterDecision::Reject;
   }
 
@@ -219,11 +223,14 @@ TuringFilterDecision TuringFilterEngine::process(
   state_.has_previous = true;
 
   if (state_.log_odds_deciban >= config_.upper_deciban) {
+    state_.last_decision = TuringFilterDecision::Accept;
     return TuringFilterDecision::Accept;
   }
   if (state_.log_odds_deciban <= config_.lower_deciban) {
+    state_.last_decision = TuringFilterDecision::Reject;
     return TuringFilterDecision::Reject;
   }
+  state_.last_decision = TuringFilterDecision::Continue;
   return TuringFilterDecision::Continue;
 }
 
