@@ -168,12 +168,31 @@ def execute_proposal(
             stderr="shell metacharacters are forbidden",
         )
 
-    if len(argv) < 2 or argv[1] not in {"check", "format"}:
+    governed_action = proposal.get("governed_action")
+    if (
+        not isinstance(governed_action, list)
+        or len(governed_action) != 2
+        or not all(isinstance(item, str) for item in governed_action)
+    ):
         return _result(
             "STOP",
             argv,
             None,
-            stderr="only ruff check/format is governed",
+            stderr="proposal is missing a governed action",
+        )
+    if len(argv) < 2 or tuple(argv[:2]) != tuple(governed_action):
+        return _result(
+            "STOP",
+            argv,
+            None,
+            stderr="command does not match governed proposal action",
+        )
+    if tuple(governed_action) not in {("ruff", "check"), ("ruff", "format")}:
+        return _result(
+            "STOP",
+            argv,
+            None,
+            stderr="governed proposal action is outside allowlist",
         )
 
     roots = tuple(path.resolve() for path in allowed_paths)
