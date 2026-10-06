@@ -19,6 +19,11 @@ from researchos.experiments.phase51.statistics import (
     confidence_interval_diff,
     evaluate_significance,
 )
+from researchos.orchestration.parallel import (
+    ParallelResearchExecutor,
+    ResearchBranch,
+    ResearchWave,
+)
 
 from .contracts import BaselineResult, ModelResult, Phase52Result
 from .experiment import FEATURE_SET_NAMES, Phase52Config, _resolve_feature_indices
@@ -31,12 +36,14 @@ def _model_eval(
     features: Sequence[Sequence[float]],
     labels: Sequence[float],
 ) -> tuple[ModelResult, list[int], list[dict[int, float]]]:
-    predictions: list[int] = []
-    probabilities: list[dict[int, float]] = []
-    for row in features:
-        row_probs = estimator.predict_proba(row)
-        probabilities.append(row_probs)
-        predictions.append(max((1, 0, -1), key=lambda cls: row_probs[cls]))
+    if isinstance(estimator, MultivariateEmpiricalProbabilityEstimator):
+        probabilities = estimator.predict_proba_batch(features)
+    else:
+        probabilities = [estimator.predict_proba(row) for row in features]
+    predictions = [
+        max((1, 0, -1), key=lambda cls: row_probs[cls])
+        for row_probs in probabilities
+    ]
     accuracy = (
         sum(int(p) == int(a) for p, a in zip(predictions, labels)) / len(labels) if labels else 0.0
     )
@@ -564,10 +571,19 @@ def run_prepared_phase52_comparison(
 ) -> dict[str, Phase52Result]:
     """Run every Phase 5.2 feature set against one prepared dataset."""
     prepared.validate(config.required_macro_symbols)
-    return {
-        feature_set: _run_prepared(prepared, replace(config, feature_set=feature_set))
+    branches = tuple(
+        ResearchBranch(
+            branch_id=feature_set,
+            run=lambda _, feature_set=feature_set: _run_prepared(
+                prepared, replace(config, feature_set=feature_set)
+            ),
+        )
         for feature_set in FEATURE_SET_NAMES
-    }
+    )
+    result = ParallelResearchExecutor(max_workers=len(branches)).run(
+        (ResearchWave(wave_id="phase52-feature-sets", branches=branches),)
+    )
+    return result.by_branch_id()
 
 
 __all__ = ["run_prepared_phase52_comparison"]
