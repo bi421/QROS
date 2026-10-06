@@ -29,6 +29,16 @@ class AgentDecision:
     next_boundary: str
 
 
+@dataclass(frozen=True)
+class ExecutionResult:
+    status: str
+    command: tuple[str, ...]
+    returncode: int | None
+    stdout: str
+    stderr: str
+    next_boundary: str
+
+
 def validate_task_contract(path: Path) -> tuple[bool, list[str]]:
     result = subprocess.run(
         [sys.executable, str(VALIDATOR), str(path)],
@@ -57,74 +67,19 @@ def propose(classification: dict[str, Any], attempt_limit: int) -> dict[str, Any
     return asdict(propose_repair(classification, attempt_limit=attempt_limit))
 
 
-def run(task_contract: Path, log: str, attempt_limit: int) -> AgentDecision:
-    valid, validation_output = validate_task_contract(task_contract)
-    task_result = {
-        "path": str(task_contract),
-        "valid": valid,
-        "evidence": validation_output,
-    }
-    if not valid:
-        return AgentDecision(
-            "STOP",
-            task_result,
-            {
-                "category": "ambiguous/unsafe",
-                "repairable": False,
-                "evidence": ["invalid task contract"],
-            },
-            {
-                "action": "stop",
-                "allowed": False,
-                "attempt_limit": attempt_limit,
-            },
-            "human-review",
-        )
-
-    classification = classify(log)
-    proposal = propose(classification, attempt_limit)
-    status = "PROPOSAL_READY" if proposal["allowed"] else "STOP"
-    next_boundary = "governed-executor" if proposal["allowed"] else "human-review"
-    return AgentDecision(
-        status,
-        task_result,
-        classification,
-        proposal,
-        next_boundary,
-    )
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("task_contract", type=Path)
-    parser.add_argument("ci_log", type=Path)
-    parser.add_argument("--attempt-limit", type=int, default=1)
-    args = parser.parse_args()
-
-    if args.attempt_limit < 0:
-        parser.error("--attempt-limit must be non-negative")
-    if not args.ci_log.is_file():
-        parser.error(f"CI log not found: {args.ci_log}")
-
-    log = args.ci_log.read_text(encoding="utf-8")
-    decision = run(args.task_contract, log, args.attempt_limit)
-    print(json.dumps(asdict(decision), sort_keys=True))
-    return 0 if decision.status != "STOP" else 2
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())def _allowed_paths_from_contract(task_contract: Path) -> tuple[Path, ...]:
+def _allowed_paths_from_contract(task_contract: Path) -> tuple[Path, ...]:
     text = task_contract.read_text(encoding="utf-8")
     start = text.find("### Allowed")
     end = text.find("### Forbidden", start)
     if start < 0 or end < 0:
         return ()
+
     paths: list[Path] = []
-    for line in text[start + len("### Allowed"):end].splitlines():
+    for line in text[start + len("### Allowed") : end].splitlines():
         line = line.strip()
         if line.startswith("- ") and line[2:].strip():
             value = line[2:].strip()
-            if value.startswith("scripts/") or value.startswith("researchos/") or value.startswith("docs/"):
+            if value.startswith(("scripts/", "researchos/", "docs/")):
                 paths.append((ROOT / value).resolve())
     return tuple(paths)
 
@@ -138,30 +93,66 @@ def execute_proposal(
     attempt_limit: int = 1,
 ) -> ExecutionResult:
     argv = tuple(command)
+
     if proposal.get("allowed") is not True:
         return ExecutionResult(
-            "STOP", argv, None, "", "proposal is not authorized for execution", "human-review"
+            "STOP",
+            argv,
+            None,
+            "",
+            "proposal is not authorized for execution",
+            "human-review",
         )
+
     allowed_paths = _allowed_paths_from_contract(task_contract)
     if not allowed_paths:
         return ExecutionResult(
-            "STOP", argv, None, "", "task contract has no executable allowed paths", "human-review"
+            "STOP",
+            argv,
+            None,
+            "",
+            "task contract has no executable allowed paths",
+            "human-review",
         )
+
     if attempt_limit < 1:
         return ExecutionResult(
-            "STOP", argv, None, "", "attempt limit exhausted", "human-review"
+            "STOP",
+            argv,
+            None,
+            "",
+            "attempt limit exhausted",
+            "human-review",
         )
+
     if not argv or Path(argv[0]).name not in EXECUTABLES:
         return ExecutionResult(
-            "STOP", argv, None, "", "command is outside governed allowlist", "human-review"
+            "STOP",
+            argv,
+            None,
+            "",
+            "command is outside governed allowlist",
+            "human-review",
         )
+
     if any(any(char in token for char in SHELL_META) for token in argv):
         return ExecutionResult(
-            "STOP", argv, None, "", "shell metacharacters are forbidden", "human-review"
+            "STOP",
+            argv,
+            None,
+            "",
+            "shell metacharacters are forbidden",
+            "human-review",
         )
+
     if len(argv) < 2 or argv[1] not in {"check", "format"}:
         return ExecutionResult(
-            "STOP", argv, None, "", "only ruff check/format is governed", "human-review"
+            "STOP",
+            argv,
+            None,
+            "",
+            "only ruff check/format is governed",
+            "human-review",
         )
 
     roots = tuple(path.resolve() for path in allowed_paths)
@@ -171,11 +162,23 @@ def execute_proposal(
         for path in paths
     ):
         return ExecutionResult(
-            "STOP", argv, None, "", "command path escapes task scope", "human-review"
+            "STOP",
+            argv,
+            None,
+            "",
+            "command path escapes task scope",
+            "human-review",
         )
 
     if not approved:
-        return ExecutionResult("DRY_RUN", argv, None, "", "", "human-approval")
+        return ExecutionResult(
+            "DRY_RUN",
+            argv,
+            None,
+            "",
+            "",
+            "human-approval",
+        )
 
     result = subprocess.run(
         list(argv),
