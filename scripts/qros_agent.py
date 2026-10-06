@@ -497,9 +497,7 @@ def main() -> int:
         parser.error("--attempt-limit must be non-negative")
     if not args.ci_log.is_file():
         parser.error(f"CI log not found: {args.ci_log}")
-    decision = run(
-        args.task_contract, args.ci_log.read_text(encoding="utf-8"), args.attempt_limit
-    )
+    decision = run(args.task_contract, args.ci_log.read_text(encoding="utf-8"), args.attempt_limit)
     print(json.dumps(asdict(decision), sort_keys=True))
     return 0 if decision.status != "STOP" else 2
 
