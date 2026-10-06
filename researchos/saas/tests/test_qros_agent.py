@@ -76,6 +76,14 @@ def test_cli_emits_machine_readable_decision(tmp_path: Path) -> None:
     assert decision["proposal"]["proposal_id"]
 
 
+def test_ruff_check_flag_is_not_treated_as_scope_path() -> None:
+    agent = load_agent()
+    paths = agent._command_paths(
+        ["ruff", "format", "--check", "scripts/qros_agent.py"]
+    )
+    assert paths == ((ROOT / "scripts" / "qros_agent.py").resolve(),)
+
+
 def test_missing_approval_fails_closed() -> None:
     agent = load_agent()
     p = proposal(agent)
