@@ -90,7 +90,7 @@ class _PreparedView:
 
 
 def _prepared_view(
-    build: ContextAwareFeatureBuild, feature_set: str, cfg: Phase52Config
+    build: ContextAwareFeatureBuild, cfg: Phase52Config
 ) -> Phase52PreparedData:
     research = build.research_observations
     close = tuple(float(o.close) for o in research)
@@ -135,8 +135,8 @@ def run_context_aware_phase52_comparison(
     build.validate(contract)
 
     results: dict[str, Any] = {}
+    prepared = _prepared_view(build, cfg)
     for feature_set in FEATURE_SET_NAMES:
-        prepared = _prepared_view(build, feature_set, cfg)
         results[feature_set] = _run_prepared(
             prepared,
             replace(cfg, feature_set=_EXECUTION_FEATURE_SET_NAMES[feature_set]),

@@ -8,7 +8,7 @@ are explicit and use a deterministic multivariate estimator inside Phase 5.2.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Protocol
 
 from .contracts import Phase52Result
@@ -137,33 +137,6 @@ def run_phase52(
 
     return _run_prepared(prepared, cfg)
 
-
-def run_phase52_comparison(
-    close: Sequence[float],
-    high: Sequence[float],
-    low: Sequence[float],
-    volume: Sequence[float],
-    macro_factor_series: dict[str, Sequence[float | None]],
-    config: Phase52Config | None = None,
-    *,
-    timestamps: Sequence[object] | None = None,
-    macro_timestamps: dict[str, Sequence[object]] | None = None,
-) -> dict[str, Phase52Result]:
-    """Run all five feature sets with the governed final-holdout contract."""
-    base = config or Phase52Config()
-    return {
-        feature_set: run_phase52(
-            close,
-            high,
-            low,
-            volume,
-            macro_factor_series,
-            config=replace(base, feature_set=feature_set),
-            timestamps=timestamps,
-            macro_timestamps=macro_timestamps,
-        )
-        for feature_set in FEATURE_SET_NAMES
-    }
 
 
 __all__ = ["FEATURE_SET_NAMES", "Phase52Config", "run_phase52", "run_phase52_comparison"]
