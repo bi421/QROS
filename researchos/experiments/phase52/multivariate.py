@@ -92,17 +92,42 @@ class MultivariateEmpiricalProbabilityEstimator:
         order = np.lexsort((indices, distances))
         return order[:k].tolist()
 
+    def predict_proba_batch(
+        self, feature_rows: Sequence[Sequence[float | None]]
+    ) -> list[dict[int, float]]:
+        """Predict a batch with the same deterministic semantics as predict_proba."""
+        if not self._trained:
+            raise ValueError("Estimator not fitted")
+        if not feature_rows:
+            return []
+        values = np.asarray(
+            [[float(row[i]) for i in self.feature_indices] for row in feature_rows],
+            dtype=np.float64,
+        )
+        if np.isnan(values).any():
+            raise ValueError("Selected prediction features must be finite")
+        normalized = (values - np.asarray(self._mins)) / np.asarray(self._spans)
+        deltas = self._train_rows[None, :, :] - normalized[:, None, :]
+        distances = np.einsum("qnd,qnd->qn", deltas, deltas)
+        train_indices = np.arange(len(self._train_rows), dtype=np.int64)
+        k = min(self.n_neighbors, len(self._train_rows))
+        results: list[dict[int, float]] = []
+        for row_distances in distances:
+            order = np.lexsort((train_indices, row_distances))[:k]
+            counts = {1: 0, 0: 0, -1: 0}
+            for index in order:
+                cls = self._labels[int(index)]
+                if cls in counts:
+                    counts[cls] += 1
+            total = sum(counts.values())
+            if total == 0:
+                results.append({1: 1 / 3, 0: 1 / 3, -1: 1 / 3})
+            else:
+                results.append({cls: counts[cls] / total for cls in (1, 0, -1)})
+        return results
+
     def predict_proba(self, feature_row: Sequence[float | None]) -> dict[int, float]:
-        indices = self._nearest_indices(feature_row)
-        counts = {1: 0, 0: 0, -1: 0}
-        for i in indices:
-            cls = self._labels[i]
-            if cls in counts:
-                counts[cls] += 1
-        total = sum(counts.values())
-        if total == 0:
-            return {1: 1 / 3, 0: 1 / 3, -1: 1 / 3}
-        return {cls: counts[cls] / total for cls in (1, 0, -1)}
+        return self.predict_proba_batch([feature_row])[0]
 
     def predict_class(self, feature_row: Sequence[float | None]) -> int:
         probs = self.predict_proba(feature_row)
