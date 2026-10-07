@@ -3,13 +3,13 @@
 ## Canonical deployment artifact
 
 QROS uses the FastAPI production composition root at
-`researchos.saas.runtime:app`. It requires:
+`researchos.saas.runtime:create_production_app` with Uvicorn `--factory`. It requires:
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY` (server-only; never expose it to a browser)
 - `BILLING_WEBHOOK_SECRET` for the billing webhook
 
-The repository contains a production-oriented `Dockerfile` and a
+The repository contains a production-oriented `Dockerfile`; the runtime is loaded through an application factory so importing the module does not require production secrets and a
 `docker-compose.yml` for local container validation.
 
 ## Local validation
