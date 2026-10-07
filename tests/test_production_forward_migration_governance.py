@@ -81,7 +81,7 @@ def test_mutation_requires_both_apply_and_confirmation() -> None:
 
 def test_exact_version_and_migration_specific_postconditions_are_verified() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
-    assert 'version="${MIGRATION_FILE:0:14}"' in text
+    assert 'version="${MIGRATION_FILE%%_*}"' in text
     assert 'migration_version_verified=${version}' in text
     assert "dataset_version_storage_path_contract" in text
     assert "validate_dataset_version_storage_path()" in text

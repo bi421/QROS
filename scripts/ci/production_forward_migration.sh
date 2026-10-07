@@ -20,7 +20,7 @@ test -f "${migration_path}" || {
   exit 1
 }
 
-version="${MIGRATION_FILE:0:14}"
+version="${MIGRATION_FILE%%_*}"
 migration_sha="$(sha256sum "${migration_path}" | awk '{print $1}')"
 
 echo "migration=${MIGRATION_FILE}"
