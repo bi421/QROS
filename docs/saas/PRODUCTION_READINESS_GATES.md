@@ -42,12 +42,18 @@ new repository-to-environment delta after the earlier staging baseline:
   `20260928120000_storage_authorization_workspace_membership_reconciliation.sql`,
   `20260928123000_dataset_version_storage_path_reconciliation.sql`, and
   `20260928124500_workspace_billing_admin_role_reconciliation.sql`.
-- Production remains on its independently audited older migration history and has not
-  received those late M1 reconciliation migrations or the worker migration.
+- Production has since advanced beyond that older snapshot and now reports a live
+  execution entry `20261007035414` named
+  `202610060001_production_forward_reconciliation`, corresponding to the repository
+  migration `supabase/migrations/202610060001_production_forward_reconciliation.sql`.
+  This current production fact supersedes the older statement that production had not
+  received the forward reconciliation.
 
-This is a **new current delta**, not a reopening of the earlier historical-name
-issue. No staging or production mutation was performed by this audit. The governed
-forward-migration workflow remains the only authorized production transport.
+The 2026-09-30 staging delta remains open: staging still lacks the three reconciliation
+migrations above. The production execution fact is recorded separately from workflow
+authorization/evidence; this document does not infer that a governed workflow run
+occurred from the database history alone. The governed forward-migration workflow
+remains the repository's authorized transport path.
 
 ## Current migration ledger state — 2026-09-28
 
