@@ -56,14 +56,14 @@ class StandaloneResearchWorker:
                 stop.wait(IDLE_POLL_SECONDS)
                 continue
 
-            executor = GovernedResearchExecutor(
-                self._store,
-                self._dataset_store,
-                self._dataset_storage,
-                message.workspace_id,
-            )
-            worker = ResearchWorker(self._store, executor)
             try:
+                executor = GovernedResearchExecutor(
+                    self._store,
+                    self._dataset_store,
+                    self._dataset_storage,
+                    message.workspace_id,
+                )
+                worker = ResearchWorker(self._store, executor)
                 worker.run_once(message.workspace_id, message.research_run_id)
             except Exception:
                 job = self._store.get(message.workspace_id, message.research_run_id)
