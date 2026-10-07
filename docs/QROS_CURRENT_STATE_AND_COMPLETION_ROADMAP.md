@@ -1,11 +1,12 @@
 # QROS — CURRENT STATE, COMPLETION ROADMAP & PRODUCTION CHECKLIST
 
-Last verified snapshot: 2026-09-30
+Last verified snapshot: 2026-10-07
 
-IMPORTANT: This date is a historical verification timestamp, not a substitute for live-state verification.
+IMPORTANT: This timestamp records the repository audit snapshot; live external environment state still requires direct verification.
 Repository: bi421/QROS
 Production branch: main
-Production SHA: b584a10d7853f9d5d4297c5202ef130b19c3faa5
+Current main SHA: 9f99fa3a10c859e534fd2d816880177484c3d449
+Frozen Phase 5.2 evidence baseline: b584a10d7853f9d5d4297c5202ef130b19c3faa5
 
 ---
 
@@ -36,90 +37,27 @@ REAL IMPLEMENTATION
 ---
 
 
-# 1B. LIVE-STATE CORRECTION — 2026-10-01
+# 1B. LIVE-STATE CORRECTION — 2026-10-07
 
-The following facts supersede stale statements elsewhere in this document where they conflict.
+The following facts are the latest repository-verified state and supersede older SHA claims in this document.
 
 ## GitHub main
 
-- Current live main SHA: 7a0d29a13b9571f149ea88a61a146b3ad4da57fb
-- Commit: docs: establish autonomous QROS execution contract and completion roadmap (#417)
-- PR #417 is MERGED.
-- The frozen Phase 5.2 release/evidence baseline remains b584a10d7853f9d5d4297c5202ef130b19c3faa5.
-- The merge of PR #417 is documentation-only and does not reopen or modify Phase 5.2.
+- Current live main SHA: 9f99fa3a10c859e534fd2d816880177484c3d449
+- Commit: fix(saas): make production runtime application-factory safe (#596)
+- PR #596 is MERGED.
+- Exact current main CI was independently verified successful for the relevant GitHub Actions workflows.
+- The frozen Phase 5.2 evidence baseline remains b584a10d7853f9d5d4297c5202ef130b19c3faa5 and is historical evidence only.
 
 Therefore distinguish:
 
 CURRENT MAIN SHA
-→ 7a0d29a13b9571f149ea88a61a146b3ad4da57fb
+→ 9f99fa3a10c859e534fd2d816880177484c3d449
 
-FROZEN PHASE 5.2 PRODUCTION BASELINE
+FROZEN PHASE 5.2 EVIDENCE BASELINE
 → b584a10d7853f9d5d4297c5202ef130b19c3faa5
 
-## Supabase migration provenance — exact live result
-
-Read-only inspection of production project pvhdsngxyoiqhqwujfjt returned 45 migration-history rows.
-
-The migration list is not simply missing one workspace migration. It contains bidirectional history drift:
-
-### Remote-only migration versions: 8
-
-| Remote version | Remote name |
-|---|---|
-| 20260923063726 | 202609210002_saas_research_claim_run_binding |
-| 20260923063730 | 202609220003_saas_research_validation |
-| 20260923063735 | 202609220004_saas_research_finding |
-| 20260923063739 | 202609230001_saas_tenant_isolation_hardening |
-| 20260923064546 | 202609230002_fix_missing_rls_policies |
-| 20260923083904 | 202609230007_commercial_entitlements |
-| 20260923094021 | 202609231000_dataset_storage_registry_hardening |
-| 20260930013114 | saas_workspace_provisioning |
-
-### Local-only migration versions: 12
-
-202609210002, 202609220003, 202609220004, 202609230005, 202609230006, 202609240001, 202609240002, 20260928103556, 20260928120000, 20260928123000, 20260928124500, 202609300001.
-
-The first three remote-only rows preserve the names of repository migrations whose original timestamp versions existed in repository history. The remaining remote-only names also do not correspond to current main filenames.
-
-Supabase CLI documentation confirms that migration history is keyed by migration timestamp/version and that migration repair changes only the tracking table, not schema SQL.
-
-### Current dry-run evidence
-
-supabase db push --dry-run was executed against the linked production project.
-
-Result:
-
-Remote migration versions not found in local migrations directory.
-
-The CLI suggested reverting the eight remote-only versions, but no repair was executed.
-
-Therefore:
-
-- no production migration history was mutated during this investigation;
-- no production SQL was applied;
-- no local migration file was pulled or overwritten;
-- the provenance gap remains open.
-
-### Provenance conclusion
-
-This is a CLASS D — SUPABASE / RELEASE REPRODUCIBILITY blocker.
-
-The evidence proves migration-history drift. It does not by itself prove schema corruption.
-
-The production public.provision_workspace(uuid,text) implementation was separately inspected and is logically equivalent to the current 202609300001_saas_workspace_provisioning.sql implementation. This is evidence about schema behavior, not proof of byte-for-byte migration provenance.
-
-### Required next action
-
-Before any migration repair, db pull, or forward production deployment:
-
-1. preserve the current remote migration-history evidence;
-2. map each remote-only version to the exact repository commit/file that produced its SQL;
-3. verify whether the version rewrites were intentional and documented;
-4. determine the smallest forward-only reconciliation that restores release reproducibility;
-5. run the migration verifier/release gate against the reconciled state;
-6. only then proceed to the separate CLASS E hosting blocker.
-
-Do not execute the CLI-suggested migration repair --status reverted command yet.
+The historical Supabase migration-provenance findings below remain documented as prior evidence, but must not be presented as live-state proof without a fresh environment query.
 
 # 1A. AI EXECUTION CONTRACT
 
@@ -150,25 +88,25 @@ The agent must prefer verified repository facts over remembered conversation sta
 
 # 2. CURRENT PRODUCTION TRUTH
 
-## Production SHA
+## Current main SHA
 
-b584a10d7853f9d5d4297c5202ef130b19c3faa5
+9f99fa3a10c859e534fd2d816880177484c3d449
 
 Commit:
 
-evidence(phase52): record XAUUSD M1 permutation test
-
-Parent:
-
-5d6eea14c8cd8194252479a6ff8a5d97db97fea8
+fix(saas): make production runtime application-factory safe (#596)
 
 GitHub main currently points to:
 
+9f99fa3a10c859e534fd2d816880177484c3d449
+
+This is the current repository main identity.
+
+## Frozen Phase 5.2 evidence baseline
+
 b584a10d7853f9d5d4297c5202ef130b19c3faa5
 
-This SHA is the frozen production baseline.
-
-DO NOT replace this baseline with an older SHA.
+This SHA is historical scientific evidence and must not be confused with current main.
 
 ---
 
