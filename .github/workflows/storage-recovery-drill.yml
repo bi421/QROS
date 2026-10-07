@@ -55,8 +55,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$SUPABASE_URL"; test -n "$SERVICE_ROLE_KEY"; test -n "$S3_BUCKET"; test -n "$AWS_REGION"
-          test -n "$AWS_ACCESS_KEY_ID"
-          test -n "$AWS_SECRET_ACCESS_KEY"
+          test -n "$AWS_ROLE_ARN"
 
       - name: Configure AWS OIDC credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -121,7 +120,7 @@ jobs:
           aws s3api head-object --bucket "$S3_BUCKET" --key "qros-storage-drill/$OBJECT_NAME" --region "$AWS_REGION" >/dev/null
       - name: Restore independent copy
         env:
-          AWS_REGION: ${{ secrets.QROS_RECOVERY_AWS_REGION }}
+          AWS_REGION: ${{ vars.QROS_RECOVERY_AWS_REGION }}
           S3_BUCKET: ${{ secrets.QROS_RECOVERY_S3_BUCKET }}
           OBJECT_NAME: ${{ inputs.object_name }}
         run: |
@@ -145,7 +144,7 @@ jobs:
       - name: Cleanup drill S3 object
         if: always()
         env:
-          AWS_REGION: ${{ secrets.QROS_RECOVERY_AWS_REGION }}
+          AWS_REGION: ${{ vars.QROS_RECOVERY_AWS_REGION }}
           S3_BUCKET: ${{ secrets.QROS_RECOVERY_S3_BUCKET }}
           OBJECT_NAME: ${{ inputs.object_name }}
         run: |
