@@ -62,9 +62,9 @@ REQUIRED_MARKERS = {
         "qros-datasets",
         "qros-storage-drill/$OBJECT_NAME",
         "aws s3api head-object",
-        "QROS_RECOVERY_AWS_ACCESS_KEY_ID",
-        "QROS_RECOVERY_AWS_SECRET_ACCESS_KEY",
-        "QROS_RECOVERY_AWS_REGION",
+        "Configure AWS OIDC credentials",
+        "role-to-assume: ${{ vars.QROS_RECOVERY_AWS_ROLE_ARN }}",
+        "aws-region: ${{ vars.QROS_RECOVERY_AWS_REGION }}",
     ),
     ".github/workflows/release.yml": (
         'tags:',
