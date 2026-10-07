@@ -370,21 +370,22 @@ QROS is **not production-ready** until all applicable gates below have independe
 ## Exact repository baseline
 
 - **Repository:** `bi421/QROS`
-- **Current main SHA:** `a0a616807cbcfa7be9720de7b7991b102002e6a0`
-- **PR #594:** merged — `fix(saas): fail closed when Stripe webhook is not configured`
-- Exact-main compare is identical; no ahead/behind drift is being inferred.
+- **Current main SHA:** `fc2dbcb7a9ddae986c73d6553174f73a92c32166`
+- **PR #595:** merged — `fix(ci): parse production migration version before postflight`
+- PR #594 remains included in this main baseline: `fix(saas): fail closed when Stripe webhook is not configured`.
+- Exact main is the SHA above; all claims below are scoped to this exact release.
 
 ## Post-merge CI proof for the exact SHA
 
-All required post-merge gates observed for `a0a616807cbcfa7be9720de7b7991b102002e6a0`:
+All three required post-merge gates are observed for `fc2dbcb7a9ddae986c73d6553174f73a92c32166`:
 
 | Gate | Run | Status |
 |---|---:|---|
-| Git Governance | 37500280514 | SUCCESS |
-| Supabase Database Security Tests | 37500280493 | SUCCESS |
-| CI | 37500280631 | SUCCESS |
+| Git Governance | 37552570593 | SUCCESS |
+| Supabase Database Security Tests | 37552570597 | SUCCESS |
+| CI | 37552570649 | SUCCESS |
 
-Therefore **repository CI is GREEN for the exact current main SHA**.
+Therefore **repository CI is GREEN for exact main `fc2dbcb7a9ddae986c73d6553174f73a92c32166`**.
 
 ## SaaS implementation status
 
