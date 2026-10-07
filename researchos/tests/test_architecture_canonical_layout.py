@@ -147,6 +147,8 @@ def test_production_runtime_is_explicitly_durable() -> None:
     assert not any(token in source for token in forbidden)
     assert "session_validator = SupabaseSessionValidator(client)" in source
     assert "session_validator=session_validator" in source
+    assert "app = build_production_app()" not in source
+    assert "create_production_app = build_production_app" in source
 
     build = next(
         node for node in ast.walk(tree)

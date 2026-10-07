@@ -621,11 +621,11 @@ python:3.12.14-alpine3.24
 
 Application:
 
-researchos.saas.runtime:app
+researchos.saas.runtime:create_production_app (Uvicorn `--factory`)
 
 Start command:
 
-uvicorn researchos.saas.runtime:app --host 0.0.0.0 --port 8000
+uvicorn researchos.saas.runtime:create_production_app --factory --host 0.0.0.0 --port 8000
 
 Container port:
 
