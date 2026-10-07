@@ -30,9 +30,9 @@ REQUIRED_MARKERS = {
         "aws s3 cp",
         "head-object",
         "sha256sum --check",
-        "BACKUP_AWS_ACCESS_KEY_ID",
-        "BACKUP_AWS_SECRET_ACCESS_KEY",
-        "BACKUP_AWS_REGION",
+        "Configure AWS OIDC credentials",
+        "role-to-assume: ${{ vars.BACKUP_AWS_ROLE_ARN }}",
+        "aws-region: ${{ vars.BACKUP_AWS_REGION }}",
         "PROD_DATABASE_URL",
     ),
     ".github/workflows/production-schema-parity.yml": (
