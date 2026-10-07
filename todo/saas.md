@@ -370,22 +370,14 @@ QROS is **not production-ready** until all applicable gates below have independe
 ## Exact repository baseline
 
 - **Repository:** `bi421/QROS`
-- **Current main SHA:** `fc2dbcb7a9ddae986c73d6553174f73a92c32166`
+- **Current main SHA:** `3725da5f7f92b154eb7bdbae5cc6655cfb25fea5`
 - **PR #595:** merged — `fix(ci): parse production migration version before postflight`
 - PR #594 remains included in this main baseline: `fix(saas): fail closed when Stripe webhook is not configured`.
 - Exact main is the SHA above; all claims below are scoped to this exact release.
 
 ## Post-merge CI proof for the exact SHA
 
-All three required post-merge gates are observed for `fc2dbcb7a9ddae986c73d6553174f73a92c32166`:
-
-| Gate | Run | Status |
-|---|---:|---|
-| Git Governance | 37552570593 | SUCCESS |
-| Supabase Database Security Tests | 37552570597 | SUCCESS |
-| CI | 37552570649 | SUCCESS |
-
-Therefore **repository CI is GREEN for exact main `fc2dbcb7a9ddae986c73d6553174f73a92c32166`**.
+Post-merge CI evidence for `3725da5f7f92b154eb7bdbae5cc6655cfb25fea5` is **NOT VERIFIED in the current repository evidence snapshot**. The available GitHub integration currently exposes PR-triggered workflow runs for commit lookup, while this merge commit requires push-triggered main-run verification. Do not infer GREEN from the absence of returned runs.
 
 ## SaaS implementation status
 
