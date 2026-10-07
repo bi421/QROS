@@ -370,14 +370,15 @@ QROS is **not production-ready** until all applicable gates below have independe
 ## Exact repository baseline
 
 - **Repository:** `bi421/QROS`
-- **Current main SHA:** `3725da5f7f92b154eb7bdbae5cc6655cfb25fea5`
-- **PR #595:** merged — `fix(ci): parse production migration version before postflight`
+- **Current main SHA:** `f4c01b506ae5d96d0ba4a05fa7a042a230abb0a5`
+- **PR #602:** merged — `docs(saas): refresh current main readiness baseline`
+- **PR #601:** merged — `fix(saas): preserve configured plan rate limiter lookup`
 - PR #594 remains included in this main baseline: `fix(saas): fail closed when Stripe webhook is not configured`.
 - Exact main is the SHA above; all claims below are scoped to this exact release.
 
 ## Post-merge CI proof for the exact SHA
 
-Post-merge CI evidence for `3725da5f7f92b154eb7bdbae5cc6655cfb25fea5` is **NOT VERIFIED in the current repository evidence snapshot**. The available GitHub integration currently exposes PR-triggered workflow runs for commit lookup, while this merge commit requires push-triggered main-run verification. Do not infer GREEN from the absence of returned runs.
+Post-merge CI evidence for `f4c01b506ae5d96d0ba4a05fa7a042a230abb0a5` is **partially verified**: GitHub UI evidence shows Git Governance #498 and CI #3963 succeeded for the push-triggered main commit. The current GitHub integration does not expose those push-triggered runs through commit lookup, so this connector cannot independently reproduce their run records. Do not infer additional gates beyond the observed evidence.
 
 ## SaaS implementation status
 
