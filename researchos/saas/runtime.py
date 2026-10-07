@@ -99,4 +99,8 @@ def build_production_app() -> FastAPI:
     )
 
 
-app = build_production_app()
+# Uvicorn loads this factory with --factory so importing this module performs no
+# production configuration, network connection, or secret lookup.
+create_production_app = build_production_app
+
+__all__ = ["build_production_app", "create_production_app"]
