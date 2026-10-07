@@ -407,11 +407,10 @@ def create_app(
         if deleted:
             raise HTTPException(status_code=410, detail="workspace is deleted")
 
-    def require_rate_limit(tenant: TenantContext) -> None:
-        principal = hashlib.sha256(f"workspace:{tenant.workspace_id}".encode()).hexdigest()
-        effective_limiter = plan_limiters.get(tenant.plan, limiter)
+    def require_rate_limit_principal(principal: str, effective_limiter: RateLimiter | None = None) -> None:
+        limiter_to_use = effective_limiter or limiter
         try:
-            allowed = effective_limiter.allow(principal)
+            allowed = limiter_to_use.allow(principal)
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -419,6 +418,11 @@ def create_app(
             ) from exc
         if not allowed:
             raise HTTPException(status_code=429, detail="rate limit exceeded")
+
+    def require_rate_limit(tenant: TenantContext) -> None:
+        principal = hashlib.sha256(f"workspace:{tenant.workspace_id}".encode()).hexdigest()
+        effective_limiter = plan_rate_limiters.get(tenant.plan, limiter)
+        require_rate_limit_principal(principal, effective_limiter)
 
     def request_fingerprint(payload: object) -> str:
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
@@ -644,6 +648,8 @@ def create_app(
                 detail="workspace provisioning is not configured",
             )
         user_id = auth.authenticate_user(authorization)
+        principal = hashlib.sha256(f"user:{user_id}".encode()).hexdigest()
+        require_rate_limit_principal(principal)
         try:
             provisioned = workspaces.provision(user_id, request.name)
         except WorkspaceProvisioningConflict as exc:

@@ -15,6 +15,7 @@ from researchos.saas.billing import InMemoryBillingEventStore, InMemoryBillingPr
 from researchos.saas.contracts import Plan, TenantContext, WorkspaceRole
 from researchos.saas.datasets import InMemoryDatasetStorage, InMemoryDatasetStore
 from researchos.saas.store import InMemoryResearchJobStore
+from researchos.saas.workspace import InMemoryWorkspaceProvisioner
 
 
 class StaticAuth:
@@ -106,6 +107,31 @@ def test_unconfigured_saas_auth_fails_closed() -> None:
     client = TestClient(create_app())
     response = client.get("/v1/me", headers={"Authorization": "Bearer anything"})
     assert response.status_code == 503
+
+
+def test_workspace_provisioning_is_user_rate_limited() -> None:
+    limiter = StaticRateLimiter(allowed=False)
+    context = TenantContext(
+        user_id=uuid4(),
+        workspace_id=uuid4(),
+        plan=Plan.PRO,
+    )
+    client = TestClient(
+        create_app(
+            auth_provider=StaticAuth(context),
+            workspace_provisioner=InMemoryWorkspaceProvisioner(),
+            rate_limiter=limiter,
+        )
+    )
+    response = client.post(
+        "/v1/workspaces",
+        headers={"Authorization": "Bearer test"},
+        json={"name": "Blocked Workspace"},
+    )
+    assert response.status_code == 429
+    assert limiter.keys == [
+        hashlib.sha256(f"user:{context.user_id}".encode()).hexdigest()
+    ]
 
 
 def test_rate_limit_is_workspace_scoped_and_enforced() -> None:
