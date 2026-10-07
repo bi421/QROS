@@ -4,7 +4,7 @@ This document records the current executable release gates for QROS SaaS.
 
 ## Verified on main
 
-- FastAPI production composition exists at `researchos.saas.runtime:app`.
+- FastAPI production composition exists at `researchos.saas.runtime:create_production_app` via Uvicorn `--factory`.
 - Supabase is the canonical persistence and migration authority.
 - `supabase/migrations/` is version-controlled and validated in CI.
 - Production Docker image builds in CI.
