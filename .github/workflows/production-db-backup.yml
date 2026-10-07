@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: production-db-backup
@@ -14,7 +15,7 @@ concurrency:
 
 jobs:
   backup:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: production
     steps:
       - uses: actions/checkout@v5
@@ -29,21 +30,25 @@ jobs:
           command -v aws
           aws --version
 
+      - name: Configure AWS OIDC credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.BACKUP_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.BACKUP_AWS_REGION }}
+
       - name: Validate production backup configuration
         env:
           PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
           PRODUCTION_PROJECT_ID: ${{ secrets.PRODUCTION_PROJECT_ID }}
-          BACKUP_AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
-          BACKUP_AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
-          BACKUP_AWS_REGION: ${{ secrets.BACKUP_AWS_REGION }}
+          BACKUP_AWS_ROLE_ARN: ${{ vars.BACKUP_AWS_ROLE_ARN }}
+          BACKUP_AWS_REGION: ${{ vars.BACKUP_AWS_REGION }}
           BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
         run: |
           set -euo pipefail
           test -n "${PROD_DATABASE_URL}" || { echo "::error::PROD_DATABASE_URL is not configured"; exit 1; }
           test -n "${PRODUCTION_PROJECT_ID}" || { echo "::error::PRODUCTION_PROJECT_ID is not configured"; exit 1; }
-          test -n "${BACKUP_AWS_ACCESS_KEY_ID}" || { echo "::error::BACKUP_AWS_ACCESS_KEY_ID is not configured"; exit 1; }
-          test -n "${BACKUP_AWS_SECRET_ACCESS_KEY}" || { echo "::error::BACKUP_AWS_SECRET_ACCESS_KEY is not configured"; exit 1; }
-          test -n "${BACKUP_AWS_REGION}" || { echo "::error::BACKUP_AWS_REGION is not configured"; exit 1; }
+          test -n "${BACKUP_AWS_ROLE_ARN}" || { echo "::error::BACKUP_AWS_ROLE_ARN repository variable is not configured"; exit 1; }
+          test -n "${BACKUP_AWS_REGION}" || { echo "::error::BACKUP_AWS_REGION repository variable is not configured"; exit 1; }
           test -n "${BACKUP_S3_BUCKET}" || { echo "::error::BACKUP_S3_BUCKET is not configured"; exit 1; }
           case "${PROD_DATABASE_URL}" in
             *"${PRODUCTION_PROJECT_ID}"*) ;;
@@ -115,16 +120,12 @@ jobs:
 
       - name: Upload backup, checksum, and evidence manifest
         env:
-          BACKUP_AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
-          BACKUP_AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
-          BACKUP_AWS_REGION: ${{ secrets.BACKUP_AWS_REGION }}
+          BACKUP_AWS_ROLE_ARN: ${{ vars.BACKUP_AWS_ROLE_ARN }}
+          BACKUP_AWS_REGION: ${{ vars.BACKUP_AWS_REGION }}
           BACKUP_AWS_ENDPOINT_URL: ${{ secrets.BACKUP_AWS_ENDPOINT_URL }}
           BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
         run: |
           set -euo pipefail
-          aws configure set aws_access_key_id "${BACKUP_AWS_ACCESS_KEY_ID}"
-          aws configure set aws_secret_access_key "${BACKUP_AWS_SECRET_ACCESS_KEY}"
-          aws configure set region "${BACKUP_AWS_REGION}"
           ENDPOINT_ARGS=(); if [ -n "${BACKUP_AWS_ENDPOINT_URL:-}" ]; then ENDPOINT_ARGS+=(--endpoint-url "${BACKUP_AWS_ENDPOINT_URL}"); fi
           aws s3 cp /tmp/qros-backup.dump "s3://${BACKUP_S3_BUCKET}/$(cat /tmp/backup-object-key)" "${ENDPOINT_ARGS[@]}"
           aws s3 cp /tmp/qros-backup.dump.sha256 "s3://${BACKUP_S3_BUCKET}/$(cat /tmp/backup-checksum-key)" "${ENDPOINT_ARGS[@]}"
@@ -132,16 +133,12 @@ jobs:
 
       - name: Verify remote objects with HEAD and version identity
         env:
-          BACKUP_AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
-          BACKUP_AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
-          BACKUP_AWS_REGION: ${{ secrets.BACKUP_AWS_REGION }}
+          BACKUP_AWS_ROLE_ARN: ${{ vars.BACKUP_AWS_ROLE_ARN }}
+          BACKUP_AWS_REGION: ${{ vars.BACKUP_AWS_REGION }}
           BACKUP_AWS_ENDPOINT_URL: ${{ secrets.BACKUP_AWS_ENDPOINT_URL }}
           BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
         run: |
           set -euo pipefail
-          aws configure set aws_access_key_id "${BACKUP_AWS_ACCESS_KEY_ID}"
-          aws configure set aws_secret_access_key "${BACKUP_AWS_SECRET_ACCESS_KEY}"
-          aws configure set region "${BACKUP_AWS_REGION}"
           ENDPOINT_ARGS=(); if [ -n "${BACKUP_AWS_ENDPOINT_URL:-}" ]; then ENDPOINT_ARGS+=(--endpoint-url "${BACKUP_AWS_ENDPOINT_URL}"); fi
           HEAD="$(aws s3api head-object --bucket "${BACKUP_S3_BUCKET}" --key "$(cat /tmp/backup-object-key)" --query '[ContentLength,VersionId]' --output text "${ENDPOINT_ARGS[@]}")"
           CHECKSUM_HEAD="$(aws s3api head-object --bucket "${BACKUP_S3_BUCKET}" --key "$(cat /tmp/backup-checksum-key)" --query '[ContentLength,VersionId]' --output text "${ENDPOINT_ARGS[@]}")"
@@ -156,16 +153,12 @@ jobs:
 
       - name: Download remote backup and verify checksum equality
         env:
-          BACKUP_AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
-          BACKUP_AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
-          BACKUP_AWS_REGION: ${{ secrets.BACKUP_AWS_REGION }}
+          BACKUP_AWS_ROLE_ARN: ${{ vars.BACKUP_AWS_ROLE_ARN }}
+          BACKUP_AWS_REGION: ${{ vars.BACKUP_AWS_REGION }}
           BACKUP_AWS_ENDPOINT_URL: ${{ secrets.BACKUP_AWS_ENDPOINT_URL }}
           BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
         run: |
           set -euo pipefail
-          aws configure set aws_access_key_id "${BACKUP_AWS_ACCESS_KEY_ID}"
-          aws configure set aws_secret_access_key "${BACKUP_AWS_SECRET_ACCESS_KEY}"
-          aws configure set region "${BACKUP_AWS_REGION}"
           ENDPOINT_ARGS=(); if [ -n "${BACKUP_AWS_ENDPOINT_URL:-}" ]; then ENDPOINT_ARGS+=(--endpoint-url "${BACKUP_AWS_ENDPOINT_URL}"); fi
           aws s3 cp "s3://${BACKUP_S3_BUCKET}/$(cat /tmp/backup-object-key)" /tmp/remote-qros-backup.dump "${ENDPOINT_ARGS[@]}"
           aws s3 cp "s3://${BACKUP_S3_BUCKET}/$(cat /tmp/backup-checksum-key)" /tmp/remote-qros-backup.dump.sha256 "${ENDPOINT_ARGS[@]}"
@@ -189,16 +182,12 @@ jobs:
       - name: Upload verified manifest and re-verify it
         if: success()
         env:
-          BACKUP_AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
-          BACKUP_AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
-          BACKUP_AWS_REGION: ${{ secrets.BACKUP_AWS_REGION }}
+          BACKUP_AWS_ROLE_ARN: ${{ vars.BACKUP_AWS_ROLE_ARN }}
+          BACKUP_AWS_REGION: ${{ vars.BACKUP_AWS_REGION }}
           BACKUP_AWS_ENDPOINT_URL: ${{ secrets.BACKUP_AWS_ENDPOINT_URL }}
           BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
         run: |
           set -euo pipefail
-          aws configure set aws_access_key_id "${BACKUP_AWS_ACCESS_KEY_ID}"
-          aws configure set aws_secret_access_key "${BACKUP_AWS_SECRET_ACCESS_KEY}"
-          aws configure set region "${BACKUP_AWS_REGION}"
           ENDPOINT_ARGS=(); if [ -n "${BACKUP_AWS_ENDPOINT_URL:-}" ]; then ENDPOINT_ARGS+=(--endpoint-url "${BACKUP_AWS_ENDPOINT_URL}"); fi
           MANIFEST_KEY="$(cat /tmp/backup-manifest-key)"
           aws s3 cp /tmp/backup-manifest.json "s3://${BACKUP_S3_BUCKET}/${MANIFEST_KEY}" "${ENDPOINT_ARGS[@]}"
