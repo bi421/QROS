@@ -94,15 +94,17 @@ A passing container build is not a deployment.
 
 Do not mark production-ready from repository tests alone. The exact release commit must have CI success and an observed end-to-end workflow in the target environment.
 
-## Legacy public-table access audit — 2026-09-29
+## Legacy public-table access audit — 2026-10-07
 
-A direct production privilege audit reviewed the nine legacy public tables that have RLS disabled: `User`, `Like`, `Dislike`, `Referral`, `users`, `avatars`, `albums`, `album_consents`, and `face_embeddings`.
+A direct production schema/security recheck reviewed the nine legacy public tables that have RLS disabled: `User`, `Like`, `Dislike`, `Referral`, `users`, `avatars`, `albums`, `album_consents`, and `face_embeddings`.
 
 Observed on production project `pvhdsngxyoiqhqwujfjt`:
 
 - RLS is disabled on all nine legacy tables.
-- `anon`, `authenticated`, and `service_role` have **no SELECT privilege** on any of the nine tables.
-- The table ACLs expose only the database `postgres` owner privileges.
-- The current Supabase Security Advisor did not report these tables; its observed security finding is the separate Auth leaked-password-protection warning.
+- Current approximate row count is **0 on all nine tables**.
+- The current Supabase Security Advisor does **not** report these nine tables as an active security finding.
+- The current Security Advisor findings are limited to two intentional QROS server-only tables with RLS enabled and no policies, plus the separate Auth leaked-password-protection warning.
+- No production mutation was performed.
 
-Conclusion: these nine tables are not reachable through the Supabase Data API roles by the observed privilege state. They remain legacy schema-hardening debt, not a basis for blindly enabling RLS. Any future RLS enablement or policy design must first identify a legitimate legacy application access path and preserve its authorization contract. No production mutation was performed.
+Conclusion: the nine tables remain legacy schema-hardening debt, but the current evidence does not justify calling them an exposed Data API surface or blindly enabling RLS without first identifying a legitimate legacy application access contract. Any future RLS enablement must establish explicit policies and preserve that contract.
+
