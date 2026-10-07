@@ -30,12 +30,6 @@ jobs:
           command -v aws
           aws --version
 
-      - name: Configure AWS OIDC credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.BACKUP_AWS_ROLE_ARN }}
-          aws-region: ${{ vars.BACKUP_AWS_REGION }}
-
       - name: Validate production backup configuration
         env:
           PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
@@ -54,6 +48,12 @@ jobs:
             *"${PRODUCTION_PROJECT_ID}"*) ;;
             *) echo "::error::production database URL does not identify governed project ${PRODUCTION_PROJECT_ID}"; exit 1 ;;
           esac
+
+      - name: Configure AWS OIDC credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.BACKUP_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.BACKUP_AWS_REGION }}
 
       - name: Dump production database and capture source identity
         env:
