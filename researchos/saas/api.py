@@ -407,7 +407,10 @@ def create_app(
         if deleted:
             raise HTTPException(status_code=410, detail="workspace is deleted")
 
-    def require_rate_limit_principal(principal: str, effective_limiter: RateLimiter | None = None) -> None:
+    def require_rate_limit_principal(
+        principal: str,
+        effective_limiter: RateLimiter | None = None,
+    ) -> None:
         limiter_to_use = effective_limiter or limiter
         try:
             allowed = limiter_to_use.allow(principal)
@@ -421,7 +424,7 @@ def create_app(
 
     def require_rate_limit(tenant: TenantContext) -> None:
         principal = hashlib.sha256(f"workspace:{tenant.workspace_id}".encode()).hexdigest()
-        effective_limiter = plan_rate_limiters.get(tenant.plan, limiter)
+        effective_limiter = plan_limiters.get(tenant.plan, limiter)
         require_rate_limit_principal(principal, effective_limiter)
 
     def request_fingerprint(payload: object) -> str:
