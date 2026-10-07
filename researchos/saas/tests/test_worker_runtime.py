@@ -1,3 +1,4 @@
+from threading import Event
 from uuid import uuid4
 
 import pytest
@@ -87,3 +88,46 @@ def test_in_memory_queue_message_lifecycle_is_identifier_only():
     assert queue.receive() == ResearchQueueMessage(message_id, workspace_id, job_id)
     queue.ack(message_id)
     assert queue.messages == []
+
+def test_worker_runtime_survives_executor_setup_failure(monkeypatch):
+    from researchos.saas import worker_runtime
+
+    stop = Event()
+    workspace_id = uuid4()
+    research_run_id = uuid4()
+
+    class Queue:
+        def __init__(self):
+            self.received = False
+            self.acked = []
+
+        def receive(self):
+            if self.received:
+                return None
+            self.received = True
+            return ResearchQueueMessage(1, workspace_id, research_run_id)
+
+        def ack(self, message_id):
+            self.acked.append(message_id)
+
+    class Store:
+        def get(self, workspace_id, research_run_id):
+            stop.set()
+            return None
+
+    def fail_executor(*args, **kwargs):
+        raise RuntimeError("executor setup failed")
+
+    monkeypatch.setattr(worker_runtime, "GovernedResearchExecutor", fail_executor)
+
+    queue = Queue()
+    worker = worker_runtime.StandaloneResearchWorker(
+        Store(),
+        InMemoryDatasetStore(),
+        InMemoryDatasetStorage(),
+        queue,
+    )
+
+    worker.run_forever(stop)
+
+    assert queue.acked == []
