@@ -2,7 +2,7 @@ import glob
 
 import pandas as pd
 
-from researchos.engines.quant.vectorized_backtest import vectorized_backtest
+from researchos.quant_engine.vectorized_backtest import vectorized_backtest
 
 print("=" * 60)
 print("📈 SMA CROSSOVER (NO FILTER)")

@@ -4,7 +4,7 @@ sys.path.append("cpp_quant/python")
 import glob
 
 import pandas as pd
-from researchos.engines.quant.cpp_engine import CppQuant
+from researchos.quant_engine.cpp_engine import CppQuant
 
 # 1. Өгөгдөл унших
 df = pd.concat(

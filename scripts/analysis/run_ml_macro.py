@@ -7,7 +7,7 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 
-from researchos.engines.quant.machine_learning.purged_validation import purged_k_fold
+from researchos.quant_engine.machine_learning.purged_validation import purged_k_fold
 
 
 def run_ml_macro_strategy() -> None:
