@@ -233,7 +233,9 @@ def test_phase52_parallel_matches_sequential_and_reports_timing() -> None:
 
 def test_phase52_rejects_nonpositive_final_holdout_size() -> None:
     inputs = _inputs()
-    with pytest.raises(ValueError, match="holdout_size must be positive"):
+    from researchos.orchestration.parallel import ParallelOrchestrationError
+
+    with pytest.raises(ParallelOrchestrationError, match="holdout_size must be positive"):
         run_phase52_comparison_optimized(
             *inputs[:4],
             inputs[6],
