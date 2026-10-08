@@ -759,9 +759,11 @@ NB_MODULE(cpp_quant_backend, m) {
 
   m.def("parallel_research_wave",
         [](const std::vector<double>& values) {
-          nb::gil_scoped_release release;
-          const auto result = quant::parallel::run_research_wave(values);
-          nb::gil_scoped_acquire acquire;
+          quant::parallel::ResearchWaveResult result;
+          {
+            nb::gil_scoped_release release;
+            result = quant::parallel::run_research_wave(values);
+          }
           nb::dict out;
           out["mean"] = result.mean;
           out["variance"] = result.variance;
