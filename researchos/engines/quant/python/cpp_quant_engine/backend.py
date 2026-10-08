@@ -6,16 +6,14 @@ from types import ModuleType
 
 
 def native_module() -> ModuleType:
-    """Return the compiled cpp_quant_backend extension."""
+    """Return the canonical compiled QROS C++ quant backend."""
     try:
-        from . import cpp_quant_backend
+        from cpp_quant_engine import cpp_quant_backend
     except ImportError as exc:
         raise ImportError(
             "QROS C++ backend is not built or is not importable. "
-            "Install QROS with pip install -e . so scikit-build-core "
-            "can build and install the native extension."
+            "Build/install QROS with pip install -e ."
         ) from exc
-
     return cpp_quant_backend
 
 
