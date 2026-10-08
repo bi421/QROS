@@ -6,7 +6,7 @@ set -euo pipefail
 : "${MIGRATION_FILE:?MIGRATION_FILE is required}"
 
 case "${MIGRATION_FILE}" in
-  202610060001_production_forward_reconciliation.sql|20260928123000_dataset_version_storage_path_reconciliation.sql|20260928124500_workspace_billing_admin_role_reconciliation.sql|20260928120000_storage_authorization_workspace_membership_reconciliation.sql)
+  202610060001_production_forward_reconciliation.sql|20261005041000_billing_subscription_identity.sql|20260928123000_dataset_version_storage_path_reconciliation.sql|20260928124500_workspace_billing_admin_role_reconciliation.sql|20260928120000_storage_authorization_workspace_membership_reconciliation.sql)
     ;;
   *)
     echo "::error::migration is not in the governed M1 forward-migration allowlist: ${MIGRATION_FILE}"
@@ -120,6 +120,13 @@ select 1 / case when
   and to_regprocedure('public.receive_research_run(integer)') is not null
   and to_regprocedure('public.ack_research_run(bigint)') is not null
   and exists (select 1 from pg_indexes where schemaname='public' and tablename='subscription' and indexname='subscription_provider_subscription_id_key')
+then 1 else 0 end as postcondition_ok;
+"
+    ;;
+  20261005041000_billing_subscription_identity.sql)
+    supabase --workdir "$bundle" db query --linked "
+select 1 / case when
+  exists (select 1 from pg_indexes where schemaname='public' and tablename='subscription' and indexname='subscription_provider_subscription_id_key')
 then 1 else 0 end as postcondition_ok;
 "
     ;;
