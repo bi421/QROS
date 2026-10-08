@@ -96,7 +96,7 @@ class HistoricalSimulationEngine:
         """
         return self._backend.run_simulation(
             request=request,
-            prices=prices,
+            dataset=prices,
             calculation_version=request.calculation_version,
         )
 
