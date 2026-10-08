@@ -37,7 +37,7 @@ class BacktestEngine:
         capital = self.initial_capital
         position = 0.0
         entry_price = 0.0
-        trades: list[tuple[str, float, float, float]] = []  # (action, price, size, pnl)
+        trades: list[tuple[str, float, float, float]] = []
         equity_curve: list[float] = [capital]
 
         for signal in signals:
@@ -71,6 +71,7 @@ class BacktestEngine:
             capital += revenue
             trades.append(("CLOSE", closing_price, position, pnl))
             position = 0.0
+            equity_curve.append(capital)
 
         final_value = capital
         total_return = (final_value - self.initial_capital) / self.initial_capital
