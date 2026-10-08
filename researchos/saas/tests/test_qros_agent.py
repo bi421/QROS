@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / "scripts" / "qros_agent.py"
 CONTRACT = ROOT / "docs" / "engineering" / "tasks" / "qros-agent-v1.md"
@@ -145,6 +147,54 @@ def test_approval_attempt_authority_is_bound_to_ledger() -> None:
     assert ledger.consumed_attempts == 0
 
 
+def test_approval_is_bound_to_governed_action_not_only_command() -> None:
+    agent = load_agent()
+    p = proposal(agent)
+    ledger = agent.AttemptLedger(1)
+    valid = approval(agent, p, ledger)
+    forged = agent.ApprovalProvenance(
+        status=valid.status,
+        approver_id=valid.approver_id,
+        approved_at=valid.approved_at,
+        proposal_id=valid.proposal_id,
+        governed_action=("ruff", "check"),
+        scope_sha256=valid.scope_sha256,
+        attempt_authority=valid.attempt_authority,
+    )
+    result = agent.execute_proposal(
+        CONTRACT, p, ["ruff", "format", "--check", "scripts/qros_agent.py"],
+        approval=forged, ledger=ledger,
+    )
+    assert result.status == "STOP"
+    assert "governed action" in result.stderr
+    assert result.receipt is None
+    assert ledger.consumed_attempts == 0
+
+
+def test_approval_is_bound_to_task_scope_hash() -> None:
+    agent = load_agent()
+    p = proposal(agent)
+    ledger = agent.AttemptLedger(1)
+    valid = approval(agent, p, ledger)
+    forged = agent.ApprovalProvenance(
+        status=valid.status,
+        approver_id=valid.approver_id,
+        approved_at=valid.approved_at,
+        proposal_id=valid.proposal_id,
+        governed_action=valid.governed_action,
+        scope_sha256=agent._canonical_sha(["scripts/some_other_scope.py"]),
+        attempt_authority=valid.attempt_authority,
+    )
+    result = agent.execute_proposal(
+        CONTRACT, p, ["ruff", "format", "--check", "scripts/qros_agent.py"],
+        approval=forged, ledger=ledger,
+    )
+    assert result.status == "STOP"
+    assert "task scope" in result.stderr
+    assert result.receipt is None
+    assert ledger.consumed_attempts == 0
+
+
 def test_wrong_proposal_is_rejected() -> None:
     agent = load_agent()
     p = proposal(agent)
@@ -222,6 +272,24 @@ def test_attempt_budget_is_not_reset_by_replay() -> None:
     assert "exhausted" in second.stderr or "replay" in second.stderr
 
 
+def test_attempt_ledger_rejects_replay_and_budget_overrun() -> None:
+    agent = load_agent()
+    ledger = agent.AttemptLedger(2)
+    first_receipt = agent._canonical_sha({"governed": "execution-a"})
+
+    assert ledger.consume(first_receipt) == 1
+
+    with pytest.raises(RuntimeError, match="replay"):
+        ledger.consume(first_receipt)
+
+    assert ledger.consume(agent._canonical_sha({"governed": "execution-b"})) == 2
+
+    with pytest.raises(RuntimeError, match="exhausted"):
+        ledger.consume(agent._canonical_sha({"governed": "execution-c"}))
+
+    assert ledger.consumed_attempts == 2
+
+
 def test_receipt_binds_required_provenance() -> None:
     agent = load_agent()
     p = proposal(agent)
@@ -272,3 +340,36 @@ def test_unapproved_proposal_stops() -> None:
     )
     assert result.status == "STOP"
     assert "not authorized" in result.stderr
+
+
+def test_dirty_worktree_blocks_governed_execution(monkeypatch) -> None:
+    agent = load_agent()
+    p = proposal(agent)
+    ledger = agent.AttemptLedger(1)
+    a = approval(agent, p, ledger)
+    monkeypatch.setattr(agent, "_git_status", lambda: (True, " M scripts/qros_agent.py\n"))
+    result = agent.execute_proposal(
+        CONTRACT, p, ["ruff", "format", "--check", "scripts/qros_agent.py"],
+        approval=a, ledger=ledger,
+    )
+    assert result.status == "STOP"
+    assert "not clean" in result.stderr
+    assert result.receipt is None
+    assert result.pre_execution_sha is None
+    assert ledger.consumed_attempts == 0
+
+
+def test_unavailable_worktree_state_blocks_governed_execution(monkeypatch) -> None:
+    agent = load_agent()
+    p = proposal(agent)
+    ledger = agent.AttemptLedger(1)
+    a = approval(agent, p, ledger)
+    monkeypatch.setattr(agent, "_git_status", lambda: (False, ""))
+    result = agent.execute_proposal(
+        CONTRACT, p, ["ruff", "format", "--check", "scripts/qros_agent.py"],
+        approval=a, ledger=ledger,
+    )
+    assert result.status == "STOP"
+    assert "could not establish repository worktree state" in result.stderr
+    assert result.receipt is None
+    assert ledger.consumed_attempts == 0

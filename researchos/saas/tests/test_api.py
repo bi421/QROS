@@ -11,7 +11,12 @@ from fastapi.testclient import TestClient
 
 from researchos.research_core.contracts import FROZEN_XAUUSD_M1_WORKFLOW
 from researchos.saas.api import create_app
-from researchos.saas.billing import InMemoryBillingEventStore, InMemoryBillingProvider
+from researchos.saas.billing import (
+    Entitlement,
+    InMemoryBillingEventStore,
+    InMemoryBillingProvider,
+    InMemoryEntitlementStore,
+)
 from researchos.saas.contracts import Plan, TenantContext, WorkspaceRole
 from researchos.saas.datasets import InMemoryDatasetStorage, InMemoryDatasetStore
 from researchos.saas.store import InMemoryResearchJobStore
@@ -243,6 +248,118 @@ def test_research_run_idempotency_is_atomic_under_concurrent_requests() -> None:
     assert {response.json()["id"] for response in responses}.__len__() == 1
 
 
+def test_idempotency_key_is_partitioned_by_workspace_and_never_replays_foreign_response() -> None:
+    """Two workspaces sharing one job store must not collide on an identical key.
+
+    The idempotency map is keyed by (workspace_id, key); workspace B reusing
+    workspace A's key must receive a fresh B-scoped run, never A's response, and
+    must not be able to resolve A's dataset version.
+    """
+    shared_jobs = InMemoryResearchJobStore()
+    shared_datasets = InMemoryDatasetStore()
+
+    ctx_a = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.OWNER)
+    ctx_b = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.OWNER)
+
+    def app_for(ctx: TenantContext) -> TestClient:
+        return TestClient(create_app(
+            auth_provider=StaticAuth(ctx),
+            job_store=shared_jobs,
+            dataset_store=shared_datasets,
+            dataset_storage=InMemoryDatasetStorage(),
+        ))
+
+    client_a = app_for(ctx_a)
+    client_b = app_for(ctx_b)
+
+    version_a = _upload(client_a, "ws-a-dataset", b"x").json()["version"]["id"]
+    version_b = _upload(client_b, "ws-b-dataset", b"x").json()["version"]["id"]
+
+    key = "SAME_KEY"
+    resp_a = client_a.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": key},
+        json={"dataset_version_id": version_a},
+    )
+    assert resp_a.status_code == 202
+    body_a = resp_a.json()
+    assert body_a["workspace_id"] == str(ctx_a.workspace_id)
+
+    resp_b = client_b.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": key},
+        json={"dataset_version_id": version_b},
+    )
+    assert resp_b.status_code == 202
+    body_b = resp_b.json()
+
+    assert body_b["workspace_id"] == str(ctx_b.workspace_id)
+    assert body_b["id"] != body_a["id"]
+    assert body_b["dataset_version_id"] == version_b
+    assert body_a["id"] not in resp_b.text
+    assert str(ctx_a.workspace_id) not in resp_b.text
+    assert version_a not in resp_b.text
+
+    cross = client_b.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "other-key"},
+        json={"dataset_version_id": version_a},
+    )
+    assert cross.status_code == 404
+
+    job_a = shared_jobs.get(ctx_a.workspace_id, UUID(body_a["id"]))
+    job_b = shared_jobs.get(ctx_b.workspace_id, UUID(body_b["id"]))
+    assert job_a is not None and job_a.workspace_id == ctx_a.workspace_id
+    assert job_b is not None and job_b.workspace_id == ctx_b.workspace_id
+    assert shared_jobs.get(ctx_b.workspace_id, UUID(body_a["id"])) is None
+    assert shared_jobs.get(ctx_a.workspace_id, UUID(body_b["id"])) is None
+
+
+def test_idempotency_key_reuse_with_different_fingerprint_fails_closed_without_overwrite() -> None:
+    """Same workspace + same key + different request fingerprint must 409.
+
+    The failed attempt must not overwrite the stored fingerprint/response, must
+    not mutate the original run, and must not create a second resource: replaying
+    the ORIGINAL fingerprint still returns the original run.
+    """
+    client, context, _, _ = _client()
+    version_1 = _upload(client, "fp-one", b"x").json()["version"]["id"]
+    version_2 = _upload(client, "fp-two", b"y").json()["version"]["id"]
+    key = "conflict-key"
+
+    first = client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": key},
+        json={"dataset_version_id": version_1},
+    )
+    assert first.status_code == 202
+    job_id = first.json()["id"]
+
+    conflicting = client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": key},
+        json={"dataset_version_id": version_2},
+    )
+    assert conflicting.status_code == 409
+    assert "reused" in conflicting.text
+
+    replay = client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": key},
+        json={"dataset_version_id": version_1},
+    )
+    assert replay.status_code == 202
+    assert replay.json()["id"] == job_id
+    assert replay.json()["dataset_version_id"] == version_1
+
+    fetched = client.get(
+        f"/v1/research-runs/{job_id}", headers={"Authorization": "Bearer test"}
+    )
+    assert fetched.status_code == 200
+    assert fetched.json()["workspace_id"] == str(context.workspace_id)
+    assert fetched.json()["dataset_version_id"] == version_1
+
+
 def test_create_and_get_research_job_are_tenant_scoped() -> None:
     client, context, _, _ = _client()
     uploaded = _upload(client, "sample", b"x")
@@ -440,6 +557,145 @@ def test_billing_webhook_rejects_invalid_signature() -> None:
         headers={"X-Billing-Signature": "bad", "X-Billing-Provider": "hmac"},
     )
     assert response.status_code == 401
+
+
+class _UnavailableEntitlementStore:
+    """Entitlement backend that fails on every access; must never degrade to allow."""
+
+    def get(self, tenant_id: UUID, plan: str) -> Entitlement:
+        raise RuntimeError("entitlement backend unavailable")
+
+    def upsert(self, entitlement: Entitlement) -> Entitlement:
+        raise RuntimeError("entitlement backend unavailable")
+
+
+def test_entitlement_service_failure_fails_closed_and_creates_no_run() -> None:
+    context = TenantContext(user_id=uuid4(), workspace_id=uuid4(), plan=Plan.PRO)
+    jobs = InMemoryResearchJobStore()
+    client = TestClient(
+        create_app(
+            auth_provider=StaticAuth(context),
+            job_store=jobs,
+            dataset_store=InMemoryDatasetStore(),
+            dataset_storage=InMemoryDatasetStorage(),
+            entitlement_store=_UnavailableEntitlementStore(),
+        )
+    )
+
+    response = client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "entitlement-down"},
+        json={"dataset_version_id": str(uuid4())},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "service_unavailable"
+    assert response.json()["message"] == "entitlement service unavailable"
+    assert jobs.count_active(context.workspace_id) == 0
+    assert jobs.count_monthly(context.workspace_id) == 0
+
+
+def test_monthly_job_entitlement_exceeded_returns_402_without_creating_run() -> None:
+    context = TenantContext(user_id=uuid4(), workspace_id=uuid4(), plan=Plan.PRO)
+    jobs = InMemoryResearchJobStore()
+    entitlements = InMemoryEntitlementStore()
+    entitlements.upsert(
+        Entitlement(
+            tenant_id=context.workspace_id,
+            plan="pro",
+            max_datasets=1000,
+            max_jobs_per_month=1,
+            max_storage_mb=10240,
+        )
+    )
+    client = TestClient(
+        create_app(
+            auth_provider=StaticAuth(context),
+            job_store=jobs,
+            dataset_store=InMemoryDatasetStore(),
+            dataset_storage=InMemoryDatasetStorage(),
+            entitlement_store=entitlements,
+        )
+    )
+    version_id = _upload(client, "monthly-quota", b"x").json()["version"]["id"]
+
+    first = client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "quota-1"},
+        json={"dataset_version_id": version_id},
+    )
+    second = client.post(
+        "/v1/research-runs",
+        headers={"Authorization": "Bearer test", "Idempotency-Key": "quota-2"},
+        json={"dataset_version_id": version_id},
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 402
+    assert second.json()["code"] == "ENTITLEMENT_EXCEEDED"
+    assert jobs.count_monthly(context.workspace_id) == 1
+
+
+def test_concurrency_limit_returns_429_without_creating_additional_run() -> None:
+    context = TenantContext(user_id=uuid4(), workspace_id=uuid4(), plan=Plan.PRO)
+    jobs = InMemoryResearchJobStore()
+    client = TestClient(
+        create_app(
+            auth_provider=StaticAuth(context),
+            job_store=jobs,
+            dataset_store=InMemoryDatasetStore(),
+            dataset_storage=InMemoryDatasetStorage(),
+        )
+    )
+    version_id = _upload(client, "concurrency", b"x").json()["version"]["id"]
+
+    def _create(key: str):
+        return client.post(
+            "/v1/research-runs",
+            headers={"Authorization": "Bearer test", "Idempotency-Key": key},
+            json={"dataset_version_id": version_id},
+        )
+
+    assert _create("concurrency-1").status_code == 202
+    assert _create("concurrency-2").status_code == 202
+    assert jobs.count_active(context.workspace_id) == 2
+
+    third = _create("concurrency-3")
+
+    assert third.status_code == 429
+    assert third.json()["code"] == "rate_limited"
+    assert third.json()["message"] == "concurrent research run limit reached"
+    assert jobs.count_active(context.workspace_id) == 2
+
+
+def test_billing_webhook_rejects_event_id_reuse_with_different_payload() -> None:
+    billing = InMemoryBillingEventStore()
+    client, _, _, _ = _client(billing_store=billing, billing_secret="secret")
+    workspace_id = str(uuid4())
+    original = json.dumps(
+        {"event_id": "evt_reuse", "workspace_id": workspace_id, "plan": "pro", "status": "active"}
+    ).encode()
+    tampered = json.dumps(
+        {"event_id": "evt_reuse", "workspace_id": workspace_id, "plan": "enterprise", "status": "active"}
+    ).encode()
+
+    def _post(body: bytes):
+        signature = hmac.new(b"secret", body, hashlib.sha256).hexdigest()
+        return client.post(
+            "/v1/billing/webhook",
+            content=body,
+            headers={"X-Billing-Signature": signature, "X-Billing-Provider": "hmac"},
+        )
+
+    first = _post(original)
+    assert first.status_code == 200
+    assert first.json() == {"status": "processed"}
+
+    assert _post(tampered).status_code == 409
+
+    replay = _post(original)
+    assert replay.status_code == 200
+    assert replay.json() == {"status": "replayed"}
 
 
 

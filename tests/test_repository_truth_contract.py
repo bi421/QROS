@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import ast
-import re
 from pathlib import Path
 
-from scripts.check_scope import is_new_native_quant_python_module
+from scripts.check_scope import (
+    FORBIDDEN_NEW_PATHS,
+    changed_paths,
+    is_new_native_quant_python_module,
+)
 
 
 def test_macro_storage_public_api_does_not_export_skeletons() -> None:
@@ -16,8 +19,11 @@ def test_macro_storage_public_api_does_not_export_skeletons() -> None:
 
 
 def test_scope_guard_rejects_root_level_python_files() -> None:
-    text = Path("scripts/check_scope.py").read_text(encoding="utf-8")
-    assert re.search(r"^\[^/\]+\.py$", text, re.MULTILINE)
+    # Root-level Python scripts are forbidden; owned directories are allowed.
+    assert any(pattern.search("analyze.py") for pattern in FORBIDDEN_NEW_PATHS)
+    assert not any(
+        pattern.search("scripts/analyze.py") for pattern in FORBIDDEN_NEW_PATHS
+    )
 
 
 def test_scope_guard_rejects_new_native_quant_python_modules() -> None:
@@ -33,6 +39,19 @@ def test_scope_guard_rejects_new_native_quant_python_modules() -> None:
     assert not is_new_native_quant_python_module(
         "researchos/quant_engine/new_api.py"
     )
+
+
+def test_scope_guard_changed_paths_supports_added_only_filter() -> None:
+    # Regression: main() calls changed_paths(base, staged, "A") to scope the
+    # native-quant rule to newly added files. The guard used to crash with
+    # TypeError because changed_paths had no diff_filter parameter.
+    all_changed = changed_paths(None, False)
+    added_only = changed_paths(None, False, "A")
+
+    assert isinstance(all_changed, list)
+    assert isinstance(added_only, list)
+    # Added files are always a subset of Added/Copied/Modified/Renamed files.
+    assert set(added_only).issubset(set(all_changed))
 
 
 def test_walkforward_artifact_is_not_claimed_verified_when_missing() -> None:
