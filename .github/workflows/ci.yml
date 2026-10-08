@@ -121,7 +121,7 @@ jobs:
         env:
           PYTHONPATH: researchos/engines/quant/python
         run: |
-          python -c "from researchos.engines.quant.cpp_backend import CppQuantAdapter; e=CppQuantAdapter(); assert e.is_cpp, 'compiled C++ backend is not active'; print(e.get_version())"
+          python -c "from researchos.quant_engine.cpp_backend import CppQuantAdapter; e=CppQuantAdapter(); assert e.is_cpp, 'compiled C++ backend is not active'; print(e.get_version())"
           python -m pytest researchos/tests/test_cpp_backtest_regression.py -v --tb=short
 
   health-evidence:

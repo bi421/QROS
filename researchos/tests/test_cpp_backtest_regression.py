@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from researchos.engines.quant.cpp_backend import CppQuantAdapter
+from researchos.quant_engine.cpp_backend import CppQuantAdapter
 from researchos.quant_engine.backend import PythonQuantBackend
 
 SMA_FAST = 20

@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from researchos.engines.quant.probability import (
+from researchos.quant_engine.probability import (
     generic_grid_mle,
     mle_log_normal,
     mle_normal,

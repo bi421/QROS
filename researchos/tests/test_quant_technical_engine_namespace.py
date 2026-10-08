@@ -2,7 +2,7 @@
 
 import pytest
 
-from researchos.engines.quant.technical import engine as legacy
+from researchos.quant_engine.technical import engine as legacy
 from researchos.quant_engine.technical import engine as canonical
 from researchos.quant_engine.technical.contracts import Bars, IndicatorSpec
 
