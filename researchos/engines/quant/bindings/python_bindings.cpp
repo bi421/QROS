@@ -32,6 +32,7 @@
 #include "quant/statistics/regression.h"
 #include "quant/statistics/rolling.h"
 #include "quant/low_latency/turing_filter.h"
+#include "quant/parallel/research_wave.h"
 
 #include "quant_engine.hpp"
 
@@ -755,6 +756,25 @@ NB_MODULE(cpp_quant_backend, m) {
         nb::arg("bullish_hypothesis") = true,
         nb::arg("decisions").noconvert(),
         "Zero-copy Turing-inspired structural/anchor/SPRT filter.");
+
+  m.def("parallel_research_wave",
+        [](const std::vector<double>& values) {
+          quant::parallel::ResearchWaveResult result;
+          {
+            nb::gil_scoped_release release;
+            result = quant::parallel::run_research_wave(values);
+          }
+          nb::dict out;
+          out["mean"] = result.mean;
+          out["variance"] = result.variance;
+          out["standard_deviation"] = result.standard_deviation;
+          out["linear_slope"] = result.linear_slope;
+          out["positive_rate"] = result.positive_rate;
+          out["sample_size"] = result.sample_size;
+          return out;
+        },
+        nb::arg("values"),
+        "Run independent deterministic research measurements in parallel over one immutable snapshot.");
 
   m.def("version", []() { return quant::Version::current().to_string(); },
         "Get the C++ Quant Engine version (major.minor.patch)");

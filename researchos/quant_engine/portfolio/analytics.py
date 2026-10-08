@@ -369,10 +369,18 @@ def allocate_capital(
 
     capital = [portfolio.initial_capital * f for f in frac]
 
-    portfolio_returns(portfolio)
-    p = 0.5
-    b = 1.5
-    kelly = kelly_fraction(p, b)
+    returns = portfolio_returns(portfolio)
+    wins = [r for r in returns if r > 0.0]
+    losses = [r for r in returns if r < 0.0]
+    if wins and losses:
+        p = len(wins) / len(returns)
+        average_win = mean(wins)
+        average_loss = abs(mean(losses))
+        b = average_win / average_loss if average_loss > 0.0 else 0.0
+        kelly = kelly_fraction(p, b) if b > 0.0 else 0.0
+    else:
+        # Kelly sizing is undefined without both winning and losing outcomes.
+        kelly = 0.0
 
     return AllocationResult(
         capital_per_asset=capital,
@@ -480,13 +488,15 @@ def compute_portfolio_metrics(
 def _mat_inv(a: list[list[float]]) -> list[list[float]]:
     """Matrix inversion via Gauss-Jordan elimination."""
     n = len(a)
+    if n == 0 or any(len(row) != n for row in a):
+        raise ValueError("matrix must be non-empty and square")
     aug = [a[i][:] + [1.0 if i == j else 0.0 for j in range(n)] for i in range(n)]
     for i in range(n):
         pivot = max(range(i, n), key=lambda r: abs(aug[r][i]))
         aug[i], aug[pivot] = aug[pivot], aug[i]
         pv = aug[i][i]
         if abs(pv) < 1e-12:
-            return [[1.0 if r == c else 0.0 for c in range(n)] for r in range(n)]
+            raise ValueError("matrix is singular or numerically ill-conditioned")
         for j in range(2 * n):
             aug[i][j] /= pv
         for r in range(n):

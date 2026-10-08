@@ -34,6 +34,7 @@ class CalculationMethod(str, Enum):
     HISTORICAL_FREQUENCY = "HistoricalFrequency"
     CONFIDENCE_ADJUSTED = "ConfidenceAdjusted"
     EVIDENCE_BALANCE = "EvidenceBalance"
+    CALIBRATED_LINEAR_POOL = "CalibratedLinearPool"
 
 
 class DecisionStatus(str, Enum):

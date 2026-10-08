@@ -9,6 +9,7 @@ infers or fabricates a calibration status.
 from __future__ import annotations
 
 from datetime import datetime
+import math
 from typing import Any
 
 from researchos.core.base_object import BaseObject
@@ -341,10 +342,90 @@ class ProbabilityValidator:
         return self.validate(assessment) == []
 
 
+class CalibratedLinearPool:
+    """Fuse validated three-way probability distributions with a linear opinion pool.
+
+    Component probabilities must be explicitly marked as out-of-sample
+    calibrated. Confidence scores are never converted into probabilities.
+    """
+
+    VERSION = "CALIBRATED_LINEAR_POOL_V1"
+
+    @staticmethod
+    def _distribution(item: DecisionEvidenceItem) -> tuple[float, float, float]:
+        provenance = item.provenance or {}
+        if provenance.get("calibration_status") != "validated":
+            raise ValueError(
+                f"evidence {item.source_id!r} is not backed by validated calibration"
+            )
+        raw = provenance.get("probability_distribution")
+        if not isinstance(raw, dict):
+            raise ValueError(
+                f"evidence {item.source_id!r} is missing probability_distribution"
+            )
+        values = (
+            float(raw.get("bullish", math.nan)),
+            float(raw.get("bearish", math.nan)),
+            float(raw.get("neutral", math.nan)),
+        )
+        if any(not math.isfinite(v) or v < 0.0 or v > 1.0 for v in values):
+            raise ValueError(f"evidence {item.source_id!r} contains invalid probability values")
+        if abs(sum(values) - 1.0) > FLOAT_TOLERANCE:
+            raise ValueError(f"evidence {item.source_id!r} probabilities must sum to 1.0")
+        return values
+
+    def fuse(self, decision_context_id: str, evidence_collection_id: str,
+             items: list[DecisionEvidenceItem], timestamp: datetime | None = None
+    ) -> ProbabilityAssessment:
+        if not items:
+            raise ValueError("calibrated linear pool requires at least one evidence item")
+        weighted: list[tuple[float, tuple[float, float, float]]] = []
+        for item in items:
+            weight = float(item.weight)
+            if not math.isfinite(weight) or weight < 0.0:
+                raise ValueError(f"evidence {item.source_id!r} has invalid fusion weight")
+            weighted.append((weight, self._distribution(item)))
+        total_weight = sum(weight for weight, _ in weighted)
+        if total_weight <= 0.0:
+            raise ValueError("calibrated linear pool requires positive total weight")
+        bullish = sum(w * d[0] for w, d in weighted) / total_weight
+        bearish = sum(w * d[1] for w, d in weighted) / total_weight
+        neutral = sum(w * d[2] for w, d in weighted) / total_weight
+        total = bullish + bearish + neutral
+        if not math.isfinite(total) or total <= 0.0:
+            raise ValueError("fused probability distribution is invalid")
+        bullish /= total
+        bearish /= total
+        neutral /= total
+        return ProbabilityAssessment(
+            decision_context_id=decision_context_id,
+            evidence_collection_id=evidence_collection_id,
+            bullish_probability=bullish,
+            bearish_probability=bearish,
+            neutral_probability=neutral,
+            confidence=max(bullish, bearish, neutral),
+            uncertainty=1.0 - max(bullish, bearish, neutral),
+            evidence_strength=total_weight / len(weighted),
+            historical_consistency=max(bullish, bearish, neutral),
+            sample_size=len(items),
+            calculation_method=CalculationMethod.CALIBRATED_LINEAR_POOL,
+            calculation_version=self.VERSION,
+            limitations=[
+                "Components must be calibrated out-of-sample",
+                "Fusion does not assume component independence",
+                "Evidence dependence must be monitored separately",
+            ],
+            timestamp=timestamp,
+            probability_calibration_status="validated_components",
+        )
+
+
+
 __all__ = [
     "CALCULATION_VERSION",
     "FLOAT_TOLERANCE",
     "ProbabilityAssessment",
     "ProbabilityCalculator",
     "ProbabilityValidator",
+    "CalibratedLinearPool",
 ]
