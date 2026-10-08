@@ -112,7 +112,7 @@ def test_context_execution_rejects_source_index_mismatch(monkeypatch) -> None:
     broken = build.datasets["PRICE_ONLY"]
     broken.metadata["source_indices"] = [1]  # type: ignore[index]
     monkeypatch.setattr(
-        "researchos.experiments.phase52_rebuild.context_execution._run_prepared",
+        "researchos.experiments.phase52_rebuild.context_execution.run_prepared_phase52_comparison",
         lambda prepared, config: None,
     )
     try:

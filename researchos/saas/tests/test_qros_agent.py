@@ -70,7 +70,7 @@ def test_cli_emits_machine_readable_decision(tmp_path: Path) -> None:
     log.write_text("ruff check failed: E501 line too long\n", encoding="utf-8")
     result = subprocess.run(
         [sys.executable, str(SCRIPT), str(CONTRACT), str(log), "--attempt-limit", "1"],
-        cwd=ROOT, capture_output=True, text=True, check=False,
+        cwd=ROOT, stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False,
     )
     assert result.returncode == 0
     decision = json.loads(result.stdout)
