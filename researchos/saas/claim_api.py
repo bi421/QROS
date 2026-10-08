@@ -257,13 +257,13 @@ def register_research_claim_routes(
     )
     @require_permission("claim", "list")
     def list_research_claims(
+        request: Request,
         page: str = "1",
         page_size: str = "20",
         sort_by: str = "created_at",
         sort_order: str = "desc",
         status_filter: str | None = Query(default=None, alias="filter[status]"),
         tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
-        request: Request = None,
         context: TenantContext = Depends(tenant_dependency),
     ) -> ResearchClaimPageResponse:
         try:
@@ -286,6 +286,8 @@ def register_research_claim_routes(
                 detail={"code": exc.code, "message": str(exc)},
             ) from exc
         store = require_store()
+        claims: list[ResearchClaim]
+        total: int
         if tenant_filter is not None and tenant_filter != str(context.workspace_id):
             claims, total = [], 0
         else:

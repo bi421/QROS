@@ -754,6 +754,8 @@ def create_app(
                 raise PaginationParameterError(
                     "name filter must be between 1 and 256 characters"
                 )
+            rows: list[Dataset]
+            total: int
             if tenant_filter is not None and tenant_filter != str(tenant.workspace_id):
                 rows, total = [], 0
             else:
@@ -1251,7 +1253,7 @@ def create_app(
         app.openapi_schema = schema
         return schema
 
-    app.openapi = _custom_openapi
+    setattr(app, "openapi", _custom_openapi)
     return app
 
 

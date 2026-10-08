@@ -1,7 +1,8 @@
 """Shared public-list pagination, filtering, and sorting contract."""
 from __future__ import annotations
+from collections.abc import Sequence
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, is_dataclass
 from math import ceil
 from typing import Any
@@ -75,7 +76,7 @@ def validate_filter_keys(filters: Mapping[str, object], *, allowed: frozenset[st
 
 def pagination_envelope(
     *,
-    data: list[object],
+    data: Sequence[object],
     page: int,
     page_size: int,
     total: int,

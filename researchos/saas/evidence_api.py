@@ -219,13 +219,13 @@ def register_research_evidence_routes(
     @require_permission("evidence", "list")
     def list_research_run_evidence(
         job_id: UUID,
+        request: Request,
         page: str = "1",
         page_size: str = "20",
         sort_by: str = "created_at",
         sort_order: str = "desc",
         status_filter: str | None = Query(default=None, alias="filter[status]"),
         tenant_filter: str | None = Query(default=None, alias="filter[tenant_id]"),
-        request: Request = None,
         context: TenantContext = Depends(tenant_dependency),
     ) -> dict[str, object]:
         _validate_evidence_query(page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order, status_filter=status_filter, tenant_filter=tenant_filter, request=request)
