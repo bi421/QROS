@@ -7,7 +7,7 @@ sys.path.insert(0, ".")
 from researchos.engines.ml.features import create_features
 from researchos.engines.ml.model import train_model
 from researchos.engines.ml.strategy import MLStrategy
-from researchos.engines.quant.backtest import BacktestEngine
+from researchos.quant_engine.backtest import BacktestEngine
 
 print("Loading data...")
 files = glob.glob("data/raw/histdata/xauusd/DAT_ASCII_XAUUSD_M1_*.csv")

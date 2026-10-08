@@ -4,7 +4,7 @@ import sys
 import time
 
 import pandas as pd
-from researchos.engines.quant.cpp_engine import CppQuant
+from researchos.quant_engine.cpp_engine import CppQuant
 
 print("=" * 70)
 print("⚡ ULTRA FAST: C++ Бэктест + Комисс Python-д тооцоолсон")

@@ -4,7 +4,7 @@ Generate signal file from real macro-factor predictions.
 import numpy as np
 import pandas as pd
 
-from researchos.engines.quant.signal_file import generate_signal_file_from_predictions, validate_signal_file
+from researchos.quant_engine.signal_file import generate_signal_file_from_predictions, validate_signal_file
 
 # ---- Load XAUUSD (real MT5 export) ----
 gold = pd.read_csv("data/curated/xauusd/xauusd_d1_2021_2025_mt5_final.csv")

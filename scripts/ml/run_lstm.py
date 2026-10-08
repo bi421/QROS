@@ -10,7 +10,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
-from researchos.engines.quant.cpp_engine import run_ml_backtest_cpp
+from researchos.quant_engine.cpp_engine import run_ml_backtest_cpp
 from sklearn.preprocessing import StandardScaler
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.layers import LSTM, Dense, Dropout
