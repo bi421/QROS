@@ -25,6 +25,12 @@ class BacktestEngine:
         commission: float = 0.001,
         slippage: float = 0.0005,
     ) -> None:
+        if initial_capital <= 0:
+            raise ValueError("initial_capital must be positive")
+        if commission < 0 or slippage < 0:
+            raise ValueError("commission and slippage must be non-negative")
+        if commission + slippage >= 1:
+            raise ValueError("commission and slippage must sum to less than 1")
         self.initial_capital = initial_capital
         self.commission = commission
         self.slippage = slippage
