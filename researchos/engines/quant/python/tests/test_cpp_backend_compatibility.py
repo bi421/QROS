@@ -14,16 +14,16 @@ import os
 import time
 
 import pytest
-from researchos.engines.quant.cpp_backend import CppQuantAdapter, has_cpp_engine
+from researchos.quant_engine.cpp_backend import CppQuantAdapter, has_cpp_engine
 
-from researchos.engines.quant.backend import PythonQuantBackend
-from researchos.engines.quant.compatibility import (
+from researchos.quant_engine.backend import PythonQuantBackend
+from researchos.quant_engine.compatibility import (
     DEFAULT_TOLERANCES,
     canonical_result_hash,
     verify_backend_parity,
 )
-from researchos.engines.quant.interface import QuantComputationInterface
-from researchos.engines.quant.models import CalculationVersion, SimulationRequest, SimulationResult
+from researchos.quant_engine.interface import QuantComputationInterface
+from researchos.quant_engine.models import CalculationVersion, SimulationRequest, SimulationResult
 
 _V1 = CalculationVersion.CALCULATION_V1
 
