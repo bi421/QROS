@@ -84,7 +84,7 @@ def test_structural_comparison_and_backend_hash() -> None:
     assert result.mode == "structural"
     assert result.comparison_hash == comparator.compare_structural(expected, actual).comparison_hash
 
-    from researchos.engines.quant.backend_hash import canonicalize as legacy_canonicalize
+    from researchos.quant_engine.backend_hash import canonicalize as legacy_canonicalize
     from researchos.quant_engine.backend_hash import canonicalize as canonical_canonicalize
 
     assert legacy_canonicalize(expected) == canonical_canonicalize(expected)

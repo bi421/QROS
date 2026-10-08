@@ -10,7 +10,7 @@ from joblib import Parallel, delayed
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 
-from researchos.engines.quant.vectorized_backtest import vectorized_backtest
+from researchos.quant_engine.vectorized_backtest import vectorized_backtest
 
 timings = {}
 

@@ -10,16 +10,16 @@ import math
 import sys
 
 import pytest
-from researchos.engines.quant.cpp_backend import (
+from researchos.quant_engine.cpp_backend import (
     CppQuantAdapter,
     get_cpp_engine_version,
     has_cpp_engine,
 )
 
-from researchos.engines.quant.backend import PythonQuantBackend
-from researchos.engines.quant.interface import QuantComputationInterface
-from researchos.engines.quant.models import CalculationVersion, SimulationRequest
-from researchos.engines.quant.simulation import HistoricalSimulationEngine
+from researchos.quant_engine.backend import PythonQuantBackend
+from researchos.quant_engine.interface import QuantComputationInterface
+from researchos.quant_engine.models import CalculationVersion, SimulationRequest
+from researchos.quant_engine.simulation import HistoricalSimulationEngine
 
 _V1 = CalculationVersion.CALCULATION_V1
 
@@ -366,7 +366,7 @@ class TestCppQuantAdapterVersions:
 
 class TestCppQuantAdapterSerialization:
     def test_round_trip(self, adapter, prices):
-        from researchos.engines.quant.models import SimulationResult
+        from researchos.quant_engine.models import SimulationResult
 
         result = adapter.run_simulation(make_request(), prices)
         data = result.to_dict()

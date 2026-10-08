@@ -4,8 +4,8 @@ import math
 
 import pytest
 
-from researchos.engines.quant.technical.contracts import Bars as LegacyBars
-from researchos.engines.quant.technical.validation import (
+from researchos.quant_engine.technical.contracts import Bars as LegacyBars
+from researchos.quant_engine.technical.validation import (
     validate_bars as legacy_validate_bars,
     validate_params as legacy_validate_params,
     validate_period as legacy_validate_period,

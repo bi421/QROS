@@ -16,14 +16,14 @@ import math
 
 import pytest
 
-from researchos.engines.quant.backend import PythonQuantBackend
-from researchos.engines.quant.cpp_backend import CppQuantAdapter, has_cpp_engine
-from researchos.engines.quant.models import (
+from researchos.quant_engine.backend import PythonQuantBackend
+from researchos.quant_engine.cpp_backend import CppQuantAdapter, has_cpp_engine
+from researchos.quant_engine.models import (
     CalculationVersion,
     SimulationRequest,
     SimulationResult,
 )
-from researchos.engines.quant.simulation import HistoricalSimulationEngine
+from researchos.quant_engine.simulation import HistoricalSimulationEngine
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
 

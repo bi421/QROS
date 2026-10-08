@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from researchos.engines.quant.backtest import BacktestEngine
+from researchos.quant_engine.backtest import BacktestEngine
 
 
 @dataclass(frozen=True)

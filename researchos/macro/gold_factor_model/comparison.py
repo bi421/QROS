@@ -30,7 +30,7 @@ from scipy import stats
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from researchos.engines.quant.validation.walk_forward_strategy_validation import (
+from researchos.quant_engine.validation.walk_forward_strategy_validation import (
     compute_indicators,
     compute_metrics,
     generate_signals_vectorized,
@@ -210,7 +210,7 @@ def run_indicator_baseline(
     test_bars = test_months * bars_per_month
     step_bars = step_months * bars_per_month
 
-    from researchos.engines.quant.machine_learning.purged_validation import expanding_window_folds
+    from researchos.quant_engine.machine_learning.purged_validation import expanding_window_folds
 
     folds = expanding_window_folds(len(df), initial_train_bars, test_bars, step_bars)
     fold_results = []
