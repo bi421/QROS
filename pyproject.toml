@@ -130,6 +130,7 @@ markers = [
     "fast: default development feedback tests",
     "frozen: expensive validated evidence tests; run on demand or when dependencies change",
     "performance: performance and scale validation tests",
+    "real_db: tests that require a live database connection",
     "cpp: tests that require the compiled C++ quant backend",
 ]
 

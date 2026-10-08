@@ -400,7 +400,7 @@ def _json_safe(value: Any) -> Any:
 def _render(report: Report) -> str:
     r = _json_safe(asdict(report))
     lines = [
-        "# ResearchOS â€” Canonical Phase 5.2 Report",
+        "# ResearchOS — Canonical Phase 5.2 Report",
         "",
         f"**Overall gate:** {r['evidence_status']['overall']}",
         f"**Scientific claim:** {r['evidence_status']['scientific_claim']}",
@@ -428,9 +428,9 @@ def _render(report: Report) -> str:
         "",
         f"Exact raw research intersection: **{r['alignment']['raw_exact_intersection']}**",
         f"Exact production research intersection: **{r['alignment']['production_exact_intersection']}**",
-        f"Raw â†’ production difference: **{r['alignment']['raw_vs_production_difference']}**",
-        f"Context range: **{r['alignment']['context_first']} â†’ {r['alignment']['context_last']}**",
-        f"Research range: **{r['alignment']['first']} â†’ {r['alignment']['last']}**",
+        f"Raw → production difference: **{r['alignment']['raw_vs_production_difference']}**",
+        f"Context range: **{r['alignment']['context_first']} → {r['alignment']['context_last']}**",
+        f"Research range: **{r['alignment']['first']} → {r['alignment']['last']}**",
         f"Context strictly before research: **{r['alignment']['context_before_research']}**",
         f"Rule: {r['alignment']['rule']}",
         "",
@@ -446,13 +446,13 @@ def _render(report: Report) -> str:
         "",
         "## Feature-set comparison",
         "",
-        "| Feature set | Outcome | Samples | Accuracy | Baseline | Î” accuracy | Brier | Î” Brier | p-value |",
+        "| Feature set | Outcome | Samples | Accuracy | Baseline | Δ accuracy | Brier | Δ Brier | p-value |",
         "|---|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for name, v in r["phase52"].items():
 
         def fmt(x):
-            return "â€”" if x is None else (f"{x:.4f}" if isinstance(x, float) else str(x))
+            return "—" if x is None else (f"{x:.4f}" if isinstance(x, float) else str(x))
 
         lines.append(
             f"| {name} | {v['outcome']} | {v['validation_samples'] or 0} | {fmt(v['accuracy'])} | {fmt(v['baseline_accuracy'])} | {fmt(v['accuracy_delta_vs_baseline'])} | {fmt(v['brier'])} | {fmt(v['brier_delta_vs_baseline'])} | {fmt(v['p_value'])} |"
@@ -463,7 +463,7 @@ def _render(report: Report) -> str:
         "",
         "### What this proves",
         "- 2020 context initializes feature state without becoming experiment samples.",
-        "- Only 2021â€“2025 research observations enter execution.",
+        "- Only 2021–2025 research observations enter execution.",
         "- The 60-row feature warmup is supplied by pre-research context rather than deleting research rows.",
         "- The 5-row label horizon remains unchanged.",
         "- The 1200 train+validation gate is measured only on research samples.",
