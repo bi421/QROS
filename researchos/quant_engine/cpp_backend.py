@@ -530,10 +530,14 @@ class CppQuantAdapter(QuantComputationInterface):
     def run_simulation(
         self,
         request: SimulationRequest,
-        prices: list[float],
+        dataset: Any,
         calculation_version: CalculationVersion = CALCULATION_V1,
     ) -> SimulationResult:
         _require_v1(calculation_version)
+
+        from researchos.quant_engine.backend import PythonQuantBackend
+
+        prices = PythonQuantBackend()._extract_prices(dataset)
 
         if len(prices) < 2:
             raise ValueError(f"Need at least 2 prices for simulation, got {len(prices)}")
