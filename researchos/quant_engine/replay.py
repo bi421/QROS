@@ -189,6 +189,7 @@ class ReplayEngine:
         stats["strategy"] = self.strategy.identifier
         stats["strategy_version"] = self.strategy.version
         stats["num_bars"] = len(bars)
+        stats["signal_fill_timing"] = "next_bar_open"
 
         return {
             "signals": self.execution.signals,
@@ -197,7 +198,6 @@ class ReplayEngine:
             "equity_curve": self.execution.equity_curve,
             "execution_stats": stats,
             "num_bars": len(bars),
-            "signal_fill_timing": "next_bar_open",
             "start_time": _iso(getattr(bars[0], "timestamp", None)),
             "end_time": _iso(getattr(bars[-1], "timestamp", None)),
         }

@@ -5,6 +5,15 @@ from __future__ import annotations
 import subprocess
 import sys
 
+# Placeholder-only templates (e.g. .env.example) document required variables and
+# hold no secrets, so they are intentionally tracked. Real secret-bearing variants
+# (.env, .env.local, .env.production, ...) remain forbidden.
+TEMPLATE_SUFFIXES = (".example", ".sample", ".template")
+
+
+def _is_template(path: str) -> bool:
+    return path.endswith(TEMPLATE_SUFFIXES)
+
 
 def main() -> int:
     result = subprocess.run(
@@ -16,10 +25,10 @@ def main() -> int:
     forbidden = [
         path
         for path in paths
-        if path == ".env"
-        or path.startswith(".env.")
-        or "/.env" in path
-        or path.endswith("/.env")
+        if not _is_template(path)
+        and (
+            path == ".env" or path.startswith(".env.") or "/.env" in path or path.endswith("/.env")
+        )
     ]
     if forbidden:
         print("Forbidden tracked environment files:", file=sys.stderr)

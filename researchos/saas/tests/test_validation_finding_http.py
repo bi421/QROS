@@ -10,7 +10,7 @@ from researchos.saas.datasets import InMemoryDatasetStorage, InMemoryDatasetStor
 from researchos.saas.finding import ResearchFindingRecord
 from researchos.saas.finding_api import InMemoryResearchFindingStore
 from researchos.saas.store import InMemoryResearchJobStore
-from researchos.saas.validation import ResearchValidationRecord
+from researchos.saas.validation import ResearchValidationRecord, VALIDATION_CONTRACT_VERSION
 from researchos.saas.validation_api import InMemoryResearchValidationStore
 
 
@@ -108,6 +108,54 @@ def test_validation_and_finding_http_boundaries_fail_closed() -> None:
     assert fetched.json()["finding_sha256"] == created.json()["finding_sha256"]
 
 
+def test_validation_http_route_binds_provenance_and_rejects_forged_manifest() -> None:
+    context = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
+    jobs = InMemoryResearchJobStore()
+    validations = InMemoryResearchValidationStore()
+    findings = InMemoryResearchFindingStore()
+    client = _app(context, jobs, validations, findings)
+    job_id, result = _run(client, context, jobs)
+
+    foreign = client.post(
+        f"/v1/research-runs/{uuid4()}/validation",
+        headers={"Authorization": "Bearer test"},
+        json={
+            "result_manifest_sha256": result.manifest_sha256,
+            "status": "VALIDATED",
+            "payload": {},
+        },
+    )
+    assert foreign.status_code == 404
+
+    forged = client.post(
+        f"/v1/research-runs/{job_id}/validation",
+        headers={"Authorization": "Bearer test"},
+        json={"result_manifest_sha256": "f" * 64, "status": "VALIDATED", "payload": {}},
+    )
+    assert forged.status_code == 409
+    assert validations.get(context.workspace_id, job_id) is None
+
+    payload = {"metrics": {"brier_improvement": 0.1}, "gate": "PASS"}
+    created = client.post(
+        f"/v1/research-runs/{job_id}/validation",
+        headers={"Authorization": "Bearer test"},
+        json={
+            "result_manifest_sha256": result.manifest_sha256,
+            "status": "VALIDATED",
+            "payload": payload,
+        },
+    )
+    assert created.status_code == 201
+    body = created.json()
+    assert body["workspace_id"] == str(context.workspace_id)
+    assert body["research_run_id"] == str(job_id)
+    assert body["result_manifest_sha256"] == result.manifest_sha256
+    assert body["validation_sha256"] == ResearchValidationRecord.compute_validation_sha256(
+        ResearchValidationRecord.canonical_payload(payload)
+    )
+    assert body["contract_version"] == VALIDATION_CONTRACT_VERSION
+
+
 def test_validation_and_finding_reads_are_tenant_scoped() -> None:
     owner = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
     other = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
@@ -135,3 +183,80 @@ def test_validation_and_finding_reads_are_tenant_scoped() -> None:
     other_client = _app(other, jobs, validations, findings)
     assert other_client.get(f"/v1/research-runs/{job_id}/validation", headers={"Authorization": "Bearer test"}).status_code == 404
     assert other_client.get(f"/v1/research-runs/{job_id}/finding", headers={"Authorization": "Bearer test"}).status_code == 404
+
+
+def test_finding_cannot_be_created_against_foreign_workspace_validation() -> None:
+    """Workspace B must not bind a finding to workspace A's validation lineage.
+
+    Even when B knows A's job_id and A's exact validation digest, the finding
+    route resolves the validation inside B's own workspace, so the cross-tenant
+    attempt fails closed with 404 and persists nothing in either workspace.
+    """
+    owner = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
+    other = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.RESEARCHER)
+    jobs = InMemoryResearchJobStore()
+    validations = InMemoryResearchValidationStore()
+    findings = InMemoryResearchFindingStore()
+
+    owner_client = _app(owner, jobs, validations, findings)
+    job_id, result = _run(owner_client, owner, jobs)
+    payload = {"metrics": {"brier_improvement": 0.1}}
+    validation = ResearchValidationRecord(
+        id=uuid4(), workspace_id=owner.workspace_id, research_run_id=job_id,
+        result_manifest_sha256=result.manifest_sha256, claim_id=None, plan_hash=None,
+        validation_sha256=ResearchValidationRecord.compute_validation_sha256(payload),
+        status="VALIDATED", metrics={"brier_improvement": 0.1},
+    )
+    validations.create(validation)
+
+    other_client = _app(other, jobs, validations, findings)
+    response = other_client.post(
+        f"/v1/research-runs/{job_id}/finding",
+        headers={"Authorization": "Bearer test"},
+        json={"validation_sha256": validation.validation_sha256, "payload": {"finding": "stolen"}},
+    )
+    assert response.status_code == 404
+
+    assert findings.get(other.workspace_id, job_id) is None
+    assert findings.get(owner.workspace_id, job_id) is None
+    assert validations.get(owner.workspace_id, job_id) == validation
+
+
+def test_validation_and_finding_reads_are_permitted_for_lowest_privilege_role() -> None:
+    """VIEWER is the least-privileged read role; the explicit finding:read / job:read
+    authorization on these routes must still permit it (no over-restriction)."""
+    viewer = TenantContext(uuid4(), uuid4(), Plan.PRO, WorkspaceRole.VIEWER)
+    jobs = InMemoryResearchJobStore()
+    validations = InMemoryResearchValidationStore()
+    findings = InMemoryResearchFindingStore()
+    job_id = uuid4()
+    manifest = "1" * 64
+    payload = {"metrics": {"brier_improvement": 0.1}}
+    validation = ResearchValidationRecord(
+        id=uuid4(), workspace_id=viewer.workspace_id, research_run_id=job_id,
+        result_manifest_sha256=manifest, claim_id=None, plan_hash=None,
+        validation_sha256=ResearchValidationRecord.compute_validation_sha256(payload),
+        status="VALIDATED", metrics={"brier_improvement": 0.1},
+    )
+    validations.create(validation)
+    finding_payload = {"finding": "validated"}
+    finding = ResearchFindingRecord(
+        id=uuid4(), workspace_id=viewer.workspace_id, research_run_id=job_id,
+        validation_id=validation.id, result_manifest_sha256=manifest,
+        validation_sha256=validation.validation_sha256, claim_id=None, plan_hash=None,
+        finding_sha256=ResearchFindingRecord.compute_finding_sha256(finding_payload),
+        status="VALIDATED", payload=finding_payload,
+    )
+    findings.create(finding)
+
+    client = _app(viewer, jobs, validations, findings)
+    got_validation = client.get(
+        f"/v1/research-runs/{job_id}/validation", headers={"Authorization": "Bearer test"}
+    )
+    got_finding = client.get(
+        f"/v1/research-runs/{job_id}/finding", headers={"Authorization": "Bearer test"}
+    )
+    assert got_validation.status_code == 200
+    assert got_validation.json()["validation_sha256"] == validation.validation_sha256
+    assert got_finding.status_code == 200
+    assert got_finding.json()["finding_sha256"] == finding.finding_sha256

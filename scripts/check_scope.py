@@ -34,8 +34,8 @@ def repository_paths() -> list[str]:
     return [item for item in completed.stdout.decode("utf-8").split("\\0") if item]
 
 
-def changed_paths(base: str | None, staged: bool) -> list[str]:
-    command = ["git", "diff", "--name-only", "--diff-filter=ACMR"]
+def changed_paths(base: str | None, staged: bool, diff_filter: str = "ACMR") -> list[str]:
+    command = ["git", "diff", "--name-only", f"--diff-filter={diff_filter}"]
     if staged:
         command.append("--cached")
     elif base:

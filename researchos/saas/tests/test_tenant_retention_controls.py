@@ -82,6 +82,26 @@ def test_workspace_delete_returns_receipt_and_blocks_follow_up_list_reads() -> N
     assert list_response.json()["message"] == "workspace is deleted"
 
 
+def test_foreign_workspace_delete_is_rejected_without_mutating_victim() -> None:
+    attacker = TenantContext(uuid4(), uuid4(), Plan.FREE, WorkspaceRole.OWNER)
+    victim_workspace = uuid4()
+    persistence = InMemoryTenantPersistence()
+    persistence.add("dataset", "victim-dataset", victim_workspace, {"id": "victim-dataset"})
+
+    client = TestClient(
+        create_app(auth_provider=StaticAuth(attacker), tenant_persistence=persistence)
+    )
+
+    response = client.delete(
+        f"/v1/workspaces/{victim_workspace}",
+        headers={"Authorization": "Bearer test"},
+    )
+
+    assert response.status_code == 404
+    assert persistence.is_workspace_deleted(victim_workspace) is False
+    assert persistence.visible("dataset", victim_workspace) == [{"id": "victim-dataset"}]
+
+
 def test_export_contains_datasets_jobs_and_evidence_envelopes() -> None:
     workspace_id = uuid4()
     context = TenantContext(uuid4(), workspace_id, Plan.FREE, WorkspaceRole.OWNER)

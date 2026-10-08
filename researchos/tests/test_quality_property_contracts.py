@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
-from hypothesis import given, settings, strategies as st
+from hypothesis import HealthCheck, given, settings, strategies as st
 
 from researchos.quant_engine.numerical_validation import (
     NumericalComparator,
@@ -35,10 +35,23 @@ FINITE_FLOATS = st.floats(
 )
 
 
-@settings(max_examples=50, derandomize=True)
+# A SHA-256 digest is exactly 32 bytes; bytes.hex() yields the identical
+# 64-char lowercase-hex space as from_regex(r"[0-9a-f]{64}") without the
+# pathological per-draw regex-engine cost.
+HEX_DIGESTS = st.binary(min_size=32, max_size=32).map(bytes.hex)
+
+
+# too_slow is suppressed because the one-time Hypothesis warm-up draw can absorb
+# ambient CPU contention when this file runs inside the full suite; it is a
+# harness-speed heuristic, not a correctness property. storage_path_for is O(1).
+@settings(
+    max_examples=50,
+    derandomize=True,
+    suppress_health_check=[HealthCheck.too_slow],
+)
 @given(
     workspace=st.uuids(),
-    digest=st.from_regex(r"[0-9a-f]{64}", fullmatch=True),
+    digest=HEX_DIGESTS,
     version=st.integers(min_value=1, max_value=100_000),
 )
 def test_storage_path_for_is_deterministic_and_int_string_equivalent(
