@@ -23,14 +23,23 @@ double compute_mean(const std::vector<double>& values) {
   return static_cast<double>(sum / static_cast<long double>(values.size()));
 }
 
-double compute_variance(const std::vector<double>& values, double m) {
+double compute_variance(const std::vector<double>& values) {
   if (values.size() < 2) return 0.0;
-  long double sum = 0.0L;
+
+  // Welford's one-pass algorithm: numerically stable and independent of the
+  // mean worker, so variance can execute concurrently with every other wave.
+  long double mean = 0.0L;
+  long double m2 = 0.0L;
+  std::size_t count = 0;
   for (double value : values) {
-    const long double delta = static_cast<long double>(value) - m;
-    sum += delta * delta;
+    ++count;
+    const long double x = static_cast<long double>(value);
+    const long double delta = x - mean;
+    mean += delta / static_cast<long double>(count);
+    const long double delta2 = x - mean;
+    m2 += delta * delta2;
   }
-  return static_cast<double>(sum / static_cast<long double>(values.size() - 1));
+  return static_cast<double>(m2 / static_cast<long double>(count - 1));
 }
 
 double compute_slope(const std::vector<double>& values) {
@@ -78,13 +87,12 @@ ResearchWaveResult run_research_wave(const std::vector<double>& values) {
     return compute_positive_rate(values);
   });
 
-  const double m = mean_future.get();
-  auto variance_future = std::async(std::launch::async, [&values, m] {
-    return compute_variance(values, m);
+  auto variance_future = std::async(std::launch::async, [&values] {
+    return compute_variance(values);
   });
 
   ResearchWaveResult result;
-  result.mean = m;
+  result.mean = mean_future.get();
   result.variance = variance_future.get();
   result.standard_deviation = std::sqrt(result.variance);
   result.linear_slope = slope_future.get();
