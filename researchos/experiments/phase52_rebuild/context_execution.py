@@ -1,7 +1,8 @@
 """Execution adapter for context-aware Phase 5.2 rebuild datasets."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from researchos.experiments.phase52.execution import run_prepared_phase52_comparison
@@ -9,7 +10,7 @@ from researchos.experiments.phase52.experiment import Phase52Config
 from researchos.experiments.phase52.prepared import Phase52PreparedData
 
 from .context_pipeline import ContextAwareFeatureBuild
-from .feature_contract import Phase52FeatureContract
+from .feature_contract import FEATURE_SET_NAMES, Phase52FeatureContract
 
 _EXECUTION_FEATURE_SET_NAMES = {
     "PRICE_ONLY": "PRICE_ONLY",
@@ -89,9 +90,8 @@ class _PreparedView:
         return None
 
 
-def _prepared_view(
-    build: ContextAwareFeatureBuild, cfg: Phase52Config
-) -> Phase52PreparedData:
+def _prepared_view(build: ContextAwareFeatureBuild, cfg: Phase52Config) -> Phase52PreparedData:
+    """Research-row prices with the context-initialized feature dataset."""
     research = build.research_observations
     close = tuple(float(o.close) for o in research)
     high = tuple(float(o.high) for o in research)
@@ -106,7 +106,7 @@ def _prepared_view(
     macro_timestamps: dict[str, tuple[object, ...]] = {
         symbol: tuple(timestamps) for symbol in macro
     }
-    return Phase52PreparedData.build(
+    base = Phase52PreparedData.build(
         close,
         high,
         low,
@@ -118,6 +118,31 @@ def _prepared_view(
         threshold=cfg.threshold,
         required_macro_symbols=cfg.required_macro_symbols,
     )
+    # PRICE_ALL carries every price and macro column; execution selects each
+    # feature set's columns from it by name (see _resolve_feature_indices).
+    wide = build.datasets["PRICE_ALL"]
+    view = _DatasetView(
+        feature_names=tuple(wide.feature_names),
+        features=tuple(wide.rows),
+        labels=tuple(wide.labels),
+        metadata=dict(wide.metadata),
+    )
+    return replace(base, dataset=view)
+
+
+def _check_context_datasets(build: ContextAwareFeatureBuild) -> None:
+    """Fail closed unless every feature set shares PRICE_ALL's exact sample rows."""
+    reference = build.datasets["PRICE_ALL"]
+    reference_indices = tuple(reference.metadata.get("source_indices", ()))
+    reference_labels = tuple(reference.labels)
+    for feature_set in FEATURE_SET_NAMES:
+        dataset = build.datasets[feature_set]
+        indices = tuple(dataset.metadata.get("source_indices", ()))
+        if indices != tuple(range(dataset.sample_count)):
+            raise AssertionError(f"context dataset source-index contract failed for {feature_set}")
+        if indices != reference_indices or tuple(dataset.labels) != reference_labels:
+            raise AssertionError(f"context dataset rows differ from PRICE_ALL for {feature_set}")
+
 
 def run_context_aware_phase52_comparison(
     build: ContextAwareFeatureBuild,
@@ -133,6 +158,7 @@ def run_context_aware_phase52_comparison(
         validation_size=cfg.validation_size,
     )
     build.validate(contract)
+    _check_context_datasets(build)
 
     prepared = _prepared_view(build, cfg)
     return run_prepared_phase52_comparison(prepared, cfg)
