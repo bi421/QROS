@@ -1,7 +1,7 @@
 # ResearchOS Release Notes
 
 **Latest Release:** v1.0.1 (Release Candidate)
-**Release Date:** 2026-08-16
+**Release Date:** 2026-10-08
 **Status:** Release Candidate
 
 ---
@@ -49,11 +49,11 @@ The local database files remain on disk where required for development/testing, 
 
 Current development HEAD:
 
-`6a1e4285c3697b7adc9f51f27d8a995dc3cf9463`
+`584cd7bfe13bfdd62f67a93eef96206646c798e0`
 
 Commit:
 
-`fix: harden decision engine contracts and regression coverage`
+`chore(quant): remove obsolete engine surfaces (#607)`
 
 The release candidate has **not** yet been tagged or pushed.
 
