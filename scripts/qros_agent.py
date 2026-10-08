@@ -163,6 +163,7 @@ def validate_task_contract(path: Path) -> tuple[bool, list[str]]:
     result = subprocess.run(
         [sys.executable, str(VALIDATOR), str(path)],
         cwd=ROOT,
+        stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
         check=False,
@@ -207,6 +208,7 @@ def _git_status() -> tuple[bool, str]:
     result = subprocess.run(
         ["git", "status", "--porcelain", "--untracked-files=all"],
         cwd=ROOT,
+        stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
         check=False,
@@ -218,6 +220,7 @@ def _git_head() -> tuple[bool, str]:
     result = subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=ROOT,
+        stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
         check=False,
@@ -230,6 +233,7 @@ def _git_diff(paths: Sequence[Path]) -> tuple[bool, str]:
     result = subprocess.run(
         ["git", "diff", "--", *relative_paths],
         cwd=ROOT,
+        stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
         check=False,
@@ -391,6 +395,7 @@ def execute_proposal(
     result = subprocess.run(
         list(argv),
         cwd=ROOT,
+        stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
         check=False,
