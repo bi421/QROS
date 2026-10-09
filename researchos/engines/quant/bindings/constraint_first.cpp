@@ -45,7 +45,9 @@ NB_MODULE(qros_constraint_engine, m) {
         }
 
         std::vector<std::int32_t> unique_horizons;
+        std::vector<std::vector<std::size_t>> candidate_indices_by_horizon;
         unique_horizons.reserve(std::min(count, max_unique_horizons));
+        candidate_indices_by_horizon.reserve(std::min(count, max_unique_horizons));
         for (std::size_t i = 0; i < count; ++i) {
           const auto h = horizons.data()[i];
           const double target = target_bps.data()[i];
@@ -56,11 +58,16 @@ NB_MODULE(qros_constraint_engine, m) {
             throw std::invalid_argument("target_bps must be finite and positive");
           if (direction != 1 && direction != -1)
             throw std::invalid_argument("direction must be +1 (long) or -1 (short)");
-          if (std::find(unique_horizons.begin(), unique_horizons.end(), h) == unique_horizons.end()) {
+          auto it = std::find(unique_horizons.begin(), unique_horizons.end(), h);
+          if (it == unique_horizons.end()) {
             unique_horizons.push_back(h);
+            candidate_indices_by_horizon.emplace_back();
             if (unique_horizons.size() > max_unique_horizons)
               throw std::invalid_argument("candidate set exceeds max_unique_horizons; split into bounded batches");
+            it = std::prev(unique_horizons.end());
           }
+          const auto horizon_index = static_cast<std::size_t>(it - unique_horizons.begin());
+          candidate_indices_by_horizon[horizon_index].push_back(i);
         }
 
         std::vector<double> probabilities(count, nan_value());
@@ -68,7 +75,8 @@ NB_MODULE(qros_constraint_engine, m) {
         std::vector<std::int64_t> samples(count, 0);
 
         // Process one horizon at a time: memory stays O(N), not O(H * N).
-        for (const auto h : unique_horizons) {
+        for (std::size_t horizon_index = 0; horizon_index < unique_horizons.size(); ++horizon_index) {
+          const auto h = unique_horizons[horizon_index];
           std::vector<double> values;
           values.reserve(n - static_cast<std::size_t>(h));
           {
@@ -81,8 +89,7 @@ NB_MODULE(qros_constraint_engine, m) {
             std::sort(values.begin(), values.end());
           }
 
-          for (std::size_t i = 0; i < count; ++i) {
-            if (horizons.data()[i] != h) continue;
+          for (const auto i : candidate_indices_by_horizon[horizon_index]) {
             const double target = target_bps.data()[i];
             const auto split = directions.data()[i] == 1
                 ? std::lower_bound(values.begin(), values.end(), target)
