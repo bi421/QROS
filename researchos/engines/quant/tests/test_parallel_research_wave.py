@@ -6,7 +6,7 @@ import pytest
 
 
 def test_parallel_research_wave_matches_reference_math() -> None:
-    backend = pytest.importorskip("cpp_quant_backend")
+    backend = pytest.importorskip("cpp_quant_engine.cpp_quant_backend")
     result = backend.parallel_research_wave([1.0, 2.0, 3.0, 4.0])
 
     assert result["sample_size"] == 4
@@ -18,7 +18,7 @@ def test_parallel_research_wave_matches_reference_math() -> None:
 
 
 def test_parallel_research_wave_rejects_non_finite_values() -> None:
-    backend = pytest.importorskip("cpp_quant_backend")
+    backend = pytest.importorskip("cpp_quant_engine.cpp_quant_backend")
 
     with pytest.raises(ValueError, match="non-finite"):
         backend.parallel_research_wave([1.0, float("nan")])
