@@ -3,7 +3,7 @@
 from researchos.engines.quant.turing_engine import Transition, TuringMachine
 
 
-def _binary_incrementer() -> TuringMachine:
+def _binary_incrementer(max_steps: int = 100) -> TuringMachine:
     # Input is MSB -> LSB. The machine walks to the right edge, then adds one.
     transitions = {
         ("scan", "0"): Transition("scan", "0", 1),
@@ -18,7 +18,7 @@ def _binary_incrementer() -> TuringMachine:
         initial_state="scan",
         halt_states=frozenset({"halt"}),
         blank="_",
-        max_steps=100,
+        max_steps=max_steps,
     )
 
 
@@ -55,4 +55,54 @@ def test_missing_transition_is_explicitly_stalled() -> None:
     result = machine.run(("X",))
 
     assert result.status == "STALLED"
+    assert result.steps == 0
+
+
+def test_initial_halt_state_is_halted_with_zero_step_budget() -> None:
+    machine = TuringMachine(
+        {},
+        initial_state="halt",
+        halt_states=frozenset({"halt"}),
+        max_steps=0,
+    )
+
+    result = machine.run(("X",))
+
+    assert result.status == "HALTED"
+    assert result.steps == 0
+
+
+def test_initial_reject_state_is_rejected_with_zero_step_budget() -> None:
+    machine = TuringMachine(
+        {},
+        initial_state="reject",
+        halt_states=frozenset({"halt"}),
+        reject_states=frozenset({"reject"}),
+        max_steps=0,
+    )
+
+    result = machine.run(("X",))
+
+    assert result.status == "REJECTED"
+    assert result.steps == 0
+
+
+def test_halting_on_last_permitted_transition_is_not_timeout() -> None:
+    result = _binary_incrementer(max_steps=8).run(("1", "0", "1", "1"))
+
+    assert result.status == "HALTED"
+    assert result.steps == 8
+
+
+def test_nonterminal_machine_times_out_at_exact_step_budget() -> None:
+    machine = TuringMachine(
+        {("loop", "0"): Transition("loop", "0", 0)},
+        initial_state="loop",
+        halt_states=frozenset({"halt"}),
+        max_steps=0,
+    )
+
+    result = machine.run(("0",))
+
+    assert result.status == "TIMEOUT"
     assert result.steps == 0
