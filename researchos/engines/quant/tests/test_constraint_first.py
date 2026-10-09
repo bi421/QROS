@@ -58,7 +58,6 @@ def test_unique_horizon_limit_is_enforced() -> None:
         )
 
 
-
 @pytest.mark.cpp
 @pytest.mark.skipif(not _native_available(), reason="compiled QROS C++ extension is not installed")
 def test_candidate_pruning_uses_explicit_probability_and_sample_thresholds() -> None:
@@ -74,3 +73,19 @@ def test_candidate_pruning_uses_explicit_probability_and_sample_thresholds() -> 
 
     assert result["survivor_indices"] == [0]
     assert result["rejected_indices"] == [1]
+
+
+@pytest.mark.cpp
+@pytest.mark.skipif(not _native_available(), reason="compiled QROS C++ extension is not installed")
+def test_mixed_horizon_buckets_preserve_candidate_order_and_sample_counts() -> None:
+    closes = np.array([100.0, 101.0, 99.0, 102.0, 98.0, 104.0, 100.0], dtype=np.float64)
+    targets = np.array([100.0, 100.0, 200.0, 200.0], dtype=np.float64)
+    horizons = np.array([2, 1, 2, 1], dtype=np.int32)
+    directions = np.array([1, -1, -1, 1], dtype=np.int32)
+
+    result = evaluate_candidates(closes, targets, horizons, directions)
+
+    assert result["unique_horizons"] == 2
+    assert result["sample_size"] == [5, 6, 5, 6]
+    assert result["wins"] == [1, 3, 0, 2]
+    assert result["probability"] == pytest.approx([1 / 5, 3 / 6, 0 / 5, 2 / 6])
