@@ -55,6 +55,15 @@ def audit(migration_dir: Path, ledger: list[dict[str, str]]) -> list[str]:
         if len(rows) > 1:
             findings.append("DUPLICATE_DB_LOGICAL_NAME: " + name + " => " + ", ".join(r["version"] for r in rows))
 
+    db_by_version: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for row in ledger:
+        db_by_version[row["version"]].append(row)
+    for version, rows in sorted(db_by_version.items()):
+        if len(rows) > 1:
+            findings.append(
+                "DUPLICATE_DB_VERSION: " + version + " => " + ", ".join(r["name"] for r in rows)
+            )
+
     for name in sorted(repo_by_name.keys() - db_by_name.keys()):
         findings.append("REPO_ONLY_REQUIRES_SCHEMA_REVIEW: " + ", ".join(p.name for p in repo_by_name[name]))
     for name in sorted(db_by_name.keys() - repo_by_name.keys()):
