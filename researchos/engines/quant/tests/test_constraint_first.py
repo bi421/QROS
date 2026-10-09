@@ -6,6 +6,26 @@ import pytest
 from researchos.engines.quant.python.cpp_quant_engine.constraint_first import evaluate_candidates
 
 
+@pytest.mark.parametrize(
+    ("horizons", "directions", "message"),
+    [
+        ([1.5], [1], "horizon must contain integer-valued numbers"),
+        ([1], [1.5], "direction must contain integer-valued numbers"),
+        ([1], [0], "direction values must be -1 or 1"),
+        ([1], [2**40], "direction values must fit in int32"),
+        ([0], [1], "horizon values must be positive"),
+        ([np.nan], [1], "horizon must contain only finite values"),
+    ],
+)
+def test_integer_inputs_are_validated_before_native_extension_import(
+    horizons: list[float | int],
+    directions: list[float | int],
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        evaluate_candidates([100.0, 101.0], [10.0], horizons, directions)
+
+
 def _native_available() -> bool:
     try:
         from cpp_quant_engine import qros_constraint_engine  # noqa: F401
