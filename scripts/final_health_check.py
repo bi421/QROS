@@ -33,7 +33,25 @@ REQUIRED_CHECKS = (
 
 
 def command_result(label: str, command: list[str], *, cwd: Path = ROOT) -> dict[str, object]:
-    completed = subprocess.run(command, cwd=cwd, text=True, capture_output=True, check=False)
+    resolved = shutil.which(command[0]) or command[0]
+    try:
+        completed = subprocess.run(
+            [resolved, *command[1:]],
+            cwd=cwd,
+            stdin=subprocess.DEVNULL,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        return {
+            "label": label,
+            "command": command,
+            "returncode": 1,
+            "status": "FAIL",
+            "stdout": "",
+            "stderr": f"{type(exc).__name__}: {exc}",
+        }
     return {
         "label": label,
         "command": command,
