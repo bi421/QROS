@@ -1,22 +1,22 @@
 """
-Backend scheduling — deterministic, profile-driven candidate selection.
+Backend scheduling â€” deterministic, profile-driven candidate selection.
 
 Phase 4.4: intelligent backend scheduling & production hardening.
 
 The scheduler turns ``BackendRouter`` from static first-match routing into an
 adaptive production scheduler while preserving the ResearchOS determinism
-contract (identical inputs + identical router configuration → identical
+contract (identical inputs + identical router configuration â†’ identical
 output and ``result_hash``).
 
 Selection is a **pure function** of four signals:
 
-    1. ``dataset size`` — binned into a ``DatasetSizeClass``
+    1. ``dataset size`` â€” binned into a ``DatasetSizeClass``
        (SMALL / MEDIUM / LARGE) via deterministic thresholds.
-    2. ``operation complexity`` — a static per-operation complexity class
+    2. ``operation complexity`` â€” a static per-operation complexity class
        (light / standard / heavy) used for diagnostics and default seeding.
-    3. ``backend capability`` — the candidate's advertised
+    3. ``backend capability`` â€” the candidate's advertised
        ``BackendCapabilities`` (operation support + trust-boundary guarantees).
-    4. ``historical performance`` — a ``CertifiedPerformanceProfile``: a
+    4. ``historical performance`` â€” a ``CertifiedPerformanceProfile``: a
        versioned table of measured per-(backend, operation, size-class)
        runtimes. The profile is seeded from the official benchmark
        (``researchos.benchmarks.benchmark_cpp``) and only changes via an
@@ -25,10 +25,10 @@ Selection is a **pure function** of four signals:
 
 Runtime telemetry (``ExecutionHistory``) records every execution's observed
 duration, chosen backend, fallback count, and validation outcome.  It is
-**observational** — it is never part of the deterministic ``result_hash``, and
+**observational** â€” it is never part of the deterministic ``result_hash``, and
 it never silently changes a scheduling decision.
 
-This is a certification/trust layer only — it computes nothing on its own and
+This is a certification/trust layer only â€” it computes nothing on its own and
 makes no trading, signalling, or prediction decisions.
 """
 
@@ -106,8 +106,8 @@ def _estimate_dataset_size(inputs: Mapping[str, Any]) -> int | None:
 
     Only ``inputs`` values are inspected (the request payload).  The first
     usable sequence-like or sized value wins; structured inputs without a
-    meaningful length return None (→ SMALL).  This is a heuristic for
-    scheduling only — the backends remain the authority on data parsing.
+    meaningful length return None (â†’ SMALL).  This is a heuristic for
+    scheduling only â€” the backends remain the authority on data parsing.
     """
     for value in inputs.values():
         if isinstance(value, (list, tuple)):
@@ -237,7 +237,7 @@ class CertifiedPerformanceProfile:
         version: str = "0",
         source: str = "",
     ) -> None:
-        self._stats: dict[self._KEY, PerformanceStat] = {
+        self._stats: dict[tuple[str, str, str], PerformanceStat] = {
             (
                 str(backend),
                 str(op),
@@ -304,7 +304,7 @@ class CertifiedPerformanceProfile:
 
         The new profile version is ``<old>.<n>`` (or an explicit ``version``).
         This is the only sanctioned way historical performance influences
-        selection — an explicit, versioned action.
+        selection â€” an explicit, versioned action.
 
         Args:
             history: The execution history to learn from.
@@ -402,7 +402,7 @@ class CertifiedPerformanceProfile:
 class ExecutionRecord:
     """One observational telemetry record from a router execution.
 
-    All fields are observational — none participate in the deterministic
+    All fields are observational â€” none participate in the deterministic
     ``result_hash``.
 
     Attributes:
@@ -495,7 +495,7 @@ class BackendScheduler:
     """Deterministic, profile-driven candidate selection.
 
     ``decide`` is a pure function of its arguments: identical
-    (operation, inputs, eligible candidates, profile) → identical decision.
+    (operation, inputs, eligible candidates, profile) â†’ identical decision.
     When no profile is set, it reproduces the Phase 4.1 behavior (first
     registered candidate wins).
     """
@@ -515,7 +515,7 @@ class BackendScheduler:
     def set_profile(self, profile: CertifiedPerformanceProfile | None) -> None:
         """Install (or clear) the certified performance profile.
 
-        The profile is configuration: identical inputs + identical profile →
+        The profile is configuration: identical inputs + identical profile â†’
         identical scheduling decisions.
         """
         if profile is not None and not isinstance(profile, CertifiedPerformanceProfile):
@@ -573,7 +573,7 @@ class BackendScheduler:
         measured = [(name, est) for name, est in estimates if est is not None]
 
         if not measured:
-            # No measurements for this (op, size) — fall back to deterministic
+            # No measurements for this (op, size) â€” fall back to deterministic
             # registration order (never assume unknown speed).
             first = eligible[0][0]
             return SchedulerDecision(

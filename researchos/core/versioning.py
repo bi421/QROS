@@ -1,8 +1,8 @@
 """
 Version control for ResearchOS objects and methodology.
 
-Based on Article XVII: Object Model — all objects are version-controlled.
-Based on Article III: Principles — all parameters are version-controlled.
+Based on Article XVII: Object Model â€” all objects are version-controlled.
+Based on Article III: Principles â€” all parameters are version-controlled.
 
 Every ResearchOS object and methodology parameter has a version
 that is tracked and immutable.
@@ -10,6 +10,7 @@ that is tracked and immutable.
 
 from __future__ import annotations
 
+from typing import Any
 from dataclasses import dataclass, field
 
 from researchos.core.timestamp import utc_now
@@ -59,9 +60,9 @@ class VersionHistory:
     All changes are tracked with timestamps and reasons.
     """
 
-    versions: list[dict[str, any]] = field(default_factory=list)
+    versions: list[dict[str, Any]] = field(default_factory=list)
 
-    def __init__(self, initial_version: Version = None):
+    def __init__(self, initial_version: Version | None = None):
         self.versions = []
         if initial_version:
             self.add_version(initial_version, "Initial version")

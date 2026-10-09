@@ -29,6 +29,7 @@ class TimeWindow:
     start: datetime
     end: datetime
     event_time: datetime
+    metadata: dict[str, Any] = field(default_factory=dict, compare=False, hash=False)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary."""
