@@ -56,3 +56,21 @@ def test_unique_horizon_limit_is_enforced() -> None:
             np.array([1, -1], dtype=np.int32),
             max_unique_horizons=1,
         )
+
+
+
+@pytest.mark.cpp
+@pytest.mark.skipif(not _native_available(), reason="compiled QROS C++ extension is not installed")
+def test_candidate_pruning_uses_explicit_probability_and_sample_thresholds() -> None:
+    closes = np.array([100.0, 101.0, 100.0, 102.0, 99.0, 103.0], dtype=np.float64)
+    result = evaluate_candidates(
+        closes,
+        np.array([100.0, 100.0]),
+        np.array([1, 1], dtype=np.int32),
+        np.array([1, -1], dtype=np.int32),
+        minimum_probability=0.3,
+        minimum_samples=5,
+    )
+
+    assert result["survivor_indices"] == [0]
+    assert result["rejected_indices"] == [1]
