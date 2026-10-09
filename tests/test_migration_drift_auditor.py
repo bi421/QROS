@@ -31,3 +31,15 @@ def test_duplicate_logical_names_are_reported(tmp_path: Path):
     (tmp_path / "20261005022000_billing_event_ordering.sql").write_text("select 2;", encoding="utf-8")
     findings = audit(tmp_path, [])
     assert any(item.startswith("DUPLICATE_REPO_LOGICAL_NAME") for item in findings)
+
+
+def test_duplicate_database_version_is_reported_even_when_names_differ(tmp_path: Path):
+    (tmp_path / "20261005021400_billing_event_ordering.sql").write_text("select 1;", encoding="utf-8")
+    findings = audit(
+        tmp_path,
+        [
+            {"version": "20261005022000", "name": "20261005021400_billing_event_ordering"},
+            {"version": "20261005022000", "name": "20261005021500_other_migration"},
+        ],
+    )
+    assert any(item.startswith("DUPLICATE_DB_VERSION: 20261005022000") for item in findings)
