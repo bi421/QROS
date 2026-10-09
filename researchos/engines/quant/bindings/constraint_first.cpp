@@ -24,7 +24,8 @@ NB_MODULE(qros_constraint_engine, m) {
   m.def(
       "evaluate_candidates",
       [](ReadOnlyF64 closes, ReadOnlyF64 target_bps, ReadOnlyI32 horizons,
-         ReadOnlyI32 directions, std::size_t max_unique_horizons = 64) {
+         ReadOnlyI32 directions, std::size_t max_unique_horizons = 64,
+         double minimum_probability = 0.0, std::int64_t minimum_samples = 1) {
         const std::size_t n = closes.shape(0);
         const std::size_t count = target_bps.shape(0);
         if (n < 3) throw std::invalid_argument("closes must contain at least 3 prices");
@@ -32,6 +33,11 @@ NB_MODULE(qros_constraint_engine, m) {
           throw std::invalid_argument("candidate arrays must have equal lengths");
         if (max_unique_horizons == 0)
           throw std::invalid_argument("max_unique_horizons must be positive");
+        if (!std::isfinite(minimum_probability) || minimum_probability < 0.0 ||
+            minimum_probability > 1.0)
+          throw std::invalid_argument("minimum_probability must be in [0, 1]");
+        if (minimum_samples < 1)
+          throw std::invalid_argument("minimum_samples must be positive");
 
         for (std::size_t i = 0; i < n; ++i) {
           if (!std::isfinite(closes.data()[i]) || closes.data()[i] <= 0.0)
@@ -91,10 +97,25 @@ NB_MODULE(qros_constraint_engine, m) {
           }
         }
 
+        std::vector<std::int64_t> survivors;
+        std::vector<std::int64_t> rejected;
+        survivors.reserve(count);
+        rejected.reserve(count);
+        for (std::size_t i = 0; i < count; ++i) {
+          if (samples[i] >= minimum_samples && probabilities[i] >= minimum_probability)
+            survivors.push_back(static_cast<std::int64_t>(i));
+          else
+            rejected.push_back(static_cast<std::int64_t>(i));
+        }
+
         nb::dict out;
         out["probability"] = std::move(probabilities);
         out["wins"] = std::move(wins);
         out["sample_size"] = std::move(samples);
+        out["survivor_indices"] = std::move(survivors);
+        out["rejected_indices"] = std::move(rejected);
+        out["minimum_probability"] = minimum_probability;
+        out["minimum_samples"] = minimum_samples;
         out["unique_horizons"] = unique_horizons.size();
         out["candle_count"] = n;
         out["probability_definition"] =
@@ -108,5 +129,7 @@ NB_MODULE(qros_constraint_engine, m) {
       nb::arg("horizons").noconvert(),
       nb::arg("directions").noconvert(),
       nb::arg("max_unique_horizons") = 64,
+      nb::arg("minimum_probability") = 0.0,
+      nb::arg("minimum_samples") = 1,
       "Evaluate bounded candidate hypotheses against one immutable close-price snapshot. Inputs must be contiguous NumPy arrays; closes are read without copying.");
 }
