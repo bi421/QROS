@@ -15,6 +15,8 @@ def evaluate_candidates(
     directions: ArrayLike,
     *,
     max_unique_horizons: int = 64,
+    minimum_probability: float = 0.0,
+    minimum_samples: int = 1,
 ) -> dict[str, Any]:
     """Estimate historical forward-return hit rates using the native C++ kernel."""
     close_array: NDArray[np.float64] = np.ascontiguousarray(closes, dtype=np.float64)
@@ -36,6 +38,8 @@ def evaluate_candidates(
         horizon_array,
         direction_array,
         max_unique_horizons,
+        minimum_probability,
+        minimum_samples,
     )
 
 
