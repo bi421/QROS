@@ -7,7 +7,6 @@
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
-#include <unordered_map>
 #include <vector>
 
 namespace nb = nanobind;
@@ -16,13 +15,7 @@ using ReadOnlyF64 = nb::ndarray<nb::numpy, const double, nb::ndim<1>, nb::c_cont
 using ReadOnlyI32 = nb::ndarray<nb::numpy, const std::int32_t, nb::ndim<1>, nb::c_contig>;
 
 namespace {
-
-struct HorizonReturns {
-  std::vector<double> bps;
-};
-
 double nan_value() { return std::numeric_limits<double>::quiet_NaN(); }
-
 }  // namespace
 
 NB_MODULE(qros_constraint_engine, m) {
@@ -64,39 +57,38 @@ NB_MODULE(qros_constraint_engine, m) {
           }
         }
 
-        std::unordered_map<std::int32_t, HorizonReturns> cache;
-        cache.reserve(unique_horizons.size());
-        {
-          nb::gil_scoped_release release;
-          for (const auto h : unique_horizons) {
-            HorizonReturns data;
-            data.bps.reserve(n - static_cast<std::size_t>(h));
-            for (std::size_t i = 0; i + static_cast<std::size_t>(h) < n; ++i) {
-              const double r = (closes.data()[i + static_cast<std::size_t>(h)] /
-                                closes.data()[i] - 1.0) * 10000.0;
-              data.bps.push_back(r);
-            }
-            std::sort(data.bps.begin(), data.bps.end());
-            cache.emplace(h, std::move(data));
-          }
-        }
-
         std::vector<double> probabilities(count, nan_value());
         std::vector<std::int64_t> wins(count, 0);
         std::vector<std::int64_t> samples(count, 0);
-        for (std::size_t i = 0; i < count; ++i) {
-          const auto& values = cache.at(horizons.data()[i]).bps;
-          const double target = target_bps.data()[i];
-          const auto split = directions.data()[i] == 1
-              ? std::lower_bound(values.begin(), values.end(), target)
-              : std::upper_bound(values.begin(), values.end(), -target);
-          const auto win_count = directions.data()[i] == 1
-              ? static_cast<std::int64_t>(values.end() - split)
-              : static_cast<std::int64_t>(split - values.begin());
-          wins[i] = win_count;
-          samples[i] = static_cast<std::int64_t>(values.size());
-          probabilities[i] = values.empty() ? nan_value()
-              : static_cast<double>(win_count) / static_cast<double>(values.size());
+
+        // Process one horizon at a time: memory stays O(N), not O(H * N).
+        for (const auto h : unique_horizons) {
+          std::vector<double> values;
+          values.reserve(n - static_cast<std::size_t>(h));
+          {
+            nb::gil_scoped_release release;
+            for (std::size_t i = 0; i + static_cast<std::size_t>(h) < n; ++i) {
+              const double r = (closes.data()[i + static_cast<std::size_t>(h)] /
+                                closes.data()[i] - 1.0) * 10000.0;
+              values.push_back(r);
+            }
+            std::sort(values.begin(), values.end());
+          }
+
+          for (std::size_t i = 0; i < count; ++i) {
+            if (horizons.data()[i] != h) continue;
+            const double target = target_bps.data()[i];
+            const auto split = directions.data()[i] == 1
+                ? std::lower_bound(values.begin(), values.end(), target)
+                : std::upper_bound(values.begin(), values.end(), -target);
+            const auto win_count = directions.data()[i] == 1
+                ? static_cast<std::int64_t>(values.end() - split)
+                : static_cast<std::int64_t>(split - values.begin());
+            wins[i] = win_count;
+            samples[i] = static_cast<std::int64_t>(values.size());
+            probabilities[i] = values.empty() ? nan_value()
+                : static_cast<double>(win_count) / static_cast<double>(values.size());
+          }
         }
 
         nb::dict out;
