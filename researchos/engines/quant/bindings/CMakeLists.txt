@@ -65,3 +65,38 @@ install(
     LIBRARY DESTINATION cpp_quant_engine
     RUNTIME DESTINATION cpp_quant_engine
 )
+
+
+# Separate bounded candidate-probability kernel. Kept isolated from the legacy
+# bridge so its zero-copy array contract and performance can be tested directly.
+nanobind_add_module(
+    qros_constraint_engine
+    constraint_first.cpp
+)
+
+target_link_libraries(
+    qros_constraint_engine
+    PRIVATE
+        quant_engine
+)
+
+target_compile_features(
+    qros_constraint_engine
+    PRIVATE
+        cxx_std_20
+)
+
+set_target_properties(
+    qros_constraint_engine
+    PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY
+            "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+        RUNTIME_OUTPUT_DIRECTORY
+            "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+)
+
+install(
+    TARGETS qros_constraint_engine
+    LIBRARY DESTINATION cpp_quant_engine
+    RUNTIME DESTINATION cpp_quant_engine
+)
