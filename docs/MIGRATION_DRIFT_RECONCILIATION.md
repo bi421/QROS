@@ -51,9 +51,9 @@ At the audit time, these were observed:
 - Both `research_validation` and `research_finding` have RLS enabled and forced, but their live policies are `tenant_select/insert/update/delete`; the named client-deny policies are absent. The current repository migration `20261008050300_saas_rls_performance_hardening.sql` recreates those tenant policies on these server-only projections, conflicting with the earlier server-only contract. Direct table SELECT grants for `anon`, `authenticated`, and `service_role` were not present in the read-only privilege probe; governed server-side RPC behavior must be regression-tested before changing policies.
 
 Three forward-only candidate migrations have been added to the PR for review:
-- `202610100001_storage_authorization_workspace_membership_reconciliation.sql`
-- `202610100002_dataset_version_storage_path_reconciliation.sql`
-- `202610100003_restore_server_only_research_projections.sql`
+- `20261010000100_storage_authorization_workspace_membership_reconciliation.sql`
+- `20261010000200_dataset_version_storage_path_reconciliation.sql`
+- `20261010000300_restore_server_only_research_projections.sql`
 
 These files are proposed changes only; they have **not** been applied to staging or production. The production workflow allowlist has intentionally not been expanded pending staging validation. Do not run them against production until exact-SHA staging tests and independent recovery evidence pass.
 
