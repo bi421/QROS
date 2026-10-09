@@ -1,3 +1,4 @@
+#include <cmath>
 // nanobind bindings exposing the C++ Quant Engine to Python.
 //
 // Two surfaces are provided:
@@ -759,6 +760,11 @@ NB_MODULE(cpp_quant_backend, m) {
 
   m.def("parallel_research_wave",
         [](const std::vector<double>& values) {
+          for (double value : values) {
+            if (!std::isfinite(value)) {
+              throw nb::value_error("research wave input contains non-finite value");
+            }
+          }
           quant::parallel::ResearchWaveResult result;
           {
             nb::gil_scoped_release release;

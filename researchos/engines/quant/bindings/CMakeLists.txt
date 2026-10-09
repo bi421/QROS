@@ -55,6 +55,10 @@ set_target_properties(
             "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
         RUNTIME_OUTPUT_DIRECTORY
             "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+        LIBRARY_OUTPUT_DIRECTORY_RELEASE
+            "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE
+            "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
 )
 
 
@@ -92,6 +96,10 @@ set_target_properties(
         LIBRARY_OUTPUT_DIRECTORY
             "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
         RUNTIME_OUTPUT_DIRECTORY
+            "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+        LIBRARY_OUTPUT_DIRECTORY_RELEASE
+            "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE
             "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
 )
 
