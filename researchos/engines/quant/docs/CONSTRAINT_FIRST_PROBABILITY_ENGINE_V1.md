@@ -28,6 +28,11 @@ dependent. The rate is exploratory, not a calibrated probability of future
 profit. Use chronological holdout periods, costs, multiple-testing correction,
 and block-based uncertainty estimates before ranking or acting on candidates.
 
+The benchmark script scripts/benchmark_constraint_first.py reads a real CSV
+close column; it does not synthesize or download candles. Supply a chronological
+XAUUSD M1 CSV with a close column to measure the 1,000,000-candle / 100,000-candidate
+case on the target machine.
+
 The engine rejects non-finite/non-positive closes, invalid candidate directions,
 invalid targets/horizons, mismatched arrays, and candidate sets with too many
 unique horizons. It does not silently truncate, impute, or repair inputs.
