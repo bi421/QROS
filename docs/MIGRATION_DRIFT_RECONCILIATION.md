@@ -44,10 +44,20 @@ Multiple ledger versions differ from the leading timestamp in the corresponding 
 
 At the audit time, these were observed:
 
-- Present: workspace retention columns/tables, tenant deletion tombstones, dataset-version feed, `enqueue_research_run(uuid,uuid,text)`, team entitlement constraint, private `qros-datasets` bucket, tenant select policy.
-- Absent: `pgtap` extension; a policy named `research validation client deny` on `public.research_validation`.
+- Present: workspace retention columns/tables, tenant deletion tombstones, dataset-version feed, `enqueue_research_run(uuid,uuid,text)`, team entitlement constraint, private `qros-datasets` bucket.
+- Absent: `pgtap` extension; a policy named `research validation client deny` on `public.research_validation`; `public.validate_dataset_version_storage_path()`.
+- The live `qros-datasets` select/insert/update/delete policies authorize via `auth.jwt() ->> 'tenant_id'`, not `private.is_workspace_member(uuid)`. The earlier membership reconciliation file is absent from the DB migration ledger.
+- The live `dataset_version_storage_path_contract` constraint does not require the canonical trailing slash. The table had 0 rows at audit time, so the proposed path reconciliation has no existing rows to normalize; its precondition still must be tested in staging.
+- Both `research_validation` and `research_finding` have RLS enabled and forced, but their live policies are `tenant_select/insert/update/delete`; the named client-deny policies are absent. The current repository migration `20261008050300_saas_rls_performance_hardening.sql` recreates those tenant policies on these server-only projections, conflicting with the earlier server-only contract. Direct table SELECT grants for `anon`, `authenticated`, and `service_role` were not present in the read-only privilege probe; governed server-side RPC behavior must be regression-tested before changing policies.
 
-The absence of a particular policy name is not proof that the table is unprotected. Inspect every applicable policy, grants, and RLS flags before deciding whether to add or replace policies. Do not enable RLS without the intended policies and tested service-role behavior.
+Three forward-only candidate migrations have been added to the PR for review:
+- `20261010000100_storage_authorization_workspace_membership_reconciliation.sql`
+- `20261010000200_dataset_version_storage_path_reconciliation.sql`
+- `20261010000300_restore_server_only_research_projections.sql`
+
+These files are proposed changes only; they have **not** been applied to staging or production. The production workflow allowlist has intentionally not been expanded pending staging validation. Do not run them against production until exact-SHA staging tests and independent recovery evidence pass.
+
+The absence of a particular policy name is not proof by itself that a table is unprotected. Inspect all policies, grants, RLS flags, and server-side RPC behavior. Do not enable RLS without the intended policies and tested service-role/RPC behavior.
 
 ## Required reconciliation protocol
 
