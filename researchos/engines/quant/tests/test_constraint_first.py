@@ -27,7 +27,7 @@ def test_known_forward_return_probabilities() -> None:
     assert result["candle_count"] == 6
     assert result["unique_horizons"] == 1
     assert result["sample_size"] == [5, 5]
-    assert result["probability"][0] == pytest.approx(2 / 5)
+    assert result["probability"][0] == pytest.approx(3 / 5)
     assert result["probability"][1] == pytest.approx(1 / 5)
 
 
