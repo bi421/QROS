@@ -130,14 +130,18 @@ def _prepared_view(build: ContextAwareFeatureBuild, cfg: Phase52Config) -> Phase
     return replace(base, dataset=view)
 
 
+def _source_indices(dataset: Any) -> tuple[int, ...]:
+    return tuple(dataset.metadata.get("source_indices", ()))
+
+
 def _check_context_datasets(build: ContextAwareFeatureBuild) -> None:
     """Fail closed unless every feature set shares PRICE_ALL's exact sample rows."""
     reference = build.datasets["PRICE_ALL"]
-    reference_indices = tuple(reference.metadata.get("source_indices", ()))
+    reference_indices = _source_indices(reference)
     reference_labels = tuple(reference.labels)
     for feature_set in FEATURE_SET_NAMES:
         dataset = build.datasets[feature_set]
-        indices = tuple(dataset.metadata.get("source_indices", ()))
+        indices = _source_indices(dataset)
         if indices != tuple(range(dataset.sample_count)):
             raise AssertionError(f"context dataset source-index contract failed for {feature_set}")
         if indices != reference_indices or tuple(dataset.labels) != reference_labels:
