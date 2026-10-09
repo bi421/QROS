@@ -43,8 +43,8 @@ def main() -> int:
     parser.add_argument("--minimum-samples", type=int, default=1)
     args = parser.parse_args()
 
-    if args.candles < 3 or args.candidates < 1:
-        parser.error("--candles must be >= 3 and --candidates must be >= 1")
+    if args.candles < 3 or args.candidates < 1 or args.max_unique_horizons < 1:
+        parser.error("--candles must be >= 3, --candidates >= 1, and --max-unique-horizons >= 1")
 
     closes = read_closes(args.csv_path, args.candles)
     if len(closes) < 3:
