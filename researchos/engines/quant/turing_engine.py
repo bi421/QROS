@@ -77,11 +77,15 @@ class TuringMachine:
         head = 0
         steps = 0
 
-        while steps < self._max_steps:
+        while True:
+            # Terminal states take precedence over the step limit: a machine
+            # that halts on its final permitted transition has HALTED status.
             if state in self._halt_states:
                 return self._result("HALTED", state, head, tape, steps)
             if state in self._reject_states:
                 return self._result("REJECTED", state, head, tape, steps)
+            if steps >= self._max_steps:
+                return self._result("TIMEOUT", state, head, tape, steps)
 
             symbol = tape.get(head, self._blank)
             transition = self._transitions.get((state, symbol))
@@ -93,8 +97,6 @@ class TuringMachine:
             state = transition.next_state
             steps += 1
 
-        return self._result("TIMEOUT", state, head, tape, steps)
-
     def _result(
         self,
         status: str,
@@ -103,5 +105,11 @@ class TuringMachine:
         tape: Mapping[int, Symbol],
         steps: int,
     ) -> TuringResult:
-        non_blank = tuple(sorted((position, symbol) for position, symbol in tape.items() if symbol != self._blank))
+        non_blank = tuple(
+            sorted(
+                (position, symbol)
+                for position, symbol in tape.items()
+                if symbol != self._blank
+            )
+        )
         return TuringResult(status, state, head, non_blank, steps)
