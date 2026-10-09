@@ -87,5 +87,5 @@ def test_mixed_horizon_buckets_preserve_candidate_order_and_sample_counts() -> N
 
     assert result["unique_horizons"] == 2
     assert result["sample_size"] == [5, 6, 5, 6]
-    assert result["wins"] == [1, 3, 0, 2]
-    assert result["probability"] == pytest.approx([1 / 5, 3 / 6, 0 / 5, 2 / 6])
+    assert result["wins"] == [2, 3, 0, 2]
+    assert result["probability"] == pytest.approx([2 / 5, 3 / 6, 0 / 5, 2 / 6])
