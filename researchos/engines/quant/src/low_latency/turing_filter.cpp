@@ -142,7 +142,12 @@ TuringFilterDecision TuringFilterEngine::process(
     const TuringFilterTick& tick) noexcept {
   if (state_.last_decision == TuringFilterDecision::Accept ||
       state_.last_decision == TuringFilterDecision::Reject) {
+    // Start a fresh evidence sequence without forgetting feed chronology.
+    const bool has_timestamp = state_.has_timestamp;
+    const std::int64_t last_timestamp_ns = state_.last_timestamp_ns;
     reset();
+    state_.has_timestamp = has_timestamp;
+    state_.last_timestamp_ns = last_timestamp_ns;
   }
 
   if (!config_valid(config_)) {
