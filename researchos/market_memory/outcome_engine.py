@@ -52,13 +52,15 @@ def compute_forward_outcomes(
         raise ValueError("horizons must be a non-empty list of positive integers")
     if len(set(horizons)) != len(horizons):
         raise ValueError("horizons must not contain duplicates")
-    if (
-        isinstance(threshold, bool)
-        or not isinstance(threshold, (int, float))
-        or not math.isfinite(threshold)
-        or threshold < 0
-    ):
+    if isinstance(threshold, bool) or not isinstance(threshold, (int, float)):
         raise ValueError("threshold must be finite and non-negative")
+    try:
+        normalized_threshold = float(threshold)
+    except (OverflowError, ValueError):
+        raise ValueError("threshold must be finite and non-negative") from None
+    if not math.isfinite(normalized_threshold) or normalized_threshold < 0:
+        raise ValueError("threshold must be finite and non-negative")
+    threshold = normalized_threshold
     required = {"timestamp", "open", "high", "low", "close"}
     missing = required.difference(price_df.columns)
     if missing:
