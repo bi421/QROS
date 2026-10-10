@@ -12,7 +12,34 @@ Never uses random shuffling. Always respects temporal order.
 
 from __future__ import annotations
 
+import math
 from typing import Any
+
+
+def _validated_ratio(name: str, value: float) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be a finite number strictly between 0 and 1")
+    try:
+        normalized = float(value)
+    except (OverflowError, ValueError):
+        raise ValueError(f"{name} must be a finite number strictly between 0 and 1") from None
+    if not math.isfinite(normalized) or not 0.0 < normalized < 1.0:
+        raise ValueError(f"{name} must be a finite number strictly between 0 and 1")
+    return normalized
+
+
+def _validate_window_size(name: str, value: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(f"{name} must be a positive integer")
+    return value
+
+
+def _require_chronological(events: list[Any]) -> None:
+    for i, event in enumerate(events):
+        if not hasattr(event, "timestamp"):
+            raise ValueError(f"event at index {i} has no timestamp")
+        if i and event.timestamp < events[i - 1].timestamp:
+            raise ValueError(f"events must be sorted by timestamp; out of order at index {i}")
 
 
 def chronological_split(
@@ -31,6 +58,11 @@ def chronological_split(
     Returns:
         Tuple of (train_events, validation_events, test_events)
     """
+    train_ratio = _validated_ratio("train_ratio", train_ratio)
+    validation_ratio = _validated_ratio("validation_ratio", validation_ratio)
+    if train_ratio + validation_ratio >= 1.0:
+        raise ValueError("train_ratio + validation_ratio must be less than 1")
+    _require_chronological(events)
     if not events:
         return [], [], []
 
@@ -56,19 +88,14 @@ def expanding_window_splits(
 
     The training window expands by step_size each fold.
     Validation window is always validation_size.
-
-    Args:
-        events: List of events sorted by timestamp
-        initial_train_size: Initial training set size
-        validation_size: Validation set size
-        step_size: How much the training window expands each fold
-
-    Returns:
-        List of (train_events, validation_events) tuples
     """
+    initial_train_size = _validate_window_size("initial_train_size", initial_train_size)
+    validation_size = _validate_window_size("validation_size", validation_size)
+    step_size = _validate_window_size("step_size", step_size)
+    _require_chronological(events)
+
     splits = []
     n = len(events)
-
     train_end = initial_train_size
     while train_end + validation_size <= n:
         train = events[:train_end]
