@@ -90,6 +90,21 @@ TEST(TuringFilterTest, SequentialOddsAcceptsOnlyAfterAnchorsAndThreshold) {
   EXPECT_EQ(engine.state().samples, 0u);
 }
 
+TEST(TuringFilterTest, TerminalDecisionDoesNotResetTimestampWatermark) {
+  auto config = base_config();
+  config.min_persistence = 1;
+  TuringFilterEngine engine(config);
+
+  EXPECT_EQ(engine.process(tick(10)), TuringFilterDecision::Continue);
+  EXPECT_EQ(engine.process(tick(11)), TuringFilterDecision::Accept);
+
+  // Terminal outcomes reset evidence, not the chronological feed watermark.
+  EXPECT_EQ(engine.process(tick(9)), TuringFilterDecision::Drop);
+  EXPECT_EQ(engine.state().last_timestamp_ns, 11);
+  EXPECT_EQ(engine.process(tick(12)), TuringFilterDecision::Continue);
+}
+
+
 TEST(TuringFilterTest, BrokenStructuralCribAbortsPriorSequence) {
   auto config = base_config();
   config.min_persistence = 1;
