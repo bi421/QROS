@@ -6,6 +6,7 @@ cannot prove that upstream feature construction is free from hidden look-ahead.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+import math
 from datetime import datetime
 from typing import Protocol, TypeVar
 
@@ -37,8 +38,8 @@ def audit_temporal_leakage(
     supplied, every feature timestamp must be no later than its event timestamp.
     """
     try:
-        if tolerance_seconds < 0:
-            raise ValueError("tolerance_seconds must be >= 0")
+        if not math.isfinite(tolerance_seconds) or tolerance_seconds < 0:
+            raise ValueError("tolerance_seconds must be finite and >= 0")
         partitions = (("train", train), ("validation", validation), ("test", test))
         for name, records in partitions:
             if not records:
