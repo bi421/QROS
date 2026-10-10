@@ -27,9 +27,10 @@ The `profitability_verdict` is deliberately `NOT_ASSESSED_BY_MATHEMATICAL_AUDIT`
 
 ## Current coverage
 
-- Beta-Bernoulli posterior arithmetic: independently recomputed.
+- Descriptive statistics (mean, population variance/standard deviation, range, last-observation z-score, correlation, and linear regression): independently recomputed from the ordered raw prices.
 - Monte Carlo terminal summary: replayed independently from the input prices, simulation count, and seed.
 - Existing engine API: preserved, with an opt-in audited method.
+- Bayesian posterior and Monte Carlo replay audits run only when those optional outputs are requested.
 
 ## Explicitly not established
 
