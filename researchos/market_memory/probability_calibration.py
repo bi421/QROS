@@ -74,31 +74,40 @@ class ProbabilityCalibrator:
     ) -> tuple[Dict[str, float], Tuple[tuple[float, float], ...]]:
         """Fit PAVA and return both training predictions and confidence breakpoints."""
         ordered = sorted(rows, key=lambda r: (r[1], r[0]))
-        blocks: List[list[float | int]] = []
+        grouped: List[list[float | int]] = []
         for _, x, y in ordered:
-            blocks.append([x, y, 1, y])
+            if grouped and float(grouped[-1][0]) == x:
+                grouped[-1][1] = int(grouped[-1][1]) + 1
+                grouped[-1][2] = float(grouped[-1][2]) + y
+            else:
+                grouped.append([x, 1, y])
+
+        # Equal confidence values must share one empirical rate before PAVA;
+        # otherwise tie ordering can assign different labels to the same x.
+        blocks: List[list[float | int]] = []
+        for x, count, positives in grouped:
+            blocks.append([x, count, positives])
             while len(blocks) >= 2:
                 a, b = blocks[-2], blocks[-1]
-                if float(a[3]) / int(a[2]) <= float(b[3]) / int(b[2]):
+                if float(a[2]) / int(a[1]) <= float(b[2]) / int(b[1]):
                     break
-                merged = [
+                blocks[-2:] = [[
                     min(float(a[0]), float(b[0])),
-                    0.0,
-                    int(a[2]) + int(b[2]),
-                    float(a[3]) + float(b[3]),
-                ]
-                blocks[-2:] = [merged]
+                    int(a[1]) + int(b[1]),
+                    float(a[2]) + float(b[2]),
+                ]]
 
         breakpoints: List[tuple[float, float]] = []
-        predictions: Dict[str, float] = {}
-        index = 0
-        for block in blocks:
-            p = max(0.0, min(1.0, float(block[3]) / int(block[2])))
-            x = float(block[0])
-            breakpoints.append((x, round(p, 10)))
-            for _ in range(int(block[2])):
-                predictions[ordered[index][0]] = round(p, 10)
-                index += 1
+        probability_by_confidence: Dict[float, float] = {}
+        for x, count, positives in blocks:
+            p = round(max(0.0, min(1.0, float(positives) / int(count))), 10)
+            breakpoints.append((float(x), p))
+            probability_by_confidence[float(x)] = p
+        xs = tuple(x for x, _ in breakpoints)
+        predictions = {
+            eid: breakpoints[max(0, bisect_right(xs, x) - 1)][1]
+            for eid, x, _ in rows
+        }
         return predictions, tuple(breakpoints)
 
     @staticmethod

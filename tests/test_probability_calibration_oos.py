@@ -82,3 +82,28 @@ def test_fit_ignores_unmatched_outcome_ids() -> None:
     calibrator.fit(registry, outcomes)
 
     assert calibrator.predict_probability(0.72) >= 0.0
+
+
+def test_isotonic_groups_identical_confidences_before_fitting() -> None:
+    original = _registry()
+    evidence = [
+        Evidence(
+            observation_id=f"obs-{i}",
+            hypothesis_id="hypothesis-1",
+            interpretation=f"sample-{i}",
+            direction="Supporting" if i % 2 else "Contradicting",
+            source_reliability=0.12345 if i in (0, 1) else item.confidence,
+            id=item.id,
+        )
+        for i, item in enumerate(original.evidence)
+    ]
+    registry = EvidenceRegistry("research-1", evidence=evidence)
+    outcomes = {f"evidence-{i}": True for i in range(12)}
+    outcomes["evidence-0"] = False
+
+    calibrator = ProbabilityCalibrator(method="isotonic")
+    calibrator.fit(registry, outcomes)
+    report = calibrator.calibrate(registry)
+
+    assert calibrator.predict_probability(0.12345) == 0.5
+    assert report.calibrated_map["evidence-0"] == report.calibrated_map["evidence-1"]
