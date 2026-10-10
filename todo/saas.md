@@ -370,15 +370,16 @@ QROS is **not production-ready** until all applicable gates below have independe
 ## Exact repository baseline
 
 - **Repository:** `bi421/QROS`
-- **Current main SHA observed 2026-10-10:** `4e611b35a260a8c8e363c00a27f1827c69296b1b`
-- **Exact-SHA CI run:** [38047049481](https://github.com/bi421/QROS/actions/runs/38047049481) — completed / success.
-- **Exact-SHA Git Governance run:** [38047049445](https://github.com/bi421/QROS/actions/runs/38047049445) — completed / success.
-- These are the two exact-SHA workflow runs independently observed for this refresh. They do not prove staging, production deployment, migration execution, backup/restore, billing, or commercial readiness.
-- The earlier `f4c01b5…` baseline and its run references below are historical, not current-release evidence. All current-release claims must use the SHA and run links above.
+- **Current main SHA observed 2026-10-10:** `3572a66360e00e6b5f5c36752d9734d6df185c93`
+- This SHA is the squash-merge commit for PR #670, which updates Git Governance to rerun validation when a PR title is edited.
+- **Post-merge exact-SHA CI:** NOT VERIFIED in this audit. The available workflow lookup only returns pull-request-triggered runs, and the combined commit-status lookup returned no separate status-check records. Do not reuse CI runs from earlier SHAs as proof for this main commit.
+- **Post-merge Git Governance:** PR #670's exact head SHA `ce2ef258552df50ebc5ec65facd7d244b133c2e6` passed run [38054110745](https://github.com/bi421/QROS/actions/runs/38054110745) before merge; the merge commit's push-triggered Governance result was not independently verified here.
+- Earlier run references [38047049481](https://github.com/bi421/QROS/actions/runs/38047049481) and [38047049445](https://github.com/bi421/QROS/actions/runs/38047049445) belong to a previous SHA and are historical, not current-release evidence.
+- These repository CI facts do not prove staging, production deployment, migration execution, backup/restore, billing, or commercial readiness.
 
 ## Post-merge CI proof for the exact SHA
 
-Current exact-SHA evidence is limited to the two workflow runs linked above. Combined-status lookup returned no separate status-check records, so do not infer additional gates beyond those observed workflow results.
+**NOT VERIFIED.** Do not infer successful post-merge CI from the PR-head checks. Verify push-triggered workflows against exact main SHA `3572a66360e00e6b5f5c36752d9734d6df185c93` before making a current-release CI claim.
 
 ## SaaS implementation status
 
