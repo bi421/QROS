@@ -386,6 +386,20 @@ class TestConditioning:
         assert result.raw_probability == 1.0  # both positive
         assert result.mean_return == pytest.approx(0.015)
 
+    def test_conditional_statistics_handles_large_finite_outcomes(self):
+        events = [
+            _make_event_with_outcome("large_1", "bullish", 1e308, "2021-01-01T00:00:00"),
+            _make_event_with_outcome("large_2", "bullish", 1e308, "2021-01-02T00:00:00"),
+        ]
+        result = compute_conditional_statistics(
+            events,
+            ConditionSpec(name="large_outcomes", conditions={}),
+            bootstrap_num_resamples=25,
+        )
+        assert result.mean_return == pytest.approx(1e308)
+        assert result.std_return == 0.0
+        assert result.confidence_interval == pytest.approx((1e308, 1e308))
+
     def test_conditional_statistics_uses_dependence_aware_bootstrap(self):
         events = [
             _make_event_with_outcome("e1", "bullish", 0.01, "2021-01-01T00:00:00"),
