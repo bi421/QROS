@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 import polars as pl
@@ -71,3 +72,16 @@ def test_m1_event_extraction_is_deterministic():
 def test_forward_outcome_rejects_integer_threshold_that_overflows_float():
     with pytest.raises(ValueError, match="threshold must be finite"):
         compute_forward_outcomes([], pl.DataFrame(), threshold=10**1000)
+
+
+def test_forward_outcome_rejects_event_price_that_overflows_float():
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    frame = pl.DataFrame({
+        "timestamp": [start, start + timedelta(days=1)],
+        "open": [100.0, 100.0],
+        "high": [101.0, 101.0],
+        "low": [99.0, 99.0],
+        "close": [100.0, 100.0],
+    })
+    with pytest.raises(ValueError, match="event price must be finite"):
+        compute_forward_outcomes([replace(_event(), event_price=10**1000)], frame, horizons=[1])
