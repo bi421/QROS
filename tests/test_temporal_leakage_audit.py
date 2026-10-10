@@ -90,3 +90,20 @@ def test_temporal_leakage_audit_fails_closed_on_unordered_partition() -> None:
 
     assert result.status is AuditStatus.INVALID_INPUT
     assert "strictly increasing" in result.explanation
+
+
+
+def test_temporal_leakage_audit_falsifies_label_ending_before_event() -> None:
+    invalid = Record(
+        datetime(2025, 1, 2, tzinfo=timezone.utc),
+        datetime(2025, 1, 1, tzinfo=timezone.utc),
+        datetime(2025, 1, 2, tzinfo=timezone.utc),
+    )
+    result = _audit(
+        [invalid],
+        [_record(5, 6)],
+        [_record(9, 10)],
+    )
+
+    assert result.status is AuditStatus.FALSIFIED
+    assert "label ends before its event timestamp" in result.explanation
