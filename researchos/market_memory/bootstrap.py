@@ -14,6 +14,13 @@ from typing import Any, Sequence
 from researchos.market_memory.event_schema import BootstrapResult
 
 
+def _mean(values: Sequence[float]) -> float:
+    """Compute a finite-range arithmetic mean without summing raw magnitudes."""
+    if not values:
+        return 0.0
+    return math.fsum(value / len(values) for value in values)
+
+
 def _validate_bootstrap_parameters(values: Sequence[float], num_resamples: int, confidence_level: float) -> None:
     if not values:
         raise ValueError("values cannot be empty")
@@ -40,10 +47,10 @@ def bootstrap_mean_ci(values: Sequence[float], num_resamples: int = 1000, seed: 
     _validate_bootstrap_parameters(values, num_resamples, confidence_level)
     rng = random.Random(seed)
     n = len(values)
-    point_estimate = sum(values) / n
-    resample_means = [sum(rng.choice(values) for _ in range(n)) / n for _ in range(num_resamples)]
+    point_estimate = _mean(values)
+    resample_means = [_mean([rng.choice(values) for _ in range(n)]) for _ in range(num_resamples)]
     resample_means.sort()
-    bootstrap_mean_val = sum(resample_means) / len(resample_means)
+    bootstrap_mean_val = _mean(resample_means)
     bootstrap_std = math.sqrt(sum((x - bootstrap_mean_val) ** 2 for x in resample_means) / len(resample_means))
     alpha = 1.0 - confidence_level
     return BootstrapResult(
@@ -77,7 +84,7 @@ def block_bootstrap_mean_ci(values: Sequence[float], block_size: int, num_resamp
 
     rng = random.Random(seed)
     n = len(values)
-    point_estimate = sum(values) / n
+    point_estimate = _mean(values)
     starts = list(range(n - block_size + 1))
     resample_means: list[float] = []
     for _ in range(num_resamples):
@@ -86,9 +93,9 @@ def block_bootstrap_mean_ci(values: Sequence[float], block_size: int, num_resamp
             start = rng.choice(starts)
             sample.extend(values[start:start + block_size])
         sample = sample[:n]
-        resample_means.append(sum(sample) / n)
+        resample_means.append(_mean(sample))
     resample_means.sort()
-    bootstrap_mean_val = sum(resample_means) / len(resample_means)
+    bootstrap_mean_val = _mean(resample_means)
     bootstrap_std = math.sqrt(sum((x - bootstrap_mean_val) ** 2 for x in resample_means) / len(resample_means))
     alpha = 1.0 - confidence_level
     return BootstrapResult(
