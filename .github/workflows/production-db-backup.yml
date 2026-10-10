@@ -147,8 +147,14 @@ jobs:
           echo "checksum HEAD: ${CHECKSUM_HEAD}"
           echo "manifest HEAD: ${MANIFEST_HEAD}"
           read -r REMOTE_SIZE REMOTE_VERSION <<< "${HEAD}"
-          test "${REMOTE_SIZE}" -gt 0
-          test -n "${REMOTE_VERSION}" && test "${REMOTE_VERSION}" != 'None'
+          read -r CHECKSUM_SIZE CHECKSUM_VERSION <<< "${CHECKSUM_HEAD}"
+          read -r MANIFEST_SIZE MANIFEST_VERSION <<< "${MANIFEST_HEAD}"
+          test "${REMOTE_SIZE}" -gt 0 || { echo "::error::remote backup object is empty"; exit 1; }
+          test -n "${REMOTE_VERSION}" && test "${REMOTE_VERSION}" != 'None' || { echo "::error::remote backup object has no version ID"; exit 1; }
+          test "${CHECKSUM_SIZE}" -gt 0 || { echo "::error::remote checksum object is empty"; exit 1; }
+          test -n "${CHECKSUM_VERSION}" && test "${CHECKSUM_VERSION}" != 'None' || { echo "::error::remote checksum object has no version ID"; exit 1; }
+          test "${MANIFEST_SIZE}" -gt 0 || { echo "::error::remote manifest object is empty"; exit 1; }
+          test -n "${MANIFEST_VERSION}" && test "${MANIFEST_VERSION}" != 'None' || { echo "::error::remote manifest object has no version ID"; exit 1; }
           printf '%s\n' "${REMOTE_VERSION}" > /tmp/backup-version-id
 
       - name: Download remote backup and verify checksum equality
