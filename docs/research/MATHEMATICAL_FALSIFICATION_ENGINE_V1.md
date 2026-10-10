@@ -25,9 +25,9 @@ The audit recomputes these values independently from the reported measurement an
 
 ## Monte Carlo boundary
 
-The current Monte Carlo implementation reports aggregate terminal-price moments and quantiles, but does not expose the raw paths as an evidence artifact. Therefore `audit_monte_carlo_summary` only rejects malformed or internally impossible summaries and otherwise returns `INCONCLUSIVE`. It does not claim to verify the random-number stream, simulation paths, sampling assumptions, convergence, or market realism.
+The current Monte Carlo implementation reports aggregate terminal-price moments and quantiles. `audit_monte_carlo_summary` therefore rejects malformed summaries but returns `INCONCLUSIVE` for a merely coherent summary. The stronger `audit_monte_carlo_replay` independently reruns the current empirical-resampling algorithm from the exact input prices, simulation count, and seed, then compares all reported moments and quantiles within a declared tolerance.
 
-A stronger Monte Carlo audit requires an immutable artifact containing:
+A reproducible replay requires an immutable artifact containing:
 - exact input series and its hash;
 - algorithm/version and source commit SHA;
 - RNG family, seed, simulation count, horizon, and resampling/model assumptions;
@@ -35,6 +35,8 @@ A stronger Monte Carlo audit requires an immutable artifact containing:
 - independently recomputed moments and quantiles;
 - convergence/error diagnostics across predeclared simulation budgets;
 - model checks against observed out-of-sample outcomes.
+
+A successful replay establishes numerical reproducibility of the declared algorithm only. It does not prove that iid resampling is a valid market model or that future prices follow the simulated distribution.
 
 ## Falsification is not the same as failed verification
 
