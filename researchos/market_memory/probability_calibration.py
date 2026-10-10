@@ -47,10 +47,19 @@ class ProbabilityCalibrator:
         registry: EvidenceRegistry, outcomes: Dict[str, bool]
     ) -> List[tuple[str, float, float]]:
         evidence_by_id = {e.id: e for e in registry.evidence}
+        matched_ids = [eid for eid in sorted(outcomes) if eid in evidence_by_id]
+        invalid_ids = [
+            eid for eid in matched_ids
+            if not isinstance(outcomes[eid], bool)
+        ]
+        if invalid_ids:
+            raise ValueError(
+                "Calibration outcomes must be booleans for matched evidence IDs; "
+                f"invalid IDs: {invalid_ids[:5]}"
+            )
         rows = [
             (eid, evidence_by_id[eid].confidence, 1.0 if outcomes[eid] else 0.0)
-            for eid in sorted(outcomes)
-            if eid in evidence_by_id
+            for eid in matched_ids
         ]
         if len(rows) < ProbabilityCalibrator.MIN_SAMPLES:
             raise ValueError("At least 10 matched evidence/outcome samples are required.")
