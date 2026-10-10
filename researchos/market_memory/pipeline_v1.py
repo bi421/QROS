@@ -5,6 +5,9 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime, timezone
 
+from researchos.quant_engine.mathematical_falsification import AuditStatus
+from researchos.quant_engine.temporal_leakage_audit import audit_temporal_leakage
+
 from researchos.market_memory.conditioning import ConditionSpec, MultipleTestingAudit, compute_conditional_statistics, filter_events
 from researchos.market_memory.event_extractor import extract_sma_crossover_events
 from researchos.market_memory.event_schema import ConditionalResult, EventType, EvidenceStatus, MarketEvent, MarketMemoryReport, ValidationResult
@@ -107,6 +110,12 @@ def run_market_memory_pipeline(
         except ValueError:
             return None
 
+    temporal_leakage_audit = audit_temporal_leakage(
+        train_events,
+        validation_events,
+        test_events,
+        label_end_getter=label_end_getter,
+    )
     dependence_audit = audit_label_overlap(events, label_end_getter)
     dependence_block_size = max(1, dependence_audit.max_concurrent_labels)
 
@@ -187,7 +196,12 @@ def run_market_memory_pipeline(
     evidence_records = []
     for cr in conditional_results:
         oos = oos_results[cr.condition_name]
-        validated = oos is not None and oos.stable and audit.overall_status != "FAIL"
+        validated = (
+            oos is not None
+            and oos.stable
+            and audit.overall_status != "FAIL"
+            and temporal_leakage_audit.status is AuditStatus.VERIFIED
+        )
         status = EvidenceStatus.VALIDATED.value if validated else cr.status
         prob = probability_evidence.get(cr.condition_name)
         uncertainty: dict[str, object] = {"mean_confidence_interval": cr.confidence_interval}
@@ -200,6 +214,11 @@ def run_market_memory_pipeline(
                 "hypotheses": hypothesis_count,
                 "per_hypothesis_alpha": corrected_alpha,
             }
+        uncertainty["temporal_leakage_audit"] = {
+            "status": temporal_leakage_audit.status.value,
+            "explanation": temporal_leakage_audit.explanation,
+            "scope": "supplied train/validation/test event and realized-label timestamps only",
+        }
         uncertainty["label_dependence"] = {
             "method": "realized_label_interval_overlap",
             "interval_definition": "[event_timestamp, realized_end)",
@@ -232,8 +251,10 @@ def run_market_memory_pipeline(
             uncertainty=uncertainty, validation_method="walk_forward_expanding_purged", random_seed=seed, status=status,
         ))
 
-    if audit.overall_status == "FAIL":
+    if audit.overall_status == "FAIL" or temporal_leakage_audit.status is AuditStatus.FALSIFIED:
         overall_status = EvidenceStatus.REJECTED.value
+    elif temporal_leakage_audit.status is not AuditStatus.VERIFIED:
+        overall_status = EvidenceStatus.UNVALIDATED.value
     elif all(oos is not None and oos.stable for oos in oos_results.values()) and oos_results:
         overall_status = EvidenceStatus.VALIDATED.value
     else:
@@ -251,5 +272,10 @@ def run_market_memory_pipeline(
         },
         conditional_results=conditional_results, validation_results=validation_results, evidence_records=evidence_records,
         self_audit=audit, overall_status=overall_status,
-        notes=f"Dataset hash: {dataset_hash}. Multiple testing audit: {multiple_testing.to_dict()}. Label dependence audit: {dependence_audit}",
+        notes=(
+            f"Dataset hash: {dataset_hash}. Multiple testing audit: {multiple_testing.to_dict()}. "
+            f"Label dependence audit: {dependence_audit}. "
+            f"Independent temporal leakage audit: {temporal_leakage_audit.status.value} "
+            f"({temporal_leakage_audit.explanation})"
+        ),
     )

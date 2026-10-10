@@ -11,3 +11,12 @@ audit. It does not prove that feature values were correctly constructed,
 external data revisions were captured, hyperparameter selection avoided test
 reuse, or the market strategy is profitable. Use actual feature availability
 times and realized label end times, not approximations inferred from event time.
+
+## Market Memory pipeline integration
+
+The Market Memory pipeline runs this audit on its chronological train/validation/test
+partitions using realized label-end timestamps. The resulting status and explanation
+are attached to each evidence record and the report notes. A falsified boundary audit
+rejects the report; invalid or unverifiable audit input prevents a validated status.
+This is deliberately fail-closed and does not replace the walk-forward validator,
+feature-provenance checks, or multiple-testing controls.
