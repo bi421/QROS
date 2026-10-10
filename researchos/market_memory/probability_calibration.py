@@ -103,8 +103,9 @@ class ProbabilityCalibrator:
             p = round(max(0.0, min(1.0, float(positives) / int(count))), 10)
             breakpoints.append((float(x), p))
             probability_by_confidence[float(x)] = p
+        xs = tuple(x for x, _ in breakpoints)
         predictions = {
-            eid: probability_by_confidence[x]
+            eid: breakpoints[max(0, bisect_right(xs, x) - 1)][1]
             for eid, x, _ in rows
         }
         return predictions, tuple(breakpoints)
