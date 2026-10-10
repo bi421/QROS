@@ -573,3 +573,39 @@ class TestPipeline:
         for e in report.evidence_records:
             assert e.dataset_id != ""
             assert e.computation_method != ""
+
+
+class TestConditionalStatisticsParameterContract:
+    """Invalid bootstrap parameters must fail closed before sampling."""
+
+    def test_rejects_non_integer_resample_count(self):
+        events = [_make_event_with_outcome("e1", "bullish", 0.01)]
+        with pytest.raises(ValueError, match="positive integer"):
+            compute_conditional_statistics(
+                events, ConditionSpec(name="all", conditions={}),
+                bootstrap_num_resamples=1.5,
+            )
+
+    def test_rejects_boolean_resample_count(self):
+        events = [_make_event_with_outcome("e1", "bullish", 0.01)]
+        with pytest.raises(ValueError, match="positive integer"):
+            compute_conditional_statistics(
+                events, ConditionSpec(name="all", conditions={}),
+                bootstrap_num_resamples=True,
+            )
+
+    def test_rejects_non_positive_dependence_block_size(self):
+        events = [_make_event_with_outcome("e1", "bullish", 0.01)]
+        with pytest.raises(ValueError, match="dependence_block_size"):
+            compute_conditional_statistics(
+                events, ConditionSpec(name="all", conditions={}),
+                dependence_block_size=0,
+            )
+
+    def test_rejects_boolean_bootstrap_seed(self):
+        events = [_make_event_with_outcome("e1", "bullish", 0.01)]
+        with pytest.raises(TypeError, match="bootstrap_seed"):
+            compute_conditional_statistics(
+                events, ConditionSpec(name="all", conditions={}),
+                bootstrap_seed=True,
+            )
