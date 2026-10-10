@@ -131,6 +131,21 @@ TEST(TuringFilterTest, NonMonotonicTimestampDrops) {
   EXPECT_EQ(engine.state().samples, 0u);
 }
 
+TEST(TuringFilterTest, StructuralDropDoesNotResetTimestampWatermark) {
+  auto config = base_config();
+  config.min_persistence = 1;
+  TuringFilterEngine engine(config);
+
+  EXPECT_EQ(engine.process(tick(10)), TuringFilterDecision::Continue);
+  auto broken = tick(20);
+  broken.ask = 102.0;
+  EXPECT_EQ(engine.process(broken), TuringFilterDecision::Drop);
+
+  // The broken quote resets evidence, not the monotonic timestamp watermark.
+  EXPECT_EQ(engine.process(tick(15)), TuringFilterDecision::Drop);
+  EXPECT_EQ(engine.process(tick(21)), TuringFilterDecision::Continue);
+}
+
 TEST(TuringFilterTest, NonFiniteInputFailsClosed) {
   auto config = base_config();
   config.min_persistence = 1;
