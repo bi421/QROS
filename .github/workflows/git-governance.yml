@@ -40,7 +40,7 @@ jobs:
           if not branch_re.match(branch): errors.append(f"PR branch name is not allowed: {branch!r}")
           if branch == "main": errors.append("Direct main PR branch is forbidden")
           if errors:
-              print("\\n".join(errors)); sys.exit(1)
+              print("\n".join(errors)); sys.exit(1)
           print(f"PR governance OK: branch={branch} title={title}")
           PY
 
