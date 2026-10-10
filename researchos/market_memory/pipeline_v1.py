@@ -42,6 +42,25 @@ def _finite_returns(events: list[MarketEvent], condition: ConditionSpec) -> list
     return values
 
 
+def _directional_success_counts(
+    events: list[MarketEvent], condition: ConditionSpec
+) -> tuple[int, int] | None:
+    """Return direction-adjusted successes/trials; refuse ambiguous directions."""
+    successes = 0
+    trials = 0
+    for event in filter_events(events, condition):
+        value = event.outcome.return_1d if event.outcome else None
+        if not isinstance(value, (int, float)) or value != value or abs(value) == float("inf"):
+            continue
+        direction = event.direction.strip().lower()
+        if direction not in {"bullish", "bearish"}:
+            return None
+        trials += 1
+        if (direction == "bullish" and value > 0) or (direction == "bearish" and value < 0):
+            successes += 1
+    return (successes, trials) if trials else None
+
+
 def run_market_memory_pipeline(
     data_path: str = "data/curated/xauusd/xauusd_d1_2021_2025_mt5_final.csv",
     asset: str = "XAUUSD",
@@ -124,15 +143,24 @@ def run_market_memory_pipeline(
     corrected_confidence_level = 1.0 - corrected_alpha
 
     conditional_results: list[ConditionalResult] = []
-    probability_evidence: dict[str, ProportionEvidence] = {}
+    raw_probability_evidence: dict[str, ProportionEvidence] = {}
+    directional_probability_evidence: dict[str, ProportionEvidence] = {}
     for spec in conditions:
         result = compute_conditional_statistics(events, spec, outcome_field="return_1d", bootstrap_seed=seed, dependence_block_size=dependence_block_size)
         conditional_results.append(result)
         values = _finite_returns(events, spec)
         if values:
-            probability_evidence[spec.name] = wilson_proportion_ci(
+            raw_probability_evidence[spec.name] = wilson_proportion_ci(
                 sum(value > 0.0 for value in values),
                 len(values),
+                confidence_level=corrected_confidence_level,
+            )
+        directional_counts = _directional_success_counts(events, spec)
+        if directional_counts is not None:
+            directional_successes, directional_trials = directional_counts
+            directional_probability_evidence[spec.name] = wilson_proportion_ci(
+                directional_successes,
+                directional_trials,
                 confidence_level=corrected_confidence_level,
             )
 
@@ -203,11 +231,16 @@ def run_market_memory_pipeline(
             and temporal_leakage_audit.status is AuditStatus.VERIFIED
         )
         status = EvidenceStatus.VALIDATED.value if validated else cr.status
-        prob = probability_evidence.get(cr.condition_name)
+        raw_prob = raw_probability_evidence.get(cr.condition_name)
+        directional_prob = directional_probability_evidence.get(cr.condition_name)
         uncertainty: dict[str, object] = {"mean_confidence_interval": cr.confidence_interval}
-        if prob:
-            uncertainty["probability_confidence_interval"] = list(prob.confidence_interval)
-            uncertainty["probability_confidence_level"] = prob.confidence_level
+        if raw_prob:
+            uncertainty["raw_probability_confidence_interval"] = list(raw_prob.confidence_interval)
+            uncertainty["raw_probability_confidence_level"] = raw_prob.confidence_level
+        if directional_prob:
+            uncertainty["directional_probability_confidence_interval"] = list(directional_prob.confidence_interval)
+            uncertainty["directional_probability_confidence_level"] = directional_prob.confidence_level
+        if raw_prob or directional_prob:
             uncertainty["multiple_testing"] = {
                 "method": "bonferroni",
                 "family_alpha": _PIPELINE_ALPHA,
@@ -247,7 +280,13 @@ def run_market_memory_pipeline(
             time_range=(events[0].timestamp.isoformat() if events else "", events[-1].timestamp.isoformat() if events else ""),
             computation_method="forward_return_analysis", code_module="researchos.market_memory.pipeline_v1",
             statistical_method="Bonferroni-adjusted Wilson probability CI + dependence-aware block bootstrap mean CI when labels overlap + purged walk-forward OOS + realized-label boundary and dependence audit",
-            result={"raw_probability": cr.raw_probability, "mean_return": cr.mean_return, "std_return": cr.std_return},
+            result={
+                "raw_probability": cr.raw_probability,
+                "directional_probability": cr.directional_probability,
+                "probability_definition": cr.probability_definition,
+                "mean_return": cr.mean_return,
+                "std_return": cr.std_return,
+            },
             uncertainty=uncertainty, validation_method="walk_forward_expanding_purged", random_seed=seed, status=status,
         ))
 
