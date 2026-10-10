@@ -244,6 +244,7 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install -e ".[dev,test,saas]"
           python -m pip install pytest-cov
+          python -m pip freeze --all > resolved-dependencies.txt
       - name: Build C++ quant backend
         run: |
           cmake -S researchos/engines/quant \
@@ -268,5 +269,6 @@ jobs:
           path: |
             coverage.xml
             coverage.txt
+            resolved-dependencies.txt
           if-no-files-found: warn
           retention-days: 90
