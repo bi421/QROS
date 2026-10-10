@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from researchos.quant_engine.mathematical_falsification import AuditStatus
 from researchos.quant_engine.temporal_leakage_audit import audit_temporal_leakage
