@@ -190,3 +190,19 @@ def test_unknown_direction_fails_closed_even_when_no_forward_observation_exists(
     invalid_event = replace(_event(start, "D1"), direction="sideways")
     with pytest.raises(ValueError, match="Unsupported event direction"):
         compute_forward_outcomes([invalid_event], df)
+
+
+
+def test_boolean_threshold_fails_closed_instead_of_becoming_one_percent():
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    df = pl.DataFrame(
+        {
+            "timestamp": [start, start + timedelta(days=1)],
+            "open": [100.0, 100.0],
+            "high": [100.0, 101.0],
+            "low": [100.0, 100.0],
+            "close": [100.0, 101.0],
+        }
+    )
+    with pytest.raises(ValueError, match="threshold must be finite and non-negative"):
+        compute_forward_outcomes([_event(start, "D1")], df, threshold=True)
