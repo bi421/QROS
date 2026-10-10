@@ -85,6 +85,10 @@ NB_MODULE(qros_constraint_engine, m) {
             for (std::size_t i = 0; i + static_cast<std::size_t>(h) < n; ++i) {
               const double r = (closes.data()[i + static_cast<std::size_t>(h)] /
                                 closes.data()[i] - 1.0) * 10000.0;
+              if (!std::isfinite(r)) {
+                throw std::invalid_argument(
+                    "forward return must be finite for every evaluated horizon");
+              }
               values.push_back(r);
             }
             std::sort(values.begin(), values.end());
