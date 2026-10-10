@@ -107,3 +107,19 @@ def test_temporal_leakage_audit_falsifies_label_ending_before_event() -> None:
 
     assert result.status is AuditStatus.FALSIFIED
     assert "label ends before its event timestamp" in result.explanation
+
+
+def test_temporal_leakage_audit_is_inconclusive_without_feature_provenance() -> None:
+    train = [_record(1, 2), _record(2, 3)]
+    validation = [_record(5, 6)]
+    test = [_record(9, 10)]
+
+    result = audit_temporal_leakage(
+        train,
+        validation,
+        test,
+        label_end_getter=lambda record: record.label_end,
+    )
+
+    assert result.status is AuditStatus.INCONCLUSIVE
+    assert "Feature-availability timestamps were not supplied" in result.explanation

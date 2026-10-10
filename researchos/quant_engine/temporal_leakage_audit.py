@@ -124,6 +124,22 @@ def audit_temporal_leakage(
             "Temporal leakage contract violated: " + "; ".join(issues[:8]),
         )
 
+    if feature_available_at_getter is None:
+        return MathematicalAudit(
+            "temporal_leakage",
+            AuditStatus.INCONCLUSIVE,
+            "feature availability provenance",
+            None,
+            None,
+            None,
+            tolerance_seconds,
+            (
+                "partition ordering and realized-label boundaries were checked",
+                "feature availability must be supplied from actual feature provenance",
+            ),
+            "Feature-availability timestamps were not supplied. Partition and label boundaries may pass, but temporal leakage cannot be VERIFIED without checking when the input features became knowable.",
+        )
+
     return MathematicalAudit(
         "temporal_leakage",
         AuditStatus.VERIFIED,
