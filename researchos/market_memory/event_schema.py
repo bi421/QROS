@@ -336,10 +336,6 @@ class ConditionalResult:
     condition_spec: ConditionSpec
     sample_size: int = 0
     raw_probability: float = 0.0
-    # Fraction of finite outcomes moving in the event's declared direction.
-    # None means at least one event direction was not recognized.
-    directional_probability: float | None = None
-    probability_definition: str = "P(return > 0); raw positive-return frequency"
     mean_return: float = 0.0
     std_return: float = 0.0
     confidence_interval: tuple[float, float] | None = None
@@ -347,6 +343,9 @@ class ConditionalResult:
     bootstrap_num_resamples: int = 1000
     status: str = EvidenceStatus.EXPLORATORY.value
     notes: str = ""
+    # Appended to preserve positional compatibility with the original fields.
+    directional_probability: float | None = None
+    probability_definition: str = "P(return > 0); raw positive-return frequency"
 
     def to_dict(self) -> dict[str, Any]:
         return {
