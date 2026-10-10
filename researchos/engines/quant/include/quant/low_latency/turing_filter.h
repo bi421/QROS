@@ -61,6 +61,7 @@ struct TuringFilterState final {
   std::uint8_t constraint_mask{0};
   TuringFilterDecision last_decision{TuringFilterDecision::Continue};
   bool has_previous{false};
+  bool has_timestamp{false};
   std::int64_t last_timestamp_ns{0};
   double last_mid{0.0};
   double last_directional_imbalance{0.0};

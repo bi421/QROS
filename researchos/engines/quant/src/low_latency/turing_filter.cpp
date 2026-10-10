@@ -95,7 +95,7 @@ std::uint8_t TuringFilterEngine::structural_constraints(
     mask |= ConstraintTradeVolume;
   }
 
-  if (!state_.has_previous || tick.timestamp_ns > state_.last_timestamp_ns) {
+  if (!state_.has_timestamp || tick.timestamp_ns > state_.last_timestamp_ns) {
     mask |= ConstraintTimestamp;
   }
 
@@ -154,6 +154,15 @@ TuringFilterDecision TuringFilterEngine::process(
 
   const std::uint8_t structural = structural_constraints(tick);
   state_.constraint_mask = structural;
+
+  // Keep the chronology watermark independent from the directional sequence.
+  // A bad quote may abort evidence accumulation, but must not let a later
+  // out-of-order tick become the first timestamp of a fresh sequence.
+  if ((structural & ConstraintFinite) != 0 &&
+      (structural & ConstraintTimestamp) != 0) {
+    state_.last_timestamp_ns = tick.timestamp_ns;
+    state_.has_timestamp = true;
+  }
 
   if ((structural & kStructuralMask) != kStructuralMask) {
     state_.samples = 0;
