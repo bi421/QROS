@@ -66,7 +66,9 @@ def _compute_atr(highs: list[float], lows: list[float], closes: list[float], per
 
 
 def _compute_rsi(closes: list[float], period: int = 14) -> list[float]:
-    """Compute Relative Strength Index."""
+    """Compute RSI with one output per close and a stable flat-market value."""
+    if period < 1:
+        raise ValueError("period must be >= 1")
     if len(closes) < period + 1:
         return [50.0] * len(closes)
 
@@ -77,15 +79,24 @@ def _compute_rsi(closes: list[float], period: int = 14) -> list[float]:
     avg_gain = sum(gains[:period]) / period
     avg_loss = sum(losses[:period]) / period
 
+    def rsi_value(gain: float, loss: float) -> float:
+        if gain == 0.0 and loss == 0.0:
+            return 50.0
+        if loss == 0.0:
+            return 100.0
+        if gain == 0.0:
+            return 0.0
+        rs = gain / loss
+        return 100.0 - 100.0 / (1.0 + rs)
+
+    # The first RSI is available at input index `period`; keep warmup output
+    # aligned with closes and append the initial averaged value.
     rsi: list[float] = [50.0] * period
+    rsi.append(rsi_value(avg_gain, avg_loss))
     for i in range(period, len(gains)):
         avg_gain = (avg_gain * (period - 1) + gains[i]) / period
         avg_loss = (avg_loss * (period - 1) + losses[i]) / period
-        if avg_loss == 0:
-            rsi.append(100.0)
-        else:
-            rs = avg_gain / avg_loss
-            rsi.append(100.0 - 100.0 / (1.0 + rs))
+        rsi.append(rsi_value(avg_gain, avg_loss))
     return rsi
 
 
