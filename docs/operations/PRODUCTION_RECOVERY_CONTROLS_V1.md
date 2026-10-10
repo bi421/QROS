@@ -43,3 +43,21 @@ RPO/RTO remain **unverified until an actual drill records them**. Documentation 
 ## Release blockers
 
 Before production launch, the exact target environment must demonstrate schema parity, authenticated Golden Path, storage upload/download, job execution/recovery, database restore, independent storage restore, exact-release smoke, and measured RPO/RTO.
+
+## Production database backup prerequisites
+
+The scheduled production backup fails closed unless the GitHub Actions `production` environment and repository configuration are provisioned. Configure and verify these values through the repository/environment settings; do not commit credentials or print secret values in workflow logs.
+
+Required GitHub Actions values:
+
+- Repository variable `BACKUP_AWS_ROLE_ARN`: IAM role trusted for this repository's GitHub Actions OIDC identity.
+- Repository variable `BACKUP_AWS_REGION`: AWS region for the destination bucket.
+- Repository/environment secret `PROD_DATABASE_URL`: connection URL for the governed production database.
+- Repository/environment secret `PRODUCTION_PROJECT_ID`: expected project identifier checked against the connection URL.
+- Repository/environment secret `BACKUP_S3_BUCKET`: destination bucket name.
+- Optional secret `BACKUP_S3_PREFIX`: object-key prefix; defaults to `qros/production`.
+- Optional secret `BACKUP_AWS_ENDPOINT_URL`: endpoint override for an S3-compatible service.
+
+The role trust policy must allow the GitHub OIDC provider and restrict the subject to the intended repository and production environment. Grant only the permissions needed to upload, inspect, and download the backup objects in the configured bucket. Enable S3 bucket versioning before running the workflow; the workflow now checks this before connecting to the production database.
+
+After configuration, dispatch the workflow manually and inspect the exact run. A successful code CI run is not a successful production backup. Production backup readiness remains unverified until an actual run confirms OIDC assumption, database dump, remote object/version checks, downloaded checksum equality, and final manifest equality. A separate isolated restore drill is required to prove recoverability.
