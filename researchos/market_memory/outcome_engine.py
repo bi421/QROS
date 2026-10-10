@@ -75,6 +75,12 @@ def compute_forward_outcomes(
     for event in events:
         if event.timestamp.tzinfo != timezone:
             raise ValueError("event and price timestamps must use the same timezone")
+        if event.direction.strip().lower() not in {
+            "bullish", "long", "up", "bearish", "short", "down"
+        }:
+            raise ValueError(
+                f"Unsupported event direction for outcome calculation: {event.direction}"
+            )
         if not math.isfinite(event.event_price) or event.event_price <= 0:
             raise ValueError("event price must be finite and strictly positive for percentage returns")
     for column in ("open", "high", "low", "close"):
