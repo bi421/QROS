@@ -443,6 +443,14 @@ class TestBootstrap:
         mean = sum(values) / len(values)
         assert result.confidence_interval[0] <= mean <= result.confidence_interval[1]
 
+    def test_bootstrap_mean_does_not_overflow_for_large_finite_values(self):
+        values = [1e308, 1e308, 1e308]
+        result = bootstrap_mean_ci(values, num_resamples=25, seed=42)
+        assert result.point_estimate == pytest.approx(1e308)
+        assert result.bootstrap_mean == pytest.approx(1e308)
+        assert result.bootstrap_std == 0.0
+        assert result.confidence_interval == pytest.approx((1e308, 1e308))
+
     def test_bootstrap_stability_check(self):
         values = [1.0, 2.0, 3.0, 4.0, 5.0] * 10
         result = bootstrap_stability_check(values, seed=42)
