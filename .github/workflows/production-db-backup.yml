@@ -170,10 +170,11 @@ jobs:
           aws s3 cp "s3://${BACKUP_S3_BUCKET}/$(cat /tmp/backup-checksum-key)" /tmp/remote-qros-backup.dump.sha256 "${ENDPOINT_ARGS[@]}"
           test -s /tmp/remote-qros-backup.dump
           test -s /tmp/remote-qros-backup.dump.sha256
-          (cd /tmp && sha256sum --check remote-qros-backup.dump.sha256)
           LOCAL_DIGEST="$(cut -d' ' -f1 /tmp/qros-backup.dump.sha256)"
-          REMOTE_DIGEST="$(cut -d' ' -f1 /tmp/remote-qros-backup.dump.sha256)"
-          test "${LOCAL_DIGEST}" = "${REMOTE_DIGEST}"
+          REMOTE_CHECKSUM_DIGEST="$(cut -d' ' -f1 /tmp/remote-qros-backup.dump.sha256)"
+          REMOTE_BACKUP_DIGEST="$(sha256sum /tmp/remote-qros-backup.dump | cut -d' ' -f1)"
+          test "${REMOTE_BACKUP_DIGEST}" = "${REMOTE_CHECKSUM_DIGEST}" || { echo "::error::downloaded backup digest does not match the remote checksum object"; exit 1; }
+          test "${LOCAL_DIGEST}" = "${REMOTE_BACKUP_DIGEST}" || { echo "::error::downloaded backup digest does not match the locally created backup"; exit 1; }
           python3 - <<'PY'
           import json
           from pathlib import Path
