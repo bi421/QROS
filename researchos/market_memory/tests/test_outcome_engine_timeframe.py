@@ -174,3 +174,19 @@ def test_non_empty_events_with_empty_price_data_fail_closed():
     )
     with pytest.raises(ValueError, match="price_df must contain observations"):
         compute_forward_outcomes([_event(start, "D1")], df)
+
+
+def test_unknown_direction_fails_closed_even_when_no_forward_observation_exists():
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    df = pl.DataFrame(
+        {
+            "timestamp": [start],
+            "open": [100.0],
+            "high": [100.0],
+            "low": [100.0],
+            "close": [100.0],
+        }
+    )
+    invalid_event = replace(_event(start, "D1"), direction="sideways")
+    with pytest.raises(ValueError, match="Unsupported event direction"):
+        compute_forward_outcomes([invalid_event], df)
