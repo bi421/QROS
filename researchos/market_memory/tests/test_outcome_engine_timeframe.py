@@ -144,3 +144,33 @@ def test_incoherent_ohlc_candle_fails_closed():
     )
     with pytest.raises(ValueError, match="high below open, low, or close"):
         compute_forward_outcomes([_event(start, "D1")], df)
+
+
+def test_event_timestamp_missing_from_price_data_fails_closed():
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    df = pl.DataFrame(
+        {
+            "timestamp": [start + timedelta(days=1), start + timedelta(days=2)],
+            "open": [100.0, 100.0],
+            "high": [100.0, 101.0],
+            "low": [100.0, 100.0],
+            "close": [100.0, 101.0],
+        }
+    )
+    with pytest.raises(ValueError, match="event timestamp .* is not present in price data"):
+        compute_forward_outcomes([_event(start, "D1")], df)
+
+
+def test_non_empty_events_with_empty_price_data_fail_closed():
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    df = pl.DataFrame(
+        schema={
+            "timestamp": pl.Datetime(time_zone="UTC"),
+            "open": pl.Float64,
+            "high": pl.Float64,
+            "low": pl.Float64,
+            "close": pl.Float64,
+        }
+    )
+    with pytest.raises(ValueError, match="price_df must contain observations"):
+        compute_forward_outcomes([_event(start, "D1")], df)
