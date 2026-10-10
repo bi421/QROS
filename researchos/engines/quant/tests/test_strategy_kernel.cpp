@@ -15,6 +15,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <limits>
 #include <vector>
 
 using namespace quant;
@@ -1189,6 +1190,22 @@ TEST(StrategyKernel, InputHashSensitiveToBarsAndSignals) {
   auto c = run_kernel(cfg, {mk(101, 102, 100, 101, 0), mk(101, 102, 100, 101, 1)}, {});
   EXPECT_NE(a.input_hash, b.input_hash);
   EXPECT_NE(b.input_hash, c.input_hash);
+}
+
+TEST(StrategyKernel, InputHashDistinguishesVeryLargeFiniteValues) {
+  auto cfg = zero_cost_cfg();
+  const double largest = std::numeric_limits<double>::max();
+  const double next_largest = std::nextafter(largest, 0.0);
+  std::vector<OHLCV> bars_a = {
+      mk(100, 101, 99, 100, 0, largest),
+      mk(100, 101, 99, 100, 1, largest)};
+  std::vector<OHLCV> bars_b = {
+      mk(100, 101, 99, 100, 0, next_largest),
+      mk(100, 101, 99, 100, 1, next_largest)};
+
+  const auto a = run_kernel(cfg, bars_a, {});
+  const auto b = run_kernel(cfg, bars_b, {});
+  EXPECT_NE(a.input_hash, b.input_hash);
 }
 
 TEST(StrategyKernel, HashDisabledSkipsComputation) {
