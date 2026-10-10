@@ -3,6 +3,7 @@ name: Git Governance
 on:
   pull_request:
     branches: [main]
+    types: [opened, reopened, synchronize, edited]
   push:
     branches: [main]
 
@@ -39,7 +40,7 @@ jobs:
           if not branch_re.match(branch): errors.append(f"PR branch name is not allowed: {branch!r}")
           if branch == "main": errors.append("Direct main PR branch is forbidden")
           if errors:
-              print("\\n".join(errors)); sys.exit(1)
+              print("\n".join(errors)); sys.exit(1)
           print(f"PR governance OK: branch={branch} title={title}")
           PY
 
@@ -51,7 +52,7 @@ jobs:
 
       - name: Verify no tracked secret-like files
         run: |
-          if git ls-files | grep -Ei '(^|/)(\.env|.*\\.(pem|key|p12|pfx))$'; then
+          if git ls-files | grep -Ei '(^|/)(\.env|.*\.(pem|key|p12|pfx))$'; then
             echo "Secret-like tracked file detected" >&2
             exit 1
           fi
