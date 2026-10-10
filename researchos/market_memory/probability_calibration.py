@@ -61,15 +61,18 @@ class ProbabilityCalibrator:
         invalid_confidence_ids = []
         for eid in matched_ids:
             confidence = evidence_by_id[eid].confidence
-            if (
-                isinstance(confidence, bool)
-                or not isinstance(confidence, (int, float))
-                or not isfinite(confidence)
-                or not 0.0 <= confidence <= 1.0
-            ):
+            if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
                 invalid_confidence_ids.append(eid)
                 continue
-            rows.append((eid, float(confidence), 1.0 if outcomes[eid] else 0.0))
+            try:
+                normalized_confidence = float(confidence)
+            except (OverflowError, ValueError):
+                invalid_confidence_ids.append(eid)
+                continue
+            if not isfinite(normalized_confidence) or not 0.0 <= normalized_confidence <= 1.0:
+                invalid_confidence_ids.append(eid)
+                continue
+            rows.append((eid, normalized_confidence, 1.0 if outcomes[eid] else 0.0))
         if invalid_confidence_ids:
             raise ValueError(
                 "Evidence confidence must be finite and between 0 and 1 for matched "
@@ -184,12 +187,13 @@ class ProbabilityCalibrator:
         """
         if not self._is_fitted:
             raise RuntimeError("Calibrator must be fitted before predicting.")
-        if (
-            isinstance(confidence, bool)
-            or not isinstance(confidence, (int, float))
-            or not isfinite(confidence)
-            or not 0.0 <= confidence <= 1.0
-        ):
+        if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+            raise ValueError("confidence must be finite and between 0 and 1")
+        try:
+            confidence = float(confidence)
+        except (OverflowError, ValueError):
+            raise ValueError("confidence must be finite and between 0 and 1") from None
+        if not isfinite(confidence) or not 0.0 <= confidence <= 1.0:
             raise ValueError("confidence must be finite and between 0 and 1")
 
         if self.method == "isotonic":
