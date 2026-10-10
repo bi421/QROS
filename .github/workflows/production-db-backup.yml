@@ -198,7 +198,13 @@ jobs:
           ENDPOINT_ARGS=(); if [ -n "${BACKUP_AWS_ENDPOINT_URL:-}" ]; then ENDPOINT_ARGS+=(--endpoint-url "${BACKUP_AWS_ENDPOINT_URL}"); fi
           MANIFEST_KEY="$(cat /tmp/backup-manifest-key)"
           aws s3 cp /tmp/backup-manifest.json "s3://${BACKUP_S3_BUCKET}/${MANIFEST_KEY}" "${ENDPOINT_ARGS[@]}"
-          aws s3api head-object --bucket "${BACKUP_S3_BUCKET}" --key "${MANIFEST_KEY}" "${ENDPOINT_ARGS[@]}"
+          MANIFEST_HEAD="$(aws s3api head-object --bucket "${BACKUP_S3_BUCKET}" --key "${MANIFEST_KEY}" --query '[ContentLength,VersionId]' --output text "${ENDPOINT_ARGS[@]}")"
+          echo "verified manifest HEAD: ${MANIFEST_HEAD}"
+          read -r MANIFEST_SIZE MANIFEST_VERSION <<< "${MANIFEST_HEAD}"
+          test "${MANIFEST_SIZE}" -gt 0 || { echo "::error::verified manifest object is empty"; exit 1; }
+          test -n "${MANIFEST_VERSION}" && test "${MANIFEST_VERSION}" != 'None' || { echo "::error::verified manifest object has no version ID"; exit 1; }
+          aws s3 cp "s3://${BACKUP_S3_BUCKET}/${MANIFEST_KEY}" /tmp/remote-verified-manifest.json "${ENDPOINT_ARGS[@]}"
+          cmp --silent /tmp/backup-manifest.json /tmp/remote-verified-manifest.json || { echo "::error::remote verified manifest differs from local evidence"; exit 1; }
 
       - name: Cleanup
         if: always()

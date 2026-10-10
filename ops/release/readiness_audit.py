@@ -31,6 +31,8 @@ REQUIRED_MARKERS = {
         "head-object",
         "REMOTE_BACKUP_DIGEST",
         "REMOTE_CHECKSUM_DIGEST",
+        "verified manifest HEAD",
+        "remote verified manifest differs from local evidence",
         "Configure AWS OIDC credentials",
         "role-to-assume: ${{ vars.BACKUP_AWS_ROLE_ARN }}",
         "aws-region: ${{ vars.BACKUP_AWS_REGION }}",
