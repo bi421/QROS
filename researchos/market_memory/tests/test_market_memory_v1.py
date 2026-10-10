@@ -291,6 +291,33 @@ class TestOutcomeEngine:
         assert updated[0].outcome.return_1d is not None
         assert updated[0].outcome.return_1d == pytest.approx(0.01)  # (101-100)/100
 
+    @pytest.mark.parametrize("event_price", [0.0, -1.0])
+    def test_rejects_non_positive_event_price(self, event_price):
+        ts1 = datetime(2021, 1, 1, tzinfo=timezone.utc)
+        ts2 = datetime(2021, 1, 2, tzinfo=timezone.utc)
+        df = pl.DataFrame(
+            {
+                "timestamp": [ts1, ts2],
+                "open": [100.0, 101.0],
+                "high": [101.0, 102.0],
+                "low": [99.0, 100.0],
+                "close": [100.0, 101.0],
+            }
+        )
+        event = _make_minimal_event("invalid_price", "bullish", ts1)
+        invalid_event = MarketEvent(
+            event_id=event.event_id,
+            asset=event.asset,
+            timeframe=event.timeframe,
+            event_type=event.event_type,
+            direction=event.direction,
+            timestamp=event.timestamp,
+            event_price=event_price,
+            context=event.context,
+        )
+        with pytest.raises(ValueError, match="strictly positive"):
+            compute_forward_outcomes([invalid_event], df)
+
     def test_no_future_leakage_in_outcomes(self):
         ts1 = datetime(2021, 1, 1, tzinfo=timezone.utc)
         ts2 = datetime(2021, 1, 2, tzinfo=timezone.utc)
