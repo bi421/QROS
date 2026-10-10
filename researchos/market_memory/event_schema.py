@@ -336,6 +336,10 @@ class ConditionalResult:
     condition_spec: ConditionSpec
     sample_size: int = 0
     raw_probability: float = 0.0
+    # Fraction of finite outcomes moving in the event's declared direction.
+    # None means at least one event direction was not recognized.
+    directional_probability: float | None = None
+    probability_definition: str = "P(return > 0); raw positive-return frequency"
     mean_return: float = 0.0
     std_return: float = 0.0
     confidence_interval: tuple[float, float] | None = None
@@ -350,6 +354,8 @@ class ConditionalResult:
             "condition_spec": self.condition_spec.to_dict(),
             "sample_size": self.sample_size,
             "raw_probability": self.raw_probability,
+            "directional_probability": self.directional_probability,
+            "probability_definition": self.probability_definition,
             "mean_return": self.mean_return,
             "std_return": self.std_return,
             "confidence_interval": list(self.confidence_interval) if self.confidence_interval else None,
