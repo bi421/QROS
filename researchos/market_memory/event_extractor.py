@@ -128,14 +128,15 @@ def _compute_macd(closes: list[float], fast: int = 12, slow: int = 26, signal: i
 def _determine_session(timestamp: datetime) -> str:
     """Determine trading session from UTC timestamp."""
     hour = timestamp.hour
+    if 12 <= hour < 16:
+        return Session.OVERLAP.value
     if 0 <= hour < 8:
         return Session.ASIAN.value
-    elif 8 <= hour < 16:
+    if 8 <= hour < 12:
         return Session.EUROPEAN.value
-    elif 12 <= hour < 21:
-        return Session.OVERLAP.value
-    else:
+    if 16 <= hour < 21:
         return Session.US.value
+    return Session.US.value
 
 
 def _compute_regime(sma_fast: float, sma_slow: float, atr: float, close: float) -> tuple[str, str]:
