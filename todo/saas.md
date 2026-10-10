@@ -370,15 +370,15 @@ QROS is **not production-ready** until all applicable gates below have independe
 ## Exact repository baseline
 
 - **Repository:** `bi421/QROS`
-- **Current main SHA:** `f4c01b506ae5d96d0ba4a05fa7a042a230abb0a5`
-- **PR #602:** merged — `docs(saas): refresh current main readiness baseline`
-- **PR #601:** merged — `fix(saas): preserve configured plan rate limiter lookup`
-- PR #594 remains included in this main baseline: `fix(saas): fail closed when Stripe webhook is not configured`.
-- Exact main is the SHA above; all claims below are scoped to this exact release.
+- **Current main SHA observed 2026-10-10:** `4e611b35a260a8c8e363c00a27f1827c69296b1b`
+- **Exact-SHA CI run:** [38047049481](https://github.com/bi421/QROS/actions/runs/38047049481) — completed / success.
+- **Exact-SHA Git Governance run:** [38047049445](https://github.com/bi421/QROS/actions/runs/38047049445) — completed / success.
+- These are the two exact-SHA workflow runs independently observed for this refresh. They do not prove staging, production deployment, migration execution, backup/restore, billing, or commercial readiness.
+- The earlier `f4c01b5…` baseline and its run references below are historical, not current-release evidence. All current-release claims must use the SHA and run links above.
 
 ## Post-merge CI proof for the exact SHA
 
-Post-merge CI evidence for `f4c01b506ae5d96d0ba4a05fa7a042a230abb0a5` is **partially verified**: GitHub UI evidence shows Git Governance #498 and CI #3963 succeeded for the push-triggered main commit. The current GitHub integration does not expose those push-triggered runs through commit lookup, so this connector cannot independently reproduce their run records. Do not infer additional gates beyond the observed evidence.
+Current exact-SHA evidence is limited to the two workflow runs linked above. Combined-status lookup returned no separate status-check records, so do not infer additional gates beyond those observed workflow results.
 
 ## SaaS implementation status
 
@@ -411,8 +411,10 @@ These are **implementation facts**, not proof of a deployed production customer 
 
 ## Immediate next actions
 
-1. Verify whether any existing GitHub evidence already proves a staging Golden Path run for the current release.
-2. If none exists, treat staging execution as the next external gate rather than creating speculative source changes.
+1. **Staging Golden Path remains NOT VERIFIED for current main.** A recent workflow-run search found no `Staging Golden Path Gate` execution in the latest 100 runs inspected.
+2. The workflow is manual (`workflow_dispatch`) and requires GitHub Environment secrets `QROS_STAGING_BASE_URL`, `QROS_STAGING_JWT`, and `QROS_STAGING_ISOLATION_JWT`. Run it only after the staging endpoint and two valid, separate test identities are configured.
+3. The connected Supabase account currently exposes one project (`pvhdsngxyoiqhqwujfjt`, `Boljoo_Project`, ACTIVE_HEALTHY); a separate staging project was not visible in that connected project list. This is not proof that staging cannot exist elsewhere.
+4. Production backup remains blocked by missing `BACKUP_AWS_ROLE_ARN` repository variable in the observed scheduled backup failure. Do not invent or commit credentials; configure the approved GitHub/AWS OIDC setup before rerunning.
 3. After staging proof, execute the controlled production migration workflow and capture exact migration-history/schema evidence.
 4. Execute and verify the production backup chain.
 5. Provision/verify isolated DR infrastructure and run the recovery drill.
