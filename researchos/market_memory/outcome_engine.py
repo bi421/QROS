@@ -73,8 +73,8 @@ def compute_forward_outcomes(
     for event in events:
         if event.timestamp.tzinfo != timezone:
             raise ValueError("event and price timestamps must use the same timezone")
-        if not math.isfinite(event.event_price) or event.event_price == 0:
-            raise ValueError("event price must be finite and non-zero for percentage returns")
+        if not math.isfinite(event.event_price) or event.event_price <= 0:
+            raise ValueError("event price must be finite and strictly positive for percentage returns")
     for column in ("open", "high", "low", "close"):
         values = frame[column].to_list()
         if any(value is None or not math.isfinite(float(value)) for value in values):
