@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from bisect import bisect_right
 from dataclasses import dataclass
-from math import exp, log
+from math import exp, isfinite, log
 from typing import Dict, List, Tuple
 
 from researchos.objects.evidence import EvidenceRegistry
@@ -152,8 +152,13 @@ class ProbabilityCalibrator:
         """
         if not self._is_fitted:
             raise RuntimeError("Calibrator must be fitted before predicting.")
-        if not 0.0 <= confidence <= 1.0:
-            raise ValueError("confidence must be between 0 and 1")
+        if (
+            isinstance(confidence, bool)
+            or not isinstance(confidence, (int, float))
+            or not isfinite(confidence)
+            or not 0.0 <= confidence <= 1.0
+        ):
+            raise ValueError("confidence must be finite and between 0 and 1")
 
         if self.method == "isotonic":
             if not self._isotonic_breakpoints:
