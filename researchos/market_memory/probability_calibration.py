@@ -57,10 +57,24 @@ class ProbabilityCalibrator:
                 "Calibration outcomes must be booleans for matched evidence IDs; "
                 f"invalid IDs: {invalid_ids[:5]}"
             )
-        rows = [
-            (eid, evidence_by_id[eid].confidence, 1.0 if outcomes[eid] else 0.0)
-            for eid in matched_ids
-        ]
+        rows = []
+        invalid_confidence_ids = []
+        for eid in matched_ids:
+            confidence = evidence_by_id[eid].confidence
+            if (
+                isinstance(confidence, bool)
+                or not isinstance(confidence, (int, float))
+                or not isfinite(confidence)
+                or not 0.0 <= confidence <= 1.0
+            ):
+                invalid_confidence_ids.append(eid)
+                continue
+            rows.append((eid, float(confidence), 1.0 if outcomes[eid] else 0.0))
+        if invalid_confidence_ids:
+            raise ValueError(
+                "Evidence confidence must be finite and between 0 and 1 for matched "
+                f"evidence IDs; invalid IDs: {invalid_confidence_ids[:5]}"
+            )
         if len(rows) < ProbabilityCalibrator.MIN_SAMPLES:
             raise ValueError("At least 10 matched evidence/outcome samples are required.")
         labels = {row[2] for row in rows}

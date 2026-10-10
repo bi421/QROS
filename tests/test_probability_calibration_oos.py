@@ -107,3 +107,14 @@ def test_isotonic_groups_identical_confidences_before_fitting() -> None:
 
     assert calibrator.predict_probability(0.12345) == 0.5
     assert report.calibrated_map["evidence-0"] == report.calibrated_map["evidence-1"]
+
+
+@pytest.mark.parametrize("invalid_confidence", [True, float("nan"), float("inf"), -0.01, 1.01, "0.5"])
+def test_fit_rejects_invalid_matched_evidence_confidence(invalid_confidence) -> None:
+    registry = _registry()
+    registry.evidence[0].confidence = invalid_confidence
+    outcomes = {f"evidence-{i}": i >= 6 for i in range(12)}
+    calibrator = ProbabilityCalibrator(method="isotonic")
+
+    with pytest.raises(ValueError, match="Evidence confidence must be finite"):
+        calibrator.fit(registry, outcomes)
