@@ -132,13 +132,15 @@ def walk_forward_validate(
         raise ValueError("max_outcome_horizon_days must be a positive integer when supplied")
     if max_outcome_horizon_days is not None and purge_days < max_outcome_horizon_days:
         raise ValueError("purge_days must be >= max_outcome_horizon_days to prevent label leakage")
-    if (
-        isinstance(confidence_level, bool)
-        or not isinstance(confidence_level, (int, float))
-        or not math.isfinite(confidence_level)
-        or not 0.0 < confidence_level < 1.0
-    ):
+    if isinstance(confidence_level, bool) or not isinstance(confidence_level, (int, float)):
         raise ValueError("confidence_level must be finite and strictly between 0 and 1")
+    try:
+        normalized_confidence_level = float(confidence_level)
+    except (OverflowError, ValueError):
+        raise ValueError("confidence_level must be finite and strictly between 0 and 1") from None
+    if not math.isfinite(normalized_confidence_level) or not 0.0 < normalized_confidence_level < 1.0:
+        raise ValueError("confidence_level must be finite and strictly between 0 and 1")
+    confidence_level = normalized_confidence_level
 
     ordered = list(events)
     for i in range(1, len(ordered)):
