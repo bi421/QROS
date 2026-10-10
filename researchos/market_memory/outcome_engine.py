@@ -88,7 +88,15 @@ def compute_forward_outcomes(
             raise ValueError(
                 f"Unsupported event direction for outcome calculation: {event.direction}"
             )
-        if not math.isfinite(event.event_price) or event.event_price <= 0:
+        if isinstance(event.event_price, bool) or not isinstance(event.event_price, (int, float)):
+            raise ValueError("event price must be finite and strictly positive for percentage returns")
+        try:
+            normalized_event_price = float(event.event_price)
+        except (OverflowError, ValueError):
+            raise ValueError(
+                "event price must be finite and strictly positive for percentage returns"
+            ) from None
+        if not math.isfinite(normalized_event_price) or normalized_event_price <= 0:
             raise ValueError("event price must be finite and strictly positive for percentage returns")
     for column in ("open", "high", "low", "close"):
         values = frame[column].to_list()
@@ -118,7 +126,7 @@ def compute_forward_outcomes(
             )
         idx = ts_to_idx[event.timestamp]
         _timeframe_minutes(event.timeframe)
-        event_close = event.event_price
+        event_close = float(event.event_price)
         returns: dict[str, float | None] = {}
         directions: dict[str, str | None] = {}
         mfe: dict[str, float | None] = {}
