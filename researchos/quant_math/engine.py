@@ -11,6 +11,7 @@ from researchos.quant_engine.mathematical_falsification import (
     audit_monte_carlo_replay,
 )
 from researchos.quant_engine.descriptive_statistics_audit import audit_descriptive_statistics
+from researchos.quant_engine.market_geometry_audit import audit_market_geometry
 from researchos.quant_math.bayesian import beta_bernoulli
 from researchos.quant_math.contracts import QuantMathResult
 from researchos.quant_math.geometry import measure_market_geometry
@@ -88,7 +89,11 @@ class QuantMathEngine:
             seed=seed,
         )
         audits = [
-            audit_descriptive_statistics(prices, result.statistics.__dict__).to_dict()
+            audit_market_geometry(prices, {
+                **result.geometry.__dict__,
+                "vector": result.geometry.vector.__dict__,
+            }).to_dict(),
+            audit_descriptive_statistics(prices, result.statistics.__dict__).to_dict(),
         ]
         if result.bayesian is not None:
             audits.append(audit_beta_bernoulli(result.bayesian.__dict__).to_dict())
@@ -120,7 +125,7 @@ class QuantMathEngine:
             "limitations": [
                 "VERIFIED means checked arithmetic or replay is reproducible, not that market assumptions are true.",
                 "Monte Carlo replay uses the declared historical-return resampling algorithm and does not validate its iid assumption.",
-                "Market geometry, model calibration, data leakage, transaction costs, and out-of-sample profitability are not yet independently audited by this integration.",
+                "Model calibration, data leakage, transaction costs, and out-of-sample profitability are not yet independently audited by this integration.",
                 "No profitability conclusion is inferred from missing or inconclusive evidence.",
             ],
         }
