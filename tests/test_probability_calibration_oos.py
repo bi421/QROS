@@ -1,6 +1,6 @@
-import pytest
-
 from __future__ import annotations
+
+import pytest
 
 from researchos.market_memory.probability_calibration import ProbabilityCalibrator
 from researchos.objects.evidence import Evidence, EvidenceRegistry
