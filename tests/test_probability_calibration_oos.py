@@ -1,3 +1,5 @@
+import pytest
+
 from __future__ import annotations
 
 from researchos.market_memory.probability_calibration import ProbabilityCalibrator
@@ -47,3 +49,14 @@ def test_isotonic_prediction_does_not_require_oos_evidence_id() -> None:
     calibrator.fit(registry, outcomes)
 
     assert calibrator.predict_probability(0.72) == calibrator.predict_probability(0.72)
+
+
+@pytest.mark.parametrize("confidence", [True, False, float("nan"), float("inf"), float("-inf")])
+def test_predict_probability_rejects_boolean_and_non_finite_confidence(confidence) -> None:
+    registry = _registry()
+    outcomes = {f"evidence-{i}": i >= 6 for i in range(12)}
+    calibrator = ProbabilityCalibrator(method="isotonic")
+    calibrator.fit(registry, outcomes)
+
+    with pytest.raises(ValueError, match="confidence must be finite"):
+        calibrator.predict_probability(confidence)
