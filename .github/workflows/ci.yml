@@ -221,3 +221,48 @@ jobs:
       - name: New type errors only
         run: |
           python -m mypy --config-file pyproject.toml --follow-imports=skip | mypy-baseline filter
+
+  full-configured-test-suite:
+    name: Full Configured Test Suite + Coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake g++
+      - name: Install project and test dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -e ".[dev,test,saas]"
+          python -m pip install pytest-cov
+      - name: Build C++ quant backend
+        run: |
+          cmake -S researchos/engines/quant \
+            -B researchos/engines/quant/build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_PYTHON_BINDINGS=ON
+          cmake --build researchos/engines/quant/build -j
+      - name: Run every configured test path and enforce coverage floor
+        env:
+          PYTHONPATH: researchos/engines/quant/python
+        run: |
+          python -m pytest -q --import-mode=importlib -m "not real_db" \
+            --cov=researchos --cov-report=xml:coverage.xml \
+            --cov-report=term-missing --cov-fail-under=50 2>&1 | tee coverage.txt
+      - name: Upload exact-SHA coverage evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qros-coverage-${{ github.sha }}
+          path: |
+            coverage.xml
+            coverage.txt
+          if-no-files-found: warn
+          retention-days: 90
