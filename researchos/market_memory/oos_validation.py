@@ -230,8 +230,13 @@ def _matched_values(events: Sequence[EventT], matcher: Callable[[EventT], bool],
     for event in events:
         if matcher(event):
             value = getter(event)
-            if value is not None and math.isfinite(float(value)):
-                values.append(float(value))
+            if value is not None:
+                try:
+                    normalized_value = float(value)
+                except (OverflowError, TypeError, ValueError):
+                    raise ValueError("matched outcome values must be finite numbers") from None
+                if math.isfinite(normalized_value):
+                    values.append(normalized_value)
     return values
 
 
