@@ -1,3 +1,4 @@
+from researchos.quant_engine.market_geometry_audit import audit_market_geometry
 from researchos.quant_engine.descriptive_statistics_audit import (
     audit_descriptive_statistics,
 )
@@ -17,6 +18,7 @@ def test_engine_attaches_independent_statistics_bayesian_and_monte_carlo_audits(
     assert report["audit_integration_version"] == "QUANT_MATH_AUDIT_V1"
     assert report["result_hash"] == report["result"]["result_hash"]
     assert {item["model"] for item in report["mathematical_audits"]} == {
+        "market_geometry",
         "descriptive_statistics",
         "beta_bernoulli",
         "monte_carlo_replay",
@@ -49,7 +51,8 @@ def test_engine_audits_statistics_without_optional_models() -> None:
     )
 
     assert [item["model"] for item in report["mathematical_audits"]] == [
-        "descriptive_statistics"
+        "market_geometry",
+        "descriptive_statistics",
     ]
     assert report["overall_audit_status"] == AuditStatus.VERIFIED.value
     assert (
@@ -71,3 +74,16 @@ def test_existing_evaluate_contract_remains_unchanged() -> None:
     assert result.bayesian is not None
     assert result.monte_carlo is not None
     assert len(result.result_hash) == 64
+
+
+
+def test_geometry_audit_falsifies_tampered_slope() -> None:
+    prices = [100.0, 101.0, 99.5, 102.0, 101.0, 103.5]
+    geometry = QuantMathEngine().evaluate(prices=prices).geometry
+    measurement = {**geometry.__dict__, "vector": geometry.vector.__dict__}
+    measurement["slope"] += 0.5
+
+    audit = audit_market_geometry(prices, measurement)
+
+    assert audit.status is AuditStatus.FALSIFIED
+    assert audit.checked_claim == "slope"
