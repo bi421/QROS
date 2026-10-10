@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import math
 import os
 import platform
 import sys
@@ -112,8 +113,27 @@ def main() -> int:
         parser.error("--candles must be >= 3; candidates and unique horizons must be positive")
     if args.max_unique_horizons > args.candles - 2:
         parser.error("--max-unique-horizons cannot exceed candles - 2")
-    if args.target_bps <= 0 or args.min_persistence < 1:
-        parser.error("target-bps and min-persistence must be positive")
+    if not math.isfinite(args.target_bps) or args.target_bps <= 0 or args.min_persistence < 1:
+        parser.error("--target-bps must be finite and positive; --min-persistence must be positive")
+    if not math.isfinite(args.minimum_probability) or not 0.0 <= args.minimum_probability <= 1.0:
+        parser.error("--minimum-probability must be finite and in [0, 1]")
+    if args.minimum_samples < 1:
+        parser.error("--minimum-samples must be positive")
+    for option, value in (
+        ("--max-spread", args.max_spread),
+        ("--min-total-depth", args.min_total_depth),
+        ("--min-trade-volume", args.min_trade_volume),
+    ):
+        if not math.isfinite(value) or value < 0.0:
+            parser.error(f"{option} must be finite and non-negative")
+    if (
+        not math.isfinite(args.min_abs_imbalance)
+        or not 0.0 <= args.min_abs_imbalance < 1.0
+    ):
+        parser.error("--min-abs-imbalance must be finite and in [0, 1)")
+    for option, value in (("--alpha", args.alpha), ("--beta", args.beta)):
+        if not math.isfinite(value) or not 0.0 < value < 1.0:
+            parser.error(f"{option} must be finite and strictly between 0 and 1")
 
     source = args.csv_path.resolve(strict=True)
     data = load_market_rows(source, args.candles)
