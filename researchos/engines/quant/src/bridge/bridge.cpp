@@ -297,11 +297,16 @@ std::string iso8601_now() {
 #else
   gmtime_r(&tt, &tm);
 #endif
-  char buf[32];
-  std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d",
-                tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour,
-                tm.tm_min, tm.tm_sec);
-  return std::string(buf);
+  // tm fields are integers with no strict upper width bound, so a small
+  // fixed buffer can trigger -Wformat-truncation or silently truncate output.
+  char buf[128];
+  const int written = std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d",
+                                    tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+                                    tm.tm_hour, tm.tm_min, tm.tm_sec);
+  if (written < 0 || static_cast<std::size_t>(written) >= sizeof(buf)) {
+    throw std::runtime_error("ISO-8601 timestamp formatting failed or truncated");
+  }
+  return std::string(buf, static_cast<std::size_t>(written));
 }
 
 // ── Model canonical forms / hashes ─────────────────────────────────────────
