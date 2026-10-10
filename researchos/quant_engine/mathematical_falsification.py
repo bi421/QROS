@@ -6,9 +6,10 @@ that the assumptions describe markets or that a strategy will be profitable.
 from __future__ import annotations
 
 import math
+import random
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 
 class AuditStatus(str, Enum):
@@ -155,4 +156,107 @@ def audit_monte_carlo_summary(
         None, mean, None, tolerance,
         ("terminal values are non-negative", "percentiles summarize the same simulation sample"),
         "Basic summary constraints pass, but aggregate fields cannot prove the simulation paths, RNG, sampling assumptions, or reported moments. Raw paths and generator/version metadata are required for independent replay.",
+    )
+
+
+def audit_monte_carlo_replay(
+    prices: Sequence[float],
+    measurement: Mapping[str, Any],
+    *,
+    tolerance: float = 1e-10,
+) -> MathematicalAudit:
+    """Independently replay the current empirical-resampling terminal model.
+
+    The replay reproduces the declared algorithm from raw prices, simulation
+    count, and seed without calling the production Monte Carlo function.
+    VERIFIED means numerical reproducibility only; it does not validate the
+    iid-resampling assumption or establish predictive market validity.
+    """
+    try:
+        values = [_number(value, "price") for value in prices]
+        if len(values) < 2 or any(value <= 0 for value in values):
+            raise ValueError("at least two finite positive prices are required")
+        simulations_value = _number(measurement["simulations"], "simulations")
+        seed_value = _number(measurement["seed"], "seed")
+        if not simulations_value.is_integer() or simulations_value < 1:
+            raise ValueError("simulations must be a positive integer")
+        if not seed_value.is_integer():
+            raise ValueError("seed must be an integer")
+        reported = {
+            "mean_terminal": _number(measurement["mean_terminal"], "mean_terminal"),
+            "standard_deviation_terminal": _number(
+                measurement["standard_deviation_terminal"], "standard_deviation_terminal"
+            ),
+            "percentile_05": _number(measurement["percentile_05"], "percentile_05"),
+            "percentile_50": _number(measurement["percentile_50"], "percentile_50"),
+            "percentile_95": _number(measurement["percentile_95"], "percentile_95"),
+        }
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
+        return MathematicalAudit(
+            "monte_carlo_replay", AuditStatus.INVALID_INPUT, "replay inputs",
+            None, None, None, tolerance, (),
+            f"Cannot replay the claim: {exc}",
+        )
+
+    returns = [
+        values[index] / values[index - 1] - 1.0
+        for index in range(1, len(values))
+    ]
+    rng = random.Random(int(seed_value))
+    terminals = []
+    for _ in range(int(simulations_value)):
+        terminal = values[0]
+        for _ in returns:
+            terminal *= 1.0 + rng.choice(returns)
+        terminals.append(terminal)
+    terminals.sort()
+
+    def quantile(probability: float) -> float:
+        position = probability * (len(terminals) - 1)
+        low = math.floor(position)
+        high = math.ceil(position)
+        if low == high:
+            return terminals[low]
+        weight = position - low
+        return terminals[low] * (1.0 - weight) + terminals[high] * weight
+
+    mean = math.fsum(terminals) / len(terminals)
+    sd = math.sqrt(math.fsum((value - mean) ** 2 for value in terminals) / len(terminals))
+    expected = {
+        "mean_terminal": mean,
+        "standard_deviation_terminal": sd,
+        "percentile_05": quantile(0.05),
+        "percentile_50": quantile(0.50),
+        "percentile_95": quantile(0.95),
+    }
+    errors = {
+        name: abs(expected[name] - reported[name])
+        for name in expected
+    }
+    worst_name = max(errors, key=errors.get)
+    worst_error = errors[worst_name]
+    status = (
+        AuditStatus.VERIFIED
+        if all(error <= tolerance for error in errors.values())
+        else AuditStatus.FALSIFIED
+    )
+    return MathematicalAudit(
+        "monte_carlo_replay",
+        status,
+        worst_name,
+        expected[worst_name],
+        reported[worst_name],
+        worst_error,
+        tolerance,
+        (
+            "same input prices and simulation horizon",
+            "Python random.Random behavior and seed are part of the replay contract",
+            "historical returns are resampled independently with replacement",
+        ),
+        (
+            "Reported Monte Carlo summary matches an independent replay numerically. "
+            "This does not validate the iid-resampling assumption or future profitability."
+            if status is AuditStatus.VERIFIED
+            else f"Independent replay disagrees with reported {worst_name}; numerical claim is falsified."
+        ),
     )
