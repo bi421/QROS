@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
-
 from researchos.decision_engine.probability import ProbabilityAssessment
 from researchos.probability_validation import evaluate_probability_calibration
 from researchos.quant_engine.mathematical_falsification import AuditStatus
