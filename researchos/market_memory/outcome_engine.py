@@ -79,9 +79,19 @@ def compute_forward_outcomes(
         values = frame[column].to_list()
         if any(value is None or not math.isfinite(float(value)) for value in values):
             raise ValueError(f"{column} prices must all be finite and non-null")
+        if any(float(value) <= 0 for value in values):
+            raise ValueError(f"{column} prices must all be strictly positive")
+    opens = frame["open"].to_list()
     closes = frame["close"].to_list()
     highs = frame["high"].to_list()
     lows = frame["low"].to_list()
+    for index, (open_price, high_price, low_price, close_price) in enumerate(
+        zip(opens, highs, lows, closes, strict=True)
+    ):
+        if high_price < max(open_price, low_price, close_price):
+            raise ValueError(f"OHLC candle at index {index} has a high below open, low, or close")
+        if low_price > min(open_price, high_price, close_price):
+            raise ValueError(f"OHLC candle at index {index} has a low above open, high, or close")
     ts_to_idx = {ts: i for i, ts in enumerate(timestamps)}
 
     updated_events: list[MarketEvent] = []
