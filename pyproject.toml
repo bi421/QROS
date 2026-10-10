@@ -106,7 +106,7 @@ BUILD_TESTS = false
 BUILD_BENCHMARKS = false
 
 [tool.pytest.ini_options]
-# Mirrors the CI suite (.github/workflows/test-python.yml).
+# Every configured Python test tree is included in the full-suite CI job.
 testpaths = [
     "researchos/experiments/phase51/tests",
     "researchos/market_memory/tests",
@@ -120,7 +120,15 @@ testpaths = [
     "researchos/engines/quant/tests",
     "researchos/memory/tests",
     "researchos/saas/tests",
-    "financial_research_lab/tests",
+    "examples/financial_research_lab/tests",
+    "researchos/decision_engine/tests",
+    "researchos/orchestration/tests",
+    "researchos/probability/tests",
+    "researchos/quant_math/tests",
+    "researchos/research_adapters/tests",
+    "researchos/risk/tests",
+    "researchos/engines/quant/python/tests",
+    "researchos/research_core/tests",
 ]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
