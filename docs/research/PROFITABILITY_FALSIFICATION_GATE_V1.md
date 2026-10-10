@@ -17,6 +17,12 @@ a predeclared benchmark. Strategy returns must already reflect all declared
 transaction costs, spread, slippage, and fees. The function does not estimate
 or invent costs. It rejects unaligned series and undeclared costs.
 
+**Important trust boundary:** `costs_included=True` is a caller assertion, not
+proof that costs were actually deducted. Before production integration, the
+caller must bind the returns to a versioned cost model and an auditable source
+artifact (including its hash). A report must not convert the boolean alone
+into a verified-cost claim.
+
 The evaluator reports:
 - sample count and arithmetic mean net return;
 - moving-block-bootstrap confidence intervals for net and benchmark-relative
