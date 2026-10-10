@@ -111,15 +111,17 @@ def _compute_macd(closes: list[float], fast: int = 12, slow: int = 26, signal: i
         if fast_value is not None and slow_value is not None:
             macd_line[i] = fast_value - slow_value
 
-    # Signal line
-    valid_macd = [m for m in macd_line if m != 0.0 or macd_line.index(m) >= slow - 1]
+    # The signal EMA must consume every MACD observation from the first
+    # valid slow-EMA index onward, including legitimate zero values. Filtering
+    # by value shifts time alignment and can silently corrupt the signal line.
     signal_line = [0.0] * len(closes)
+    signal_start = slow - 1
+    valid_macd = macd_line[signal_start:]
     if len(valid_macd) >= signal:
-        signal_valid_start = macd_line.index(valid_macd[0])
         ema_signal = ema(valid_macd, signal)
-        for i, val in enumerate(ema_signal):
+        for offset, val in enumerate(ema_signal):
             if val is not None:
-                signal_line[signal_valid_start + i] = val
+                signal_line[signal_start + offset] = val
 
     histogram = [macd_line[i] - signal_line[i] for i in range(len(closes))]
     return macd_line, signal_line, histogram
