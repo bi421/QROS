@@ -11,8 +11,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: git-governance-\${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: \${{ github.event_name == 'pull_request' }}
+  group: git-governance-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   governance:
@@ -26,8 +26,8 @@ jobs:
       - name: Validate PR branch and title
         if: github.event_name == 'pull_request'
         env:
-          PR_TITLE: \${{ github.event.pull_request.title }}
-          HEAD_REF: \${{ github.head_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          HEAD_REF: ${{ github.head_ref }}
         run: |
           python - <<'PY'
           import os, re, sys
