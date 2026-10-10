@@ -76,6 +76,9 @@ def audit_temporal_leakage(
                 if label_end.tzinfo != record.timestamp.tzinfo:
                     issues.append(f"{name}[{index}] label/event timezone mismatch")
                     continue
+                if label_end < record.timestamp:
+                    issues.append(f"{name}[{index}] label ends before its event timestamp")
+                    continue
                 if (label_end - boundary).total_seconds() >= -tolerance_seconds:
                     issues.append(f"{name}[{index}] label reaches or crosses next partition boundary")
 
