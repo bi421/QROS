@@ -203,3 +203,16 @@ def test_walk_forward_rejects_integer_confidence_level_that_overflows_float():
             step_size=20,
             confidence_level=10**1000,
         )
+
+
+def test_walk_forward_rejects_outcome_integer_that_overflows_float():
+    with pytest.raises(ValueError, match="matched outcome values must be finite numbers"):
+        walk_forward_validate(
+            _events(100),
+            lambda e: e.match,
+            lambda e: 10**1000,
+            initial_train_size=40,
+            validation_size=20,
+            test_size=20,
+            step_size=20,
+        )
