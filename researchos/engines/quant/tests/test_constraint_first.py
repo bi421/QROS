@@ -53,6 +53,19 @@ def test_known_forward_return_probabilities() -> None:
 
 @pytest.mark.cpp
 @pytest.mark.skipif(not _native_available(), reason="compiled QROS C++ extension is not installed")
+@pytest.mark.cpp
+@pytest.mark.skipif(not _native_available(), reason="compiled QROS C++ extension is not installed")
+def test_non_finite_forward_return_fails_closed() -> None:
+    closes = np.array([1e-308, 1e308, 1.0], dtype=np.float64)
+    with pytest.raises(ValueError, match="forward return must be finite"):
+        evaluate_candidates(
+            closes,
+            np.array([100.0]),
+            np.array([1], dtype=np.int32),
+            np.array([1], dtype=np.int32),
+        )
+
+
 def test_candidate_validation_fails_closed() -> None:
     closes = np.array([100.0, 101.0, 102.0], dtype=np.float64)
     with pytest.raises(ValueError, match="direction"):
