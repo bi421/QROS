@@ -556,6 +556,7 @@ class TestPipeline:
         assert report.total_events > 0
         assert len(report.conditional_results) > 0
         assert report.self_audit is not None
+        assert "Independent temporal leakage audit:" in report.notes
 
     @SKIP_IF_NO_DATA
     def test_pipeline_determinism(self):
