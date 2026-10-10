@@ -156,3 +156,36 @@ def test_legacy_fixed_matcher_api_remains_compatible():
     )
     assert result.total_folds == 2
     assert result.fit_mode == "fixed_matcher"
+
+
+@pytest.mark.parametrize(
+    ("parameter", "value"),
+    [
+        ("initial_train_size", True),
+        ("validation_size", 1.5),
+        ("test_size", False),
+        ("step_size", 2.5),
+        ("min_test_events", True),
+        ("purge_days", True),
+        ("embargo_days", 0.5),
+        ("max_outcome_horizon_days", False),
+        ("confidence_level", True),
+        ("confidence_level", float("nan")),
+    ],
+)
+def test_invalid_walk_forward_parameters_fail_closed(parameter, value):
+    kwargs = {
+        "initial_train_size": 40,
+        "validation_size": 20,
+        "test_size": 20,
+        "step_size": 20,
+        "min_test_events": 10,
+    }
+    kwargs[parameter] = value
+    with pytest.raises(ValueError):
+        walk_forward_validate(
+            _events(100),
+            lambda e: e.match,
+            lambda e: e.value,
+            **kwargs,
+        )
