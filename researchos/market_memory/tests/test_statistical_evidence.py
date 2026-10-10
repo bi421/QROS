@@ -111,3 +111,37 @@ def test_directional_probability_is_unavailable_for_unknown_direction() -> None:
     assert result.raw_probability == pytest.approx(1.0)
     assert result.directional_probability is None
     assert "not bullish/bearish" in result.notes
+
+
+
+@pytest.mark.parametrize(
+    ("successes", "trials", "confidence_level"),
+    [
+        (True, 10, 0.95),
+        (1.0, 10, 0.95),
+        (1, True, 0.95),
+        (1, 10, True),
+        (1, 10, float("nan")),
+        (1, 10, float("inf")),
+        (10**1000, 10, 0.95),
+    ],
+)
+def test_wilson_rejects_invalid_numeric_types_and_parameters(successes, trials, confidence_level):
+    with pytest.raises(ValueError):
+        wilson_proportion_ci(successes, trials, confidence_level)
+
+
+@pytest.mark.parametrize(
+    ("alpha", "hypotheses"),
+    [
+        (True, 5),
+        (float("nan"), 5),
+        (float("inf"), 5),
+        (0.05, True),
+        (0.05, 1.5),
+        (0.05, 0),
+    ],
+)
+def test_bonferroni_rejects_invalid_numeric_types_and_parameters(alpha, hypotheses):
+    with pytest.raises(ValueError):
+        bonferroni_alpha(alpha, hypotheses)
