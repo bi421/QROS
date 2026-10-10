@@ -60,3 +60,25 @@ def test_predict_probability_rejects_boolean_and_non_finite_confidence(confidenc
 
     with pytest.raises(ValueError, match="confidence must be finite"):
         calibrator.predict_probability(confidence)
+
+
+@pytest.mark.parametrize("invalid_outcome", [0, 1, "false", "true", None, 0.0, 1.0])
+def test_fit_rejects_non_boolean_matched_outcomes(invalid_outcome) -> None:
+    registry = _registry()
+    outcomes = {f"evidence-{i}": i >= 6 for i in range(12)}
+    outcomes["evidence-0"] = invalid_outcome
+    calibrator = ProbabilityCalibrator(method="isotonic")
+
+    with pytest.raises(ValueError, match="outcomes must be booleans"):
+        calibrator.fit(registry, outcomes)
+
+
+def test_fit_ignores_unmatched_outcome_ids() -> None:
+    registry = _registry()
+    outcomes = {f"evidence-{i}": i >= 6 for i in range(12)}
+    outcomes["not-in-registry"] = "not-a-boolean"
+    calibrator = ProbabilityCalibrator(method="isotonic")
+
+    calibrator.fit(registry, outcomes)
+
+    assert calibrator.predict_probability(0.72) >= 0.0
