@@ -2,6 +2,7 @@ from researchos.quant_engine.mathematical_falsification import (
     AuditStatus,
     audit_beta_bernoulli,
     audit_monte_carlo_summary,
+    audit_monte_carlo_replay,
 )
 
 
@@ -69,3 +70,24 @@ def test_monte_carlo_invalid_percentile_order_fails_closed() -> None:
         "percentile_95": 110.0,
     })
     assert result.status is AuditStatus.INVALID_INPUT
+
+
+def test_monte_carlo_replay_verifies_existing_engine_output() -> None:
+    from researchos.quant_math.monte_carlo import simulate_terminal_distribution
+
+    prices = [100.0, 101.0, 99.5, 102.0, 101.0, 103.5]
+    measurement = simulate_terminal_distribution(prices, simulations=250, seed=19)
+    result = audit_monte_carlo_replay(prices, measurement.__dict__)
+    assert result.status is AuditStatus.VERIFIED
+
+
+def test_monte_carlo_replay_falsifies_tampered_output() -> None:
+    from researchos.quant_math.monte_carlo import simulate_terminal_distribution
+
+    prices = [100.0, 101.0, 99.5, 102.0, 101.0, 103.5]
+    measurement = simulate_terminal_distribution(prices, simulations=250, seed=19)
+    reported = dict(measurement.__dict__)
+    reported["mean_terminal"] += 1.0
+    result = audit_monte_carlo_replay(prices, reported)
+    assert result.status is AuditStatus.FALSIFIED
+    assert result.checked_claim == "mean_terminal"
