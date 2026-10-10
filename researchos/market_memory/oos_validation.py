@@ -107,18 +107,38 @@ def walk_forward_validate(
     With ``fit_callback=None`` the legacy fixed ``matcher`` behavior is
     preserved exactly.
     """
-    if initial_train_size < 1 or validation_size < 1 or test_size < 1:
-        raise ValueError("window sizes must be >= 1")
-    if step_size < 1 or min_test_events < 1:
-        raise ValueError("step_size and min_test_events must be >= 1")
-    if purge_days < 0 or embargo_days < 0:
-        raise ValueError("purge_days and embargo_days must be >= 0")
-    if max_outcome_horizon_days is not None and max_outcome_horizon_days < 1:
-        raise ValueError("max_outcome_horizon_days must be >= 1 when supplied")
+    positive_integer_parameters = {
+        "initial_train_size": initial_train_size,
+        "validation_size": validation_size,
+        "test_size": test_size,
+        "step_size": step_size,
+        "min_test_events": min_test_events,
+    }
+    for name, value in positive_integer_parameters.items():
+        if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+            raise ValueError(f"{name} must be a positive integer")
+    non_negative_integer_parameters = {
+        "purge_days": purge_days,
+        "embargo_days": embargo_days,
+    }
+    for name, value in non_negative_integer_parameters.items():
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise ValueError(f"{name} must be a non-negative integer")
+    if max_outcome_horizon_days is not None and (
+        not isinstance(max_outcome_horizon_days, int)
+        or isinstance(max_outcome_horizon_days, bool)
+        or max_outcome_horizon_days < 1
+    ):
+        raise ValueError("max_outcome_horizon_days must be a positive integer when supplied")
     if max_outcome_horizon_days is not None and purge_days < max_outcome_horizon_days:
         raise ValueError("purge_days must be >= max_outcome_horizon_days to prevent label leakage")
-    if not 0.0 < confidence_level < 1.0:
-        raise ValueError("confidence_level must be strictly between 0 and 1")
+    if (
+        isinstance(confidence_level, bool)
+        or not isinstance(confidence_level, (int, float))
+        or not math.isfinite(confidence_level)
+        or not 0.0 < confidence_level < 1.0
+    ):
+        raise ValueError("confidence_level must be finite and strictly between 0 and 1")
 
     ordered = list(events)
     for i in range(1, len(ordered)):
