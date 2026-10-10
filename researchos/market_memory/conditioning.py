@@ -105,12 +105,22 @@ def compute_conditional_statistics(
     values are excluded from the empirical sample rather than contaminating the
     result. No missing-value repair or interpolation is performed.
     """
-    if bootstrap_num_resamples < 1:
-        raise ValueError("bootstrap_num_resamples must be >= 1")
-    if not 0.0 < confidence_level < 1.0:
-        raise ValueError("confidence_level must be strictly between 0 and 1")
-    if not isinstance(bootstrap_seed, int):
-        raise TypeError("bootstrap_seed must be an int")
+    if (
+        not isinstance(bootstrap_num_resamples, int)
+        or isinstance(bootstrap_num_resamples, bool)
+        or bootstrap_num_resamples < 1
+    ):
+        raise ValueError("bootstrap_num_resamples must be a positive integer")
+    if not math.isfinite(confidence_level) or not 0.0 < confidence_level < 1.0:
+        raise ValueError("confidence_level must be finite and strictly between 0 and 1")
+    if not isinstance(bootstrap_seed, int) or isinstance(bootstrap_seed, bool):
+        raise TypeError("bootstrap_seed must be an integer, not bool")
+    if (
+        not isinstance(dependence_block_size, int)
+        or isinstance(dependence_block_size, bool)
+        or dependence_block_size < 1
+    ):
+        raise ValueError("dependence_block_size must be a positive integer")
     if not outcome_field or not isinstance(outcome_field, str):
         raise ValueError("outcome_field must be a non-empty string")
 
