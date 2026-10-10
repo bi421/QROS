@@ -4,7 +4,9 @@ The audit checks a supplied train/validation/test split for strict chronological
 ordering, realized label windows crossing the next partition boundary, missing
 label-end timestamps, and feature-availability timestamps later than the event
 timestamp. Missing partitions and malformed timestamp contracts are
-fail-closed as invalid input; detected boundary violations are falsified.
+fail-closed as invalid input; detected boundary violations are falsified. If
+feature-availability provenance is not supplied, a clean partition/label check
+is INCONCLUSIVE rather than VERIFIED.
 
 A verified result is scoped to the records and timestamps supplied to the
 audit. It does not prove that feature values were correctly constructed,
