@@ -98,9 +98,8 @@ def test_isotonic_groups_identical_confidences_before_fitting() -> None:
         for i, item in enumerate(original.evidence)
     ]
     registry = EvidenceRegistry("research-1", evidence=evidence)
-    outcomes = {f"evidence-{i}": i >= 6 for i in range(12)}
+    outcomes = {f"evidence-{i}": True for i in range(12)}
     outcomes["evidence-0"] = False
-    outcomes["evidence-1"] = True
 
     calibrator = ProbabilityCalibrator(method="isotonic")
     calibrator.fit(registry, outcomes)
