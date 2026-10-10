@@ -28,18 +28,31 @@ class ProportionEvidence:
         return self.confidence_interval[0] > 0.5 or self.confidence_interval[1] < 0.5
 
 
+def _finite_probability_parameter(name: str, value: float) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be finite and strictly between 0 and 1")
+    try:
+        normalized = float(value)
+    except (OverflowError, ValueError):
+        raise ValueError(f"{name} must be finite and strictly between 0 and 1") from None
+    if not math.isfinite(normalized) or not 0.0 < normalized < 1.0:
+        raise ValueError(f"{name} must be finite and strictly between 0 and 1")
+    return normalized
+
+
 def wilson_proportion_ci(
     successes: int,
     trials: int,
     confidence_level: float = 0.95,
 ) -> ProportionEvidence:
     """Compute a Wilson score interval for a binomial proportion."""
-    if trials < 1:
-        raise ValueError("trials must be >= 1")
+    if isinstance(trials, bool) or not isinstance(trials, int) or trials < 1:
+        raise ValueError("trials must be a positive integer")
+    if isinstance(successes, bool) or not isinstance(successes, int):
+        raise ValueError("successes must be an integer")
     if successes < 0 or successes > trials:
         raise ValueError("successes must be between 0 and trials")
-    if not 0.0 < confidence_level < 1.0:
-        raise ValueError("confidence_level must be strictly between 0 and 1")
+    confidence_level = _finite_probability_parameter("confidence_level", confidence_level)
 
     z = _normal_quantile(0.5 + confidence_level / 2.0)
     p = successes / trials
@@ -63,10 +76,9 @@ def wilson_proportion_ci(
 
 def bonferroni_alpha(alpha: float, hypotheses: int) -> float:
     """Return the family-wise-error adjusted per-test alpha."""
-    if not 0.0 < alpha < 1.0:
-        raise ValueError("alpha must be strictly between 0 and 1")
-    if hypotheses < 1:
-        raise ValueError("hypotheses must be >= 1")
+    alpha = _finite_probability_parameter("alpha", alpha)
+    if isinstance(hypotheses, bool) or not isinstance(hypotheses, int) or hypotheses < 1:
+        raise ValueError("hypotheses must be a positive integer")
     return alpha / hypotheses
 
 
