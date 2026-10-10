@@ -117,10 +117,12 @@ def compute_conditional_statistics(
     matched = filter_events(events, spec)
 
     values: list[float] = []
+    directions: list[str] = []
     for event in matched:
         value = getattr(event.outcome, outcome_field, None) if event.outcome else None
         if isinstance(value, (int, float)) and math.isfinite(float(value)):
             values.append(float(value))
+            directions.append(event.direction.strip().lower())
 
     n = len(values)
     if n == 0:
@@ -132,6 +134,8 @@ def compute_conditional_statistics(
             mean_return=0.0,
             std_return=0.0,
             status=EvidenceStatus.INCONCLUSIVE.value,
+            probability_definition=f"P({outcome_field} > 0); raw positive-return frequency",
+            directional_probability=None,
             notes="No finite outcomes matched condition",
         )
 
@@ -139,6 +143,17 @@ def compute_conditional_statistics(
     std_val = _std(values)
     positive_count = sum(1 for value in values if value > 0)
     raw_prob = positive_count / n
+    known_directions = {"bullish", "bearish"}
+    directional_prob = (
+        sum(
+            1
+            for value, direction in zip(values, directions, strict=True)
+            if (direction == "bullish" and value > 0)
+            or (direction == "bearish" and value < 0)
+        ) / n
+        if all(direction in known_directions for direction in directions)
+        else None
+    )
     effective_block_size = min(dependence_block_size, n)
     ci_result = block_bootstrap_mean_ci(values, effective_block_size, bootstrap_num_resamples, bootstrap_seed, confidence_level)
     ci = ci_result.confidence_interval if len(values) >= 2 else None
@@ -163,7 +178,20 @@ def compute_conditional_statistics(
         bootstrap_seed=bootstrap_seed,
         bootstrap_num_resamples=bootstrap_num_resamples,
         status=status,
-        notes=notes,
+        directional_probability=directional_prob,
+        probability_definition=(
+            f"P({outcome_field} > 0); raw positive-return frequency, "
+            "not direction-adjusted signal success"
+        ),
+        notes=(
+            notes
+            + (
+                "; directional_probability is unavailable because an event direction "
+                "is not bullish/bearish"
+                if directional_prob is None
+                else f"; directional_probability={directional_prob:.6f}"
+            )
+        ),
     )
 
 def _bootstrap_mean_ci(

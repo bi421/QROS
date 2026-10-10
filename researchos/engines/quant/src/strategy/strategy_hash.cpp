@@ -8,6 +8,7 @@
 #include <ctime>
 #include <iomanip>
 #include <sstream>
+#include <stdexcept>
 
 namespace quant {
 namespace strategy {
@@ -140,9 +141,16 @@ std::string iso8601(TimePoint tp) {
 std::string canonical_double(double v) {
   if (std::isnan(v)) return "null";
   if (std::isinf(v)) return v > 0 ? "1e999" : "-1e999";
-  char buf[64];
-  std::snprintf(buf, sizeof(buf), "%.10f", v);
-  return buf;
+
+  // Fixed-point formatting of a finite double can require over 300 characters
+  // (e.g. DBL_MAX). Keep enough space for the full decimal representation and
+  // reject formatting failures instead of silently hashing a truncated value.
+  char buf[384];
+  const int written = std::snprintf(buf, sizeof(buf), "%.10f", v);
+  if (written < 0 || static_cast<std::size_t>(written) >= sizeof(buf)) {
+    throw std::runtime_error("canonical_double formatting failed or truncated");
+  }
+  return std::string(buf, static_cast<std::size_t>(written));
 }
 
 std::string canonical_int(int64_t v) { return std::to_string(v); }

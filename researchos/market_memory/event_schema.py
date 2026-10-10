@@ -343,6 +343,9 @@ class ConditionalResult:
     bootstrap_num_resamples: int = 1000
     status: str = EvidenceStatus.EXPLORATORY.value
     notes: str = ""
+    # Appended to preserve positional compatibility with the original fields.
+    directional_probability: float | None = None
+    probability_definition: str = "P(return > 0); raw positive-return frequency"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -350,6 +353,8 @@ class ConditionalResult:
             "condition_spec": self.condition_spec.to_dict(),
             "sample_size": self.sample_size,
             "raw_probability": self.raw_probability,
+            "directional_probability": self.directional_probability,
+            "probability_definition": self.probability_definition,
             "mean_return": self.mean_return,
             "std_return": self.std_return,
             "confidence_interval": list(self.confidence_interval) if self.confidence_interval else None,
