@@ -59,7 +59,9 @@ def compute_forward_outcomes(
     if missing:
         raise ValueError(f"price_df missing columns: {sorted(missing)}")
     if len(price_df) == 0:
-        return events
+        if events:
+            raise ValueError("price_df must contain observations when events are supplied")
+        return []
 
     frame = price_df.sort("timestamp")
     timestamps = frame["timestamp"].to_list()
@@ -97,8 +99,10 @@ def compute_forward_outcomes(
     updated_events: list[MarketEvent] = []
     for event in events:
         if event.timestamp not in ts_to_idx:
-            updated_events.append(event)
-            continue
+            raise ValueError(
+                f"event timestamp {event.timestamp.isoformat()} is not present in price data; "
+                "cannot calculate forward outcomes"
+            )
         idx = ts_to_idx[event.timestamp]
         _timeframe_minutes(event.timeframe)
         event_close = event.event_price
