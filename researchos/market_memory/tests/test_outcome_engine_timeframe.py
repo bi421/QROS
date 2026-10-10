@@ -113,3 +113,34 @@ def test_non_finite_market_prices_fail_closed():
     )
     with pytest.raises(ValueError, match="close prices must all be finite"):
         compute_forward_outcomes([_event(start, "D1")], df)
+
+
+
+def test_non_positive_market_prices_fail_closed():
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    df = pl.DataFrame(
+        {
+            "timestamp": [start, start + timedelta(days=1)],
+            "open": [100.0, 100.0],
+            "high": [100.0, 101.0],
+            "low": [100.0, 0.0],
+            "close": [100.0, 101.0],
+        }
+    )
+    with pytest.raises(ValueError, match="low prices must all be strictly positive"):
+        compute_forward_outcomes([_event(start, "D1")], df)
+
+
+def test_incoherent_ohlc_candle_fails_closed():
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    df = pl.DataFrame(
+        {
+            "timestamp": [start, start + timedelta(days=1)],
+            "open": [100.0, 100.0],
+            "high": [100.0, 99.0],
+            "low": [100.0, 98.0],
+            "close": [100.0, 101.0],
+        }
+    )
+    with pytest.raises(ValueError, match="high below open, low, or close"):
+        compute_forward_outcomes([_event(start, "D1")], df)
