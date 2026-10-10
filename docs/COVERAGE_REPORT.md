@@ -1,3 +1,5 @@
+> **Historical report — not current-main evidence.** This report was measured on 2026-08-16 and must not be cited as the coverage of a later commit. For current evidence, use the `Full Configured Test Suite + Coverage` CI artifact named `qros-coverage-<exact SHA>`; that run also enforces the configured minimum coverage floor.
+
 # PHASE 3.2 — Coverage Measurement Report
 
 **Date Executed:** 2026-08-16  
