@@ -779,9 +779,10 @@ TEST(StrategyKernel, DailyLossLimitBlocksNewEntries) {
 
 TEST(StrategyKernel, DailyLossLimitCircuitBreakerClosesPositions) {
   auto cfg = zero_cost_cfg();
-  cfg.trade.sizing = PositionSizing::RiskPercent;
-  cfg.trade.risk_percent = 2.0;
-  cfg.trade.default_quantity = 500.0; // no stop -> default size; 500 * 4 = -2%
+  // Fixed-lot sizing is intentional here: risk-percent sizing fails closed
+  // without a stop distance, so it cannot exercise the circuit-breaker path.
+  cfg.trade.sizing = PositionSizing::FixedLot;
+  cfg.trade.fixed_lot = 500.0; // 500 * (96 - 100) = -2,000 (2% of equity)
   cfg.risk.daily_loss_limit_pct = 1.0;
   // No stop: position bleeds to -2% -> breach triggers forced close.
   std::vector<OHLCV> bars = {
@@ -1449,8 +1450,10 @@ TEST(StrategyKernel, ManyOpenPositionsManagedPerBar) {
 TEST(StrategyKernel, EquityNeverNegativeAccounting) {
   auto cfg = zero_cost_cfg();
   cfg.trade.stop_loss = 0.0;
-  cfg.trade.sizing = PositionSizing::RiskPercent;
-  cfg.trade.risk_percent = 5.0;
+  // No stop means risk-percent sizing correctly refuses to open a position.
+  // Use a bounded fixed lot to exercise loss accounting without that ambiguity.
+  cfg.trade.sizing = PositionSizing::FixedLot;
+  cfg.trade.fixed_lot = 1000.0;
   std::vector<OHLCV> bars = {
       mk(100, 100, 100, 100, 0),
       mk(100, 100, 60, 60, 1), // deep adverse move, no stop
@@ -1458,8 +1461,8 @@ TEST(StrategyKernel, EquityNeverNegativeAccounting) {
   auto r = run_kernel(cfg, bars, {open_sig(0)});
   ASSERT_EQ(r.trades.size(), 1u);
   EXPECT_LT(r.trades[0].net_pnl, 0.0);
-  // final equity = initial + net (equity is never guaranteed positive for a
-  // levered loss, but accounting stays consistent)
+  // The chosen fixed lot keeps equity nonnegative while exercising loss accounting.
+  EXPECT_GE(r.final_equity, 0.0);
   EXPECT_DOUBLE_EQ(r.final_equity, 100000.0 + r.trades[0].net_pnl);
   EXPECT_NEAR(r.stats.net_profit, r.trades[0].net_pnl, 1e-9);
 }
