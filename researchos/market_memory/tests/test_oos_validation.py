@@ -189,3 +189,17 @@ def test_invalid_walk_forward_parameters_fail_closed(parameter, value):
             lambda e: e.value,
             **kwargs,
         )
+
+
+def test_walk_forward_rejects_integer_confidence_level_that_overflows_float():
+    with pytest.raises(ValueError, match="confidence_level must be finite"):
+        walk_forward_validate(
+            _events(100),
+            lambda e: e.match,
+            lambda e: e.value,
+            initial_train_size=40,
+            validation_size=20,
+            test_size=20,
+            step_size=20,
+            confidence_level=10**1000,
+        )
