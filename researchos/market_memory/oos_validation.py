@@ -245,7 +245,10 @@ def _probability(values: Sequence[float]) -> float:
 
 
 def _mean(values: Sequence[float]) -> float:
-    return sum(values) / len(values) if values else 0.0
+    if not values:
+        return 0.0
+    count = len(values)
+    return math.fsum(value / count for value in values)
 
 
 def _stable(train: float, validation: float, test: float, tolerance: float = 0.15) -> bool:

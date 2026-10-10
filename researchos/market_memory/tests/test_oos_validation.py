@@ -216,3 +216,21 @@ def test_walk_forward_rejects_outcome_integer_that_overflows_float():
             test_size=20,
             step_size=20,
         )
+
+
+def test_walk_forward_mean_does_not_overflow_for_finite_large_outcomes():
+    result = walk_forward_validate(
+        _events(100, value=1e308),
+        lambda e: e.match,
+        lambda e: e.value,
+        initial_train_size=40,
+        validation_size=20,
+        test_size=20,
+        step_size=20,
+    )
+
+    assert result.folds
+    for fold in result.folds:
+        assert fold.train_mean == pytest.approx(1e308)
+        assert fold.validation_mean == pytest.approx(1e308)
+        assert fold.test_mean == pytest.approx(1e308)
