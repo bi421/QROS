@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 import polars as pl
+import pytest
 
 from researchos.market_memory.event_schema import EventContext, MarketEvent
 from researchos.market_memory.m1_event_engine import extract_xauusd_m1_sma_crossover_events
@@ -65,3 +66,8 @@ def test_m1_event_extraction_is_deterministic():
     assert first == second
     assert all(event.timeframe == "M1" for event in first)
     assert all(event.dataset_source == "xauusd_m1_mt5" for event in first)
+
+
+def test_forward_outcome_rejects_integer_threshold_that_overflows_float():
+    with pytest.raises(ValueError, match="threshold must be finite"):
+        compute_forward_outcomes([], pl.DataFrame(), threshold=10**1000)
