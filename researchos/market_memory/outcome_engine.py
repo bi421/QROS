@@ -8,7 +8,8 @@ market perspectives.
 from __future__ import annotations
 
 from bisect import bisect_left
-from datetime import timedelta
+from datetime import datetime, timedelta
+import math
 
 import polars as pl
 
@@ -45,10 +46,14 @@ def compute_forward_outcomes(
     """Compute leakage-safe calendar-day outcomes from actual future observations."""
     if horizons is None:
         horizons = [1, 2, 3, 5, 10, 20]
-    if any(h < 1 for h in horizons):
-        raise ValueError("horizons must contain positive day counts")
-    if threshold < 0:
-        raise ValueError("threshold must be non-negative")
+    if not horizons or any(
+        not isinstance(h, int) or isinstance(h, bool) or h < 1 for h in horizons
+    ):
+        raise ValueError("horizons must be a non-empty list of positive integers")
+    if len(set(horizons)) != len(horizons):
+        raise ValueError("horizons must not contain duplicates")
+    if not math.isfinite(threshold) or threshold < 0:
+        raise ValueError("threshold must be finite and non-negative")
     required = {"timestamp", "open", "high", "low", "close"}
     missing = required.difference(price_df.columns)
     if missing:
@@ -58,6 +63,22 @@ def compute_forward_outcomes(
 
     frame = price_df.sort("timestamp")
     timestamps = frame["timestamp"].to_list()
+    if any(not isinstance(ts, datetime) for ts in timestamps):
+        raise ValueError("price timestamps must be datetimes")
+    if any(current <= previous for previous, current in zip(timestamps, timestamps[1:])):
+        raise ValueError("price timestamps must be unique and strictly increasing")
+    timezone = timestamps[0].tzinfo if timestamps else None
+    if any(ts.tzinfo != timezone for ts in timestamps):
+        raise ValueError("price timestamps must use a consistent timezone")
+    for event in events:
+        if event.timestamp.tzinfo != timezone:
+            raise ValueError("event and price timestamps must use the same timezone")
+        if not math.isfinite(event.event_price) or event.event_price == 0:
+            raise ValueError("event price must be finite and non-zero for percentage returns")
+    for column in ("open", "high", "low", "close"):
+        values = frame[column].to_list()
+        if any(value is None or not math.isfinite(float(value)) for value in values):
+            raise ValueError(f"{column} prices must all be finite and non-null")
     closes = frame["close"].to_list()
     highs = frame["high"].to_list()
     lows = frame["low"].to_list()
@@ -95,17 +116,14 @@ def compute_forward_outcomes(
             window_high = max(highs[idx + 1 : future_idx + 1])
             window_low = min(lows[idx + 1 : future_idx + 1])
 
-            if event_close == 0:
-                ret = directional_ret = favorable_excursion = adverse_excursion = 0.0
+            ret = (future_close - event_close) / event_close
+            directional_ret = _directional_return(event, ret)
+            if event.direction.strip().lower() in {"bullish", "long", "up"}:
+                favorable_excursion = (window_high - event_close) / event_close
+                adverse_excursion = (window_low - event_close) / event_close
             else:
-                ret = (future_close - event_close) / event_close
-                directional_ret = _directional_return(event, ret)
-                if event.direction.strip().lower() in {"bullish", "long", "up"}:
-                    favorable_excursion = (window_high - event_close) / event_close
-                    adverse_excursion = (window_low - event_close) / event_close
-                else:
-                    favorable_excursion = (event_close - window_low) / event_close
-                    adverse_excursion = (event_close - window_high) / event_close
+                favorable_excursion = (event_close - window_low) / event_close
+                adverse_excursion = (event_close - window_high) / event_close
 
             returns[f"return_{h}d"] = ret
             directions[f"direction_{h}d"] = "up" if ret > 0 else "down" if ret < 0 else "flat"

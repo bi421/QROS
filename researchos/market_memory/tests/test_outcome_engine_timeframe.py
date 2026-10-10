@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+import math
 
 import polars as pl
 import pytest
@@ -50,3 +52,64 @@ def test_unsupported_timeframe_fails_closed():
     )
     with pytest.raises(ValueError, match="Unsupported timeframe"):
         compute_forward_outcomes([_event(start, "UNKNOWN")], df)
+
+
+def test_zero_event_price_fails_closed_instead_of_fabricating_zero_return():
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    df = pl.DataFrame(
+        {
+            "timestamp": [start, start + timedelta(days=1)],
+            "open": [100.0, 100.0],
+            "high": [100.0, 101.0],
+            "low": [100.0, 100.0],
+            "close": [100.0, 101.0],
+        }
+    )
+    invalid_event = replace(_event(start, "D1"), event_price=0.0)
+    with pytest.raises(ValueError, match="finite and non-zero"):
+        compute_forward_outcomes([invalid_event], df)
+
+
+def test_non_finite_threshold_fails_closed():
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    df = pl.DataFrame(
+        {
+            "timestamp": [start, start + timedelta(days=1)],
+            "open": [100.0, 100.0],
+            "high": [100.0, 101.0],
+            "low": [100.0, 100.0],
+            "close": [100.0, 101.0],
+        }
+    )
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        compute_forward_outcomes([_event(start, "D1")], df, threshold=math.nan)
+
+
+def test_duplicate_price_timestamps_fail_closed():
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    df = pl.DataFrame(
+        {
+            "timestamp": [start, start, start + timedelta(days=1)],
+            "open": [100.0, 100.0, 100.0],
+            "high": [100.0, 100.0, 101.0],
+            "low": [100.0, 100.0, 100.0],
+            "close": [100.0, 100.0, 101.0],
+        }
+    )
+    with pytest.raises(ValueError, match="unique and strictly increasing"):
+        compute_forward_outcomes([_event(start, "D1")], df)
+
+
+def test_non_finite_market_prices_fail_closed():
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    df = pl.DataFrame(
+        {
+            "timestamp": [start, start + timedelta(days=1)],
+            "open": [100.0, 100.0],
+            "high": [100.0, 101.0],
+            "low": [100.0, 100.0],
+            "close": [100.0, float("nan")],
+        }
+    )
+    with pytest.raises(ValueError, match="close prices must all be finite"):
+        compute_forward_outcomes([_event(start, "D1")], df)
