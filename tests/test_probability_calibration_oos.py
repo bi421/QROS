@@ -51,7 +51,7 @@ def test_isotonic_prediction_does_not_require_oos_evidence_id() -> None:
     assert calibrator.predict_probability(0.72) == calibrator.predict_probability(0.72)
 
 
-@pytest.mark.parametrize("confidence", [True, False, float("nan"), float("inf"), float("-inf")])
+@pytest.mark.parametrize("confidence", [True, False, float("nan"), float("inf"), float("-inf"), 10**1000])
 def test_predict_probability_rejects_boolean_and_non_finite_confidence(confidence) -> None:
     registry = _registry()
     outcomes = {f"evidence-{i}": i >= 6 for i in range(12)}
@@ -109,7 +109,7 @@ def test_isotonic_groups_identical_confidences_before_fitting() -> None:
     assert report.calibrated_map["evidence-0"] == report.calibrated_map["evidence-1"]
 
 
-@pytest.mark.parametrize("invalid_confidence", [True, float("nan"), float("inf"), -0.01, 1.01, "0.5"])
+@pytest.mark.parametrize("invalid_confidence", [True, float("nan"), float("inf"), -0.01, 1.01, "0.5", 10**1000])
 def test_fit_rejects_invalid_matched_evidence_confidence(invalid_confidence) -> None:
     registry = _registry()
     registry.evidence[0].confidence = invalid_confidence
