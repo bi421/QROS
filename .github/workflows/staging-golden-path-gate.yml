@@ -99,8 +99,8 @@ jobs:
 
           versions_status="$(call GET "${base}/v1/datasets/${dataset_id}/versions" "${work}/versions.json")"
           test "${versions_status}" = "200" || { echo "GET dataset versions returned HTTP ${versions_status}"; cat "${work}/versions.json"; exit 1; }
-          test "$(jq -er 'length' "${work}/versions.json")" = "1"
-          listed_sha="$(jq -er '.[0].content_sha256' "${work}/versions.json")"
+          test "$(jq -er '(.data // .) | length' "${work}/versions.json")" = "1"
+          listed_sha="$(jq -er '(.data // .)[0].content_sha256' "${work}/versions.json")"
           test "${listed_sha}" = "${expected_sha}" || { echo "listed dataset hash mismatch"; exit 1; }
 
           echo "4/13 tenant boundary for dataset"
