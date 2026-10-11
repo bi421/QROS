@@ -218,7 +218,7 @@ def main() -> int:
         report["failure"] = str(exc)
         report["elapsed_seconds"] = round(time.time() - started, 3)
         args.report.write_text(
-            json.dumps(report, indent=2, sort_keys=True) + "\\n", encoding="utf-8"
+            json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
         print(json.dumps(report, indent=2, sort_keys=True))
         raise
