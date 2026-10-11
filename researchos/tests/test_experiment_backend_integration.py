@@ -304,12 +304,11 @@ class TestBoundary:
         assert params == ["self", "request", "dataset", "calculation_version"]
 
     def test_insufficient_dataset_raises(self):
-        """Backend must return an empty SimulationResult for an insufficient dataset contract."""
+        """Backend must reject an insufficient dataset instead of emitting a result."""
         backend = PythonQuantBackend()
         request = SimulationRequest(dataset_reference="x", seed=42)
-        result = backend.run_simulation(request, [100.0])
-        assert result.metrics["num_trades"] == 0
-        assert result.result_hash == "empty"
+        with pytest.raises(ValueError, match="at least 2 prices"):
+            backend.run_simulation(request, [100.0])
 
 
 # ──────────────────────────────────────────────
