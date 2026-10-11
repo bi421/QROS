@@ -352,8 +352,8 @@ class TestSimulationReplay:
         assert "max_consecutive_wins" in result.performance
 
     def test_replay_insufficient_data_raises(self, engine, simulation_request):
-        result = engine.replay(simulation_request, [100.0])
-        assert result.metrics["num_trades"] == 0
+        with pytest.raises(ValueError, match="at least 2 prices"):
+            engine.replay(simulation_request, [100.0])
 
     def test_slice_prices(self, engine, sample_prices):
         sliced = engine.slice_prices(sample_prices, 2, 7)

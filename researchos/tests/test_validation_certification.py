@@ -49,7 +49,7 @@ def test_validation_certification_extends_runtime_chain() -> None:
     experiment = _experiment()
     run, result = __import__("researchos.experiments.runner", fromlist=["BaseExperimentRunner"]).BaseExperimentRunner().run(
         experiment,
-        [],
+        [100.0, 101.0, 102.0],
     )
     runtime = certify_runtime(experiment, run, result, repository, dataset=_dataset())
 
