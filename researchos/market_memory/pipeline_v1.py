@@ -172,6 +172,15 @@ def run_market_memory_pipeline(
 
         def outcome_getter(event: MarketEvent) -> float | None:
             return event.outcome.return_1d if event.outcome else None
+
+        def directional_success_getter(event: MarketEvent, value: float) -> bool:
+            direction = event.direction.strip().lower()
+            if direction == "bullish":
+                return value > 0.0
+            if direction == "bearish":
+                return value < 0.0
+            raise ValueError("OOS directional probability requires bullish or bearish event direction")
+
         train_values = _finite_returns(train_events, condition)
         val_values = _finite_returns(validation_events, condition)
         test_values = _finite_returns(test_events, condition)
@@ -187,6 +196,7 @@ def run_market_memory_pipeline(
             purge_days=_PIPELINE_OUTCOME_HORIZON_DAYS,
             max_outcome_horizon_days=_PIPELINE_OUTCOME_HORIZON_DAYS,
             label_end_getter=label_end_getter,
+            success_getter=directional_success_getter,
         ) if len(events) >= 160 else None
         oos_results[cr.condition_name] = oos
 
