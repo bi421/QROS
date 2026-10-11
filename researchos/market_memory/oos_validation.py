@@ -263,8 +263,9 @@ def _matched_outcomes(
                     normalized_value = float(value)
                 except (OverflowError, TypeError, ValueError):
                     raise ValueError("matched outcome values must be finite numbers") from None
-                if math.isfinite(normalized_value):
-                    outcomes.append((event, normalized_value))
+                if not math.isfinite(normalized_value):
+                    raise ValueError("matched outcome values must be finite numbers")
+                outcomes.append((event, normalized_value))
     return outcomes
 
 
