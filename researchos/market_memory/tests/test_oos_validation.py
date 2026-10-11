@@ -219,6 +219,20 @@ def test_walk_forward_rejects_outcome_integer_that_overflows_float():
         )
 
 
+@pytest.mark.parametrize("invalid_outcome", [float("nan"), float("inf"), float("-inf")])
+def test_walk_forward_rejects_non_finite_matched_outcomes(invalid_outcome):
+    with pytest.raises(ValueError, match="matched outcome values must be finite numbers"):
+        walk_forward_validate(
+            _events(100),
+            lambda e: e.match,
+            lambda e: invalid_outcome,
+            initial_train_size=40,
+            validation_size=20,
+            test_size=20,
+            step_size=20,
+        )
+
+
 def test_walk_forward_mean_does_not_overflow_for_finite_large_outcomes():
     result = walk_forward_validate(
         _events(100, value=1e308),
