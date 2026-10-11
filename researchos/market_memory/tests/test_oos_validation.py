@@ -263,6 +263,7 @@ def test_walk_forward_probability_and_wilson_ci_follow_signal_direction(
         test_size=20,
         step_size=20,
         min_test_events=10,
+        dependence_block_size=5,
         success_getter=lambda event, outcome: (
             outcome > 0.0 if event.direction == "bullish" else outcome < 0.0
         ),
