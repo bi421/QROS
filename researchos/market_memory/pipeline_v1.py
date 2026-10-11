@@ -17,7 +17,7 @@ from researchos.market_memory.oos_validation import OOSValidationResult, walk_fo
 from researchos.market_memory.outcome_engine import compute_forward_outcomes
 from researchos.market_memory.production_gate import check_production_evidence_readiness
 from researchos.market_memory.self_audit import run_self_audit
-from researchos.market_memory.statistical_evidence import ProportionEvidence, bonferroni_alpha, wilson_proportion_ci
+from researchos.market_memory.statistical_evidence import ProportionEvidence, block_bootstrap_proportion_ci, bonferroni_alpha, wilson_proportion_ci
 from researchos.market_memory.temporal_validation import chronological_split, check_temporal_integrity
 
 
@@ -150,19 +150,40 @@ def run_market_memory_pipeline(
         conditional_results.append(result)
         values = _finite_returns(events, spec)
         if values:
-            raw_probability_evidence[spec.name] = wilson_proportion_ci(
-                sum(value > 0.0 for value in values),
-                len(values),
-                confidence_level=corrected_confidence_level,
+            raw_flags = [value > 0.0 for value in values]
+            raw_probability_evidence[spec.name] = (
+                block_bootstrap_proportion_ci(
+                    raw_flags, min(dependence_block_size, len(raw_flags)),
+                    seed=seed, confidence_level=corrected_confidence_level,
+                )
+                if dependence_block_size > 1
+                else wilson_proportion_ci(
+                    sum(raw_flags), len(raw_flags), confidence_level=corrected_confidence_level,
+                )
             )
         directional_counts = _directional_success_counts(events, spec)
         if directional_counts is not None:
             directional_successes, directional_trials = directional_counts
-            directional_probability_evidence[spec.name] = wilson_proportion_ci(
-                directional_successes,
-                directional_trials,
-                confidence_level=corrected_confidence_level,
-            )
+            if dependence_block_size > 1:
+                directional_flags = []
+                for event in filter_events(events, spec):
+                    value = event.outcome.return_1d if event.outcome else None
+                    if not isinstance(value, (int, float)) or value != value or abs(value) == float("inf"):
+                        continue
+                    direction = event.direction.strip().lower()
+                    directional_flags.append(
+                        (direction == "bullish" and value > 0.0)
+                        or (direction == "bearish" and value < 0.0)
+                    )
+                directional_probability_evidence[spec.name] = block_bootstrap_proportion_ci(
+                    directional_flags, min(dependence_block_size, len(directional_flags)),
+                    seed=seed + 1, confidence_level=corrected_confidence_level,
+                )
+            else:
+                directional_probability_evidence[spec.name] = wilson_proportion_ci(
+                    directional_successes, directional_trials,
+                    confidence_level=corrected_confidence_level,
+                )
 
     for cr in conditional_results:
         condition = cr.condition_spec
@@ -172,6 +193,15 @@ def run_market_memory_pipeline(
 
         def outcome_getter(event: MarketEvent) -> float | None:
             return event.outcome.return_1d if event.outcome else None
+
+        def directional_success_getter(event: MarketEvent, value: float) -> bool:
+            direction = event.direction.strip().lower()
+            if direction == "bullish":
+                return value > 0.0
+            if direction == "bearish":
+                return value < 0.0
+            raise ValueError("OOS directional probability requires bullish or bearish event direction")
+
         train_values = _finite_returns(train_events, condition)
         val_values = _finite_returns(validation_events, condition)
         test_values = _finite_returns(test_events, condition)
@@ -187,6 +217,8 @@ def run_market_memory_pipeline(
             purge_days=_PIPELINE_OUTCOME_HORIZON_DAYS,
             max_outcome_horizon_days=_PIPELINE_OUTCOME_HORIZON_DAYS,
             label_end_getter=label_end_getter,
+            success_getter=directional_success_getter,
+            dependence_block_size=dependence_block_size,
         ) if len(events) >= 160 else None
         oos_results[cr.condition_name] = oos
 

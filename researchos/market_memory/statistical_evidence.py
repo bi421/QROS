@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Sequence, Tuple
 
 
 @dataclass(frozen=True)
@@ -71,6 +71,59 @@ def wilson_proportion_ci(
             min(1.0, centre + half_width),
         ),
         confidence_level=confidence_level,
+    )
+
+
+
+def block_bootstrap_proportion_ci(
+    outcomes: Sequence[bool],
+    block_size: int,
+    num_resamples: int = 2000,
+    seed: int = 42,
+    confidence_level: float = 0.95,
+) -> ProportionEvidence:
+    """Circular moving-block bootstrap CI for ordered binary outcomes."""
+    if not outcomes:
+        raise ValueError("outcomes must not be empty")
+    if any(not isinstance(value, bool) for value in outcomes):
+        raise ValueError("outcomes must contain only bool values")
+    if isinstance(block_size, bool) or not isinstance(block_size, int) or block_size < 1:
+        raise ValueError("block_size must be a positive integer")
+    if block_size > len(outcomes):
+        raise ValueError("block_size cannot exceed sample size")
+    if isinstance(num_resamples, bool) or not isinstance(num_resamples, int) or num_resamples < 100:
+        raise ValueError("num_resamples must be an integer >= 100")
+    confidence_level = _finite_probability_parameter("confidence_level", confidence_level)
+    import random
+    rng = random.Random(seed)
+    n = len(outcomes)
+    estimates: list[float] = []
+    for _ in range(num_resamples):
+        sample: list[bool] = []
+        while len(sample) < n:
+            start = rng.randrange(n)
+            for offset in range(block_size):
+                sample.append(outcomes[(start + offset) % n])
+                if len(sample) == n:
+                    break
+        estimates.append(sum(sample) / n)
+    estimates.sort()
+    alpha = 1.0 - confidence_level
+    def quantile(probability: float) -> float:
+        position = (len(estimates) - 1) * probability
+        lo, hi = math.floor(position), math.ceil(position)
+        if lo == hi:
+            return estimates[lo]
+        weight = position - lo
+        return estimates[lo] * (1.0 - weight) + estimates[hi] * weight
+    successes = sum(outcomes)
+    return ProportionEvidence(
+        successes=successes,
+        trials=n,
+        probability=successes / n,
+        confidence_interval=(quantile(alpha / 2.0), quantile(1.0 - alpha / 2.0)),
+        confidence_level=confidence_level,
+        method="circular_moving_block_bootstrap",
     )
 
 
@@ -146,4 +199,4 @@ def _normal_quantile(p: float) -> float:
     return numerator / denominator
 
 
-__all__ = ["ProportionEvidence", "wilson_proportion_ci", "bonferroni_alpha"]
+__all__ = ["ProportionEvidence", "wilson_proportion_ci", "block_bootstrap_proportion_ci", "bonferroni_alpha"]

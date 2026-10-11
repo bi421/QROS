@@ -14,7 +14,7 @@ from researchos.market_memory.event_schema import (
     MarketEvent,
 )
 from researchos.market_memory.production_gate import check_production_evidence_readiness
-from researchos.market_memory.statistical_evidence import bonferroni_alpha, wilson_proportion_ci
+from researchos.market_memory.statistical_evidence import block_bootstrap_proportion_ci, bonferroni_alpha, wilson_proportion_ci
 
 
 def _event(
@@ -145,3 +145,33 @@ def test_wilson_rejects_invalid_numeric_types_and_parameters(successes, trials, 
 def test_bonferroni_rejects_invalid_numeric_types_and_parameters(alpha, hypotheses):
     with pytest.raises(ValueError):
         bonferroni_alpha(alpha, hypotheses)
+
+
+
+def test_block_bootstrap_proportion_ci_is_deterministic_and_bounded():
+    outcomes = [True] * 10 + [False] * 10 + [True] * 10 + [False] * 10
+    first = block_bootstrap_proportion_ci(outcomes, block_size=5, num_resamples=500, seed=7)
+    second = block_bootstrap_proportion_ci(outcomes, block_size=5, num_resamples=500, seed=7)
+
+    assert first == second
+    assert first.method == "circular_moving_block_bootstrap"
+    assert first.probability == pytest.approx(0.5)
+    assert 0.0 <= first.confidence_interval[0] <= 0.5
+    assert 0.5 <= first.confidence_interval[1] <= 1.0
+
+
+@pytest.mark.parametrize(
+    ("outcomes", "block_size", "num_resamples"),
+    [
+        ([], 1, 100),
+        ([True, 1], 1, 100),
+        ([True, False], 0, 100),
+        ([True, False], 3, 100),
+        ([True, False], 1, 99),
+    ],
+)
+def test_block_bootstrap_proportion_ci_rejects_invalid_inputs(outcomes, block_size, num_resamples):
+    with pytest.raises(ValueError):
+        block_bootstrap_proportion_ci(
+            outcomes, block_size=block_size, num_resamples=num_resamples
+        )
