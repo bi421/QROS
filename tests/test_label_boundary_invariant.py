@@ -54,3 +54,29 @@ def test_validation_label_crossing_test_boundary_is_rejected():
             if event is validation[-1]
             else event.timestamp + timedelta(hours=1),
         )
+
+
+@pytest.mark.parametrize(
+    ("empty_partition", "expected_name"),
+    [
+        ("train", "train"),
+        ("validation", "validation"),
+        ("test", "test"),
+    ],
+)
+def test_label_boundary_audit_rejects_empty_partition(empty_partition, expected_name):
+    events = _events()
+    partitions = {
+        "train": events[:2],
+        "validation": events[2:4],
+        "test": events[4:],
+    }
+    partitions[empty_partition] = []
+
+    with pytest.raises(ValueError, match=rf"empty: .*{expected_name}"):
+        assert_label_boundaries(
+            partitions["train"],
+            partitions["validation"],
+            partitions["test"],
+            lambda event: event.timestamp + timedelta(hours=1),
+        )
