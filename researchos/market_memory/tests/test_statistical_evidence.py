@@ -154,7 +154,7 @@ def test_block_bootstrap_proportion_ci_is_deterministic_and_bounded():
     second = block_bootstrap_proportion_ci(outcomes, block_size=5, num_resamples=500, seed=7)
 
     assert first == second
-    assert first.method == "circular_moving_block_bootstrap"
+    assert first.method == "moving_block_bootstrap_with_effective_sample_wilson_guard"
     assert first.probability == pytest.approx(0.5)
     assert 0.0 <= first.confidence_interval[0] <= 0.5
     assert 0.5 <= first.confidence_interval[1] <= 1.0
@@ -175,3 +175,13 @@ def test_block_bootstrap_proportion_ci_rejects_invalid_inputs(outcomes, block_si
         block_bootstrap_proportion_ci(
             outcomes, block_size=block_size, num_resamples=num_resamples
         )
+
+
+def test_block_bootstrap_proportion_ci_does_not_claim_certainty_for_all_successes():
+    result = block_bootstrap_proportion_ci(
+        [True] * 40, block_size=5, num_resamples=500, seed=19
+    )
+
+    assert result.probability == 1.0
+    assert result.confidence_interval[0] < 1.0
+    assert result.confidence_interval[1] == 1.0
