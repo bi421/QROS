@@ -91,7 +91,7 @@ def fit_normal(samples: Sequence[float]) -> DistributionFit:
     n = len(samples)
     if n == 0:
         raise ValueError("samples must be non-empty")
-    mean = sum(samples) / n
+    mean = _mean(samples)
     var = sum((s - mean) ** 2 for s in samples) / n
     return DistributionFit(
         distribution=DistributionType.NORMAL,
@@ -122,7 +122,7 @@ def fit_student_t(samples: Sequence[float], df: float = 5.0) -> DistributionFit:
     n = len(samples)
     if n == 0:
         raise ValueError("samples must be non-empty")
-    mean = sum(samples) / n
+    mean = _mean(samples)
     var = sum((s - mean) ** 2 for s in samples) / n
     scale = math.sqrt(var * (df - 2.0) / df) if df > 2 else math.sqrt(var)
     ll = sum(math.log(_t_pdf((s - mean) / scale, df)) for s in samples)
@@ -345,7 +345,7 @@ def _monte_carlo_result(
     num_samples: int,
 ) -> MonteCarloResult:
     n = len(samples)
-    mean = sum(samples) / n
+    mean = _mean(samples)
     sd = _std(samples)
     percentiles = {}
     sorted_samples = sorted(samples)
