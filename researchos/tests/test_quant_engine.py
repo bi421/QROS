@@ -110,6 +110,9 @@ class TestDeterministicCalculations:
         r2 = calculate_returns_from_prices(sample_prices, "percentage")
         assert r1 == r2
 
+    def test_arithmetic_mean_does_not_overflow_for_large_finite_values(self):
+        assert mean([1e308, 1e308, 1e308]) == pytest.approx(1e308)
+
     def test_statistics_deterministic(self, sample_returns):
         s1 = compute_statistics(sample_returns)
         s2 = compute_statistics(sample_returns)

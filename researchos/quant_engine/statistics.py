@@ -29,7 +29,7 @@ def _validate_returns(returns: list[float], min_samples: int = 2) -> None:
 def mean(returns: list[float]) -> float:
     """Compute the arithmetic mean of a list of returns."""
     _validate_returns(returns, min_samples=1)
-    return sum(returns) / len(returns)
+    return math.fsum(value / len(returns) for value in returns)
 
 
 def variance(returns: list[float], ddof: int = 1) -> float:
