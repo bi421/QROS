@@ -109,7 +109,7 @@ jobs:
             -H "Authorization: Bearer ${QROS_ISOLATION_JWT}" \
             "${base}/v1/datasets/${dataset_id}/versions")"
           test "${other_status}" = "200" || { echo "cross-tenant version lookup returned HTTP ${other_status}"; cat "${work}/other.json"; exit 1; }
-          test "$(jq -er 'length' "${work}/other.json")" = "0" || { echo "cross-tenant dataset data was visible"; cat "${work}/other.json"; exit 1; }
+          test "$(jq -er '(.data // .) | length' "${work}/other.json")" = "0" || { echo "cross-tenant dataset data was visible"; cat "${work}/other.json"; exit 1; }
 
           echo "5/13 create and plan-lock governed research claim"
           claim_payload="$(jq -nc \
