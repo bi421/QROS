@@ -15,6 +15,7 @@ class E:
     timestamp: datetime
     value: float
     match: bool = True
+    direction: str = "bullish"
 
 
 def _events(n: int = 300, value: float = 0.01) -> list[E]:
@@ -234,3 +235,60 @@ def test_walk_forward_mean_does_not_overflow_for_finite_large_outcomes():
         assert fold.train_mean == pytest.approx(1e308)
         assert fold.validation_mean == pytest.approx(1e308)
         assert fold.test_mean == pytest.approx(1e308)
+
+
+@pytest.mark.parametrize(
+    ("direction", "value", "expected_probability"),
+    [
+        ("bearish", -0.01, 1.0),
+        ("bearish", 0.01, 0.0),
+        ("bullish", 0.01, 1.0),
+        ("bullish", -0.01, 0.0),
+    ],
+)
+def test_walk_forward_probability_and_wilson_ci_follow_signal_direction(
+    direction: str, value: float, expected_probability: float
+):
+    events = [
+        E(datetime(2025, 1, 1, tzinfo=timezone.utc) + timedelta(days=i), value, True, direction)
+        for i in range(100)
+    ]
+
+    result = walk_forward_validate(
+        events,
+        lambda event: event.match,
+        lambda event: event.value,
+        initial_train_size=40,
+        validation_size=20,
+        test_size=20,
+        step_size=20,
+        min_test_events=10,
+        success_getter=lambda event, outcome: (
+            outcome > 0.0 if event.direction == "bullish" else outcome < 0.0
+        ),
+    )
+
+    assert result.total_folds == 2
+    for fold in result.folds:
+        assert fold.train_probability == expected_probability
+        assert fold.validation_probability == expected_probability
+        assert fold.test_probability == expected_probability
+        assert fold.test_probability_ci is not None
+        if expected_probability == 1.0:
+            assert fold.test_probability_ci[0] > 0.5
+        else:
+            assert fold.test_probability_ci[1] < 0.5
+
+
+def test_success_getter_must_return_bool():
+    with pytest.raises(TypeError, match="success_getter must return bool"):
+        walk_forward_validate(
+            _events(100),
+            lambda event: event.match,
+            lambda event: event.value,
+            initial_train_size=40,
+            validation_size=20,
+            test_size=20,
+            step_size=20,
+            success_getter=lambda event, outcome: 1,  # type: ignore[arg-type,return-value]
+        )
