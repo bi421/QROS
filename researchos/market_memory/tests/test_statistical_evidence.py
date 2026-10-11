@@ -165,7 +165,7 @@ def test_moving_block_proportion_interval_is_deterministic_and_not_narrower_than
     wilson = wilson_proportion_ci(sum(outcomes), len(outcomes), 0.95)
 
     assert a == b
-    assert a.method == "moving_block_bootstrap_wilson_envelope"
+    assert a.method == "moving_block_bootstrap_effective_sample_wilson_envelope"
     assert a.probability == pytest.approx(0.5)
     assert a.confidence_interval[0] <= wilson.confidence_interval[0]
     assert a.confidence_interval[1] >= wilson.confidence_interval[1]
@@ -177,9 +177,11 @@ def test_moving_block_proportion_interval_keeps_boundary_uncertainty():
         bootstrap_replicates=500, seed=18,
     )
 
-    assert result.method == "moving_block_bootstrap_wilson_envelope"
+    assert result.method == "moving_block_bootstrap_effective_sample_wilson_envelope"
     assert result.confidence_interval[0] < 1.0
     assert result.confidence_interval[1] == 1.0
+    effective = wilson_proportion_ci(8, 8, 0.95)
+    assert result.confidence_interval[0] <= effective.confidence_interval[0]
 
 
 @pytest.mark.parametrize(
