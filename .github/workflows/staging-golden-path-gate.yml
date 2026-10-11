@@ -20,12 +20,28 @@ jobs:
       - name: Validate staging configuration
         env:
           QROS_BASE_URL: ${{ secrets.QROS_STAGING_BASE_URL }}
+          QROS_PRODUCTION_BASE_URL: ${{ secrets.QROS_PRODUCTION_BASE_URL }}
           QROS_JWT: ${{ secrets.QROS_STAGING_JWT }}
           QROS_ISOLATION_JWT: ${{ secrets.QROS_STAGING_ISOLATION_JWT }}
         shell: bash
         run: |
           set -euo pipefail
           test -n "${QROS_BASE_URL}" || { echo "QROS_STAGING_BASE_URL is required"; exit 1; }
+          test -n "${QROS_PRODUCTION_BASE_URL}" || { echo "::error::QROS_PRODUCTION_BASE_URL is required to prevent targeting production"; exit 1; }
+          python3 - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          staging = urlparse(os.environ["QROS_BASE_URL"].strip())
+          production = urlparse(os.environ["QROS_PRODUCTION_BASE_URL"].strip())
+          if staging.scheme != "https" or not staging.hostname:
+              raise SystemExit("::error::QROS_STAGING_BASE_URL must be an HTTPS URL")
+          if production.scheme != "https" or not production.hostname:
+              raise SystemExit("::error::QROS_PRODUCTION_BASE_URL must be an HTTPS URL")
+          if staging.hostname.lower() == production.hostname.lower():
+              raise SystemExit("::error::Staging Golden Path URL must not target the production host")
+          print("staging_url_is_https=true")
+          print("staging_host_differs_from_production=true")
+          PY
           test -n "${QROS_JWT}" || { echo "QROS_STAGING_JWT is required"; exit 1; }
           test -n "${QROS_ISOLATION_JWT}" || { echo "QROS_STAGING_ISOLATION_JWT is required for the tenant-isolation gate"; exit 1; }
 
