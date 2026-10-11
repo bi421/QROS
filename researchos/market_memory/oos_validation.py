@@ -259,6 +259,8 @@ def _matched_outcomes(
         if matcher(event):
             value = getter(event)
             if value is not None:
+                if isinstance(value, bool):
+                    raise ValueError("matched outcome values must be finite numbers, not bool")
                 try:
                     normalized_value = float(value)
                 except (OverflowError, TypeError, ValueError):
