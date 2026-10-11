@@ -231,22 +231,7 @@ class PythonQuantBackend(QuantComputationInterface):
         prices = self._extract_prices(dataset)
 
         if len(prices) < 2:
-            return SimulationResult(
-                simulation_id=request.compute_input_hash(),
-                dataset_reference=request.dataset_reference,
-                result_hash="empty",
-                metrics={
-                    "total_return": 0.0,
-                    "sharpe_ratio": 0.0,
-                    "max_drawdown": 0.0,
-                    "winrate": 0.0,
-                    "num_trades": 0,
-                },
-                trades=[],
-                input_hash=request.compute_input_hash(),
-                calculation_version=calculation_version,
-                execution_timestamp=utc_now().isoformat(),
-            )
+            raise ValueError(f"Need at least 2 prices for simulation, got {len(prices)}")
 
         input_hash = request.compute_input_hash()
         sim_id = f"sim_{input_hash[:16]}"
