@@ -21,7 +21,6 @@ from researchos.market_memory.statistical_evidence import (
     ProportionEvidence,
     bonferroni_alpha,
     moving_block_proportion_ci,
-    wilson_proportion_ci,
 )
 from researchos.market_memory.temporal_validation import chronological_split, check_temporal_integrity
 
@@ -64,14 +63,6 @@ def _directional_success_values(
             or (direction == "bearish" and value < 0)
         )
     return successes or None
-
-
-def _directional_success_counts(
-    events: list[MarketEvent], condition: ConditionSpec
-) -> tuple[int, int] | None:
-    """Return direction-adjusted successes/trials; refuse ambiguous directions."""
-    outcomes = _directional_success_values(events, condition)
-    return (sum(outcomes), len(outcomes)) if outcomes else None
 
 
 def run_market_memory_pipeline(
