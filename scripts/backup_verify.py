@@ -212,8 +212,8 @@ def main() -> int:
             "verified": True, "output": migration_check.stdout.strip()
         }
         report["status"] = "VERIFIED"
-    except SystemExit as exc:
-        # Preserve machine-readable failure evidence even when restore validation fails.
+    except (SystemExit, subprocess.CalledProcessError) as exc:
+        # Preserve machine-readable failure evidence for validation and command failures.
         report["status"] = "FAILED"
         report["failure"] = str(exc)
         report["elapsed_seconds"] = round(time.time() - started, 3)
