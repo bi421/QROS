@@ -212,6 +212,16 @@ def main() -> int:
             "verified": True, "output": migration_check.stdout.strip()
         }
         report["status"] = "VERIFIED"
+    except SystemExit as exc:
+        # Preserve machine-readable failure evidence even when restore validation fails.
+        report["status"] = "FAILED"
+        report["failure"] = str(exc)
+        report["elapsed_seconds"] = round(time.time() - started, 3)
+        args.report.write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\\n", encoding="utf-8"
+        )
+        print(json.dumps(report, indent=2, sort_keys=True))
+        raise
     finally:
         subprocess.run(["docker", "rm", "-f", name], capture_output=True, check=False)
 
