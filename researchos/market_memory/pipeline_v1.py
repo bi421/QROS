@@ -17,7 +17,12 @@ from researchos.market_memory.oos_validation import OOSValidationResult, walk_fo
 from researchos.market_memory.outcome_engine import compute_forward_outcomes
 from researchos.market_memory.production_gate import check_production_evidence_readiness
 from researchos.market_memory.self_audit import run_self_audit
-from researchos.market_memory.statistical_evidence import ProportionEvidence, bonferroni_alpha, wilson_proportion_ci
+from researchos.market_memory.statistical_evidence import (
+    ProportionEvidence,
+    bonferroni_alpha,
+    moving_block_proportion_ci,
+    wilson_proportion_ci,
+)
 from researchos.market_memory.temporal_validation import chronological_split, check_temporal_integrity
 
 
@@ -42,12 +47,11 @@ def _finite_returns(events: list[MarketEvent], condition: ConditionSpec) -> list
     return values
 
 
-def _directional_success_counts(
+def _directional_success_values(
     events: list[MarketEvent], condition: ConditionSpec
-) -> tuple[int, int] | None:
-    """Return direction-adjusted successes/trials; refuse ambiguous directions."""
-    successes = 0
-    trials = 0
+) -> list[bool] | None:
+    """Return ordered direction-adjusted outcomes; refuse ambiguous directions."""
+    successes: list[bool] = []
     for event in filter_events(events, condition):
         value = event.outcome.return_1d if event.outcome else None
         if not isinstance(value, (int, float)) or value != value or abs(value) == float("inf"):
@@ -55,10 +59,19 @@ def _directional_success_counts(
         direction = event.direction.strip().lower()
         if direction not in {"bullish", "bearish"}:
             return None
-        trials += 1
-        if (direction == "bullish" and value > 0) or (direction == "bearish" and value < 0):
-            successes += 1
-    return (successes, trials) if trials else None
+        successes.append(
+            (direction == "bullish" and value > 0)
+            or (direction == "bearish" and value < 0)
+        )
+    return successes or None
+
+
+def _directional_success_counts(
+    events: list[MarketEvent], condition: ConditionSpec
+) -> tuple[int, int] | None:
+    """Return direction-adjusted successes/trials; refuse ambiguous directions."""
+    outcomes = _directional_success_values(events, condition)
+    return (sum(outcomes), len(outcomes)) if outcomes else None
 
 
 def run_market_memory_pipeline(
@@ -150,18 +163,19 @@ def run_market_memory_pipeline(
         conditional_results.append(result)
         values = _finite_returns(events, spec)
         if values:
-            raw_probability_evidence[spec.name] = wilson_proportion_ci(
-                sum(value > 0.0 for value in values),
-                len(values),
+            raw_probability_evidence[spec.name] = moving_block_proportion_ci(
+                [value > 0.0 for value in values],
                 confidence_level=corrected_confidence_level,
+                block_length=dependence_block_size,
+                seed=seed,
             )
-        directional_counts = _directional_success_counts(events, spec)
-        if directional_counts is not None:
-            directional_successes, directional_trials = directional_counts
-            directional_probability_evidence[spec.name] = wilson_proportion_ci(
-                directional_successes,
-                directional_trials,
+        directional_values = _directional_success_values(events, spec)
+        if directional_values:
+            directional_probability_evidence[spec.name] = moving_block_proportion_ci(
+                directional_values,
                 confidence_level=corrected_confidence_level,
+                block_length=dependence_block_size,
+                seed=seed + 1,
             )
 
     for cr in conditional_results:
@@ -247,9 +261,11 @@ def run_market_memory_pipeline(
         if raw_prob:
             uncertainty["raw_probability_confidence_interval"] = list(raw_prob.confidence_interval)
             uncertainty["raw_probability_confidence_level"] = raw_prob.confidence_level
+            uncertainty["raw_probability_confidence_method"] = raw_prob.method
         if directional_prob:
             uncertainty["directional_probability_confidence_interval"] = list(directional_prob.confidence_interval)
             uncertainty["directional_probability_confidence_level"] = directional_prob.confidence_level
+            uncertainty["directional_probability_confidence_method"] = directional_prob.method
         if raw_prob or directional_prob:
             uncertainty["multiple_testing"] = {
                 "method": "bonferroni",
@@ -271,7 +287,7 @@ def run_market_memory_pipeline(
             "overlap_pairs": dependence_audit.overlap_pairs,
             "max_concurrent_labels": dependence_audit.max_concurrent_labels,
             "interpretation": "Overlap is reported as dependence information; it is not treated as evidence of leakage.",
-            "inference_method": "moving_block_bootstrap" if dependence_block_size > 1 else "percentile_bootstrap",
+            "inference_method": "moving_block_bootstrap_for_means_and_proportions" if dependence_block_size > 1 else "iid_wilson_proportion_and_bootstrap_mean",
             "block_size": dependence_block_size,
             "block_size_rule": "maximum concurrent realized labels; block bootstrap only when overlap exists",
             "assumption": "Dependence is treated as predominantly local in event order within the reported block size; this does not establish independence beyond the block.",
@@ -289,7 +305,7 @@ def run_market_memory_pipeline(
             condition_definition=str(cr.condition_spec.to_dict()["conditions"]), sample_size=cr.sample_size,
             time_range=(events[0].timestamp.isoformat() if events else "", events[-1].timestamp.isoformat() if events else ""),
             computation_method="forward_return_analysis", code_module="researchos.market_memory.pipeline_v1",
-            statistical_method="Bonferroni-adjusted Wilson probability CI + dependence-aware block bootstrap mean CI when labels overlap + purged walk-forward OOS + realized-label boundary and dependence audit",
+            statistical_method="Bonferroni-adjusted Wilson probability CI; moving-block bootstrap/Wilson-envelope probability CI and block-bootstrap mean CI when labels overlap; purged walk-forward OOS; realized-label boundary and dependence audit",
             result={
                 "raw_probability": cr.raw_probability,
                 "directional_probability": cr.directional_probability,
