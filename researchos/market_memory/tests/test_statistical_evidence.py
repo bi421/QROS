@@ -14,7 +14,11 @@ from researchos.market_memory.event_schema import (
     MarketEvent,
 )
 from researchos.market_memory.production_gate import check_production_evidence_readiness
-from researchos.market_memory.statistical_evidence import block_bootstrap_proportion_ci, bonferroni_alpha, wilson_proportion_ci
+from researchos.market_memory.statistical_evidence import (
+    bonferroni_alpha,
+    moving_block_proportion_ci,
+    wilson_proportion_ci,
+)
 
 
 def _event(
@@ -148,30 +152,46 @@ def test_bonferroni_rejects_invalid_numeric_types_and_parameters(alpha, hypothes
 
 
 
-def test_block_bootstrap_proportion_ci_is_deterministic_and_bounded():
-    outcomes = [True] * 10 + [False] * 10 + [True] * 10 + [False] * 10
-    first = block_bootstrap_proportion_ci(outcomes, block_size=5, num_resamples=500, seed=7)
-    second = block_bootstrap_proportion_ci(outcomes, block_size=5, num_resamples=500, seed=7)
+def test_moving_block_proportion_interval_is_deterministic_and_not_narrower_than_wilson():
+    outcomes = ([True] * 10 + [False] * 10) * 5
+    a = moving_block_proportion_ci(
+        outcomes, confidence_level=0.95, block_length=5,
+        bootstrap_replicates=500, seed=17,
+    )
+    b = moving_block_proportion_ci(
+        outcomes, confidence_level=0.95, block_length=5,
+        bootstrap_replicates=500, seed=17,
+    )
+    wilson = wilson_proportion_ci(sum(outcomes), len(outcomes), 0.95)
 
-    assert first == second
-    assert first.method == "circular_moving_block_bootstrap"
-    assert first.probability == pytest.approx(0.5)
-    assert 0.0 <= first.confidence_interval[0] <= 0.5
-    assert 0.5 <= first.confidence_interval[1] <= 1.0
+    assert a == b
+    assert a.method == "moving_block_bootstrap_wilson_envelope"
+    assert a.probability == pytest.approx(0.5)
+    assert a.confidence_interval[0] <= wilson.confidence_interval[0]
+    assert a.confidence_interval[1] >= wilson.confidence_interval[1]
+
+
+def test_moving_block_proportion_interval_keeps_boundary_uncertainty():
+    result = moving_block_proportion_ci(
+        [True] * 40, confidence_level=0.95, block_length=5,
+        bootstrap_replicates=500, seed=18,
+    )
+
+    assert result.method == "moving_block_bootstrap_wilson_envelope"
+    assert result.confidence_interval[0] < 1.0
+    assert result.confidence_interval[1] == 1.0
 
 
 @pytest.mark.parametrize(
-    ("outcomes", "block_size", "num_resamples"),
+    ("outcomes", "kwargs"),
     [
-        ([], 1, 100),
-        ([True, 1], 1, 100),
-        ([True, False], 0, 100),
-        ([True, False], 3, 100),
-        ([True, False], 1, 99),
+        ([], {}),
+        ([True, 1], {}),
+        ([True, False], {"block_length": True}),
+        ([True, False], {"bootstrap_replicates": 99}),
+        ([True, False], {"seed": True}),
     ],
 )
-def test_block_bootstrap_proportion_ci_rejects_invalid_inputs(outcomes, block_size, num_resamples):
+def test_moving_block_proportion_interval_rejects_invalid_inputs(outcomes, kwargs):
     with pytest.raises(ValueError):
-        block_bootstrap_proportion_ci(
-            outcomes, block_size=block_size, num_resamples=num_resamples
-        )
+        moving_block_proportion_ci(outcomes, **kwargs)
