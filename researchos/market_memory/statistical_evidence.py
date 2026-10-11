@@ -117,13 +117,29 @@ def block_bootstrap_proportion_ci(
         weight = position - lo
         return estimates[lo] * (1.0 - weight) + estimates[hi] * weight
     successes = sum(outcomes)
+    probability = successes / n
+    # The empirical block bootstrap is degenerate when every observed outcome
+    # is identical. Widen it with a Wilson interval based on a conservative
+    # effective sample size so a perfect observed hit rate does not imply certainty.
+    effective_trials = max(1, math.ceil(n / block_size))
+    effective_successes = min(
+        effective_trials, max(0, round(probability * effective_trials))
+    )
+    effective_wilson = wilson_proportion_ci(
+        effective_successes, effective_trials, confidence_level
+    ).confidence_interval
+    bootstrap_interval = (quantile(alpha / 2.0), quantile(1.0 - alpha / 2.0))
+    interval = (
+        min(bootstrap_interval[0], effective_wilson[0]),
+        max(bootstrap_interval[1], effective_wilson[1]),
+    )
     return ProportionEvidence(
         successes=successes,
         trials=n,
-        probability=successes / n,
-        confidence_interval=(quantile(alpha / 2.0), quantile(1.0 - alpha / 2.0)),
+        probability=probability,
+        confidence_interval=interval,
         confidence_level=confidence_level,
-        method="circular_moving_block_bootstrap",
+        method="moving_block_bootstrap_with_effective_sample_wilson_guard",
     )
 
 
