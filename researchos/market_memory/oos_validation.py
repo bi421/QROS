@@ -198,9 +198,6 @@ def walk_forward_validate(
         test_values = [value for _, value in test_outcomes]
         is_success = success_getter or (lambda _event, value: value > 0.0)
         test_successes = sum(_evaluate_success(is_success, event, value) for event, value in test_outcomes)
-        test_success_flags = [
-            _evaluate_success(is_success, event, value) for event, value in test_outcomes
-        ]
         effective_block_size = min(dependence_block_size, len(test_success_flags)) if test_success_flags else 1
         ci = None
         if test_success_flags:
