@@ -8,7 +8,7 @@ from researchos.quant_math.contracts import (
     Vector2D,
 )
 from researchos.quant_math.engine import QUANT_MATH_VERSION, QuantMathEngine
-from researchos.quant_math.geometry import measure_market_geometry
+from researchos.quant_math.geometry import curvature_three_points, measure_market_geometry
 from researchos.quant_math.matrix import dot, euclidean_distance_vector, matrix_multiply, transpose
 from researchos.quant_math.mle import bernoulli_mle, normal_mle
 from researchos.quant_math.monte_carlo import simulate_terminal_distribution
@@ -28,6 +28,7 @@ __all__ = [
     "beta_bernoulli",
     "simulate_terminal_distribution",
     "measure_market_geometry",
+    "curvature_three_points",
     "Vector2D",
     "matrix_multiply",
     "transpose",

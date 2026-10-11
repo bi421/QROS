@@ -32,7 +32,8 @@ def test_m1_one_day_horizon_is_not_one_bar():
     rows = []
     for i in range(24 * 60 + 1):
         ts = start + timedelta(minutes=i)
-        rows.append((ts, 100.0, 100.0, 100.0, 100.0 + (1.0 if i == 1440 else 0.0)))
+        close = 100.0 + (1.0 if i == 1440 else 0.0)
+        rows.append((ts, 100.0, close, 100.0, close))
     df = pl.DataFrame(rows, schema=["timestamp", "open", "high", "low", "close"], orient="row")
     result = compute_forward_outcomes([_event(start, "M1")], df)
     assert result[0].outcome is not None

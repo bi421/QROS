@@ -133,7 +133,7 @@ testpaths = [
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --import-mode=importlib"
 markers = [
     "fast: default development feedback tests",
     "frozen: expensive validated evidence tests; run on demand or when dependencies change",

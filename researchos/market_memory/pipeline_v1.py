@@ -65,6 +65,15 @@ def _directional_success_values(
     return successes or None
 
 
+def _directional_success_counts(
+    events: list[MarketEvent], condition: ConditionSpec
+) -> tuple[int, int] | None:
+    """Return direction-adjusted successes and valid outcome count."""
+    successes = _directional_success_values(events, condition)
+    if not successes:
+        return None
+    return sum(successes), len(successes)
+
 def run_market_memory_pipeline(
     data_path: str = "data/curated/xauusd/xauusd_d1_2021_2025_mt5_final.csv",
     asset: str = "XAUUSD",
