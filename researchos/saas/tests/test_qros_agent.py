@@ -252,8 +252,9 @@ def test_shell_metacharacters_are_rejected() -> None:
     assert ledger.consumed_attempts == 0
 
 
-def test_attempt_budget_is_not_reset_by_replay() -> None:
+def test_attempt_budget_is_not_reset_by_replay(monkeypatch) -> None:
     agent = load_agent()
+    monkeypatch.setattr(agent, "_git_status", lambda: (True, ""))
     p = proposal(agent)
     ledger = agent.AttemptLedger(1)
     a = approval(agent, p, ledger)
@@ -290,8 +291,9 @@ def test_attempt_ledger_rejects_replay_and_budget_overrun() -> None:
     assert ledger.consumed_attempts == 2
 
 
-def test_receipt_binds_required_provenance() -> None:
+def test_receipt_binds_required_provenance(monkeypatch) -> None:
     agent = load_agent()
+    monkeypatch.setattr(agent, "_git_status", lambda: (True, ""))
     p = proposal(agent)
     ledger = agent.AttemptLedger(1)
     a = approval(agent, p, ledger)
@@ -313,8 +315,9 @@ def test_receipt_binds_required_provenance() -> None:
     assert receipt.next_boundary == "complete"
 
 
-def test_execution_failure_still_consumes_attempt_and_records_receipt() -> None:
+def test_execution_failure_still_consumes_attempt_and_records_receipt(monkeypatch) -> None:
     agent = load_agent()
+    monkeypatch.setattr(agent, "_git_status", lambda: (True, ""))
     p = proposal(agent)
     ledger = agent.AttemptLedger(2)
     a = approval(agent, p, ledger)

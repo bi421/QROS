@@ -80,7 +80,14 @@ def compute_forward_outcomes(
     if any(ts.tzinfo != timezone for ts in timestamps):
         raise ValueError("price timestamps must use a consistent timezone")
     for event in events:
-        if event.timestamp.tzinfo != timezone:
+        event_tz = event.timestamp.tzinfo
+        same_timezone = event_tz == timezone or (
+            event_tz is not None
+            and timezone is not None
+            and str(event_tz) == "UTC"
+            and str(timezone) == "UTC"
+        )
+        if not same_timezone:
             raise ValueError("event and price timestamps must use the same timezone")
         if event.direction.strip().lower() not in {
             "bullish", "long", "up", "bearish", "short", "down"
@@ -89,15 +96,15 @@ def compute_forward_outcomes(
                 f"Unsupported event direction for outcome calculation: {event.direction}"
             )
         if isinstance(event.event_price, bool) or not isinstance(event.event_price, (int, float)):
-            raise ValueError("event price must be finite and strictly positive for percentage returns")
+            raise ValueError("event price must be finite and non-zero, and strictly positive for percentage returns")
         try:
             normalized_event_price = float(event.event_price)
         except (OverflowError, ValueError):
             raise ValueError(
-                "event price must be finite and strictly positive for percentage returns"
+                "event price must be finite and non-zero, and strictly positive for percentage returns"
             ) from None
         if not math.isfinite(normalized_event_price) or normalized_event_price <= 0:
-            raise ValueError("event price must be finite and strictly positive for percentage returns")
+            raise ValueError("event price must be finite and non-zero, and strictly positive for percentage returns")
     for column in ("open", "high", "low", "close"):
         values = frame[column].to_list()
         if any(value is None or not math.isfinite(float(value)) for value in values):

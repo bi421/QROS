@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Callable, Protocol, Sequence, TypeVar
 
-from researchos.market_memory.statistical_evidence import block_bootstrap_proportion_ci, wilson_proportion_ci
+from researchos.market_memory.statistical_evidence import moving_block_proportion_ci, wilson_proportion_ci
 
 
 class _TimestampedEvent(Protocol):
@@ -205,8 +205,10 @@ def walk_forward_validate(
         ci = None
         if test_success_flags:
             if effective_block_size > 1:
-                ci = block_bootstrap_proportion_ci(
-                    test_success_flags, effective_block_size, confidence_level=confidence_level
+                ci = moving_block_proportion_ci(
+                    test_success_flags,
+                    confidence_level=confidence_level,
+                    block_length=effective_block_size,
                 ).confidence_interval
             else:
                 ci = wilson_proportion_ci(

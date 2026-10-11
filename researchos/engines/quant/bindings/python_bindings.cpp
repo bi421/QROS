@@ -1,3 +1,4 @@
+#include <stdexcept>
 #include <cmath>
 // nanobind bindings exposing the C++ Quant Engine to Python.
 //
