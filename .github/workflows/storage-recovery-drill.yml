@@ -28,18 +28,21 @@ jobs:
         env:
           SOURCE_ENVIRONMENT: ${{ secrets.QROS_BACKUP_SOURCE_ENVIRONMENT }}
           STAGING_PROJECT_REF: ${{ secrets.QROS_STAGING_SUPABASE_PROJECT_REF }}
+          PRODUCTION_PROJECT_REF: ${{ secrets.QROS_PRODUCTION_SUPABASE_PROJECT_REF }}
           TARGET_ENVIRONMENT: ${{ secrets.QROS_RECOVERY_TARGET_ENVIRONMENT }}
           TARGET_ID: ${{ secrets.QROS_RECOVERY_TARGET_ID }}
         run: |
           set -euo pipefail
           test -n "$SOURCE_ENVIRONMENT" || { echo "::error::QROS_BACKUP_SOURCE_ENVIRONMENT is required"; exit 1; }
           test -n "$STAGING_PROJECT_REF" || { echo "::error::QROS_STAGING_SUPABASE_PROJECT_REF is required"; exit 1; }
+          test -n "$PRODUCTION_PROJECT_REF" || { echo "::error::QROS_PRODUCTION_SUPABASE_PROJECT_REF is required"; exit 1; }
           test -n "$TARGET_ENVIRONMENT" || { echo "::error::QROS_RECOVERY_TARGET_ENVIRONMENT is required"; exit 1; }
           test -n "$TARGET_ID" || { echo "::error::QROS_RECOVERY_TARGET_ID is required"; exit 1; }
           test "$SOURCE_ENVIRONMENT" = "staging" || { echo "::error::Recovery source must be staging"; exit 1; }
           case "$SOURCE_ENVIRONMENT" in production|prod) echo "::error::Production cannot be a recovery source"; exit 1;; esac
-          case "$TARGET_ENVIRONMENT" in production|prod|staging) echo "::error::Recovery target must be isolated from staging and production"; exit 1;; esac
+          test "$TARGET_ENVIRONMENT" = "recovery" || { echo "::error::QROS_RECOVERY_TARGET_ENVIRONMENT must be exactly recovery"; exit 1; }
           test "$TARGET_ID" != "$STAGING_PROJECT_REF" || { echo "::error::Recovery target identity must differ from staging project identity"; exit 1; }
+          test "$TARGET_ID" != "$PRODUCTION_PROJECT_REF" || { echo "::error::Recovery target identity must differ from production project identity"; exit 1; }
           echo "Recovery source/target identity gate: PASS"
           echo "source_environment=$SOURCE_ENVIRONMENT"
           echo "recovery_target_environment=$TARGET_ENVIRONMENT"
