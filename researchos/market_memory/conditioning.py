@@ -71,7 +71,7 @@ def filter_events(events: list[MarketEvent], spec: ConditionSpec) -> list[Market
 def _mean(values: list[float]) -> float:
     if not values:
         return 0.0
-    return sum(values) / len(values)
+    return math.fsum(value / len(values) for value in values)
 
 def _std(values: list[float]) -> float:
     if len(values) < 2:

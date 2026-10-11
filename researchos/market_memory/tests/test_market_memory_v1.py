@@ -386,6 +386,20 @@ class TestConditioning:
         assert result.raw_probability == 1.0  # both positive
         assert result.mean_return == pytest.approx(0.015)
 
+    def test_conditional_statistics_handles_large_finite_outcomes(self):
+        events = [
+            _make_event_with_outcome("large_1", "bullish", 1e308, "2021-01-01T00:00:00"),
+            _make_event_with_outcome("large_2", "bullish", 1e308, "2021-01-02T00:00:00"),
+        ]
+        result = compute_conditional_statistics(
+            events,
+            ConditionSpec(name="large_outcomes", conditions={}),
+            bootstrap_num_resamples=25,
+        )
+        assert result.mean_return == pytest.approx(1e308)
+        assert result.std_return == 0.0
+        assert result.confidence_interval == pytest.approx((1e308, 1e308))
+
     def test_conditional_statistics_uses_dependence_aware_bootstrap(self):
         events = [
             _make_event_with_outcome("e1", "bullish", 0.01, "2021-01-01T00:00:00"),
@@ -442,6 +456,14 @@ class TestBootstrap:
         result = bootstrap_mean_ci(values, seed=42)
         mean = sum(values) / len(values)
         assert result.confidence_interval[0] <= mean <= result.confidence_interval[1]
+
+    def test_bootstrap_mean_does_not_overflow_for_large_finite_values(self):
+        values = [1e308, 1e308, 1e308]
+        result = bootstrap_mean_ci(values, num_resamples=25, seed=42)
+        assert result.point_estimate == pytest.approx(1e308)
+        assert result.bootstrap_mean == pytest.approx(1e308)
+        assert result.bootstrap_std == 0.0
+        assert result.confidence_interval == pytest.approx((1e308, 1e308))
 
     def test_bootstrap_stability_check(self):
         values = [1.0, 2.0, 3.0, 4.0, 5.0] * 10
