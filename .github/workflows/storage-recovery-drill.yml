@@ -49,13 +49,35 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.QROS_STAGING_SUPABASE_URL }}
           SERVICE_ROLE_KEY: ${{ secrets.QROS_STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          RECOVERY_SUPABASE_URL: ${{ secrets.QROS_RECOVERY_SUPABASE_URL }}
+          RECOVERY_SERVICE_ROLE_KEY: ${{ secrets.QROS_RECOVERY_SUPABASE_SERVICE_ROLE_KEY }}
           S3_BUCKET: ${{ secrets.QROS_RECOVERY_S3_BUCKET }}
           AWS_REGION: ${{ vars.QROS_RECOVERY_AWS_REGION }}
           AWS_ROLE_ARN: ${{ vars.QROS_RECOVERY_AWS_ROLE_ARN }}
         run: |
           set -euo pipefail
-          test -n "$SUPABASE_URL"; test -n "$SERVICE_ROLE_KEY"; test -n "$S3_BUCKET"; test -n "$AWS_REGION"
-          test -n "$AWS_ROLE_ARN"
+          test -n "$SUPABASE_URL"; test -n "$SERVICE_ROLE_KEY"
+          test -n "$RECOVERY_SUPABASE_URL"; test -n "$RECOVERY_SERVICE_ROLE_KEY"
+          test -n "$S3_BUCKET"; test -n "$AWS_REGION"; test -n "$AWS_ROLE_ARN"
+
+      - name: Verify recovery URL matches isolated target identity
+        env:
+          TARGET_ID: ${{ secrets.QROS_RECOVERY_TARGET_ID }}
+          RECOVERY_SUPABASE_URL: ${{ secrets.QROS_RECOVERY_SUPABASE_URL }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          target_id = os.environ["TARGET_ID"].strip()
+          parsed = urlparse(os.environ["RECOVERY_SUPABASE_URL"])
+          if parsed.scheme != "https" or not parsed.hostname:
+              raise SystemExit("::error::Recovery Supabase URL must be HTTPS")
+          expected_host = f"{target_id}.supabase.co"
+          if parsed.hostname.lower() != expected_host.lower():
+              raise SystemExit("::error::Recovery Supabase URL host does not match QROS_RECOVERY_TARGET_ID")
+          print("isolated_recovery_project_url_identity=PASS")
+          PY
 
       - name: Configure AWS OIDC credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -131,16 +153,27 @@ jobs:
         run: |
           set -euo pipefail
           python3 ops/recovery/storage_recovery_verify.py --source /tmp/qros-drill.bin --recovery-copy /tmp/qros-recovery-copy.bin --restored /tmp/qros-restored.bin
-      - name: Re-upload restored object and verify
+      - name: Restore into isolated recovery project and verify
         env:
-          SUPABASE_URL: ${{ secrets.QROS_STAGING_SUPABASE_URL }}
-          SERVICE_ROLE_KEY: ${{ secrets.QROS_STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ secrets.QROS_RECOVERY_SUPABASE_URL }}
+          SERVICE_ROLE_KEY: ${{ secrets.QROS_RECOVERY_SUPABASE_SERVICE_ROLE_KEY }}
           OBJECT_NAME: ${{ inputs.object_name }}-${{ github.run_id }}
         run: |
           set -euo pipefail
           curl --fail-with-body --silent --show-error -X POST "$SUPABASE_URL/storage/v1/object/qros-datasets/$OBJECT_NAME?upsert=true" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "apikey: $SERVICE_ROLE_KEY" -H "Content-Type: application/octet-stream" --data-binary @/tmp/qros-restored.bin
           curl --fail --silent --show-error "$SUPABASE_URL/storage/v1/object/qros-datasets/$OBJECT_NAME" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "apikey: $SERVICE_ROLE_KEY" -o /tmp/qros-downloaded.bin
           cmp /tmp/qros-drill.bin /tmp/qros-downloaded.bin
+      - name: Cleanup restored recovery object
+        if: always()
+        env:
+          SUPABASE_URL: ${{ secrets.QROS_RECOVERY_SUPABASE_URL }}
+          SERVICE_ROLE_KEY: ${{ secrets.QROS_RECOVERY_SUPABASE_SERVICE_ROLE_KEY }}
+          OBJECT_NAME: ${{ inputs.object_name }}-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if test -n "$SUPABASE_URL" && test -n "$SERVICE_ROLE_KEY"; then
+            curl --fail --silent --show-error -X DELETE "$SUPABASE_URL/storage/v1/object/qros-datasets/$OBJECT_NAME" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "apikey: $SERVICE_ROLE_KEY"
+          fi
       - name: Cleanup drill S3 object
         if: always()
         env:
