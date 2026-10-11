@@ -123,6 +123,22 @@ class PythonQuantBackend(QuantComputationInterface):
             if isinstance(dataset[0], dict) and "close" in dataset[0]:
                 return [float(d["close"]) for d in dataset]
 
+        # ResearchDataset is the experiment framework's immutable feature/label
+        # contract. Prefer the declared close column rather than silently falling
+        # back to a one-price synthetic series, which correctly fails simulation.
+        if hasattr(dataset, "features") and hasattr(dataset, "feature_names"):
+            features = dataset.features
+            feature_names = tuple(dataset.feature_names)
+            if features and "close" in feature_names:
+                close_index = feature_names.index("close")
+                prices: list[float] = []
+                for row in features:
+                    try:
+                        prices.append(float(row[close_index]))
+                    except (IndexError, TypeError, ValueError) as exc:
+                        raise ValueError("Invalid ResearchDataset close-price feature") from exc
+                return prices
+
         if hasattr(dataset, "records") and hasattr(dataset, "symbol"):
             records = dataset.records
             if records and hasattr(records[0], "close"):
@@ -231,22 +247,7 @@ class PythonQuantBackend(QuantComputationInterface):
         prices = self._extract_prices(dataset)
 
         if len(prices) < 2:
-            return SimulationResult(
-                simulation_id=request.compute_input_hash(),
-                dataset_reference=request.dataset_reference,
-                result_hash="empty",
-                metrics={
-                    "total_return": 0.0,
-                    "sharpe_ratio": 0.0,
-                    "max_drawdown": 0.0,
-                    "winrate": 0.0,
-                    "num_trades": 0,
-                },
-                trades=[],
-                input_hash=request.compute_input_hash(),
-                calculation_version=calculation_version,
-                execution_timestamp=utc_now().isoformat(),
-            )
+            raise ValueError(f"Need at least 2 prices for simulation, got {len(prices)}")
 
         input_hash = request.compute_input_hash()
         sim_id = f"sim_{input_hash[:16]}"

@@ -258,6 +258,7 @@ jobs:
         env:
           PYTHONPATH: researchos/engines/quant/python
         run: |
+          set -o pipefail
           python -m pytest -q --import-mode=importlib -m "not real_db" \
             --cov=researchos --cov-report=xml:coverage.xml \
             --cov-report=term-missing --cov-fail-under=50 2>&1 | tee coverage.txt
