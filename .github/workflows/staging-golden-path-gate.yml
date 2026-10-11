@@ -37,7 +37,18 @@ jobs:
               raise SystemExit("::error::QROS_STAGING_BASE_URL must be an HTTPS URL")
           if production.scheme != "https" or not production.hostname:
               raise SystemExit("::error::QROS_PRODUCTION_BASE_URL must be an HTTPS URL")
-          if staging.hostname.lower() == production.hostname.lower():
+          def canonical_host(parsed):
+              host = parsed.hostname
+              if not host:
+                  raise SystemExit("::error::URL hostname is required")
+              # DNS treats a trailing dot as the same absolute hostname; IDNA
+              # converts Unicode names to their ASCII DNS representation.
+              try:
+                  return host.rstrip(".").encode("idna").decode("ascii").lower()
+              except UnicodeError as exc:
+                  raise SystemExit("::error::URL hostname is invalid") from exc
+
+          if canonical_host(staging) == canonical_host(production):
               raise SystemExit("::error::Staging Golden Path URL must not target the production host")
           print("staging_url_is_https=true")
           print("staging_host_differs_from_production=true")
