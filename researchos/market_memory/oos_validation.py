@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Callable, Protocol, Sequence, TypeVar
 
-from researchos.market_memory.statistical_evidence import wilson_proportion_ci
+from researchos.market_memory.statistical_evidence import block_bootstrap_proportion_ci, wilson_proportion_ci
 
 
 class _TimestampedEvent(Protocol):
@@ -96,6 +96,7 @@ def walk_forward_validate(
     label_end_getter: Callable[[EventT], datetime | None] | None = None,
     fit_callback: Callable[[Sequence[EventT]], Callable[[EventT], bool]] | None = None,
     success_getter: Callable[[EventT, float], bool] | None = None,
+    dependence_block_size: int = 1,
 ) -> OOSValidationResult:
     """Evaluate a condition with chronological, purged walk-forward folds.
 
@@ -125,6 +126,12 @@ def walk_forward_validate(
     for name, value in non_negative_integer_parameters.items():
         if not isinstance(value, int) or isinstance(value, bool) or value < 0:
             raise ValueError(f"{name} must be a non-negative integer")
+    if (
+        not isinstance(dependence_block_size, int)
+        or isinstance(dependence_block_size, bool)
+        or dependence_block_size < 1
+    ):
+        raise ValueError("dependence_block_size must be a positive integer")
     if max_outcome_horizon_days is not None and (
         not isinstance(max_outcome_horizon_days, int)
         or isinstance(max_outcome_horizon_days, bool)
@@ -191,10 +198,20 @@ def walk_forward_validate(
         test_values = [value for _, value in test_outcomes]
         is_success = success_getter or (lambda _event, value: value > 0.0)
         test_successes = sum(_evaluate_success(is_success, event, value) for event, value in test_outcomes)
-        ci = (
-            wilson_proportion_ci(test_successes, len(test_values), confidence_level).confidence_interval
-            if test_values else None
-        )
+        test_success_flags = [
+            _evaluate_success(is_success, event, value) for event, value in test_outcomes
+        ]
+        effective_block_size = min(dependence_block_size, len(test_success_flags)) if test_success_flags else 1
+        ci = None
+        if test_success_flags:
+            if effective_block_size > 1:
+                ci = block_bootstrap_proportion_ci(
+                    test_success_flags, effective_block_size, confidence_level=confidence_level
+                ).confidence_interval
+            else:
+                ci = wilson_proportion_ci(
+                    test_successes, len(test_values), confidence_level
+                ).confidence_interval
         train_prob = _success_probability(train_outcomes, is_success)
         validation_prob = _success_probability(validation_outcomes, is_success)
         test_prob = _success_probability(test_outcomes, is_success)
