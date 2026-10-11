@@ -95,6 +95,7 @@ def walk_forward_validate(
     max_outcome_horizon_days: int | None = None,
     label_end_getter: Callable[[EventT], datetime | None] | None = None,
     fit_callback: Callable[[Sequence[EventT]], Callable[[EventT], bool]] | None = None,
+    success_getter: Callable[[EventT, float], bool] | None = None,
 ) -> OOSValidationResult:
     """Evaluate a condition with chronological, purged walk-forward folds.
 
@@ -182,17 +183,21 @@ def walk_forward_validate(
             if not callable(fold_matcher):
                 raise TypeError("fit_callback must return a callable matcher")
 
-        train_values = _matched_values(train, fold_matcher, outcome_getter)
-        validation_values = _matched_values(validation, fold_matcher, outcome_getter)
-        test_values = _matched_values(test, fold_matcher, outcome_getter)
-        test_successes = sum(v > 0.0 for v in test_values)
+        train_outcomes = _matched_outcomes(train, fold_matcher, outcome_getter)
+        validation_outcomes = _matched_outcomes(validation, fold_matcher, outcome_getter)
+        test_outcomes = _matched_outcomes(test, fold_matcher, outcome_getter)
+        train_values = [value for _, value in train_outcomes]
+        validation_values = [value for _, value in validation_outcomes]
+        test_values = [value for _, value in test_outcomes]
+        is_success = success_getter or (lambda _event, value: value > 0.0)
+        test_successes = sum(_evaluate_success(is_success, event, value) for event, value in test_outcomes)
         ci = (
             wilson_proportion_ci(test_successes, len(test_values), confidence_level).confidence_interval
             if test_values else None
         )
-        train_prob = _probability(train_values)
-        validation_prob = _probability(validation_values)
-        test_prob = _probability(test_values)
+        train_prob = _success_probability(train_outcomes, is_success)
+        validation_prob = _success_probability(validation_outcomes, is_success)
+        test_prob = _success_probability(test_outcomes, is_success)
         passed = len(test_values) >= min_test_events and _stable(train_prob, validation_prob, test_prob)
         note = "" if passed else "Insufficient OOS sample or unstable probability"
         results.append(
@@ -225,8 +230,12 @@ def walk_forward_validate(
     )
 
 
-def _matched_values(events: Sequence[EventT], matcher: Callable[[EventT], bool], getter: Callable[[EventT], float | None]) -> list[float]:
-    values: list[float] = []
+def _matched_outcomes(
+    events: Sequence[EventT],
+    matcher: Callable[[EventT], bool],
+    getter: Callable[[EventT], float | None],
+) -> list[tuple[EventT, float]]:
+    outcomes: list[tuple[EventT, float]] = []
     for event in events:
         if matcher(event):
             value = getter(event)
@@ -236,12 +245,25 @@ def _matched_values(events: Sequence[EventT], matcher: Callable[[EventT], bool],
                 except (OverflowError, TypeError, ValueError):
                     raise ValueError("matched outcome values must be finite numbers") from None
                 if math.isfinite(normalized_value):
-                    values.append(normalized_value)
-    return values
+                    outcomes.append((event, normalized_value))
+    return outcomes
 
 
-def _probability(values: Sequence[float]) -> float:
-    return sum(v > 0.0 for v in values) / len(values) if values else 0.0
+def _evaluate_success(success_getter: Callable[[EventT, float], bool], event: EventT, value: float) -> bool:
+    result = success_getter(event, value)
+    if not isinstance(result, bool):
+        raise TypeError("success_getter must return bool")
+    return result
+
+
+def _success_probability(
+    outcomes: Sequence[tuple[EventT, float]],
+    success_getter: Callable[[EventT, float], bool],
+) -> float:
+    return (
+        sum(_evaluate_success(success_getter, event, value) for event, value in outcomes) / len(outcomes)
+        if outcomes else 0.0
+    )
 
 
 def _mean(values: Sequence[float]) -> float:
