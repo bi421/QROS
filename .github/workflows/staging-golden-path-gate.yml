@@ -53,11 +53,11 @@ jobs:
               -o "${body}" -w '%{http_code}' "$@"
           }
 
-          echo "1/10 health and readiness"
+          echo "1/13 health and readiness"
           curl --fail --silent --show-error --retry 3 --retry-delay 2 "${base}/healthz" > "${work}/healthz.json"
           curl --fail --silent --show-error --retry 3 --retry-delay 2 "${base}/readyz" > "${work}/readyz.json"
 
-          echo "2/10 authenticated tenant identity"
+          echo "2/13 authenticated tenant identity"
           me_status="$(call GET "${base}/v1/me" "${work}/me.json")"
           test "${me_status}" = "200" || { echo "GET /v1/me returned HTTP ${me_status}"; cat "${work}/me.json"; exit 1; }
           workspace_id="$(jq -er '.workspace_id' "${work}/me.json")"
@@ -65,7 +65,7 @@ jobs:
           echo "workspace_id=${workspace_id}"
           echo "user_id=${user_id}"
 
-          echo "3/10 immutable dataset version"
+          echo "3/13 immutable dataset version"
           # Deterministic synthetic XAUUSD M1 fixture; validates SaaS plumbing only.
           {
             echo 'time,open,high,low,close,tick_volume'
@@ -180,7 +180,7 @@ jobs:
           evidence_status="$(call GET "${base}/v1/research-runs/${run_id}/evidence" "${work}/evidence.json")"
           test "${evidence_status}" = "200" || { echo "GET evidence returned HTTP ${evidence_status}"; cat "${work}/evidence.json"; exit 1; }
           jq -e --arg ws "${workspace_id}" --arg run "${run_id}" '
-            type == "array" and length > 0 and all(.[]; .workspace_id == $ws and .research_run_id == $run and (.provenance | type == "object"))
+            (.data | type == "array" and length > 0 and all(.[]; .workspace_id == $ws and .research_run_id == $run and (.provenance | type == "object")))
           ' "${work}/evidence.json" > /dev/null
 
           echo "10/13 verify governed claim binding"
@@ -201,7 +201,7 @@ jobs:
           test "${other_result_status}" = "404" || { echo "cross-tenant result lookup returned HTTP ${other_result_status}"; cat "${work}/other-result.json"; exit 1; }
           other_evidence_status="$(curl --silent --show-error --retry 2 --retry-delay 2 -o "${work}/other-evidence.json" -w '%{http_code}' -H "Authorization: Bearer ${QROS_ISOLATION_JWT}" "${base}/v1/research-runs/${run_id}/evidence")"
           test "${other_evidence_status}" = "200" || { echo "cross-tenant evidence lookup returned HTTP ${other_evidence_status}"; cat "${work}/other-evidence.json"; exit 1; }
-          test "$(jq -er 'length' "${work}/other-evidence.json")" = "0" || { echo "cross-tenant evidence was visible"; cat "${work}/other-evidence.json"; exit 1; }
+          jq -e '(.data | type == "array" and length == 0)' "${work}/other-evidence.json" > /dev/null || { echo "cross-tenant evidence was visible"; cat "${work}/other-evidence.json"; exit 1; }
 
           echo "11/13 record governed validation"
           validation_payload="$(jq -nc --arg manifest "$(jq -er '.manifest_sha256' "${work}/result.json")" '{result_manifest_sha256:$manifest,status:"VALIDATED",payload:{metrics:{result_integrity:1.0},checks:{deterministic_fixture:true,evidence_present:true}}}')"
