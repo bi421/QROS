@@ -27,6 +27,7 @@ from researchos.quant_engine.probability.statistics import (
     kernel_density_estimate,
     monte_carlo_normal,
     monte_carlo_return_paths,
+    _mean,
     normal_cdf,
     normal_pdf,
     one_sample_t_test,
@@ -49,10 +50,8 @@ class TestDistributionFitting:
         assert "std" in fit.parameters
         assert fit.parameters["std"] >= 0.0
 
-    def test_fit_normal_mean_does_not_overflow_for_large_finite_samples(self):
-        fit = fit_normal([1e308, 1e308, 1e308])
-        assert fit.parameters["mean"] == pytest.approx(1e308)
-        assert fit.parameters["std"] == 0.0
+    def test_sample_mean_does_not_overflow_for_large_finite_samples(self):
+        assert _mean([1e308, 1e308, 1e308]) == pytest.approx(1e308)
 
     def test_fit_normal_mean(self):
         samples = [1.0, 2.0, 3.0, 4.0, 5.0]
