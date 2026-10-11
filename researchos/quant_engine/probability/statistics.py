@@ -151,7 +151,7 @@ def kernel_density_estimate(
 
 
 def _mean(samples: Sequence[float]) -> float:
-    if not samples:
+    if len(samples) == 0:
         raise ValueError("samples must be non-empty")
     return math.fsum(sample / len(samples) for sample in samples)
 
