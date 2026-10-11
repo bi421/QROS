@@ -49,6 +49,11 @@ class TestDistributionFitting:
         assert "std" in fit.parameters
         assert fit.parameters["std"] >= 0.0
 
+    def test_fit_normal_mean_does_not_overflow_for_large_finite_samples(self):
+        fit = fit_normal([1e308, 1e308, 1e308])
+        assert fit.parameters["mean"] == pytest.approx(1e308)
+        assert fit.parameters["std"] == 0.0
+
     def test_fit_normal_mean(self):
         samples = [1.0, 2.0, 3.0, 4.0, 5.0]
         fit = fit_normal(samples)
