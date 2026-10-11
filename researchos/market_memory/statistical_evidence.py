@@ -113,6 +113,19 @@ def moving_block_proportion_ci(
     if block_length == 1 or trials < 2:
         return wilson
 
+    # Dependence reduces the amount of independent information. Use a
+    # conservative effective sample size for the Wilson guard so a long
+    # all-success/all-failure run cannot imply near-certainty merely because
+    # the raw event count is large.
+    effective_trials = max(1, math.ceil(trials / min(block_length, trials)))
+    effective_successes = min(
+        effective_trials,
+        max(0, round((successes / trials) * effective_trials)),
+    )
+    effective_wilson = wilson_proportion_ci(
+        effective_successes, effective_trials, confidence_level
+    )
+
     import random
 
     n = trials
@@ -152,11 +165,11 @@ def moving_block_proportion_ci(
         trials=trials,
         probability=successes / trials,
         confidence_interval=(
-            min(wilson.confidence_interval[0], bootstrap_lower),
-            max(wilson.confidence_interval[1], bootstrap_upper),
+            min(effective_wilson.confidence_interval[0], bootstrap_lower),
+            max(effective_wilson.confidence_interval[1], bootstrap_upper),
         ),
         confidence_level=wilson.confidence_level,
-        method="moving_block_bootstrap_wilson_envelope",
+        method="moving_block_bootstrap_effective_sample_wilson_envelope",
     )
 
 
