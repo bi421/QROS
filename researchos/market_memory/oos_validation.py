@@ -61,7 +61,19 @@ def assert_label_boundaries(
 ) -> None:
     """Fail closed unless realized label windows stay inside their partition."""
     if not train_events or not validation_events or not test_events:
-        return
+        empty_partitions = [
+            name
+            for name, partition in (
+                ("train", train_events),
+                ("validation", validation_events),
+                ("test", test_events),
+            )
+            if not partition
+        ]
+        raise ValueError(
+            "label boundary audit requires non-empty train, validation, and test "
+            f"partitions; empty: {', '.join(empty_partitions)}"
+        )
 
     validation_start = min(event.timestamp for event in validation_events)
     test_start = min(event.timestamp for event in test_events)
