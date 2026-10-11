@@ -65,7 +65,7 @@ jobs:
 
       - name: Validate drill object name
         env:
-          OBJECT_NAME: ${{ inputs.object_name }}
+          OBJECT_NAME: ${{ inputs.object_name }}-${{ github.run_id }}
         shell: bash
         run: |
           set -euo pipefail
@@ -95,7 +95,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.QROS_STAGING_SUPABASE_URL }}
           SERVICE_ROLE_KEY: ${{ secrets.QROS_STAGING_SUPABASE_SERVICE_ROLE_KEY }}
-          OBJECT_NAME: ${{ inputs.object_name }}
+          OBJECT_NAME: ${{ inputs.object_name }}-${{ github.run_id }}
         run: |
           set -euo pipefail
           curl --fail-with-body --silent --show-error -X POST "$SUPABASE_URL/storage/v1/object/qros-datasets/$OBJECT_NAME" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "apikey: $SERVICE_ROLE_KEY" -H "Content-Type: application/octet-stream" --data-binary @/tmp/qros-drill.bin
@@ -103,7 +103,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.QROS_STAGING_SUPABASE_URL }}
           SERVICE_ROLE_KEY: ${{ secrets.QROS_STAGING_SUPABASE_SERVICE_ROLE_KEY }}
-          OBJECT_NAME: ${{ inputs.object_name }}
+          OBJECT_NAME: ${{ inputs.object_name }}-${{ github.run_id }}
         run: |
           set -euo pipefail
           curl --fail --silent --show-error "$SUPABASE_URL/storage/v1/object/qros-datasets/$OBJECT_NAME" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "apikey: $SERVICE_ROLE_KEY" -o /tmp/qros-storage-source.bin
@@ -113,7 +113,7 @@ jobs:
         env:
           AWS_REGION: ${{ vars.QROS_RECOVERY_AWS_REGION }}
           S3_BUCKET: ${{ secrets.QROS_RECOVERY_S3_BUCKET }}
-          OBJECT_NAME: ${{ inputs.object_name }}
+          OBJECT_NAME: ${{ inputs.object_name }}-${{ github.run_id }}
         run: |
           set -euo pipefail
           aws s3 cp /tmp/qros-storage-source.bin "s3://$S3_BUCKET/qros-storage-drill/$OBJECT_NAME" --region "$AWS_REGION"
@@ -122,7 +122,7 @@ jobs:
         env:
           AWS_REGION: ${{ vars.QROS_RECOVERY_AWS_REGION }}
           S3_BUCKET: ${{ secrets.QROS_RECOVERY_S3_BUCKET }}
-          OBJECT_NAME: ${{ inputs.object_name }}
+          OBJECT_NAME: ${{ inputs.object_name }}-${{ github.run_id }}
         run: |
           set -euo pipefail
           aws s3 cp "s3://$S3_BUCKET/qros-storage-drill/$OBJECT_NAME" /tmp/qros-recovery-copy.bin --region "$AWS_REGION"
@@ -135,7 +135,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.QROS_STAGING_SUPABASE_URL }}
           SERVICE_ROLE_KEY: ${{ secrets.QROS_STAGING_SUPABASE_SERVICE_ROLE_KEY }}
-          OBJECT_NAME: ${{ inputs.object_name }}
+          OBJECT_NAME: ${{ inputs.object_name }}-${{ github.run_id }}
         run: |
           set -euo pipefail
           curl --fail-with-body --silent --show-error -X POST "$SUPABASE_URL/storage/v1/object/qros-datasets/$OBJECT_NAME?upsert=true" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "apikey: $SERVICE_ROLE_KEY" -H "Content-Type: application/octet-stream" --data-binary @/tmp/qros-restored.bin
@@ -146,7 +146,7 @@ jobs:
         env:
           AWS_REGION: ${{ vars.QROS_RECOVERY_AWS_REGION }}
           S3_BUCKET: ${{ secrets.QROS_RECOVERY_S3_BUCKET }}
-          OBJECT_NAME: ${{ inputs.object_name }}
+          OBJECT_NAME: ${{ inputs.object_name }}-${{ github.run_id }}
         run: |
           set -euo pipefail
           aws s3 rm "s3://$S3_BUCKET/qros-storage-drill/$OBJECT_NAME" --region "$AWS_REGION"
@@ -155,7 +155,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.QROS_STAGING_SUPABASE_URL }}
           SERVICE_ROLE_KEY: ${{ secrets.QROS_STAGING_SUPABASE_SERVICE_ROLE_KEY }}
-          OBJECT_NAME: ${{ inputs.object_name }}
+          OBJECT_NAME: ${{ inputs.object_name }}-${{ github.run_id }}
         run: |
           set -euo pipefail
           curl --fail --silent --show-error -X DELETE "$SUPABASE_URL/storage/v1/object/qros-datasets/$OBJECT_NAME" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H "apikey: $SERVICE_ROLE_KEY"
