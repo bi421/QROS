@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 from bisect import bisect_right
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Mapping, Sequence
 
@@ -59,10 +59,16 @@ class XAUUSDMarketSnapshot:
             timestamps = self.bar_close_times_by_timeframe[timeframe]
             bars.validate()
             if bars.length == 0 or len(timestamps) != bars.length:
-                raise ValueError(f"{timeframe} bars and close timestamps must have equal non-zero length")
+                raise ValueError(
+                    f"{timeframe} bars and close timestamps must have equal non-zero length"
+                )
             previous: datetime | None = None
             for timestamp in timestamps:
-                if not isinstance(timestamp, datetime) or timestamp.tzinfo is None or timestamp.utcoffset() is None:
+                if (
+                    not isinstance(timestamp, datetime)
+                    or timestamp.tzinfo is None
+                    or timestamp.utcoffset() is None
+                ):
                     raise ValueError(f"{timeframe} close timestamps must be timezone-aware")
                 if previous is not None and timestamp <= previous:
                     raise ValueError(f"{timeframe} close timestamps must be strictly increasing")
@@ -195,7 +201,8 @@ class XAUUSDTechnicalEvidenceAdapter:
                         strength=strength,
                         quality=1.0,
                         dependency_group="price-derived",
-                        source_refs=tuple(market_snapshot.source_refs) + (market_snapshot.dataset_version,),
+                        source_refs=tuple(market_snapshot.source_refs)
+                        + (market_snapshot.dataset_version,),
                     )
                 )
         return EngineResult(
