@@ -168,3 +168,27 @@ observations. The default snapshot is used for adapters without an explicit
 entry in `by_engine`; callers must deliberately provide the macro snapshot
 under the `macro` key. This routing change does not fetch data, alter engine
 calculations, or enable execution.
+
+
+## Parallel market-state evidence bridge (implemented contract; live replay unproven)
+
+The additive adapter `researchos/orchestration/xauusd_market_state_adapter.py`
+translates one reconstructed dual-clock market state into the existing
+`EvidenceRecord` / `EngineResult` contract. It can be registered as the
+`market_state` adapter and supplied through `XAUUSDResearchInputs.by_engine`,
+without changing technical, quant-math, macro, or market-memory calculations.
+
+- The request and reconstruction decision timestamps must agree within 1 ms.
+- Broker quote, futures order book, futures trade flow, DXY and VXY must all be
+  present and fresh. Any missing/stale source rejects the whole adapter result;
+  no partial market-state evidence is published.
+- Evidence retains source identifiers and derives `as_of` from event age; future,
+  malformed, or non-finite timestamps/values are rejected or omitted.
+- Directional imbalance/return fields are feature signs only, not probabilities.
+  The bridge does not create TP/SL/TIMEOUT probabilities and never executes.
+- Unit tests cover successful contract wiring, stale-source rejection, future
+  event-time rejection and decision-clock mismatch.
+
+This proves only the adapter contract. Live provider adapters, feed sequencing,
+venue/instrument normalization, reconnect behavior, pinned-data replay,
+end-to-end worker persistence, and outcome calibration remain unproven.
