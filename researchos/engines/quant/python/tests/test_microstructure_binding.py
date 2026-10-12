@@ -11,10 +11,16 @@ microstructure = pytest.importorskip("cpp_quant_engine.qros_microstructure")
 def test_timed_market_event_keeps_event_and_ingest_times_separate() -> None:
     event = microstructure.TimedMarketEvent()
     event.symbol = "XAUUSD"
+    event.source_id = "fixture-feed"
+    event.venue = "fixture"
+    event.kind = microstructure.MarketEventKind.TRADE
     event.sequence = 7
     event.event_time_ns = 1_000
     event.ingest_time_ns = 1_250
 
+    assert event.source_id == "fixture-feed"
+    assert event.venue == "fixture"
+    assert event.kind == microstructure.MarketEventKind.TRADE
     assert event.event_time_ns == 1_000
     assert event.ingest_time_ns == 1_250
     assert event.ingest_time_ns - event.event_time_ns == 250
