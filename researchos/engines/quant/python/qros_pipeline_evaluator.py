@@ -174,7 +174,7 @@ class QROSPipelineEvaluator:
         alpha = {str(h): self._forward_metrics(states, closes, safety, h) for h in cfg.horizons}
         regime = {}
         for horizon in cfg.horizons:
-            usable = len(closes) - horizon
+            usable = max(0, len(closes) - horizon)
             absolute_returns = np.abs(closes[horizon:] / closes[:-horizon] - 1.0)
             locked = safety[:usable] & np.isfinite(absolute_returns)
             unlocked = ~safety[:usable] & np.isfinite(absolute_returns)
