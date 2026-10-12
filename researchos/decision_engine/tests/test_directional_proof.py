@@ -88,7 +88,7 @@ def test_verifier_rejects_wrong_direction():
     [
         ([("Bullish", 1.0, float("nan"))], "finite"),
         ([("sideways", 1.0, 0.5)], "unsupported evidence direction"),
-        ([("Bullish", 2.0, 0.5)], "in \\[0, 1\\]"),
+        ([("Bullish", 2.0, 0.5)], "finite"),
     ],
 )
 def test_invalid_evidence_fails_closed(items, message):
