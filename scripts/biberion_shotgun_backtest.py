@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -36,6 +36,9 @@ def _validate(frame: pd.DataFrame) -> pd.DataFrame:
         raise ValueError(f"missing required columns: {sorted(missing)}")
     frame = frame.copy()
     frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True, errors="raise")
+    frame["symbol"] = frame["symbol"].astype(str)
+    if (frame["symbol"].str.strip() == "").any() or (frame["symbol"].str.lower() == "nan").any():
+        raise ValueError("symbol must be a non-empty identifier")
     for column in ("open", "high", "low", "close", "volume", "benchmark_close"):
         frame[column] = pd.to_numeric(frame[column], errors="raise")
         if not np.isfinite(frame[column].to_numpy(dtype=float)).all():
@@ -157,7 +160,10 @@ def run_backtest(
                 continue
             bar = bars.loc[sym]
             open_px = float(bar["open"]) * (1.0 + slippage)
-            if proposal["kind"] == "entry":
+            if proposal["kind"] == "exit":
+                if sym in positions:
+                    close_position(sym, float(bar["open"]), ts, "sideline_lockdown")
+            elif proposal["kind"] == "entry":
                 if lockdown or sym in positions or len(positions) >= max_assets:
                     pending.pop(sym, None)
                     continue
@@ -218,6 +224,9 @@ def run_backtest(
         lockdown = len(changes) < 5 or consistency < directionality_min
         if lockdown:
             lockdown_bars += 1
+            # Liquidate active long exposure at the next observable open; no new entries.
+            for held_symbol in positions:
+                pending[held_symbol] = {"kind": "exit", "signal_time": ts}
 
         # Winner pyramiding only: explicit flow proxy required, next bar executes the add.
         for sym, pos in list(positions.items()):
@@ -260,8 +269,9 @@ def run_backtest(
     if final_ts is not None:
         final_bars = grouped[final_ts]
         for sym in list(positions):
-            if sym in final_bars.index:
-                close_position(sym, float(final_bars.loc[sym, "close"]), final_ts, "end_of_data")
+            final_price = (float(final_bars.loc[sym, "close"]) if sym in final_bars.index
+                           else float(histories[sym][-1]["close"]))
+            close_position(sym, final_price, final_ts, "end_of_data")
     final_equity = cash
     pnls = np.asarray([t["pnl_net"] for t in trades], dtype=float)
     wins = pnls[pnls > 0]
