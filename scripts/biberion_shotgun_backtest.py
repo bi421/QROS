@@ -209,7 +209,11 @@ def run_backtest(
                     pending.pop(sym, None)
                     continue
                 equity = mark_equity(bars, "open")
-                basket_notional = sum(p.notional for p in positions.values())
+                basket_notional = sum(
+                    p.quantity * float(bars.loc[held, "open"]) * (1.0 + slippage)
+                    if held in bars.index else p.notional
+                    for held, p in positions.items()
+                )
                 basket_risk = sum(p.initial_risk for p in positions.values())
                 stop = float(proposal["stop"])
                 if open_px <= stop:
@@ -239,8 +243,13 @@ def run_backtest(
                 if pos is not None:
                     equity = mark_equity(bars, "open")
                     new_stop = max(pos.stop, float(proposal["trail_stop"]))
-                    cap = max(0.0, equity * asset_fraction - pos.notional)
-                    basket_notional = sum(item.notional for item in positions.values())
+                    current_asset_notional = pos.quantity * open_px
+                    cap = max(0.0, equity * asset_fraction - current_asset_notional)
+                    basket_notional = sum(
+                        item.quantity * float(bars.loc[held, "open"]) * (1.0 + slippage)
+                        if held in bars.index else item.notional
+                        for held, item in positions.items()
+                    )
                     basket_cap = max(0.0, equity * basket_fraction - basket_notional)
                     risk_cap = max(0.0, equity * asset_risk_fraction - pos.initial_risk)
                     basket_risk = sum(item.initial_risk for item in positions.values())
