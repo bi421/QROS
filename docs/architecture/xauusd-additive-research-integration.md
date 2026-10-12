@@ -132,3 +132,28 @@ This is a typed adapter boundary only. A live macro source, transformation
 from the existing engine's persisted assessment objects, Market Memory
 integration, and a pinned historical replay are not yet implemented or proven.
 No calibrated outcome probabilities are produced.
+
+
+## Existing MacroAnalysisEngine object bridge (implemented contract; repository/provider wiring unproven)
+
+The additive module `researchos/orchestration/xauusd_macro_object_bridge.py`
+maps the ten existing persisted assessment object types to the macro snapshot
+contract. It does not call or modify MacroAnalysisEngine scoring.
+
+- The bridge requires the expected existing object class for each of the ten
+  driver identifiers and fails closed when any driver or freshness budget is
+  missing.
+- Existing score and confidence values are passed through unchanged. The
+  existing macro objects document their score as a 0-100 gold-support scale;
+  a separate direction field is derived as score above 50 = +1, below 50 = -1,
+  and exactly 50 = neutral. This is a directional interpretation, not a new
+  score, probability, or calibration.
+- The original assessment timestamp, object ID, and evidence IDs are preserved
+  as provenance. Freshness budgets must be supplied by the caller because
+  macro source cadences differ.
+- The bridge requires assessment timestamps to satisfy the downstream
+  timezone-aware contract; invalid timestamps/scores fail closed.
+
+The bridge is not yet connected to a configured repository query or live macro
+provider. Existence of persisted object classes does not prove current data
+availability or freshness. No probabilities or execution capability are added.
