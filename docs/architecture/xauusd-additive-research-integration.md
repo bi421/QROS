@@ -28,13 +28,13 @@ The additive labeler now exists at `researchos/quant_engine/machine_learning/ohl
 
 | Area | Existing source | Audit status | Integration boundary |
 |---|---|---|---|
-| Technical indicators | `researchos/quant_engine/technical/engine.py` | IMPLEMENTED; runtime adapter not proven by this change | Wrap existing outputs; do not alter calculations |
+| Technical indicators | `researchos/quant_engine/technical/engine.py` | Existing engine + additive adapter implemented in PR #727; dataset replay unproven | Preserve calculations; validate adapter against pinned real data |
 | Decision pipeline | `researchos/decision_engine/pipeline.py` | IMPLEMENTED; its output is not a TP/SL/TIMEOUT distribution | Keep existing directional score/probability semantics unchanged |
 | Evidence collection | `researchos/decision_engine/evidence.py` | IMPLEMENTED; source collection does not prove all domain modules are connected | Convert/attach provenance in an adapter |
 | Macro analysis | `researchos/macro/engine.py` | IMPLEMENTED for its existing scope; live freshness/provider coverage unproven | Preserve source timestamp and driver provenance |
 | Market Memory | `researchos/market_memory/integration.py` | OPTIONAL adapters; defaults to standalone when unconfigured | Adapter must report NOT_CONFIGURED rather than invent evidence |
 | Order book | `researchos/data_engine/orderbook.py` | Data objects/calculations exist; live feed is an external dependency | Declare provider, venue and timestamp; do not represent as global spot FX depth |
-| Existing triple-barrier label | `researchos/quant_engine/machine_learning/labels.py` | IMPLEMENTED close-only label | Leave unchanged; add an OHLC-aware labeler in a later additive module |
+| Existing triple-barrier label | `researchos/quant_engine/machine_learning/labels.py` | Existing close-only label retained; OHLC-aware labeler added in PR #725 | Keep both APIs separate; prove OHLC labels on pinned data |
 | Calibrated TP/SL/TIMEOUT model | New fusion contract | MISSING / NOT IMPLEMENTED | No numeric probability until training, temporal validation and calibration are proven |
 
 ## Phase 0 completion checklist
@@ -44,10 +44,11 @@ The additive labeler now exists at `researchos/quant_engine/machine_learning/ohl
 - [x] Enforce timezone-aware, as-of evidence and reject future evidence.
 - [x] Record required/optional engine failures and fail closed for missing required engines.
 - [x] Keep probability unset and execution disabled.
-- [ ] Implement concrete adapters for each audited existing engine.
+- [x] Add concrete adapters for technical indicators and quant geometry/statistics.
+- [ ] Add macro-data and Market Memory adapters; require explicit source timestamps and provider status.
 - [x] Implement standalone OHLC-aware TP/SL/TIMEOUT labels and ambiguous-bar unit tests.
 - [ ] Prove labeler results against a pinned, cleaned XAUUSD OHLC dataset.
-- [ ] Connect the adapter registry to the existing research-run lifecycle.
+- [ ] Connect the adapter registry to the existing research-run lifecycle and prove API/worker integration.
 - [ ] Run repository CI and fix any failures on this branch.
 - [ ] Prove end-to-end reproducibility on a pinned XAUUSD dataset.
 
