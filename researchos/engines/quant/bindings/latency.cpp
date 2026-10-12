@@ -1,5 +1,6 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 
 #include "quant/market/latency.h"
 
@@ -30,6 +31,10 @@ NB_MODULE(qros_latency, m) {
   m.def("total_latency_ns", &quant::microstructure::total_latency_ns, "latency"_a);
   m.def("observed_feed_latency_ns", &quant::microstructure::observed_feed_latency_ns,
         "event_time_ns"_a, "ingest_time_ns"_a);
+  m.def("project_price_by_velocity_integral",
+        &quant::microstructure::project_price_by_velocity_integral,
+        "expected_price"_a, "sample_times_seconds"_a,
+        "velocity_price_per_second"_a, "epsilon_price"_a = 0.0);
   m.def("project_price_after_latency", &quant::microstructure::project_price_after_latency,
         "reference_price"_a, "drift_price_per_second"_a, "latency_ns"_a,
         "epsilon_price"_a = 0.0);
