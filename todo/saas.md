@@ -388,7 +388,20 @@ The previous roadmap snapshot was anchored to PR #670 / SHA `3572a66360e00e6b5f5
 ### Recent merged work (PR #685–#711)
 
 - **#685:** stable conditional/bootstrap means to prevent overflow on repeated finite `1e308` observations.
-- **#686–#700:** subsequent merged work exists in repository history; do not infer test coverage or operational readiness from PR numbering alone. Verify individual PR/commit evidence when documenting a specific claim.
+- **#686:** make out-of-sample success probabilities and Wilson intervals direction-aware; reject unknown direction.
+- **#687:** stabilize finite-sample arithmetic means against overflow in quant-engine probability statistics.
+- **#688–#689:** superseded/closed proposals; #688 was redundant/diverged, and #689 did not merge. Do not count them as shipped work.
+- **#690:** add dependence-aware probability intervals using moving-block bootstrap.
+- **#691:** superseded/closed proposal for degenerate dependent CIs; follow-up shipped in #692.
+- **#692:** use conservative effective sample size for Wilson guards around dependent confidence intervals.
+- **#693:** align walk-forward OOS validation with the dependence-aware CI API.
+- **#694:** reject non-finite matched OOS outcomes while preserving explicit `None` as missing.
+- **#695:** reject boolean values as numeric OOS outcomes.
+- **#696:** reject empty train/validation/test partitions in label-boundary leakage audits.
+- **#697:** stabilize native quant-backend loading and pytest import behavior; full native parity still requires build/test evidence.
+- **#698:** fail closed for undersized simulation inputs and enable `pipefail` so pytest failures cannot be hidden by `tee`.
+- **#699:** align integration tests with the short-simulation fail-closed contract.
+- **#700:** ignore local native-build/tool directories that made governed execution treat the worktree as dirty.
 - **#702:** accept the paginated dataset-versions response envelope in the staging Golden Path.
 - **#703:** isolate recovery-drill objects by workflow run.
 - **#704:** restore the drill object to an isolated Supabase target.
