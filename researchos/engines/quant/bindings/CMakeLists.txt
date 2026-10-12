@@ -198,3 +198,48 @@ install(
     LIBRARY DESTINATION cpp_quant_engine
     RUNTIME DESTINATION cpp_quant_engine
 )
+
+
+# Conservative signal-quality gate for stale data, impulse chasing and
+# candle-based level rejection. It does not infer intent or execute orders.
+nanobind_add_module(
+    qros_anti_trap
+    anti_trap.cpp
+)
+
+target_link_libraries(
+    qros_anti_trap
+    PRIVATE
+        quant_engine
+)
+
+target_include_directories(
+    qros_anti_trap
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../include
+)
+
+target_compile_features(
+    qros_anti_trap
+    PRIVATE
+        cxx_std_20
+)
+
+set_target_properties(
+    qros_anti_trap
+    PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY
+            "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+        RUNTIME_OUTPUT_DIRECTORY
+            "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+        LIBRARY_OUTPUT_DIRECTORY_RELEASE
+            "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE
+            "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+)
+
+install(
+    TARGETS qros_anti_trap
+    LIBRARY DESTINATION cpp_quant_engine
+    RUNTIME DESTINATION cpp_quant_engine
+)
