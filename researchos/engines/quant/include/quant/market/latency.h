@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 
 namespace quant::microstructure {
 
@@ -28,7 +29,18 @@ std::uint64_t total_latency_ns(const LatencyBreakdown& latency);
 std::uint64_t observed_feed_latency_ns(std::int64_t event_time_ns,
                                       std::int64_t ingest_time_ns);
 
-// Deterministic drift projection over latency. epsilon_price is an explicit
+// Deterministically integrate sampled velocity over elapsed time using the
+// composite trapezoidal rule, then add the explicit residual epsilon:
+// P(t+dt) = P_expected(t) + integral_t^(t+dt) v(tau) d tau + epsilon.
+// sample_times_seconds are elapsed offsets from zero, strictly increasing,
+// and must start at zero. Velocities are price units per second.
+double project_price_by_velocity_integral(
+    double expected_price,
+    const std::vector<double>& sample_times_seconds,
+    const std::vector<double>& velocity_price_per_second,
+    double epsilon_price = 0.0);
+
+// Deterministic drift-only approximation. epsilon_price is an explicit
 // scenario residual, not an RNG draw or a claim to predict market noise.
 double project_price_after_latency(double reference_price,
                                    double drift_price_per_second,
