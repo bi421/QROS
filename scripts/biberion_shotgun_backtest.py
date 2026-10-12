@@ -104,15 +104,16 @@ def run_backtest(
     trades: list[dict] = []
     equity_points: list[dict] = []
     lockdown_bars = 0
+    lockdown = True
     slippage = latency_slippage_bps / 10_000.0
     fee = fee_bps / 10_000.0
     buffer = stop_buffer_bps / 10_000.0
 
-    def mark_equity(bars) -> float:
+    def mark_equity(bars, price_column: str = "close") -> float:
         value = cash
         for sym, pos in positions.items():
             if sym in bars.index:
-                value += pos.quantity * float(bars.loc[sym, "close"])
+                value += pos.quantity * float(bars.loc[sym, price_column])
             else:
                 value += pos.notional
         return value
@@ -153,7 +154,8 @@ def run_backtest(
             bar = bars.loc[sym]
             flow = float(bar["flow_imbalance"]) if pd.notna(bar["flow_imbalance"]) else 0.0
             if float(bar["close"]) > pos.entry and flow > 0.0 and not lockdown:
-                pending.setdefault(sym, {"kind": "add", "signal_time": ts, "stop": pos.stop})
+                pending.setdefault(sym, {"kind": "add", "signal_time": ts, "stop": pos.stop,
+                                         "trail_stop": float(bar["low"]) * (1.0 - buffer)})
 
         # Pending signals from the prior completed bar execute at current open only.
         for sym, proposal in list(pending.items()):
@@ -165,10 +167,13 @@ def run_backtest(
                 if lockdown or sym in positions or len(positions) >= max_assets:
                     pending.pop(sym, None)
                     continue
-                equity = mark_equity(bars)
+                equity = mark_equity(bars, "open")
                 basket_notional = sum(p.notional for p in positions.values())
                 basket_risk = sum(p.initial_risk for p in positions.values())
-                stop = min(float(proposal["stop"]), open_px * (1.0 - 1e-6))
+                stop = float(proposal["stop"])
+                if open_px <= stop:
+                    pending.pop(sym, None)
+                    continue
                 stop_gap = open_px - stop
                 if stop_gap <= 0:
                     pending.pop(sym, None)
@@ -191,10 +196,11 @@ def run_backtest(
             else:
                 pos = positions.get(sym)
                 if pos is not None:
-                    equity = mark_equity(bars)
+                    equity = mark_equity(bars, "open")
+                    new_stop = max(pos.stop, float(proposal["trail_stop"]))
                     cap = max(0.0, equity * asset_fraction - pos.notional)
                     risk_cap = max(0.0, equity * asset_risk_fraction - pos.initial_risk)
-                    stop_gap = max(open_px - pos.stop, open_px * 1e-6)
+                    stop_gap = max(open_px - new_stop, open_px * 1e-6)
                     add_notional = min(cap, risk_cap * open_px / stop_gap,
                                        max(0.0, cash / (1.0 + fee)))
                     if add_notional > 0 and open_px > pos.entry:
@@ -202,13 +208,13 @@ def run_backtest(
                         cash -= add_notional * (1.0 + fee)
                         pos.quantity += qty
                         pos.notional += add_notional
+                        pos.initial_risk += qty * max(0.0, open_px - new_stop)
                         pos.additions += 1
-                        # Trailing stop only ratchets upward, never loosens.
-                        pos.stop = max(pos.stop, float(bar["low"]) * (1.0 - buffer))
+                        # Use only the previous completed bar to ratchet the stop.
+                        pos.stop = new_stop
             pending.pop(sym, None)
 
         # Benchmark direction consistency uses only benchmark values observed by this timestamp.
-        benchmark = float(bars["benchmark_close"].iloc[0])
         benchmark_history = [float(grouped[prior]["benchmark_close"].iloc[0])
                              for prior in timestamps[: index + 1]]
         changes = np.diff(np.asarray(benchmark_history[-11:], dtype=float))
