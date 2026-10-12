@@ -15,7 +15,7 @@
 | Research governance | 🟢 Complete | Core claim/plan/evidence/result governance implemented |
 | Tenant security | 🟢 Complete | RLS, authorization, isolation tests and session boundary implemented |
 | API foundation | 🟢 Complete | Versioned API, validation, rate limits, idempotency and errors |
-| Database migrations | 🟡 Blocked (staging parity) | 46 staging migration rows after the forward-only `20261005050000_dataset_version_feed_reconciliation` reconciliation; current main now contains 64 canonical migration files. The staging migration history ends with worker execution version `20260928103556` under the historical remote display name `20260928103225_saas_worker_queue_consumer`. A normalized comparison shows 17 canonical migration names are not represented in the staging history: 9 pre-worker hardening migrations and 8 migrations after the worker reconciliation point. Because historical staging migration names were rewritten, this is a migration-history/schema-parity blocker and does not by itself prove that every SQL change is absent from the live schema. The exact missing set must be reconciled and schema-verified before M1 can pass. |
+| Database migrations | 🟡 Blocked (current release evidence pending) | The last recorded audit observed 64 canonical migration files and 46 staging migration rows with historical aliases. This is a historical snapshot, not proof of schema/migration parity for the current deployed release; rerun the environment-specific audit and bind its artifact to the deployed SHA. |
 | Staging Golden Path | 🟡 Blocked | Auth/application identities and end-to-end operational evidence pending |
 | Disaster Recovery | 🔴 Blocked | Isolated recovery target and recovery storage not provisioned |
 | Observability | 🟡 In progress | Production-grade acceptance evidence pending |
@@ -32,8 +32,8 @@
 
 ### Exit criteria
 
-- [x] Exact canonical-vs-live migration-name audit completed: 64 canonical files, 46 live rows, 20 literal-name gaps. Semantic reconciliation found no additional missing schema behavior; historical migration names remain untouched.
-- [x] Staging schema/security objects verified for the reconciled SaaS contracts; semantic migration reconciliation is complete for all 20 literal-name gaps.
+- [x] Historical canonical-vs-live migration-name audit recorded 64 canonical files, 46 live rows and 20 literal-name gaps; semantic reconciliation reported no additional missing schema behavior. This is historical evidence and must be revalidated against the current deployed release.
+- [ ] Re-run staging schema/security and migration reconciliation against the current deployed release SHA; prior semantic reconciliation is historical evidence only.
 - [ ] Two controlled staging identities verified.
 - [ ] Real API tenant isolation verified.
 - [ ] Complete governed Golden Path executed.
@@ -365,124 +365,121 @@ QROS is **not production-ready** until all applicable gates below have independe
 
 ---
 
-# Current Evidence
+# Current Evidence — refreshed 2026-10-12
 
 ## Exact repository baseline
 
 - **Repository:** `bi421/QROS`
-- **Current main SHA observed 2026-10-10:** `3572a66360e00e6b5f5c36752d9734d6df185c93`
-- This SHA is the squash-merge commit for PR #670, which updates Git Governance to rerun validation when a PR title is edited.
-- **Post-merge exact-SHA CI:** NOT VERIFIED in this audit. The available workflow lookup only returns pull-request-triggered runs, and the combined commit-status lookup returned no separate status-check records. Do not reuse CI runs from earlier SHAs as proof for this main commit.
-- **Post-merge Git Governance:** PR #670's exact head SHA `ce2ef258552df50ebc5ec65facd7d244b133c2e6` passed run [38054110745](https://github.com/bi421/QROS/actions/runs/38054110745) before merge; the merge commit's push-triggered Governance result was not independently verified here.
-- Earlier run references [38047049481](https://github.com/bi421/QROS/actions/runs/38047049481) and [38047049445](https://github.com/bi421/QROS/actions/runs/38047049445) belong to a previous SHA and are historical, not current-release evidence.
-- These repository CI facts do not prove staging, production deployment, migration execution, backup/restore, billing, or commercial readiness.
+- **Previous roadmap baseline:** `3572a66360e00e6b5f5c36752d9734d6df185c93` (PR #670 merge; the prior roadmap incorrectly continued to call this current).
+- **Audit baseline requested:** `40315d796f46ff4ec5b83b9811dae978c176c2af`.
+- **Current `main` SHA:** `f290044852929544454dee44fb1e80fc4adcea10`.
+- **Exact ref proof:** comparing `f290044852929544454dee44fb1e80fc4adcea10` to `main` returned `identical` (0 ahead / 0 behind). Comparing `40315d796f46ff4ec5b83b9811dae978c176c2af` to `main` returned `ahead`, 108 commits, 0 behind.
+- **Latest main commit:** [`f290044852929544454dee44fb1e80fc4adcea10`](https://github.com/bi421/QROS/commit/f290044852929544454dee44fb1e80fc4adcea10), `fix(staging): canonicalize host comparison against production (#711)`.
+- **File blob before this refresh:** `498ff68893935ba1cd9e270e84a8fc8e77f9e827`.
+- This section records repository state, not a claim that the running deployment uses this SHA.
 
-## Post-merge CI proof for the exact SHA
+## Exact-SHA CI evidence
 
-**NOT VERIFIED.** Do not infer successful post-merge CI from the PR-head checks. Verify push-triggered workflows against exact main SHA `3572a66360e00e6b5f5c36752d9734d6df185c93` before making a current-release CI claim.
+**NOT VERIFIED for current main SHA `f290044852929544454dee44fb1e80fc4adcea10`.**
+
+- The combined commit-status lookup returned no status records for this exact SHA.
+- The available workflow-run lookup returned no runs; its connector currently filters to pull-request-triggered runs and therefore is not sufficient to prove push-triggered CI is absent or successful.
+- Do not call current-main CI green until the GitHub Actions run details are independently checked and each required workflow is tied to this exact SHA.
+- CI evidence, even when green, does not prove deployed runtime, live Auth, migration execution, backup/restore, billing, or commercial readiness.
+
+## Changes since the requested baseline — PRs #685–#711
+
+The current `main` history includes the following workstreams. These are repository/code changes; they are not substitutes for live operational evidence.
+
+### Market-memory and probability correctness — #685–#696
+
+- #685–#687: guard conditional/bootstrap and OOS mean arithmetic against overflow; make finite-sample means safer; make OOS success probability direction-aware.
+- #688: recorded as a redundant/diverged attempt, not a separate delivered feature.
+- #689–#692: dependence-aware probability intervals, including moving-block bootstrap and effective-sample-size handling.
+- #693: align walk-forward OOS validation with the dependence-CI API.
+- #694–#696: reject non-finite matched OOS outcomes, boolean outcomes, and empty label-boundary partitions; fail closed on invalid evidence rather than silently dropping it.
+- #697–#699: stabilize the quant backend/test import path; reject undersized simulations; expose pytest pipeline failures and align tests with the fail-closed contract.
+
+### Git hygiene — #700
+
+- #700 (`7d510cb911ab59ec4fe4a4327aed57b7261bbe1b`) is **not part of current main** at this evidence snapshot. Commit comparison reports the PR branch and main as diverged: main is 12 commits ahead of the shared base, while the PR head is 1 commit ahead. Do not describe its `.gitignore` change as delivered or merged. Its current PR state/checks must be verified separately before any merge decision.
+
+### Staging Golden Path and recovery controls — #701–#711
+
+- #701–#702: align Golden Path stage/progress checks and accept the documented paginated dataset-version response envelope.
+- #703–#705: isolate recovery objects by workflow run, restore drill objects into a separate recovery Supabase target, persist/validate tenant-isolation evidence from paginated API responses.
+- #706–#707: preserve machine-readable restore-failure evidence and emit valid JSON failure reports.
+- #708–#709: restrict recovery object-key characters and reject production projects as recovery targets.
+- #710–#711: reject production hosts in the staging Golden Path gate and normalize hostnames before comparing staging versus production.
+- These changes harden workflow safeguards. They do **not** prove that a real staging Golden Path or isolated recovery drill has passed.
 
 ## SaaS implementation status
 
-Implemented in the current main source tree:
+Implemented in the repository source tree (implementation evidence only):
 
-- Public `/onboarding` surface.
-- Supabase signup/signin integration.
-- Authenticated `POST /v1/workspaces` provisioning path.
-- Atomic first-workspace provisioning with owner membership and FREE subscription.
+- Public `/onboarding` surface and Supabase signup/signin integration.
+- Authenticated `POST /v1/workspaces` provisioning path, owner membership and FREE subscription.
 - `/v1/me` customer identity surface.
 - Dataset → immutable version → governed research-run path.
-- Stripe billing adapter and webhook lifecycle.
-- Stripe billing is fail-closed unless the webhook secret is configured.
+- Stripe billing adapter and webhook lifecycle; billing fails closed if the webhook secret is absent.
 
-These are **implementation facts**, not proof of a deployed production customer path.
+These do not establish a deployed, externally accessible, paid customer path.
 
-## Operational gates still requiring external evidence
+## Current external gates
 
-- Real public HTTPS deployment and exact deployed release SHA: **NOT VERIFIED**.
-- Real Supabase Auth signup/email-confirmation flow against deployed infrastructure: **NOT VERIFIED**.
-- Staging Golden Path execution and evidence artifact: **NOT VERIFIED**.
-- Production forward migration execution against `pvhdsngxyoiqhqwujfjt`: **NOT VERIFIED**.
-- Production backup execution and checksum/restore evidence: **NOT VERIFIED**.
-- Isolated DR target and recovery drill: **NOT VERIFIED**.
-- Live Stripe checkout/portal/webhook delivery with real provider: **NOT VERIFIED**.
-- Production observability/alerting acceptance: **NOT VERIFIED**.
-- External customer/commercial validation: **NOT VERIFIED**.
+| Gate | Current evidence status | What is still required |
+|---|---|---|
+| Exact-SHA CI | **NOT VERIFIED** for `f290044852929544454dee44fb1e80fc4adcea10` | Inspect required GitHub Actions runs for this exact SHA |
+| Staging migration/schema parity | **NOT VERIFIED for current deployed release SHA** | Re-run canonical migration/schema/security audit and retain its artifact |
+| Staging identities and API | **NOT VERIFIED** | Two controlled identities; real endpoint; tenant isolation and authorization-failure evidence |
+| Staging Golden Path | **NOT VERIFIED** | Run the 13-stage gate against a verified non-production hostname; retain run URL/artifacts and exact SHA |
+| Production-host exclusion | Implemented in workflow commits #710–#711; **live execution NOT VERIFIED** | Successful staging gate run demonstrating the production-host guard |
+| Production backup | **BLOCKED** in the last observed scheduled run | Configure approved `BACKUP_AWS_ROLE_ARN` repository variable / AWS OIDC role, then verify backup, checksum and remote manifest evidence |
+| Isolated DR | **NOT VERIFIED / BLOCKED** | Prove source is staging; provision a separate recovery project and storage; pass infrastructure gate before dispatch |
+| Restore drill / RPO / RTO | **NOT EXECUTED / NOT VERIFIED** | Successful isolated restore, integrity/security checks and measured RPO/RTO evidence |
+| Public HTTPS deployment | **NOT VERIFIED** | Public endpoint, TLS and exact deployed release SHA |
+| Live Supabase Auth | **NOT VERIFIED** | Signup/email-confirmation and real authenticated API path on deployed infrastructure |
+| Live Stripe | **NOT VERIFIED** | Provider checkout/portal/webhook delivery with evidence |
+| Observability acceptance | **NOT VERIFIED** | Production telemetry, alerts and credential-redaction acceptance evidence |
+| Product UI | **NOT COMPLETE** | Tenant/workspace, research workflow, evidence lineage and audit UI |
+| Customer/commercial validation | **NOT VERIFIED** | External user, measurable outcome, paid pilot or qualified commitment |
 
-**Rule:** repository completeness and green CI do not substitute for environment-specific evidence.
+Historical staging details (including the previously observed project reference, migration counts, RLS counts and Security Advisor findings) must not be treated as current release proof until rechecked against the target environment and its deployed SHA. No staging/production/recovery environment identity is inferred from a repository commit.
 
 ## Immediate next actions
 
-1. **Staging Golden Path remains NOT VERIFIED for current main.** A recent workflow-run search found no `Staging Golden Path Gate` execution in the latest 100 runs inspected.
-2. The workflow is manual (`workflow_dispatch`) and requires GitHub Environment secrets `QROS_STAGING_BASE_URL`, `QROS_STAGING_JWT`, and `QROS_STAGING_ISOLATION_JWT`. Run it only after the staging endpoint and two valid, separate test identities are configured.
-3. The connected Supabase account currently exposes one project (`pvhdsngxyoiqhqwujfjt`, `Boljoo_Project`, ACTIVE_HEALTHY); a separate staging project was not visible in that connected project list. This is not proof that staging cannot exist elsewhere.
-4. Production backup remains blocked by missing `BACKUP_AWS_ROLE_ARN` repository variable in the observed scheduled backup failure. Do not invent or commit credentials; configure the approved GitHub/AWS OIDC setup before rerunning.
-3. After staging proof, execute the controlled production migration workflow and capture exact migration-history/schema evidence.
-4. Execute and verify the production backup chain.
-5. Provision/verify isolated DR infrastructure and run the recovery drill.
-6. Deploy the exact release and prove public HTTPS, onboarding, research execution, billing and observability.
+### P0 — exact release evidence
+1. Verify required GitHub Actions workflows against exact main SHA `f290044852929544454dee44fb1e80fc4adcea10`; record workflow names, run IDs, conclusion and SHA.
+2. Verify which deployed environment, if any, runs that exact SHA.
+3. Re-run staging migration/schema/RLS/policy/function/grant checks against the verified staging environment; attach the reproducible audit artifact.
+4. Configure the approved `BACKUP_AWS_ROLE_ARN` / AWS OIDC dependency without exposing credentials, then rerun the backup workflow and inspect checksum plus remote-manifest evidence.
 
----
+### P0 — staging Golden Path
+1. Verify the staging base URL is genuinely non-production and configure the required staging environment secrets.
+2. Verify two distinct controlled Auth identities.
+3. Run the Golden Path gate and capture its run URL, exact SHA, result, and artifacts. A hardened workflow alone is not a pass.
+
+### P1 — recovery
+1. Verify source identity is staging, and provision an independent recovery Supabase/PostgreSQL target and recovery storage.
+2. Pass the DR infrastructure gate before dispatching the drill.
+3. Run backup/restore, validate schema/security/RLS/tenant isolation and objects, and measure actual RPO/RTO.
+
+### P2 — product and commercial
+1. Build the missing tenant/workspace, research workflow and evidence/audit UI.
+2. Validate one complete governed workflow with an external user.
+3. Record real paid-pilot/payment/repeat-use evidence; do not infer commercial readiness from code completion.
 
 ## Engineering Rules
 
 1. Never claim PASS without the required evidence.
-2. Never use production as a substitute for staging or recovery.
-3. Never use staging as a substitute for an isolated recovery target.
-4. Never expose or commit secrets.
-5. Never weaken security, typing, governance or tests to obtain green CI.
-6. Never use broad `Any`, blanket ignores or skipped tests as failure suppression.
-7. Never fabricate or rewrite migration history to make parity green.
-8. Never dispatch destructive/recovery workflows while their gate is blocked.
-9. Every release claim must include the exact commit SHA and environment.
+2. Every release claim must include the exact commit SHA and environment.
+3. Separate **IMPLEMENTED**, **PROVEN**, and **EXTERNAL DEPENDENCY**.
+4. Never use production as a substitute for staging or recovery.
+5. Never use staging as a substitute for an isolated recovery target.
+6. Never expose or commit secrets.
+7. Never weaken security, typing, governance or tests to obtain green CI.
+8. Never fabricate or rewrite migration history to make parity green.
+9. Never dispatch destructive/recovery workflows while their gate is blocked.
 10. `BLOCKED`, `NOT_EXECUTED`, and `NOT_VERIFIED` are valid states and must remain explicit.
-))`. The complete SaaS contract audit returns all required booleans true and zero legacy `tenant_id` storage policies; the post-reconciliation dataset-feed/storage audit also returns all required feed, retention-guard, storage-contract and storage-policy checks true. `public.dataset_version_storage_path_contract` is present and currently verifies as a CHECK constraint on `public.dataset_version` requiring `tenant/<uuid>/datasets/<sha256>/<positive-version>/`.
-- Storage object policies are present under the live names `qros_datasets_tenant_{insert,select,update,delete}`; no legacy `tenant_id` predicate was found. The earlier policy-name-only check must not be interpreted as a storage-policy absence.
-- Staging project identity and environment-specific operational state must be re-verified before being presented as current release evidence.
-- Historical migration/security observations in this document are retained only as historical evidence unless their current SHA/environment is independently re-verified.
-- Real Auth/API Golden Path: **NOT VERIFIED on current main SHA**.
-- Two controlled staging identities: **NOT VERIFIED on current main SHA**.
-- Staging worker-loss/restart and queue recovery: **NOT VERIFIED on current main SHA**.
-
-## DR
-
-- Recovery target: **NOT PROVISIONED / NOT VERIFIED**
-- Recovery S3: **NOT PROVISIONED / NOT VERIFIED**
-- DR infrastructure gate: **BLOCKED**
-- Full DR drill: **NOT EXECUTED**
 
 ---
-
-# Immediate Next Actions
-
-### P0 — Staging database proof
-- [x] Complete semantic migration reconciliation: canonical migration files vs live staging history were classified without rewriting historical migration names.
-- [x] Verify schema, RLS policies, functions, grants and required SaaS constraints against the live staging database; the full `verify_saas_contract.py` contract audit currently passes.
-- [ ] Review/document pgtap warning.
-
-### P0 — Staging identity & API
-- [ ] Verify two controlled Auth identities.
-- [ ] Verify application endpoint.
-- [ ] Execute real tenant-isolation API tests.
-
-### P0 — Golden Path
-- [ ] Execute Claim → Plan → Dataset → Run → Result → Evidence → Finding.
-- [ ] Capture exact SHA and reproducible evidence bundle.
-
-### P1 — DR infrastructure
-- [ ] Provision isolated recovery target.
-- [ ] Provision dedicated recovery storage.
-- [ ] Configure scoped GitHub Environment secrets.
-- [ ] Pass the complete DR infrastructure gate.
-
-### P2 — Product
-- [ ] Build tenant/workspace UI.
-- [ ] Build research workflow UI.
-- [ ] Build evidence/audit views.
-
-### P2 — Commercial
-- [ ] External-user validation.
-- [ ] Paid pilot.
-- [ ] Record actual commercial evidence.
-
----
-
