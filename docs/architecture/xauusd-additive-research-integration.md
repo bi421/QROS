@@ -45,7 +45,8 @@ The additive labeler now exists at `researchos/quant_engine/machine_learning/ohl
 - [x] Record required/optional engine failures and fail closed for missing required engines.
 - [x] Keep probability unset and execution disabled.
 - [x] Add concrete adapters for technical indicators and quant geometry/statistics.
-- [ ] Add macro-data and Market Memory adapters; require explicit source timestamps and provider status.
+- [x] Add a provenance- and freshness-guarded macro evidence adapter contract.
+- [ ] Connect a real macro provider and Market Memory; live provider coverage remains unproven.
 - [x] Implement standalone OHLC-aware TP/SL/TIMEOUT labels and ambiguous-bar unit tests.
 - [ ] Prove labeler results against a pinned, cleaned XAUUSD OHLC dataset.
 - [ ] Connect the adapter registry to the existing research-run lifecycle and prove API/worker integration.
@@ -85,7 +86,7 @@ infer timestamps, repair data, calculate ATR, choose signal direction, or claim
 that labels are profitable. No calibrated probabilities are emitted.
 
 
-## Concrete engine adapter phase (in review)
+## Concrete technical/QuantMath adapter phase (merged; dataset replay unproven)
 
 The next additive adapter module is
 `researchos/orchestration/xauusd_engine_adapters.py`.
@@ -107,3 +108,27 @@ The next additive adapter module is
   driver inputs, Market Memory provider wiring, order-book feeds, a complete
   research-run lifecycle, outcome calibration, and end-to-end dataset replay
   remain separate, unproven work.
+
+
+## Macro evidence adapter phase (implemented contract; provider wiring unproven)
+
+The additive module `researchos/orchestration/xauusd_macro_adapter.py`
+translates already-assessed macro driver observations into the shared evidence
+contract. It does not fetch data, call the existing MacroAnalysisEngine, or
+change its scoring logic.
+
+- All ten driver identifiers from `researchos/macro/engine.py` are required
+  before the adapter publishes evidence; missing drivers produce an
+  INSUFFICIENT result with no partial evidence.
+- Each observation carries an explicit gold-impact direction, score,
+  confidence, timestamp, source references, and provider-defined maximum age.
+- Future observations, stale observations, invalid scores/confidence, missing
+  provenance, and duplicate driver names are rejected fail-closed.
+- The provider ID and source references are preserved in every evidence record.
+- The observation timeframe is the M15 decision context; the original
+  observation timestamp remains the source's actual `as_of` time.
+
+This is a typed adapter boundary only. A live macro source, transformation
+from the existing engine's persisted assessment objects, Market Memory
+integration, and a pinned historical replay are not yet implemented or proven.
+No calibrated outcome probabilities are produced.
