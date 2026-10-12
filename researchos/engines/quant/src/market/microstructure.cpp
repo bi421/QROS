@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <iterator>
 #include <map>
 #include <stdexcept>
 
@@ -115,10 +116,19 @@ VolumeProfileSummary volume_profile_summary(
     if (prices[j] <= 0.0 || volumes[j] < 0.0) {
       throw std::invalid_argument("prices must be positive and volumes non-negative");
     }
-    const double raw_bin = std::floor(prices[j] / tick_size);
+    const long double quotient =
+        static_cast<long double>(prices[j]) / static_cast<long double>(tick_size);
+    const long double nearest = std::round(quotient);
+    const long double tolerance =
+        8.0L * static_cast<long double>(std::numeric_limits<double>::epsilon()) *
+        std::max(1.0L, std::fabs(quotient));
+    // Snap values that are only a floating-point representation error away
+    // from a valid tick; otherwise preserve floor-based binning.
+    const long double raw_bin =
+        std::fabs(quotient - nearest) <= tolerance ? nearest : std::floor(quotient);
     if (!std::isfinite(raw_bin) ||
-        raw_bin < static_cast<double>(std::numeric_limits<std::int64_t>::min()) ||
-        raw_bin > static_cast<double>(std::numeric_limits<std::int64_t>::max())) {
+        raw_bin < static_cast<long double>(std::numeric_limits<std::int64_t>::min()) ||
+        raw_bin > static_cast<long double>(std::numeric_limits<std::int64_t>::max())) {
       throw std::invalid_argument("price/tick_size bin index is out of range");
     }
     bins[static_cast<std::int64_t>(raw_bin)] += volumes[j];
