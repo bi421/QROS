@@ -30,7 +30,7 @@ def inputs(rows, direction=1, atr_value=1.0, spec=None):
 def test_long_take_profit_uses_next_bar_open_and_ohlc_high():
     result = inputs([
         (100, 101, 99, 100),
-        (100, 101, 99, 100),
+        (100, 100.5, 99.5, 100),
         (100, 102, 99.5, 101),
         (101, 101.5, 100.5, 101),
     ], spec=OutcomeSpec(take_profit_atr=1.5, stop_loss_atr=1.0, max_holding_bars=2))
@@ -44,8 +44,8 @@ def test_long_take_profit_uses_next_bar_open_and_ohlc_high():
 def test_short_stop_loss_uses_high():
     result = inputs([
         (100, 101, 99, 100),
-        (100, 101, 99, 100),
-        (100, 101.5, 98.5, 100),
+        (100, 100.5, 99.5, 100),
+        (100, 101.5, 99.0, 100),
         (100, 100.5, 99.5, 100),
     ], direction=-1,
        spec=OutcomeSpec(take_profit_atr=1.5, stop_loss_atr=1.0, max_holding_bars=2))
@@ -57,7 +57,7 @@ def test_short_stop_loss_uses_high():
 def test_both_barriers_touched_excludes_by_default():
     result = inputs([
         (100, 101, 99, 100),
-        (100, 101, 99, 100),
+        (100, 100.5, 99.5, 100),
         (100, 102, 98, 100),
         (100, 100.5, 99.5, 100),
     ], spec=OutcomeSpec(take_profit_atr=1.5, stop_loss_atr=1.0, max_holding_bars=2))
@@ -67,7 +67,7 @@ def test_both_barriers_touched_excludes_by_default():
 def test_both_barriers_touched_can_use_conservative_stop_first():
     result = inputs([
         (100, 101, 99, 100),
-        (100, 101, 99, 100),
+        (100, 100.5, 99.5, 100),
         (100, 102, 98, 100),
         (100, 100.5, 99.5, 100),
     ], spec=OutcomeSpec(
