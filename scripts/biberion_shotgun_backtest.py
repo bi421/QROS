@@ -141,7 +141,7 @@ def run_backtest(
         bars = grouped[ts]
         # A proposal must execute on the immediately following timestamp; otherwise expire it.
         for pending_symbol in list(pending):
-            if pending_symbol not in bars.index:
+            if pending_symbol not in bars.index and pending[pending_symbol]["kind"] != "exit":
                 pending.pop(pending_symbol, None)
         # Existing stops are evaluated before any current-bar signal; gaps are pessimistic.
         for sym in list(positions):
