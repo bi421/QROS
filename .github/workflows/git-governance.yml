@@ -3,16 +3,19 @@ name: Git Governance
 on:
   pull_request:
     branches: [main]
-    types: [opened, reopened, synchronize, edited]
+    types: [opened, reopened, synchronize, ready_for_review, edited]
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# Keep verification runs for distinct commits; never cancel a run because a
+# later commit was pushed to the same PR.
 concurrency:
-  group: git-governance-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: git-governance-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: false
 
 jobs:
   governance:
