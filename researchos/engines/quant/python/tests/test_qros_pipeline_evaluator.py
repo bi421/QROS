@@ -31,16 +31,18 @@ def test_forward_return_sign_and_safety_exclusion() -> None:
         "safety_gate_triggered": [False, True, False, False, False, False],
     })
     one = QROSPipelineEvaluator(EvaluationConfig(horizons=(1,))).ingest(frame).compute()["forward_returns"]["1"]
-    assert one["evaluated_signals"] == 3
-    assert math.isclose(one["win_rate"], 1.0)
+    assert one["evaluated_signals"] == 4
+    assert math.isclose(one["win_rate"], 0.75)
     assert one["safety_excluded_signals"] == 1
-    assert one["clean_evaluated_signals"] == 2
-    assert math.isclose(one["clean_win_rate"], 1.0)
+    assert one["clean_evaluated_signals"] == 3
+    assert math.isclose(one["clean_win_rate"], 2 / 3)
 
 
 def test_fail_closed_on_invalid_state_or_price() -> None:
     with pytest.raises(ValueError, match="state values"):
         QROSPipelineEvaluator().ingest(pl.DataFrame({"state": [2], "close": [10.0]}))
+    with pytest.raises(ValueError, match="exactly -1, 0, or +1"):
+        QROSPipelineEvaluator().ingest(pl.DataFrame({"state": [1.5], "close": [10.0]}))
     with pytest.raises(ValueError, match="strictly positive"):
         QROSPipelineEvaluator().ingest(pl.DataFrame({"state": [1], "close": [0.0]}))
 
