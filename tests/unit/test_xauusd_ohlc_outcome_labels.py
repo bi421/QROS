@@ -39,8 +39,8 @@ def test_long_take_profit_is_first_touch_from_next_bar_open():
 def test_short_stop_loss_is_first_touch():
     data = bars(
         (100, 101, 99, 100),
-        (100, 101.5, 98, 99),
-        (99, 100, 98, 99),
+        (100, 101.5, 99.5, 100.5),
+        (100.5, 101, 99.5, 100),
     )
     result = label_ohlc_outcomes(data, [-1, -1, -1], [1, 1, 1], spec())
     assert result[0].label is OutcomeLabel.STOP_LOSS
@@ -86,8 +86,8 @@ def test_timeout_requires_full_horizon():
 def test_entry_is_next_bar_open_not_decision_bar_close():
     data = bars(
         (100, 110, 99, 109),
-        (120, 121, 119, 120),
-        (120, 121, 119, 120),
+        (120, 121, 119.5, 120),
+        (120, 121, 119.5, 120),
     )
     result = label_ohlc_outcomes(data, [1, 1, 1], [1, 1, 1], spec())
     assert result[0].entry_index == 1
