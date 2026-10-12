@@ -99,6 +99,9 @@ def run_backtest(
     ).hexdigest()
     timestamps = list(frame["timestamp"].drop_duplicates())
     grouped = {t: part.set_index("symbol") for t, part in frame.groupby("timestamp", sort=True)}
+    for timestamp, bars_at_time in grouped.items():
+        if bars_at_time["benchmark_close"].nunique(dropna=False) != 1:
+            raise ValueError(f"benchmark_close must agree across symbols at {timestamp}")
     symbols = sorted(frame["symbol"].astype(str).unique())
     histories: dict[str, list[dict]] = {s: [] for s in symbols}
     positions: dict[str, Position] = {}
@@ -236,7 +239,7 @@ def run_backtest(
             flow = float(bar["flow_imbalance"]) if pd.notna(bar["flow_imbalance"]) else 0.0
             if float(bar["close"]) > pos.entry and flow > 0.0 and not lockdown:
                 pending.setdefault(sym, {"kind": "add", "signal_time": ts, "stop": pos.stop,
-                                         "trail_stop": float(bar["low"]) * (1.0 - buffer)})
+                                         "trail_stop": pos.stop})
 
         # Record histories and form signals at this completed bar for next bar only.
         for sym, bar in bars.iterrows():
