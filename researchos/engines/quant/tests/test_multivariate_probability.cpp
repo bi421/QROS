@@ -21,7 +21,7 @@ TEST(MultivariateProbability, ExplicitPenaltyTerms) {
 TEST(MultivariateProbability, StressInputsReduceScore) {
   auto x=fixture(); x.latency_ms=50; x.vxy=14.5; x.dxy=106.8;
   const auto r=evaluate_multivariate_probability(x);
-  EXPECT_NEAR(r.estimated_success_probability,.766,1e-12);
+  EXPECT_NEAR(r.estimated_success_probability,.715,1e-12);
   EXPECT_LT(r.estimated_success_probability,.832);
 }
 TEST(MultivariateProbability, UnverifiedCalibrationKeepsGateClosed) {

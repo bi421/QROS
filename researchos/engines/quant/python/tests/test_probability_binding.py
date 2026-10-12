@@ -1,8 +1,12 @@
 import pytest
 probability = pytest.importorskip("cpp_quant_engine.qros_probability")
-def make_input(calibrated=True):
+def make_input(calibrated=True, stress=False):
     x=probability.Input()
-    x.base_probability=.85; x.latency_ms=5; x.vxy=6.5; x.dxy=101.2; x.dxy_baseline=101.2
+    x.base_probability=.85
+    x.latency_ms=50 if stress else 5
+    x.vxy=14.5 if stress else 6.5
+    x.dxy=106.8 if stress else 101.2
+    x.dxy_baseline=101.2
     x.alpha_per_ms=.001; x.beta_per_vxy_unit=.002; x.gamma_per_dxy_point=.01
     x.gate_threshold=.70; x.calibration_verified=calibrated
     return x
@@ -10,5 +14,8 @@ def test_probability_score_and_gate():
     r=probability.evaluate(make_input())
     assert r.estimated_success_probability == pytest.approx(.832)
     assert r.research_gate_pass
+def test_stress_case_score_is_computed_not_assumed():
+    r=probability.evaluate(make_input(stress=True))
+    assert r.estimated_success_probability == pytest.approx(.715)
 def test_unverified_calibration_fails_closed():
     assert not probability.evaluate(make_input(False)).research_gate_pass
