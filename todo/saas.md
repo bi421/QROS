@@ -108,18 +108,17 @@
 - [x] Project ref: `yebwhcntiockckhdvawt`.
 - [x] Region: `ap-northeast-1`.
 - [x] PostgreSQL 17.6 / engine 17.
-- [x] 45 migration rows observed; the worker migration is present under its historical remote display name.
-- [ ] Current repository migration set must be fully reconciled with staging migration history and schema; current exact audit finds 20 historical canonical migration names not represented by live staging history; the missing `dataset_version_feed` schema contract was separately reconciled forward without rewriting history.
+- [x] Historical snapshot A recorded 45 migration rows; the worker migration appeared under its historical remote display name.
+- [x] A later historical audit recorded 46 staging migration rows and 20 literal-name gaps across 64 canonical files. These counts are from different observations and must not be combined as one current snapshot.
+- [ ] Re-run a single canonical migration-history and schema audit against the verified current staging deployment SHA. Confirm the live row count, aliases, all canonical names, and the `dataset_version_feed` schema contract. Do not rewrite migration history to force name parity.
 - [x] 23 public tables observed.
 - [x] 23/23 public tables have RLS enabled; 0 disabled.
 
 ### Remaining
 - [x] Verify the worker execution version `20260928103556` is present; its historical remote display name remains `20260928103225_saas_worker_queue_consumer` and is not rewritten.
-- [x] Reconcile and verify the 20 canonical migrations not represented by live staging history; no additional forward-only schema migration was required.
-- [x] Verify staging QROS tables, RLS state, public policies/triggers, and governed queue function grants.
-- [x] Verify RLS is enabled on all 23 QROS public tables (23/23; 0 disabled).
-- [x] Review staging Security Advisor findings.
-- [x] Document the existing `pgtap`-in-public-schema warning; no live schema mutation performed.
+- [x] Historical review recorded 23 public tables with RLS enabled (23/23, 0 disabled); current state has not been re-verified against a deployment SHA.
+- [x] Historical review covered public policies/triggers, governed queue-function grants, Security Advisor findings, and the existing `pgtap`-in-public-schema warning; no live schema mutation was performed in that review.
+- [ ] Re-run and retain current staging evidence for RLS, policies, triggers, grants, Security Advisor findings, and migration/schema parity, all bound to the verified staging deployment SHA.
 
 > **Important:** Manual migration application proves the SQL was applied; it does **not** by itself prove canonical migration-history parity. Do not rewrite migration history merely to obtain a green check.
 
@@ -386,6 +385,13 @@ QROS is **not production-ready** until all applicable gates below have independe
 - The available workflow-run lookup returned no runs; its connector currently filters to pull-request-triggered runs and therefore is not sufficient to prove push-triggered CI is absent or successful.
 - Do not call current-main CI green until the GitHub Actions run details are independently checked and each required workflow is tied to this exact SHA.
 - CI evidence, even when green, does not prove deployed runtime, live Auth, migration execution, backup/restore, billing, or commercial readiness.
+
+## CI evidence for the roadmap PR
+
+- **Roadmap PR commit tested:** `12ca135eb3f8703744c6f65867336c76c53ea3b1`.
+- **CI run:** [#4230](https://github.com/bi421/QROS/actions/runs/38192356568) — `success`.
+- **Git Governance run:** [#765](https://github.com/bi421/QROS/actions/runs/38192356520) — `success`.
+- These runs validate that exact documentation-branch commit only. They do not prove CI for current `main` SHA `f290044852929544454dee44fb1e80fc4adcea10`, and they do not prove staging or production behavior.
 
 ## Changes since the requested baseline — PRs #685–#711
 
