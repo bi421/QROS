@@ -11,6 +11,7 @@ from researchos.orchestration.xauusd_research import (
     OutcomeSpec,
     ResearchStatus,
     XAUUSDResearchError,
+    XAUUSDResearchInputs,
     XAUUSDResearchOrchestrator,
     XAUUSDResearchRequest,
 )
@@ -180,3 +181,38 @@ def test_non_ok_engine_cannot_publish_evidence():
     ).run(request(), {})
     assert result.status is ResearchStatus.INSUFFICIENT_EVIDENCE
     assert result.evidence == ()
+
+
+
+def test_per_engine_inputs_route_distinct_snapshots_without_breaking_shared_snapshot_mode():
+    seen = {}
+
+    def capture(name):
+        def adapter(_request, snapshot):
+            seen[name] = snapshot
+            return EngineResult(
+                engine_name=name,
+                status=EngineStatus.OK,
+                evidence=(evidence(engine=name),),
+            )
+        return adapter
+
+    market = object()
+    macro = object()
+    inputs = XAUUSDResearchInputs(
+        default_snapshot=market,
+        by_engine={"macro": macro},
+    )
+    result = XAUUSDResearchOrchestrator(
+        {"technical": capture("technical"), "macro": capture("macro")}
+    ).run(request(), inputs)
+
+    assert result.status is ResearchStatus.EVIDENCE_COLLECTED
+    assert seen["technical"] is market
+    assert seen["macro"] is macro
+
+
+def test_per_engine_inputs_fall_back_to_default_for_unlisted_engines():
+    default = object()
+    inputs = XAUUSDResearchInputs(default_snapshot=default, by_engine={"macro": object()})
+    assert inputs.for_engine("technical") is default
