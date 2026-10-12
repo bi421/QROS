@@ -8,6 +8,7 @@ from typing import Any
 from researchos.decision_engine.artifact import DecisionArtifact
 from researchos.decision_engine.calibration import CalibrationEvidence
 from researchos.decision_engine.context import DecisionContext, DecisionContextValidator
+from researchos.decision_engine.direction import DirectionForecast, classify_direction
 from researchos.decision_engine.contracts import EvidenceSource, WeightConfiguration
 from researchos.decision_engine.evidence import (
     EvidenceAggregator,
@@ -46,6 +47,11 @@ class DecisionPipelineResult:
     report: DecisionReport
 
     @property
+    def direction_forecast(self) -> DirectionForecast:
+        """Return the canonical UP / DOWN / NEUTRAL output for this assessment."""
+        return classify_direction(self.probability)
+
+    @property
     def report_hash(self) -> str:
         return self.report.report_hash
 
@@ -64,6 +70,7 @@ class DecisionPipelineResult:
             "evidence": self.evidence.to_dict(),
             "score": self.score.to_dict(),
             "probability": self.probability.to_dict(),
+            "direction_forecast": self.direction_forecast.to_dict(),
             "report": self.report.to_dict(),
             "artifact": self.artifact.to_dict(),
         }
