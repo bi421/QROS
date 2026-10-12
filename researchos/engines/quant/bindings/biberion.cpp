@@ -29,6 +29,7 @@ NB_MODULE(qros_biberion, m) {
     nb::class_<BasketLimits>(m, "BasketLimits")
         .def(nb::init<>())
         .def_rw("equity", &BasketLimits::equity)
+        .def_rw("max_assets", &BasketLimits::max_assets)
         .def_rw("max_basket_fraction", &BasketLimits::max_basket_fraction)
         .def_rw("max_asset_fraction", &BasketLimits::max_asset_fraction)
         .def_rw("max_asset_risk_fraction", &BasketLimits::max_asset_risk_fraction)
