@@ -68,15 +68,21 @@ class OutcomeSpec:
             raise XAUUSDResearchError("entry_rule must be NEXT_BAR_OPEN")
         if self.ambiguous_touch_policy not in {"EXCLUDE", "CONSERVATIVE_SL_FIRST"}:
             raise XAUUSDResearchError("unsupported ambiguous_touch_policy")
-        if isinstance(self.atr_period, bool) or self.atr_period <= 0:
+        if isinstance(self.atr_period, bool) or not isinstance(self.atr_period, int) or self.atr_period <= 0:
             raise XAUUSDResearchError("atr_period must be positive")
-        if isinstance(self.max_holding_bars, bool) or self.max_holding_bars <= 0:
+        if isinstance(self.max_holding_bars, bool) or not isinstance(self.max_holding_bars, int) or self.max_holding_bars <= 0:
             raise XAUUSDResearchError("max_holding_bars must be positive")
         for name, value in (
             ("take_profit_atr", self.take_profit_atr),
             ("stop_loss_atr", self.stop_loss_atr),
         ):
-            if not math.isfinite(float(value)) or float(value) <= 0:
+            if isinstance(value, bool):
+                raise XAUUSDResearchError(f"{name} must be finite and positive")
+            try:
+                numeric_value = float(value)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise XAUUSDResearchError(f"{name} must be finite and positive") from exc
+            if not math.isfinite(numeric_value) or numeric_value <= 0:
                 raise XAUUSDResearchError(f"{name} must be finite and positive")
         if not self.version.strip():
             raise XAUUSDResearchError("outcome spec version is required")
