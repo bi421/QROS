@@ -74,7 +74,7 @@ def test_macro_only_inputs_do_not_claim_complete_research():
 def test_unconfigured_macro_can_be_optional_but_is_still_reported():
     result = collect_xauusd_research(
         request(),
-        XAUUSDResearchInputs(macro=macro_snapshot()),
+        XAUUSDResearchInputs(),
         required_engines=("technical", "quant_math"),
     )
     assert result.status is ResearchStatus.INSUFFICIENT_EVIDENCE
