@@ -107,11 +107,15 @@ BasketDecision approve_cash_basket(const BasketLimits& limits,
         limits.max_asset_fraction <= 0.0 ||
         limits.max_asset_fraction > limits.max_basket_fraction ||
         limits.max_asset_risk_fraction <= 0.0 ||
-        limits.max_basket_risk_fraction <= 0.0) {
+        limits.max_basket_risk_fraction <= 0.0 || limits.max_assets == 0) {
         out.reason = "invalid_limits";
         return out;
     }
 
+    if (proposals.size() > limits.max_assets) {
+        out.reason = "basket_asset_count_exceeded";
+        return out;
+    }
     std::unordered_set<std::string> symbols;
     for (const auto& p : proposals) {
         if (p.symbol.empty() || !symbols.insert(p.symbol).second ||
