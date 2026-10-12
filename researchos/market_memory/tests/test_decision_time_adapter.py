@@ -25,8 +25,14 @@ def _record(name: str, end: str) -> EvidenceRecord:
     )
 
 
-def _report(*records: EvidenceRecord, generated_at: str = "2025-01-02T00:00:00+00:00",
-            date_range: tuple[str, str] = ("2021-01-01T00:00:00+00:00", "2024-12-31T00:00:00+00:00")) -> MarketMemoryReport:
+def _report(
+    *records: EvidenceRecord,
+    generated_at: str = "2025-01-02T00:00:00+00:00",
+    date_range: tuple[str, str] = (
+        "2021-01-01T00:00:00+00:00",
+        "2024-12-31T00:00:00+00:00",
+    ),
+) -> MarketMemoryReport:
     return MarketMemoryReport(
         report_id="MMR|XAUUSD|D1|test",
         asset="XAUUSD",
@@ -51,9 +57,11 @@ def test_as_of_gate_accepts_only_records_whose_data_window_ends_by_cutoff() -> N
 
 
 def test_as_of_gate_rejects_report_generated_after_decision_time() -> None:
-    report = _report(generated_at="2025-01-02T00:00:00+00:00", date_range=(
-        "2021-01-01T00:00:00+00:00", "2024-12-31T00:00:00+00:00"
-    ), _record("historical", "2024-12-31T00:00:00+00:00"))
+    report = _report(
+        _record("historical", "2024-12-31T00:00:00+00:00"),
+        generated_at="2025-01-02T00:00:00+00:00",
+        date_range=("2021-01-01T00:00:00+00:00", "2024-12-31T00:00:00+00:00"),
+    )
     assert market_memory_to_decision_evidence_as_of(
         report, decision_time=datetime(2025, 1, 1, tzinfo=timezone.utc)
     ) == []
