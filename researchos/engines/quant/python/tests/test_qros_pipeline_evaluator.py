@@ -22,6 +22,7 @@ def test_distribution_safety_causes_and_latency_metrics() -> None:
     assert metrics["safety_gate"]["root_causes"]["vxy"]["count"] == 1
     assert math.isclose(metrics["latency"]["median_ms"], 3.0)
     assert math.isclose(metrics["latency"]["p95_ms"], 81.0)
+    assert metrics["safety_regime_forward_diagnostics"]["1"]["safety_locked"]["count"] == 2
 
 
 def test_forward_return_sign_and_safety_exclusion() -> None:
