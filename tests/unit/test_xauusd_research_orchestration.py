@@ -78,6 +78,16 @@ def test_rejects_invalid_outcome_parameters():
         OutcomeSpec(take_profit_atr=float("inf"))
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("atr_period", 1.5), ("atr_period", True), ("max_holding_bars", 2.5),
+     ("max_holding_bars", False), ("take_profit_atr", True), ("stop_loss_atr", False)],
+)
+def test_outcome_spec_rejects_wrong_numeric_types(field, value):
+    with pytest.raises(XAUUSDResearchError):
+        OutcomeSpec(**{field: value})
+
+
 def test_evidence_rejects_future_timeframe_and_invalid_probability_like_strength():
     with pytest.raises(XAUUSDResearchError, match="unsupported evidence timeframe"):
         evidence(timeframe="M5")
@@ -135,7 +145,7 @@ def test_future_evidence_is_rejected_and_not_counted():
 
 
 def test_duplicate_evidence_ids_fail_closed():
-    shared = evidence(evidence_id="duplicate")
+    shared = evidence(engine="macro", evidence_id="duplicate")
     orchestrator = XAUUSDResearchOrchestrator(
         {"macro": ok_adapter("macro", shared), "technical": ok_adapter(
             "technical", evidence(engine="technical", evidence_id="duplicate")
