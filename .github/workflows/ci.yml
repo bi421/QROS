@@ -15,8 +15,10 @@ permissions:
   contents: read
 
 concurrency:
+  # Keep every main SHA run for release evidence, but cancel obsolete PR runs
+  # when a newer commit is pushed to that same PR.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   phase52-benchmark:
