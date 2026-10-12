@@ -147,4 +147,103 @@ BasketDecision approve_cash_basket(const BasketLimits& limits,
     out.reason = "cash_risk_limits_passed";
     return out;
 }
+StateDecision evaluate_market_state(const std::vector<double>& features,
+                                    const SafetyObservation& observation,
+                                    const StateModel& model,
+                                    const SafetyLimits& limits) {
+    StateDecision out;
+    constexpr std::size_t feature_count = 6;
+    constexpr std::size_t state_count = 3;
+
+    if (features.size() != feature_count ||
+        model.weights.size() != feature_count * state_count ||
+        model.bias.size() != state_count ||
+        !std::isfinite(model.threshold) || model.threshold <= 0.0 ||
+        model.threshold >= 1.0 ||
+        !finite_positive(limits.max_latency_ms) ||
+        !finite_positive(limits.max_vxy_level) ||
+        !finite_positive(limits.max_abs_dxy_change_pct) ||
+        !std::isfinite(observation.latency_ms) || observation.latency_ms < 0.0 ||
+        !std::isfinite(observation.vxy_level) || observation.vxy_level < 0.0 ||
+        !std::isfinite(observation.dxy_abs_change_pct) ||
+        observation.dxy_abs_change_pct < 0.0) {
+        out.reason = "invalid_model_features_or_safety_inputs";
+        return out;
+    }
+
+    for (const double value : features) {
+        if (!std::isfinite(value)) {
+            out.reason = "non_finite_feature";
+            return out;
+        }
+    }
+    for (const double value : model.weights) {
+        if (!std::isfinite(value)) {
+            out.reason = "non_finite_model_weight";
+            return out;
+        }
+    }
+    for (const double value : model.bias) {
+        if (!std::isfinite(value)) {
+            out.reason = "non_finite_model_bias";
+            return out;
+        }
+    }
+
+    // Stable softmax: subtract max(logit) before exponentiation.
+    std::vector<double> logits(state_count, 0.0);
+    for (std::size_t state = 0; state < state_count; ++state) {
+        logits[state] = model.bias[state];
+        for (std::size_t feature = 0; feature < feature_count; ++feature) {
+            logits[state] += model.weights[state * feature_count + feature] * features[feature];
+        }
+        if (!std::isfinite(logits[state])) {
+            out.reason = "non_finite_logit";
+            return out;
+        }
+    }
+    const double max_logit = *std::max_element(logits.begin(), logits.end());
+    double denominator = 0.0;
+    for (double& logit : logits) {
+        logit = std::exp(logit - max_logit);
+        denominator += logit;
+    }
+    if (!std::isfinite(denominator) || denominator <= 0.0) {
+        out.reason = "softmax_normalization_failed";
+        return out;
+    }
+    out.p_bearish = logits[0] / denominator;
+    out.p_neutral = logits[1] / denominator;
+    out.p_bullish = logits[2] / denominator;
+
+    if (!observation.dxy_fresh) {
+        out.reason = "safety_gate_dxy_stale";
+        return out;
+    }
+    if (observation.latency_ms > limits.max_latency_ms) {
+        out.reason = "safety_gate_latency_exceeded";
+        return out;
+    }
+    if (observation.vxy_level > limits.max_vxy_level) {
+        out.reason = "safety_gate_vxy_exceeded";
+        return out;
+    }
+    if (observation.dxy_abs_change_pct > limits.max_abs_dxy_change_pct) {
+        out.reason = "safety_gate_dxy_move_exceeded";
+        return out;
+    }
+
+    out.safety_passed = true;
+    if (out.p_bullish > model.threshold) {
+        out.state = 1;
+        out.reason = "bullish_probability_and_safety_passed";
+    } else if (out.p_bearish > model.threshold) {
+        out.state = -1;
+        out.reason = "bearish_probability_and_safety_passed";
+    } else {
+        out.reason = "below_probability_threshold";
+    }
+    return out;
+}
+
 }  // namespace quant::biberion
