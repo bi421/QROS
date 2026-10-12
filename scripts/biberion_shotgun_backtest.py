@@ -136,6 +136,10 @@ def run_backtest(
 
     for index, ts in enumerate(timestamps):
         bars = grouped[ts]
+        # A proposal must execute on the immediately following timestamp; otherwise expire it.
+        for pending_symbol in list(pending):
+            if pending_symbol not in bars.index:
+                pending.pop(pending_symbol, None)
         # Existing stops are evaluated before any current-bar signal; gaps are pessimistic.
         for sym in list(positions):
             if sym not in bars.index:
@@ -146,16 +150,6 @@ def run_backtest(
                 close_position(sym, float(bar["open"]), ts, "gap_stop")
             elif float(bar["low"]) <= pos.stop:
                 close_position(sym, pos.stop, ts, "stop")
-
-        # Winner pyramiding only: explicit flow proxy required, next bar executes the add.
-        for sym, pos in list(positions.items()):
-            if sym not in bars.index or pos.additions >= max_additions:
-                continue
-            bar = bars.loc[sym]
-            flow = float(bar["flow_imbalance"]) if pd.notna(bar["flow_imbalance"]) else 0.0
-            if float(bar["close"]) > pos.entry and flow > 0.0 and not lockdown:
-                pending.setdefault(sym, {"kind": "add", "signal_time": ts, "stop": pos.stop,
-                                         "trail_stop": float(bar["low"]) * (1.0 - buffer)})
 
         # Pending signals from the prior completed bar execute at current open only.
         for sym, proposal in list(pending.items()):
@@ -224,6 +218,16 @@ def run_backtest(
         lockdown = len(changes) < 5 or consistency < directionality_min
         if lockdown:
             lockdown_bars += 1
+
+        # Winner pyramiding only: explicit flow proxy required, next bar executes the add.
+        for sym, pos in list(positions.items()):
+            if sym not in bars.index or pos.additions >= max_additions:
+                continue
+            bar = bars.loc[sym]
+            flow = float(bar["flow_imbalance"]) if pd.notna(bar["flow_imbalance"]) else 0.0
+            if float(bar["close"]) > pos.entry and flow > 0.0 and not lockdown:
+                pending.setdefault(sym, {"kind": "add", "signal_time": ts, "stop": pos.stop,
+                                         "trail_stop": float(bar["low"]) * (1.0 - buffer)})
 
         # Record histories and form signals at this completed bar for next bar only.
         for sym, bar in bars.iterrows():
