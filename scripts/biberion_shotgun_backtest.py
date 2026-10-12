@@ -78,13 +78,20 @@ def run_backtest(
     fee_bps: float = 1.0,
     latency_slippage_bps: float = 2.0,
     directionality_min: float = 0.65,
+    correlation_lookback: int = 50,
+    max_pairwise_correlation: float = 0.70,
+    min_correlation_observations: int = 30,
     max_additions: int = 2,
 ) -> dict:
     """Replay bars without future information; all fractions are equity fractions."""
     if not np.isfinite(initial_cash) or initial_cash <= 0:
         raise ValueError("initial_cash must be finite and positive")
-    if fast < 1 or slow <= fast or volume_window < 2 or max_assets < 1:
-        raise ValueError("invalid windows or max_assets")
+    if (fast < 1 or slow <= fast or volume_window < 2 or max_assets < 1
+            or correlation_lookback < 2 or min_correlation_observations < 2
+            or min_correlation_observations > correlation_lookback):
+        raise ValueError("invalid windows, correlation contract, or max_assets")
+    if not np.isfinite(max_pairwise_correlation) or not 0.0 <= max_pairwise_correlation <= 1.0:
+        raise ValueError("max_pairwise_correlation must be between 0 and 1")
     fractions = (basket_fraction, asset_fraction, asset_risk_fraction, basket_risk_fraction)
     if any(not np.isfinite(x) or x <= 0 for x in fractions):
         raise ValueError("risk fractions must be finite and positive")
@@ -123,6 +130,27 @@ def run_backtest(
             else:
                 value += pos.notional
         return value
+
+    def pairwise_correlation_ok(candidate: str, peers: list[str], now_iso: str) -> bool:
+        candidate_map = {x["timestamp"]: x["close"] for x in histories[candidate]
+                         if x["timestamp"] < now_iso}
+        for peer in peers:
+            if peer == candidate:
+                continue
+            peer_map = {x["timestamp"]: x["close"] for x in histories[peer]
+                        if x["timestamp"] < now_iso}
+            common = sorted(set(candidate_map).intersection(peer_map))
+            common = common[-(correlation_lookback + 1):]
+            if len(common) - 1 < min_correlation_observations:
+                return False  # Unknown correlation is not assumed to be diversification.
+            left = np.diff(np.log(np.asarray([candidate_map[t] for t in common], dtype=float)))
+            right = np.diff(np.log(np.asarray([peer_map[t] for t in common], dtype=float)))
+            if not np.isfinite(left).all() or not np.isfinite(right).all():
+                return False
+            corr = float(np.corrcoef(left, right)[0, 1])
+            if not np.isfinite(corr) or abs(corr) > max_pairwise_correlation:
+                return False
+        return True
 
     def close_position(sym: str, px: float, ts, reason: str) -> None:
         nonlocal cash
@@ -244,7 +272,7 @@ def run_backtest(
         # Record histories and form signals at this completed bar for next bar only.
         for sym, bar in bars.iterrows():
             histories[sym].append({
-                "close": float(bar["close"]), "volume": float(bar["volume"]),
+                "timestamp": ts.isoformat(), "close": float(bar["close"]), "volume": float(bar["volume"]),
                 "low": float(bar["low"]), "flow": bar["flow_imbalance"],
             })
             hist = histories[sym]
@@ -259,6 +287,11 @@ def run_backtest(
             benchmark_up = len(benchmark_history) >= 2 and benchmark_history[-1] > benchmark_history[-2]
             crossed_up = fast_prev <= slow_prev and fast_now > slow_now
             if crossed_up and benchmark_up and surge:
+                peer_symbols = sorted(set(positions).union(
+                    p for p, proposal in pending.items() if proposal["kind"] == "entry"
+                ))
+                if not pairwise_correlation_ok(sym, peer_symbols, ts.isoformat()):
+                    continue
                 stop = float(bar["low"]) * (1.0 - buffer)
                 if stop > 0 and stop < float(bar["close"]):
                     pending[sym] = {"kind": "entry", "signal_time": ts, "stop": stop}
@@ -292,7 +325,10 @@ def run_backtest(
             "asset_fraction": asset_fraction, "asset_risk_fraction": asset_risk_fraction,
             "basket_risk_fraction": basket_risk_fraction, "fee_bps": fee_bps,
             "latency_slippage_bps": latency_slippage_bps,
-            "directionality_min": directionality_min, "max_additions": max_additions,
+            "directionality_min": directionality_min, "correlation_lookback": correlation_lookback,
+            "max_pairwise_correlation": max_pairwise_correlation,
+            "min_correlation_observations": min_correlation_observations,
+            "max_additions": max_additions,
         },
         "summary": {
             "initial_cash": initial_cash, "final_equity": final_equity,
