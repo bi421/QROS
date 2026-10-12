@@ -52,3 +52,14 @@ TEST(BiberionRisk, AcceptsBoundedCashBasket) {
   EXPECT_DOUBLE_EQ(decision.total_notional, 1000.0);
   EXPECT_DOUBLE_EQ(decision.planned_loss, 10.0);
 }
+
+TEST(BiberionRisk, RejectsMoreThanConfiguredAssetCount) {
+  BasketLimits limits;
+  limits.equity = 100000.0;
+  limits.max_assets = 1;
+  BasketProposal a{"A", 100.0, 99.0, 500.0};
+  BasketProposal b{"B", 100.0, 99.0, 500.0};
+  const auto decision = approve_cash_basket(limits, {a, b});
+  EXPECT_FALSE(decision.approved);
+  EXPECT_EQ(decision.reason, "basket_asset_count_exceeded");
+}
