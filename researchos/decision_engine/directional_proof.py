@@ -217,7 +217,16 @@ def build_direction_proof(
         "probability_semantics": _SEMANTICS,
     }
     proof = ThreeWayDirectionProof(
-        **unsigned,
+        contract_version=CONTRACT_VERSION,
+        model_id=model_id,
+        as_of=as_of,
+        horizon=horizon,
+        evidence=canonical_evidence,
+        source_data_sha256=source_hash,
+        contributions=contributions,
+        probabilities=probabilities,
+        direction=direction,
+        probability_semantics=_SEMANTICS,
         proof_sha256=hashlib.sha256(_canonical_json(unsigned).encode("utf-8")).hexdigest(),
     )
     proof.verify()
