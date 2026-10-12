@@ -50,4 +50,34 @@ NB_MODULE(qros_biberion, m) {
 
     m.def("approve_cash_basket", &approve_cash_basket,
           "limits"_a, "proposals"_a);
+
+    nb::class_<StateModel>(m, "StateModel")
+        .def(nb::init<>())
+        .def_rw("weights", &StateModel::weights)
+        .def_rw("bias", &StateModel::bias)
+        .def_rw("threshold", &StateModel::threshold);
+
+    nb::class_<SafetyObservation>(m, "SafetyObservation")
+        .def(nb::init<>())
+        .def_rw("latency_ms", &SafetyObservation::latency_ms)
+        .def_rw("vxy_level", &SafetyObservation::vxy_level)
+        .def_rw("dxy_abs_change_pct", &SafetyObservation::dxy_abs_change_pct)
+        .def_rw("dxy_fresh", &SafetyObservation::dxy_fresh);
+
+    nb::class_<SafetyLimits>(m, "SafetyLimits")
+        .def(nb::init<>())
+        .def_rw("max_latency_ms", &SafetyLimits::max_latency_ms)
+        .def_rw("max_vxy_level", &SafetyLimits::max_vxy_level)
+        .def_rw("max_abs_dxy_change_pct", &SafetyLimits::max_abs_dxy_change_pct);
+
+    nb::class_<StateDecision>(m, "StateDecision")
+        .def_ro("p_bearish", &StateDecision::p_bearish)
+        .def_ro("p_neutral", &StateDecision::p_neutral)
+        .def_ro("p_bullish", &StateDecision::p_bullish)
+        .def_ro("state", &StateDecision::state)
+        .def_ro("safety_passed", &StateDecision::safety_passed)
+        .def_ro("reason", &StateDecision::reason);
+
+    m.def("evaluate_market_state", &evaluate_market_state,
+          "standardized_features"_a, "observation"_a, "model"_a, "limits"_a);
 }
