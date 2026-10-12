@@ -37,3 +37,19 @@ def test_cash_basket_rejects_overallocation() -> None:
     decision = biberion.approve_cash_basket(limits, [proposal])
     assert decision.approved is False
     assert decision.reason == "asset_allocation_or_stop_risk_exceeded"
+
+def test_cash_basket_rejects_too_many_assets() -> None:
+    limits = biberion.BasketLimits()
+    limits.equity = 100_000.0
+    limits.max_assets = 10
+    proposals = []
+    for index in range(11):
+        proposal = biberion.BasketProposal()
+        proposal.symbol = f"ASSET{index}"
+        proposal.entry = 100.0
+        proposal.stop = 99.0
+        proposal.requested_notional = 500.0
+        proposals.append(proposal)
+    decision = biberion.approve_cash_basket(limits, proposals)
+    assert decision.approved is False
+    assert decision.reason == "basket_asset_count_exceeded"
