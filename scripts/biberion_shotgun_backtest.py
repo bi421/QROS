@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -36,6 +36,9 @@ def _validate(frame: pd.DataFrame) -> pd.DataFrame:
         raise ValueError(f"missing required columns: {sorted(missing)}")
     frame = frame.copy()
     frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True, errors="raise")
+    frame["symbol"] = frame["symbol"].astype(str)
+    if (frame["symbol"].str.strip() == "").any() or (frame["symbol"].str.lower() == "nan").any():
+        raise ValueError("symbol must be a non-empty identifier")
     for column in ("open", "high", "low", "close", "volume", "benchmark_close"):
         frame[column] = pd.to_numeric(frame[column], errors="raise")
         if not np.isfinite(frame[column].to_numpy(dtype=float)).all():
@@ -96,6 +99,9 @@ def run_backtest(
     ).hexdigest()
     timestamps = list(frame["timestamp"].drop_duplicates())
     grouped = {t: part.set_index("symbol") for t, part in frame.groupby("timestamp", sort=True)}
+    for timestamp, bars_at_time in grouped.items():
+        if bars_at_time["benchmark_close"].nunique(dropna=False) != 1:
+            raise ValueError(f"benchmark_close must agree across symbols at {timestamp}")
     symbols = sorted(frame["symbol"].astype(str).unique())
     histories: dict[str, list[dict]] = {s: [] for s in symbols}
     positions: dict[str, Position] = {}
@@ -136,6 +142,10 @@ def run_backtest(
 
     for index, ts in enumerate(timestamps):
         bars = grouped[ts]
+        # A proposal must execute on the immediately following timestamp; otherwise expire it.
+        for pending_symbol in list(pending):
+            if pending_symbol not in bars.index and pending[pending_symbol]["kind"] != "exit":
+                pending.pop(pending_symbol, None)
         # Existing stops are evaluated before any current-bar signal; gaps are pessimistic.
         for sym in list(positions):
             if sym not in bars.index:
@@ -147,23 +157,16 @@ def run_backtest(
             elif float(bar["low"]) <= pos.stop:
                 close_position(sym, pos.stop, ts, "stop")
 
-        # Winner pyramiding only: explicit flow proxy required, next bar executes the add.
-        for sym, pos in list(positions.items()):
-            if sym not in bars.index or pos.additions >= max_additions:
-                continue
-            bar = bars.loc[sym]
-            flow = float(bar["flow_imbalance"]) if pd.notna(bar["flow_imbalance"]) else 0.0
-            if float(bar["close"]) > pos.entry and flow > 0.0 and not lockdown:
-                pending.setdefault(sym, {"kind": "add", "signal_time": ts, "stop": pos.stop,
-                                         "trail_stop": float(bar["low"]) * (1.0 - buffer)})
-
         # Pending signals from the prior completed bar execute at current open only.
         for sym, proposal in list(pending.items()):
             if sym not in bars.index:
                 continue
             bar = bars.loc[sym]
             open_px = float(bar["open"]) * (1.0 + slippage)
-            if proposal["kind"] == "entry":
+            if proposal["kind"] == "exit":
+                if sym in positions:
+                    close_position(sym, float(bar["open"]), ts, "sideline_lockdown")
+            elif proposal["kind"] == "entry":
                 if lockdown or sym in positions or len(positions) >= max_assets:
                     pending.pop(sym, None)
                     continue
@@ -224,6 +227,19 @@ def run_backtest(
         lockdown = len(changes) < 5 or consistency < directionality_min
         if lockdown:
             lockdown_bars += 1
+            # Liquidate active long exposure at the next observable open; no new entries.
+            for held_symbol in positions:
+                pending[held_symbol] = {"kind": "exit", "signal_time": ts}
+
+        # Winner pyramiding only: explicit flow proxy required, next bar executes the add.
+        for sym, pos in list(positions.items()):
+            if sym not in bars.index or pos.additions >= max_additions:
+                continue
+            bar = bars.loc[sym]
+            flow = float(bar["flow_imbalance"]) if pd.notna(bar["flow_imbalance"]) else 0.0
+            if float(bar["close"]) > pos.entry and flow > 0.0 and not lockdown:
+                pending.setdefault(sym, {"kind": "add", "signal_time": ts, "stop": pos.stop,
+                                         "trail_stop": pos.stop})
 
         # Record histories and form signals at this completed bar for next bar only.
         for sym, bar in bars.iterrows():
@@ -256,8 +272,9 @@ def run_backtest(
     if final_ts is not None:
         final_bars = grouped[final_ts]
         for sym in list(positions):
-            if sym in final_bars.index:
-                close_position(sym, float(final_bars.loc[sym, "close"]), final_ts, "end_of_data")
+            final_price = (float(final_bars.loc[sym, "close"]) if sym in final_bars.index
+                           else float(histories[sym][-1]["close"]))
+            close_position(sym, final_price, final_ts, "end_of_data")
     final_equity = cash
     pnls = np.asarray([t["pnl_net"] for t in trades], dtype=float)
     wins = pnls[pnls > 0]
