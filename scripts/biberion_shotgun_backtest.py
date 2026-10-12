@@ -57,6 +57,7 @@ def _validate(frame: pd.DataFrame) -> pd.DataFrame:
     frame = frame.sort_values(["timestamp", "symbol"], kind="mergesort").reset_index(drop=True)
     if "flow_imbalance" in frame:
         frame["flow_imbalance"] = pd.to_numeric(frame["flow_imbalance"], errors="coerce")
+        frame.loc[~np.isfinite(frame["flow_imbalance"].to_numpy(dtype=float)), "flow_imbalance"] = np.nan
     else:
         frame["flow_imbalance"] = np.nan
     return frame
@@ -104,8 +105,9 @@ def run_backtest(
         raise ValueError("risk fractions must be finite and positive")
     if basket_fraction > 1 or asset_fraction > basket_fraction:
         raise ValueError("invalid allocation caps")
-    if stop_buffer_bps < 0 or fee_bps < 0 or latency_slippage_bps < 0:
-        raise ValueError("cost and stop buffer parameters must be nonnegative")
+    numeric_costs = (stop_buffer_bps, fee_bps, latency_slippage_bps)
+    if any(not np.isfinite(value) or value < 0 for value in numeric_costs):
+        raise ValueError("cost and stop buffer parameters must be finite and nonnegative")
 
     frame = _validate(data)
     if frame.empty:
