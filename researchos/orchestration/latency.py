@@ -45,6 +45,7 @@ class LatencyPolicy:
                 raise ValueError(f"{name} must be positive")
             if name != "max_source_age_ms" and number < 0:
                 raise ValueError(f"{name} must be non-negative")
+            object.__setattr__(self, name, number)
 
 
 @dataclass(frozen=True)
