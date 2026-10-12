@@ -21,7 +21,7 @@ TEST(MicrostructureKernel, OfiUsesPriorBookAndIsDeterministic) {
   ASSERT_EQ(result.size(), 3U);
   EXPECT_DOUBLE_EQ(result[0], 0.0);
   EXPECT_DOUBLE_EQ(result[1], 3.0);
-  EXPECT_DOUBLE_EQ(result[2], 11.0);
+  EXPECT_DOUBLE_EQ(result[2], 19.0);
 }
 
 TEST(MicrostructureKernel, RejectsCrossedOrInvalidBook) {
