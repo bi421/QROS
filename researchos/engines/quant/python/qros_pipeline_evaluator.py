@@ -60,7 +60,6 @@ class QROSPipelineEvaluator:
         if not valid_states.all():
             invalid = np.unique(raw_states[~valid_states]).tolist()
             raise ValueError(f"state values must be exactly -1, 0, or +1; found {invalid}")
-        states = raw_states.astype(np.int8)
         if not np.isfinite(closes).all() or (closes <= 0).any():
             raise ValueError("close prices must be finite and strictly positive")
         for horizon in cfg.horizons:
