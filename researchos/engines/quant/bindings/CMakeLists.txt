@@ -153,3 +153,48 @@ install(
     LIBRARY DESTINATION cpp_quant_engine
     RUNTIME DESTINATION cpp_quant_engine
 )
+
+
+# Isolated deterministic latency/slippage model. This is research math only;
+# it does not place orders or claim a guaranteed execution price.
+nanobind_add_module(
+    qros_latency
+    latency.cpp
+)
+
+target_link_libraries(
+    qros_latency
+    PRIVATE
+        quant_engine
+)
+
+target_include_directories(
+    qros_latency
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../include
+)
+
+target_compile_features(
+    qros_latency
+    PRIVATE
+        cxx_std_20
+)
+
+set_target_properties(
+    qros_latency
+    PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY
+            "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+        RUNTIME_OUTPUT_DIRECTORY
+            "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+        LIBRARY_OUTPUT_DIRECTORY_RELEASE
+            "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE
+            "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+)
+
+install(
+    TARGETS qros_latency
+    LIBRARY DESTINATION cpp_quant_engine
+    RUNTIME DESTINATION cpp_quant_engine
+)
