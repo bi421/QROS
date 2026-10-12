@@ -14,11 +14,13 @@ The output is derived from the existing `ProbabilityAssessment` distribution. Th
 
 Given the existing assessment probabilities:
 
-- (p_U): bullish probability
-- (p_D): bearish probability
-- (p_N): neutral probability
+- `p_U`: bullish probability
+- `p_D`: bearish probability
+- `p_N`: neutral probability
 
-The selected direction is the unique class with the greatest probability. If the greatest probability is tied between two or more classes, the output is `NEUTRAL`. The three probabilities must be finite, within [0, 1], and sum to 1 within the configured numerical tolerance. Invalid distributions raise `ValueError`; they are not converted into a directional guess.
+A class is considered tied with the maximum when its probability is `math.isclose` to the maximum using `rel_tol=1e-12` and `abs_tol=1e-15`. If multiple classes are tied with the maximum under this tolerance, the output is `NEUTRAL`; otherwise the unique maximum determines the direction. This explicit tolerance avoids a direction change caused only by insignificant floating-point differences and must match proof-verifier implementations.
+
+The three probabilities must be finite, within `[0, 1]`, and sum to `1` within the configured distribution tolerance (`1e-9`). Invalid distributions raise `ValueError`; they are not converted into a directional guess.
 
 ## Pipeline integration
 
