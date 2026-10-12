@@ -165,7 +165,7 @@ def test_solo_founder_golden_path_upload_queue_worker_result_and_report(monkeypa
     assert report["source_dataset_sha256"] == expected_source_sha256
     assert report["manifest_sha256"] == result_payload["manifest_sha256"]
     assert report["report_sha256"]
-    assert "NOT_EVALUATED" in report["markdown"]
+    assert "solo_founder_golden_path_fixture" in report["markdown"]
     assert "does not infer causality, profitability" in report["markdown"]
 
     repeated_report = client.get(f"/v1/research-runs/{run_id}/report", headers=headers)
