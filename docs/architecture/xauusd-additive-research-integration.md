@@ -82,3 +82,27 @@ resolve duplicate/out-of-order timestamps (including repeated-hour/DST cases),
 and ensure ATR and direction arrays are causally aligned. This labeler does not
 infer timestamps, repair data, calculate ATR, choose signal direction, or claim
 that labels are profitable. No calibrated probabilities are emitted.
+
+
+## Concrete engine adapter phase (in review)
+
+The next additive adapter module is
+`researchos/orchestration/xauusd_engine_adapters.py`.
+
+- `XAUUSDMarketSnapshot` requires timestamp-aligned OHLCV windows for M15,
+  M30, H1, H4, and D1, with a pinned dataset version and timezone-aware,
+  strictly increasing bar-close timestamps.
+- `XAUUSDTechnicalEvidenceAdapter` calls the existing technical engine for
+  EMA(20), EMA(50), RSI(14), ATR(14), MACD(12,26,9), and SuperTrend(10,3)
+  at the last closed bar in each timeframe. It emits raw indicator values and
+  explicitly versioned heuristic directions/strengths; these are not calibrated.
+- `XAUUSDQuantMathEvidenceAdapter` calls the existing QuantMathEngine on the
+  closed M15 close series and emits geometry/statistics evidence with the
+  engine's deterministic result hash.
+- Both adapters reject dataset-version mismatches and do not use bars closing
+  after the requested decision timestamp. The window is bounded to 512 bars
+  per timeframe.
+- The orchestrator can collect these two engine outputs together, but macro
+  driver inputs, Market Memory provider wiring, order-book feeds, a complete
+  research-run lifecycle, outcome calibration, and end-to-end dataset replay
+  remain separate, unproven work.
