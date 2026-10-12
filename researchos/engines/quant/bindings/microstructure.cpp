@@ -1,5 +1,6 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
+#include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
 
 #include "quant/market/microstructure.h"
@@ -29,6 +30,16 @@ nb::ndarray<nb::numpy, T> owned_array(std::vector<T> values) {
 
 NB_MODULE(qros_microstructure, m) {
   m.doc() = "QROS deterministic C++20 microstructure kernels; contiguous NumPy inputs are borrowed without copying.";
+
+  nb::class_<quant::microstructure::TimedMarketEvent>(m, "TimedMarketEvent")
+      .def(nb::init<>())
+      .def_rw("symbol", &quant::microstructure::TimedMarketEvent::symbol)
+      .def_rw("sequence", &quant::microstructure::TimedMarketEvent::sequence)
+      .def_rw("event_time_ns", &quant::microstructure::TimedMarketEvent::event_time_ns)
+      .def_rw("ingest_time_ns", &quant::microstructure::TimedMarketEvent::ingest_time_ns)
+      .def_rw("price", &quant::microstructure::TimedMarketEvent::price)
+      .def_rw("size", &quant::microstructure::TimedMarketEvent::size)
+      .def_rw("aggressor_side", &quant::microstructure::TimedMarketEvent::aggressor_side);
 
   m.def(
       "order_flow_imbalance",
