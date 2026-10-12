@@ -83,6 +83,7 @@ def run_backtest(
     correlation_lookback: int = 50,
     max_pairwise_correlation: float = 0.70,
     min_correlation_observations: int = 30,
+    min_flow_imbalance: float = 0.10,
     max_additions: int = 2,
 ) -> dict:
     """Replay bars without future information; all fractions are equity fractions."""
@@ -94,6 +95,8 @@ def run_backtest(
         raise ValueError("directionality_min must be between 0 and 1")
     if max_additions < 0:
         raise ValueError("max_additions must be nonnegative")
+    if not np.isfinite(min_flow_imbalance) or min_flow_imbalance < 0:
+        raise ValueError("min_flow_imbalance must be finite and nonnegative")
     if (fast < 1 or slow <= fast or volume_window < 2 or max_assets < 1
             or correlation_lookback < 2 or min_correlation_observations < 2
             or min_correlation_observations > correlation_lookback):
@@ -194,8 +197,6 @@ def run_backtest(
             pos = positions[sym]
             if float(bar["open"]) <= pos.stop:
                 close_position(sym, float(bar["open"]), ts, "gap_stop")
-            elif float(bar["low"]) <= pos.stop:
-                close_position(sym, pos.stop, ts, "stop")
 
         # Pending signals from the prior completed bar execute at current open only.
         for sym, proposal in list(pending.items()):
@@ -211,7 +212,11 @@ def run_backtest(
                     pending.pop(sym, None)
                     continue
                 equity = mark_equity(bars, "open")
-                basket_notional = sum(p.notional for p in positions.values())
+                basket_notional = sum(
+                    p.quantity * float(bars.loc[held, "open"]) * (1.0 + slippage)
+                    if held in bars.index else p.notional
+                    for held, p in positions.items()
+                )
                 basket_risk = sum(p.initial_risk for p in positions.values())
                 stop = float(proposal["stop"])
                 if open_px <= stop:
@@ -241,8 +246,13 @@ def run_backtest(
                 if pos is not None:
                     equity = mark_equity(bars, "open")
                     new_stop = max(pos.stop, float(proposal["trail_stop"]))
-                    cap = max(0.0, equity * asset_fraction - pos.notional)
-                    basket_notional = sum(item.notional for item in positions.values())
+                    current_asset_notional = pos.quantity * open_px
+                    cap = max(0.0, equity * asset_fraction - current_asset_notional)
+                    basket_notional = sum(
+                        item.quantity * float(bars.loc[held, "open"]) * (1.0 + slippage)
+                        if held in bars.index else item.notional
+                        for held, item in positions.items()
+                    )
                     basket_cap = max(0.0, equity * basket_fraction - basket_notional)
                     risk_cap = max(0.0, equity * asset_risk_fraction - pos.initial_risk)
                     basket_risk = sum(item.initial_risk for item in positions.values())
@@ -263,6 +273,13 @@ def run_backtest(
                         # Use only the previous completed bar to ratchet the stop.
                         pos.stop = new_stop
             pending.pop(sym, None)
+
+        # Intrabar stops are evaluated after open-time entries/additions to preserve event order.
+        for sym in list(positions):
+            if sym not in bars.index:
+                continue
+            if float(bars.loc[sym, "low"]) <= positions[sym].stop:
+                close_position(sym, positions[sym].stop, ts, "stop")
 
         # Benchmark direction consistency uses only benchmark values observed by this timestamp.
         benchmark_history = [float(grouped[prior]["benchmark_close"].iloc[0])
@@ -294,7 +311,7 @@ def run_backtest(
             flow = float(bar["flow_imbalance"]) if pd.notna(bar["flow_imbalance"]) else 0.0
             prior_close = histories[sym][-1]["close"] if histories[sym] else pos.entry
             if (float(bar["close"]) > pos.entry and float(bar["close"]) > prior_close
-                    and flow > 0.0 and not lockdown):
+                    and flow > min_flow_imbalance and not lockdown):
                 pending.setdefault(sym, {"kind": "add", "signal_time": ts, "stop": pos.stop,
                                          "trail_stop": pos.stop})
 
@@ -357,7 +374,7 @@ def run_backtest(
             "directionality_min": directionality_min, "correlation_lookback": correlation_lookback,
             "max_pairwise_correlation": max_pairwise_correlation,
             "min_correlation_observations": min_correlation_observations,
-            "max_additions": max_additions,
+            "min_flow_imbalance": min_flow_imbalance, "max_additions": max_additions,
         },
         "summary": {
             "initial_cash": initial_cash, "final_equity": final_equity,
