@@ -42,13 +42,15 @@ def market_memory_to_decision_evidence_as_of(
     decision_time: datetime,
     directional_only: bool = True,
 ) -> list[DecisionEvidenceItem]:
-    """Return only validated Market Memory evidence available as of decision_time.
+    """Return validated Market Memory evidence with matured outcomes by cutoff.
 
     A report generated after the decision time is rejected in full. Missing or
-    future report bounds also fail closed. Individual records whose data range
-    extends beyond decision_time are excluded. This conservative gate does not
-    make a retrospective report causal by itself; callers must supply a report
-    built exclusively from the historical dataset identified in its provenance.
+    future report bounds also fail closed. Each finding must declare an explicit
+    provenance outcome_maturity_at timestamp, which must be at or before the
+    decision time and no earlier than its evidence window end. This avoids
+    treating event timestamps as proof that forward outcomes were already known.
+    The gate is conservative, but does not replace immutable dataset and method
+    provenance validation by the caller.
     """
     if decision_time.tzinfo is None or decision_time.utcoffset() is None:
         raise ValueError("decision_time must be timezone-aware")
@@ -86,9 +88,17 @@ def market_memory_to_decision_evidence_as_of(
                 field_name="evidence.time_range.end",
                 end_of_day=True,
             )
-        except ValueError:
+            provenance = record.uncertainty.get("provenance")
+            if not isinstance(provenance, dict):
+                continue
+            maturity = _parse_timestamp(
+                provenance.get("outcome_maturity_at"),
+                field_name="evidence.provenance.outcome_maturity_at",
+                end_of_day=True,
+            )
+        except (AttributeError, TypeError, ValueError):
             continue
-        if record_start <= record_end <= cutoff:
+        if record_start <= record_end <= maturity <= cutoff:
             eligible_records.append(record)
 
     bounded_report = replace(report, evidence_records=eligible_records)
