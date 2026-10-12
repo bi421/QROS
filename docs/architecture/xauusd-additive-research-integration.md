@@ -22,8 +22,7 @@ adapter is not considered connected merely because its interface exists.
 - The collection layer emits no probability and never executes an order.
 
 The label defaults are testable research parameters, not claims of profitability.
-The current adapter contract intentionally does not implement OHLC labeling or
-model calibration yet.
+The additive labeler now exists at `researchos/quant_engine/machine_learning/ohlc_triple_barrier.py`. It is not yet connected to a dataset loader or research-run lifecycle. Model calibration remains unimplemented.
 
 ## Source-level audit snapshot
 
@@ -46,7 +45,8 @@ model calibration yet.
 - [x] Record required/optional engine failures and fail closed for missing required engines.
 - [x] Keep probability unset and execution disabled.
 - [ ] Implement concrete adapters for each audited existing engine.
-- [ ] Implement OHLC-aware TP/SL/TIMEOUT labels and ambiguous-bar tests.
+- [x] Implement standalone OHLC-aware TP/SL/TIMEOUT labels and ambiguous-bar unit tests.
+- [ ] Prove labeler results against a pinned, cleaned XAUUSD OHLC dataset.
 - [ ] Connect the adapter registry to the existing research-run lifecycle.
 - [ ] Run repository CI and fix any failures on this branch.
 - [ ] Prove end-to-end reproducibility on a pinned XAUUSD dataset.
@@ -57,3 +57,28 @@ A passing unit suite for these new contracts proves only the additive contract
 behavior. It does not prove that all existing engines are wired together, that
 historical labels are correct for real data, or that any outcome model is
 calibrated or profitable.
+
+
+## OHLC outcome labeler contract (implemented, not yet dataset-proven)
+
+The additive labeler accepts a chronologically ordered sequence of completed
+OHLC bars plus direction and ATR values aligned to each decision bar. The
+direction and ATR at index i must be available at that decision time; entry
+uses the next bar's open, never the decision bar's close. The entry bar counts
+as holding bar 1. A full forward holding window is required before emitting
+TAKE_PROFIT, STOP_LOSS, or TIMEOUT.
+
+- Long TP/SL: entry + TP_ATR × ATR; entry − SL_ATR × ATR.
+- Short TP/SL: entry − TP_ATR × ATR; entry + SL_ATR × ATR.
+- First unambiguous barrier touched wins.
+- If TP and SL are both inside the same OHLC candle, default EXCLUDE emits no
+  label; CONSERVATIVE_SL_FIRST explicitly emits STOP_LOSS.
+- Missing/invalid ATR, neutral direction, absent next-bar entry, and incomplete
+  horizon are left unlabeled with a reason code.
+- OHLC prices must be finite, positive, and internally consistent.
+
+Before dataset-level use, callers must provide chronologically sorted bars,
+resolve duplicate/out-of-order timestamps (including repeated-hour/DST cases),
+and ensure ATR and direction arrays are causally aligned. This labeler does not
+infer timestamps, repair data, calculate ATR, choose signal direction, or claim
+that labels are profitable. No calibrated probabilities are emitted.
