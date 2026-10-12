@@ -240,10 +240,8 @@ QROS does not:
 
 ## Licensing Status
 
-**No open-source or other software license is currently granted for QROS.**
+**QROS is proprietary software. All rights are reserved by Batsukh Bold.**
 
-The repository is public, but the absence of a license means the default copyright rules apply to the source code. The research-purpose statement below is a project-purpose disclaimer, **not a software license**.
-
-If QROS is intended to be distributed, reused, or incorporated into a commercial SaaS product by others, a deliberate license choice must be made and recorded in a root `LICENSE` file.
+The public visibility of this repository does not grant permission to use, copy, modify, redistribute, sublicense, or create derivative works from QROS. No open-source license (including MIT, Apache-2.0, or AGPL-3.0) is granted. See the root `LICENSE` file for the proprietary notice. Third-party components remain subject to their own licenses.
 
 QROS is research infrastructure. Research outputs are for research purposes and do not constitute financial advice or instructions to execute trades.
