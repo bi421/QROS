@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-24.04
     environment: production
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install pg_dump
         run: |
@@ -50,7 +50,7 @@ jobs:
           esac
 
       - name: Configure AWS OIDC credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: ${{ vars.BACKUP_AWS_ROLE_ARN }}
           aws-region: ${{ vars.BACKUP_AWS_REGION }}

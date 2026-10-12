@@ -14,10 +14,10 @@ jobs:
     name: Exact release gate
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
           cache: pip
@@ -48,7 +48,7 @@ jobs:
           QROS_BACKUP_DATABASE_URL: ${{ secrets.QROS_STAGING_DATABASE_URL }}
         run: python scripts/backup_verify.py
       - name: Publish backup and restore evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: backup-restore-evidence-${{ github.sha }}
           path: backup/qros_restore_report.json
@@ -58,7 +58,7 @@ jobs:
           SHA="$(git rev-parse HEAD)"
           python scripts/final_health_check.py --skip-cpp --exact-commit="$SHA"
       - name: Publish health evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: health-evidence-${{ github.sha }}
           path: .health/health_evidence_${{ github.sha }}.json
