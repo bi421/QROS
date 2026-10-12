@@ -117,7 +117,7 @@ def test_per_driver_freshness_budget_is_required():
 def test_invalid_existing_score_is_rejected_without_recalculation():
     inputs = assessments()
     inputs["Real_Yield"].score = float("nan")
-    with pytest.raises(ValueError, match="INVALID_MACRO_SCORE"):
+    with pytest.raises(ValueError, match="INVALID_EXISTING_MACRO_SCORE"):
         macro_snapshot_from_existing_assessments(
             inputs,
             provider_id="existing-macro-engine-v1",
