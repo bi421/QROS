@@ -132,3 +132,25 @@ This is a typed adapter boundary only. A live macro source, transformation
 from the existing engine's persisted assessment objects, Market Memory
 integration, and a pinned historical replay are not yet implemented or proven.
 No calibrated outcome probabilities are produced.
+
+
+## Composite research input router (contract implemented; data providers unproven)
+
+The additive module `researchos/orchestration/xauusd_research_inputs.py`
+routes separate market and macro snapshots into the existing orchestrator:
+technical and QuantMath adapters receive the market OHLCV snapshot; the macro
+adapter receives the pre-assessed macro snapshot. This resolves the input-shape
+mismatch without changing any existing calculation code.
+
+- The default collector declares technical, quant_math, and macro as required.
+- Missing snapshots are returned as NOT_CONFIGURED with stable reason codes;
+  the orchestrator marks the run INSUFFICIENT_EVIDENCE rather than inventing data.
+- Callers may explicitly make an engine optional, but its status and reason are
+  retained in the result.
+- The result continues to set `probabilities: null` and
+  `execution_enabled: false`.
+
+This wires adapter interfaces together only. It does not supply a live market
+feed, convert persisted MacroAnalysisEngine objects into macro snapshots, add
+Market Memory, or connect the collector to the API/worker lifecycle. Those
+remain separate dependencies and require dataset-backed integration tests.
