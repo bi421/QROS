@@ -283,7 +283,9 @@ def run_backtest(
                 continue
             bar = bars.loc[sym]
             flow = float(bar["flow_imbalance"]) if pd.notna(bar["flow_imbalance"]) else 0.0
-            if float(bar["close"]) > pos.entry and flow > 0.0 and not lockdown:
+            prior_close = histories[sym][-1]["close"] if histories[sym] else pos.entry
+            if (float(bar["close"]) > pos.entry and float(bar["close"]) > prior_close
+                    and flow > 0.0 and not lockdown):
                 pending.setdefault(sym, {"kind": "add", "signal_time": ts, "stop": pos.stop,
                                          "trail_stop": pos.stop})
 
