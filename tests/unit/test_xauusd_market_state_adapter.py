@@ -5,6 +5,9 @@ from researchos.orchestration.xauusd_market_state_adapter import (
 )
 from researchos.orchestration.xauusd_research import (
     EngineStatus,
+    ResearchStatus,
+    XAUUSDResearchInputs,
+    XAUUSDResearchOrchestrator,
     XAUUSDResearchRequest,
 )
 
@@ -105,3 +108,21 @@ def test_decision_timestamp_mismatch_is_rejected():
     assert result.status == EngineStatus.INSUFFICIENT
     assert result.evidence == ()
     assert result.reason_codes == ("DECISION_TIMESTAMP_MISMATCH",)
+
+
+def test_adapter_connects_through_existing_orchestrator_contract():
+    request = _request()
+    orchestrator = XAUUSDResearchOrchestrator(
+        {"market_state": XAUUSDMarketStateEvidenceAdapter()},
+        required_engines=("market_state",),
+    )
+
+    result = orchestrator.run(
+        request,
+        XAUUSDResearchInputs(default_snapshot=None, by_engine={"market_state": _state()}),
+    )
+
+    assert result.status == ResearchStatus.EVIDENCE_COLLECTED
+    assert result.missing_required_engines == ()
+    assert any(item.engine_name == "market_state" for item in result.evidence)
+    assert result.to_dict()["probabilities"] is None
