@@ -175,6 +175,26 @@ EngineAdapter = Callable[[XAUUSDResearchRequest, Any], EngineResult]
 
 
 @dataclass(frozen=True)
+class XAUUSDResearchInputs:
+    """Route different immutable snapshots to their respective engine adapters.
+
+    Existing callers may continue passing one shared snapshot. New integrations
+    can provide a default snapshot plus explicit per-engine inputs, e.g. OHLC
+    for technical/quant engines and a macro snapshot for the macro adapter.
+    """
+
+    default_snapshot: Any
+    by_engine: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if any(not isinstance(name, str) or not name.strip() for name in self.by_engine):
+            raise XAUUSDResearchError("per-engine input names must be non-empty strings")
+
+    def for_engine(self, engine_name: str) -> Any:
+        return self.by_engine.get(engine_name, self.default_snapshot)
+
+
+@dataclass(frozen=True)
 class XAUUSDResearchResult:
     """Auditable collection-stage result; not a trading recommendation."""
 
@@ -286,7 +306,7 @@ class XAUUSDResearchOrchestrator:
                 continue
 
             try:
-                result = adapter(request, market_snapshot)
+                engine_input = (\n                    market_snapshot.for_engine(engine_name)\n                    if isinstance(market_snapshot, XAUUSDResearchInputs)\n                    else market_snapshot\n                )\n                result = adapter(request, engine_input)
                 if not isinstance(result, EngineResult):
                     raise XAUUSDResearchError("adapter returned a non-EngineResult value")
                 if result.engine_name != engine_name:
@@ -358,6 +378,7 @@ __all__ = [
     "ResearchStatus",
     "SUPPORTED_TIMEFRAMES",
     "XAUUSDResearchError",
+    "XAUUSDResearchInputs",
     "XAUUSDResearchOrchestrator",
     "XAUUSDResearchRequest",
     "XAUUSDResearchResult",
