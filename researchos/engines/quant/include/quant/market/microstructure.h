@@ -10,8 +10,18 @@ namespace quant::microstructure {
 // Keep both values: event time is for market ordering; ingest time is for
 // observability/replay of information availability. Never silently overwrite
 // one with the other. Clock skew can make ingest_time_ns < event_time_ns.
+enum class MarketEventKind : std::uint8_t {
+  Trade = 0,
+  Quote = 1,
+  BookSnapshot = 2,
+  BookDelta = 3,
+};
+
 struct TimedMarketEvent {
   std::string symbol{"XAUUSD"};
+  std::string source_id{};
+  std::string venue{};
+  MarketEventKind kind{MarketEventKind::Trade};
   std::uint64_t sequence{0};
   std::int64_t event_time_ns{0};
   std::int64_t ingest_time_ns{0};
