@@ -12,9 +12,9 @@ version = "1.0.1"
 description = "Institutional-grade market research platform - deterministic, explainable, scientific"
 readme = "README.md"
 requires-python = ">=3.10,<3.15"
-license = {text = "ResearchOS Scientific License"}
+license = {text = "Proprietary - All Rights Reserved"}
 authors = [
-    {name = "QROS / ResearchOS Team"},
+    {name = "Batsukh Bold"},
 ]
 keywords = [
     "market-research",
