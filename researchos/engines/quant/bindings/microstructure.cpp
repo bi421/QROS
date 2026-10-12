@@ -9,6 +9,7 @@
 #include <vector>
 
 namespace nb = nanobind;
+using namespace nanobind::literals;
 using ReadOnlyF64 = nb::ndarray<nb::numpy, const double, nb::ndim<1>, nb::c_contig>;
 
 namespace {
