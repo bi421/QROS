@@ -60,7 +60,6 @@ class QROSPipelineEvaluator:
         if not valid_states.all():
             invalid = np.unique(raw_states[~valid_states]).tolist()
             raise ValueError(f"state values must be exactly -1, 0, or +1; found {invalid}")
-        states = raw_states.astype(np.int8)
         if not np.isfinite(closes).all() or (closes <= 0).any():
             raise ValueError("close prices must be finite and strictly positive")
         for horizon in cfg.horizons:
@@ -172,6 +171,25 @@ class QROSPipelineEvaluator:
             }
         causes = self._safety_causes(frame, safety)
         alpha = {str(h): self._forward_metrics(states, closes, safety, h) for h in cfg.horizons}
+        regime = {}
+        for horizon in cfg.horizons:
+            usable = max(0, len(closes) - horizon)
+            absolute_returns = np.abs(closes[horizon:] / closes[:-horizon] - 1.0)
+            locked = safety[:usable] & np.isfinite(absolute_returns)
+            unlocked = ~safety[:usable] & np.isfinite(absolute_returns)
+            def movement(mask: np.ndarray) -> dict[str, Any]:
+                values = absolute_returns[mask]
+                return {
+                    "count": int(len(values)),
+                    "mean_absolute_forward_return": float(np.mean(values)) if len(values) else None,
+                    "p95_absolute_forward_return": float(np.percentile(values, 95)) if len(values) else None,
+                }
+            regime[str(horizon)] = {
+                "horizon": horizon,
+                "safety_locked": movement(locked),
+                "not_locked": movement(unlocked),
+                "interpretation": "descriptive volatility comparison only; not causal proof that the gate avoids losses",
+            }
         compute_seconds = time.perf_counter() - started
         elapsed = self._ingest_seconds + compute_seconds
         trigger_source = (
@@ -196,6 +214,7 @@ class QROSPipelineEvaluator:
             },
             "latency": latency,
             "forward_returns": alpha,
+            "safety_regime_forward_diagnostics": regime,
             "profiling": {
                 "ingest_validation_seconds": self._ingest_seconds,
                 "compute_seconds": compute_seconds, "evaluator_total_seconds": elapsed,
@@ -245,6 +264,16 @@ class QROSPipelineEvaluator:
                 f"PF={self._fmt(item['profit_factor'])} expectancy={self._pct(item['expectancy'])}; "
                 f"clean n={item['clean_evaluated_signals']:,} win={self._pct(item['clean_win_rate'])} "
                 f"PF={self._fmt(item['clean_profit_factor'])} exp={self._pct(item['clean_expectancy'])}"
+            )
+        lines.append("SAFETY LOCKOUT VS UNLOCKED ABSOLUTE FORWARD MOVEMENT")
+        for horizon, item in m["safety_regime_forward_diagnostics"].items():
+            locked = item["safety_locked"]
+            unlocked = item["not_locked"]
+            lines.append(
+                f"  t+{horizon}: locked n={locked['count']:,} mean_abs={self._pct(locked['mean_absolute_forward_return'])} "
+                f"p95_abs={self._pct(locked['p95_absolute_forward_return'])}; "
+                f"unlocked n={unlocked['count']:,} mean_abs={self._pct(unlocked['mean_absolute_forward_return'])} "
+                f"p95_abs={self._pct(unlocked['p95_absolute_forward_return'])}"
             )
         lines.extend([
             "EVALUATOR PROFILING",

@@ -22,6 +22,7 @@ def test_distribution_safety_causes_and_latency_metrics() -> None:
     assert metrics["safety_gate"]["root_causes"]["vxy"]["count"] == 1
     assert math.isclose(metrics["latency"]["median_ms"], 3.0)
     assert math.isclose(metrics["latency"]["p95_ms"], 81.0)
+    assert metrics["safety_regime_forward_diagnostics"]["1"]["safety_locked"]["count"] == 2
 
 
 def test_forward_return_sign_and_safety_exclusion() -> None:
@@ -52,3 +53,16 @@ def test_dashboard_discloses_scope() -> None:
     dashboard = evaluator.dashboard()
     assert "not upstream live-stream throughput" in dashboard
     assert "No alpha claim" in dashboard
+
+def test_safety_regime_diagnostics_handle_horizon_longer_than_stream() -> None:
+    frame = pl.DataFrame({
+        "state": [1, 0, -1],
+        "close": [100.0, 101.0, 99.0],
+        "safety_gate_triggered": [True, False, True],
+    })
+    metrics = QROSPipelineEvaluator(EvaluationConfig(horizons=(1, 5))).ingest(frame).compute()
+    long_horizon = metrics["safety_regime_forward_diagnostics"]["5"]
+    assert long_horizon["safety_locked"]["count"] == 0
+    assert long_horizon["safety_locked"]["mean_absolute_forward_return"] is None
+    assert long_horizon["not_locked"]["count"] == 0
+    assert metrics["forward_returns"]["5"]["evaluated_signals"] == 0
