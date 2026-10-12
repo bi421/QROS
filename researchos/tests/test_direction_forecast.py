@@ -28,6 +28,10 @@ def assessment(up: float, down: float, neutral: float) -> ProbabilityAssessment:
         ((1 / 3, 1 / 3, 1 / 3), "NEUTRAL"),
         ((0.45, 0.45, 0.10), "NEUTRAL"),
         ((0.40, 0.20, 0.40), "NEUTRAL"),
+        ((0.5000000000001, 0.5, 0.0), "NEUTRAL"),
+        ((0.5000000001, 0.5, 0.0), "UP"),
+        ((0.0, 0.5000000000001, 0.5), "NEUTRAL"),
+        ((0.0, 0.5000000001, 0.5), "DOWN"),
     ],
 )
 def test_direction_is_exactly_one_of_three_classes(probabilities, expected):
