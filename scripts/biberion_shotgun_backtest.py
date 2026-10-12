@@ -194,8 +194,6 @@ def run_backtest(
             pos = positions[sym]
             if float(bar["open"]) <= pos.stop:
                 close_position(sym, float(bar["open"]), ts, "gap_stop")
-            elif float(bar["low"]) <= pos.stop:
-                close_position(sym, pos.stop, ts, "stop")
 
         # Pending signals from the prior completed bar execute at current open only.
         for sym, proposal in list(pending.items()):
@@ -263,6 +261,13 @@ def run_backtest(
                         # Use only the previous completed bar to ratchet the stop.
                         pos.stop = new_stop
             pending.pop(sym, None)
+
+        # Intrabar stops are evaluated after open-time entries/additions to preserve event order.
+        for sym in list(positions):
+            if sym not in bars.index:
+                continue
+            if float(bars.loc[sym, "low"]) <= positions[sym].stop:
+                close_position(sym, positions[sym].stop, ts, "stop")
 
         # Benchmark direction consistency uses only benchmark values observed by this timestamp.
         benchmark_history = [float(grouped[prior]["benchmark_close"].iloc[0])
