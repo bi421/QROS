@@ -16,7 +16,7 @@ namespace {
 AntiTrapInput BaseInput() {
   AntiTrapInput input{};
   input.open = 100.0;
-  input.high = 101.0;
+  input.high = 100.7;
   input.low = 99.0;
   input.close = 100.5;
   input.prior_range_high = 100.8;
