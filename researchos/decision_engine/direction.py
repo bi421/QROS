@@ -15,6 +15,8 @@ from researchos.decision_engine.probability import ProbabilityAssessment
 
 MarketDirection = Literal["UP", "DOWN", "NEUTRAL"]
 _PROBABILITY_TOLERANCE = 1e-9
+_DIRECTION_TIE_REL_TOLERANCE = 1e-12
+_DIRECTION_TIE_ABS_TOLERANCE = 1e-15
 
 
 @dataclass(frozen=True)
@@ -45,10 +47,10 @@ class DirectionForecast:
 def classify_direction(assessment: ProbabilityAssessment) -> DirectionForecast:
     """Return exactly UP, DOWN, or NEUTRAL from a validated 3-way assessment.
 
-    A tie for the highest probability resolves to NEUTRAL. Invalid or
-    incomplete distributions fail closed instead of silently inventing a
-    direction. This is a deterministic classification rule, not a claim that
-    the supplied probabilities are empirically calibrated.
+    Probabilities tied within the declared floating-point tolerance resolve to
+    NEUTRAL. Invalid or incomplete distributions fail closed instead of
+    silently inventing a direction. This is a deterministic classification
+    rule, not a claim that the supplied probabilities are empirically calibrated.
     """
     probabilities = (
         float(assessment.bullish_probability),
@@ -62,7 +64,16 @@ def classify_direction(assessment: ProbabilityAssessment) -> DirectionForecast:
 
     up, down, neutral = probabilities
     highest = max(probabilities)
-    winners = [index for index, value in enumerate(probabilities) if value == highest]
+    winners = [
+        index
+        for index, value in enumerate(probabilities)
+        if math.isclose(
+            value,
+            highest,
+            rel_tol=_DIRECTION_TIE_REL_TOLERANCE,
+            abs_tol=_DIRECTION_TIE_ABS_TOLERANCE,
+        )
+    ]
     if len(winners) != 1:
         direction: MarketDirection = "NEUTRAL"
     elif winners[0] == 0:
