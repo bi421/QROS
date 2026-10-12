@@ -306,7 +306,12 @@ class XAUUSDResearchOrchestrator:
                 continue
 
             try:
-                engine_input = (\n                    market_snapshot.for_engine(engine_name)\n                    if isinstance(market_snapshot, XAUUSDResearchInputs)\n                    else market_snapshot\n                )\n                result = adapter(request, engine_input)
+                engine_input = (
+                    market_snapshot.for_engine(engine_name)
+                    if isinstance(market_snapshot, XAUUSDResearchInputs)
+                    else market_snapshot
+                )
+                result = adapter(request, engine_input)
                 if not isinstance(result, EngineResult):
                     raise XAUUSDResearchError("adapter returned a non-EngineResult value")
                 if result.engine_name != engine_name:
