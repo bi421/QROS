@@ -7,23 +7,31 @@ exploratory/offline analysis; decision-time consumers should use this function.
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
 
 from researchos.decision_engine.contracts import DecisionEvidenceItem
 from researchos.market_memory.decision_adapter import market_memory_to_decision_evidence
 from researchos.market_memory.event_schema import MarketMemoryReport
 
 
-def _parse_timestamp(value: str, *, field_name: str) -> datetime:
+def _parse_timestamp(
+    value: str,
+    *,
+    field_name: str,
+    end_of_day: bool = False,
+) -> datetime:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} is missing")
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as exc:
         raise ValueError(f"{field_name} is not an ISO-8601 timestamp") from exc
-    # Market Memory date ranges may use date-only/naive values. Interpret these
-    # as UTC rather than silently applying the host machine's local timezone.
-    if parsed.tzinfo is None or parsed.utcoffset() is None:
+    # A date-only upper bound represents the entire calendar day, not midnight
+    # at its start. This prevents a same-day partial window from passing early.
+    if len(value.strip()) == 10 and end_of_day:
+        parsed = datetime.combine(parsed.date(), time.max, tzinfo=timezone.utc)
+    elif parsed.tzinfo is None or parsed.utcoffset() is None:
+        # Never inherit the host machine's local timezone.
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
 
@@ -54,7 +62,11 @@ def market_memory_to_decision_evidence_as_of(
         return []
     try:
         data_start = _parse_timestamp(report.date_range[0], field_name="report.date_range.start")
-        data_end = _parse_timestamp(report.date_range[1], field_name="report.date_range.end")
+        data_end = _parse_timestamp(
+            report.date_range[1],
+            field_name="report.date_range.end",
+            end_of_day=True,
+        )
     except ValueError:
         return []
     if data_start > data_end or data_end > cutoff:
@@ -65,8 +77,15 @@ def market_memory_to_decision_evidence_as_of(
         if len(record.time_range) != 2:
             continue
         try:
-            record_start = _parse_timestamp(record.time_range[0], field_name="evidence.time_range.start")
-            record_end = _parse_timestamp(record.time_range[1], field_name="evidence.time_range.end")
+            record_start = _parse_timestamp(
+                record.time_range[0],
+                field_name="evidence.time_range.start",
+            )
+            record_end = _parse_timestamp(
+                record.time_range[1],
+                field_name="evidence.time_range.end",
+                end_of_day=True,
+            )
         except ValueError:
             continue
         if record_start <= record_end <= cutoff:
