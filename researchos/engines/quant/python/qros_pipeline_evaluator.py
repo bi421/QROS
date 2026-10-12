@@ -52,13 +52,15 @@ class QROSPipelineEvaluator:
         if frame.height == 0:
             raise ValueError("cannot evaluate an empty dataframe")
         try:
-            states = frame.get_column(cfg.state_col).cast(pl.Int8, strict=True).to_numpy()
+            raw_states = frame.get_column(cfg.state_col).cast(pl.Float64, strict=True).to_numpy()
             closes = frame.get_column(cfg.close_col).cast(pl.Float64, strict=True).to_numpy()
         except Exception as exc:
             raise ValueError("state must be integer-like and close must be numeric") from exc
-        if not np.isin(states, (-1, 0, 1)).all():
-            invalid = np.unique(states[~np.isin(states, (-1, 0, 1))]).tolist()
-            raise ValueError(f"state values must be -1, 0, or +1; found {invalid}")
+        valid_states = np.isfinite(raw_states) & np.isin(raw_states, (-1.0, 0.0, 1.0))
+        if not valid_states.all():
+            invalid = np.unique(raw_states[~valid_states]).tolist()
+            raise ValueError(f"state values must be exactly -1, 0, or +1; found {invalid}")
+        states = raw_states.astype(np.int8)
         if not np.isfinite(closes).all() or (closes <= 0).any():
             raise ValueError("close prices must be finite and strictly positive")
         for horizon in cfg.horizons:
@@ -189,6 +191,7 @@ class QROSPipelineEvaluator:
             "safety_gate": {
                 "trigger_count": safety_count, "trigger_share": safety_count / n,
                 "root_causes": {k: {"count": v, "share_of_all_rows": v / n} for k, v in causes.items()},
+                "triggered_non_neutral_state_count": int(np.count_nonzero(safety & (states != 0))),
                 "source": trigger_source,
             },
             "latency": latency,
@@ -226,6 +229,7 @@ class QROSPipelineEvaluator:
             f"  Active vs sideline: {d['active_share']:.2%} / {d['sideline_share']:.2%}",
             "SAFETY GATE",
             f"  Triggered: {g['trigger_count']:,} ({g['trigger_share']:.2%}) [source: {g['source']}]",
+            f"  Triggered rows not neutral (contract violation): {g['triggered_non_neutral_state_count']:,}",
         ]
         for name, item in g["root_causes"].items():
             lines.append(f"  {name}: {item['count']:,} ({item['share_of_all_rows']:.2%} of rows)")
