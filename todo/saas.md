@@ -379,12 +379,14 @@ QROS is **not production-ready** until all applicable gates below have independe
 
 ## Exact-SHA CI evidence
 
-**NOT VERIFIED for current main SHA `1b2fac61062a9d90546ed399e489cae4f080a4dd`.**
+**Current main SHA at this audit: `1221cea820bf7e9b8a61be9b9b7750cd0020f7bb` — CI NOT YET VERIFIED GREEN.**
 
-- The combined commit-status lookup returned no status records for this exact SHA.
-- The available workflow-run lookup returned no runs; its connector currently filters to pull-request-triggered runs and therefore is not sufficient to prove push-triggered CI is absent or successful.
-- Do not call current-main CI green until the GitHub Actions run details are independently checked and each required workflow is tied to this exact SHA.
-- CI evidence, even when green, does not prove deployed runtime, live Auth, migration execution, backup/restore, billing, or commercial readiness.
+- GitHub branch API confirms `main` points to this exact SHA and reports branch protection disabled.
+- Git Governance run [#770](https://github.com/bi421/QROS/actions/runs/38203377336) completed successfully on this SHA.
+- CI run [#4240](https://github.com/bi421/QROS/actions/runs/38203377331) was still pending at audit time. Do not mark exact-SHA CI green until this run completes successfully.
+- Previous main SHA `1b2fac61062a9d90546ed399e489cae4f080a4dd` has CI run [#4239](https://github.com/bi421/QROS/actions/runs/38202928115) still in progress at audit time; completed checks observed on that exact SHA were successful, but the full configured test suite + coverage job had not completed. Git Governance run [#769](https://github.com/bi421/QROS/actions/runs/38202927987) succeeded on that SHA.
+- Commit-status API returning zero legacy statuses is not evidence that GitHub Actions checks are absent; inspect the Actions/check-runs endpoints tied to the exact SHA.
+- Even successful CI does not prove deployed runtime, live Auth, migration execution, backup/restore, billing, or commercial readiness.
 
 ## CI evidence for the roadmap PR
 
@@ -435,7 +437,7 @@ These do not establish a deployed, externally accessible, paid customer path.
 
 | Gate | Current evidence status | What is still required |
 |---|---|---|
-| Exact-SHA CI | **NOT VERIFIED** for `1b2fac61062a9d90546ed399e489cae4f080a4dd` | Inspect required GitHub Actions runs for this exact SHA |
+| Exact-SHA CI | **PENDING / NOT VERIFIED GREEN** for current main `1221cea820bf7e9b8a61be9b9b7750cd0020f7bb`; prior `1b2fac61062a9d90546ed399e489cae4f080a4dd` suite also incomplete at audit | Wait for CI run #4240 on current main to finish; then record conclusion and SHA |
 | Staging migration/schema parity | **NOT VERIFIED for current deployed release SHA** | Re-run canonical migration/schema/security audit and retain its artifact |
 | Staging identities and API | **NOT VERIFIED** | Two controlled identities; real endpoint; tenant isolation and authorization-failure evidence |
 | Staging Golden Path | **NOT VERIFIED** | Run the 13-stage gate against a verified non-production hostname; retain run URL/artifacts and exact SHA |
@@ -455,7 +457,7 @@ Historical staging details (including the previously observed project reference,
 ## Immediate next actions
 
 ### P0 — exact release evidence
-1. Verify required GitHub Actions workflows against exact main SHA `1b2fac61062a9d90546ed399e489cae4f080a4dd`; record workflow names, run IDs, conclusion and SHA.
+1. Verify required GitHub Actions workflows against current main SHA `1221cea820bf7e9b8a61be9b9b7750cd0020f7bb`; wait for CI run #4240 to finish and record workflow names, run IDs, conclusion and SHA.
 2. Verify which deployed environment, if any, runs that exact SHA.
 3. Re-run staging migration/schema/RLS/policy/function/grant checks against the verified staging environment; attach the reproducible audit artifact.
 4. Configure the approved `BACKUP_AWS_ROLE_ARN` / AWS OIDC dependency without exposing credentials, then rerun the backup workflow and inspect checksum plus remote-manifest evidence.
