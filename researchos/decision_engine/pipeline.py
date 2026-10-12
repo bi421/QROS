@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
 from researchos.decision_engine.artifact import DecisionArtifact
 from researchos.decision_engine.calibration import CalibrationEvidence
 from researchos.decision_engine.context import DecisionContext, DecisionContextValidator
-from researchos.decision_engine.direction import DirectionForecast, classify_direction
+from researchos.decision_engine.directional_proof import (
+    ThreeWayDirectionProof,
+    build_direction_proof,
+)
 from researchos.decision_engine.contracts import EvidenceSource, WeightConfiguration
 from researchos.decision_engine.evidence import (
     EvidenceAggregator,
@@ -45,11 +49,7 @@ class DecisionPipelineResult:
     score: EvidenceScore
     probability: ProbabilityAssessment
     report: DecisionReport
-
-    @property
-    def direction_forecast(self) -> DirectionForecast:
-        """Return the canonical UP / DOWN / NEUTRAL output for this assessment."""
-        return classify_direction(self.probability)
+    direction_proof: ThreeWayDirectionProof
 
     @property
     def report_hash(self) -> str:
@@ -70,9 +70,9 @@ class DecisionPipelineResult:
             "evidence": self.evidence.to_dict(),
             "score": self.score.to_dict(),
             "probability": self.probability.to_dict(),
-            "direction_forecast": self.direction_forecast.to_dict(),
             "report": self.report.to_dict(),
             "artifact": self.artifact.to_dict(),
+            "direction_proof": self.direction_proof.to_dict(),
         }
 
 
@@ -172,6 +172,33 @@ class DecisionPipeline:
             self.probability_validator.validate(probability),
         )
 
+        # Independently recompute the three-way weighted-evidence formula and
+        # attach a hash-verifiable proof to every canonical pipeline result.
+        direction_proof = build_direction_proof(
+            model_id=probability.calculation_version,
+            as_of=context.decision_timestamp.isoformat(),
+            horizon=context.timeframe or "UNSPECIFIED",
+            evidence=[item.to_dict() for item in evidence.items],
+        )
+        expected_probabilities = {
+            "UP": probability.bullish_probability,
+            "DOWN": probability.bearish_probability,
+            "NEUTRAL": probability.neutral_probability,
+        }
+        if any(
+            not math.isclose(
+                direction_proof.probabilities[key],
+                expected_probabilities[key],
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            )
+            for key in ("UP", "DOWN", "NEUTRAL")
+        ):
+            raise DecisionPipelineError(
+                "direction proof does not match ProbabilityAssessment; refusing output"
+            )
+        direction_proof.verify()
+
         report = generate_decision_report(
             context,
             score,
@@ -184,6 +211,7 @@ class DecisionPipeline:
             score=score,
             probability=probability,
             report=report,
+            direction_proof=direction_proof,
         )
 
 
