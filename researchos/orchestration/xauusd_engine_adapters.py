@@ -8,6 +8,7 @@ scales, not calibrated probabilities. No order/execution code is involved.
 from __future__ import annotations
 
 import math
+from bisect import bisect_right
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Mapping, Sequence
@@ -42,8 +43,8 @@ class XAUUSDMarketSnapshot:
 
     bars_by_timeframe: Mapping[str, Bars]
     bar_close_times_by_timeframe: Mapping[str, Sequence[datetime]]
+    dataset_version: str
     source_refs: tuple[str, ...] = ()
-    dataset_version: str = "UNSPECIFIED"
 
     def __post_init__(self) -> None:
         expected = set(ALL_TIMEFRAMES)
@@ -74,10 +75,9 @@ def _window_at(
     decision_time: datetime,
 ) -> tuple[Bars, datetime]:
     timestamps = snapshot.bar_close_times_by_timeframe[timeframe]
-    eligible = [i for i, stamp in enumerate(timestamps) if stamp <= decision_time]
-    if not eligible:
+    end = bisect_right(timestamps, decision_time)
+    if end == 0:
         raise ValueError(f"NO_CLOSED_BARS_AS_OF_DECISION:{timeframe}")
-    end = eligible[-1] + 1
     start = max(0, end - MAX_BARS_PER_TIMEFRAME)
     original = snapshot.bars_by_timeframe[timeframe]
     window = Bars(
@@ -123,6 +123,8 @@ class XAUUSDTechnicalEvidenceAdapter:
     ) -> EngineResult:
         if not isinstance(market_snapshot, XAUUSDMarketSnapshot):
             raise TypeError("technical adapter requires XAUUSDMarketSnapshot")
+        if market_snapshot.dataset_version != request.dataset_version:
+            raise ValueError("DATASET_VERSION_MISMATCH")
         records: list[EvidenceRecord] = []
         for timeframe in ALL_TIMEFRAMES:
             bars, as_of = _window_at(market_snapshot, timeframe, request.decision_time)
@@ -193,7 +195,7 @@ class XAUUSDTechnicalEvidenceAdapter:
                         strength=strength,
                         quality=1.0,
                         dependency_group="price-derived",
-                        source_refs=tuple(market_snapshot.source_refs),
+                        source_refs=tuple(market_snapshot.source_refs) + (market_snapshot.dataset_version,),
                     )
                 )
         return EngineResult(
@@ -220,6 +222,8 @@ class XAUUSDQuantMathEvidenceAdapter:
     ) -> EngineResult:
         if not isinstance(market_snapshot, XAUUSDMarketSnapshot):
             raise TypeError("quant-math adapter requires XAUUSDMarketSnapshot")
+        if market_snapshot.dataset_version != request.dataset_version:
+            raise ValueError("DATASET_VERSION_MISMATCH")
         bars, as_of = _window_at(market_snapshot, DECISION_TIMEFRAME, request.decision_time)
         if bars.length < 60:
             return EngineResult(
@@ -267,7 +271,8 @@ class XAUUSDQuantMathEvidenceAdapter:
                 strength=strength,
                 quality=1.0,
                 dependency_group="price-derived",
-                source_refs=tuple(market_snapshot.source_refs) + (result.result_hash,),
+                source_refs=tuple(market_snapshot.source_refs)
+                + (market_snapshot.dataset_version, result.result_hash),
             )
             for feature, value, direction, strength in features
             if math.isfinite(value) and math.isfinite(strength)
