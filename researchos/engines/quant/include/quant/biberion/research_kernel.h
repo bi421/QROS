@@ -61,4 +61,44 @@ struct BasketDecision {
 BasketDecision approve_cash_basket(const BasketLimits& limits,
                                    const std::vector<BasketProposal>& proposals);
 
+/*
+ * Three-state probabilistic decision model.
+ * Feature order (standardized with frozen training-set statistics):
+ * price_return_z, volume_z, latency_z, ofi_z, vxy_z, dxy_return_z.
+ * weights are row-major [bearish(6), neutral(6), bullish(6)].
+ * This kernel evaluates supplied parameters; it does not train them.
+ */
+struct StateModel {
+    std::vector<double> weights;
+    std::vector<double> bias;
+    double threshold{0.75};
+};
+
+struct SafetyObservation {
+    double latency_ms{0.0};
+    double vxy_level{0.0};
+    double dxy_abs_change_pct{0.0};
+    bool dxy_fresh{false};
+};
+
+struct SafetyLimits {
+    double max_latency_ms{250.0};
+    double max_vxy_level{30.0};
+    double max_abs_dxy_change_pct{1.0};
+};
+
+struct StateDecision {
+    double p_bearish{0.0};
+    double p_neutral{1.0};
+    double p_bullish{0.0};
+    int state{0};  // -1 bearish, 0 neutral/sideline, +1 bullish
+    bool safety_passed{false};
+    std::string reason{"invalid_input"};
+};
+
+StateDecision evaluate_market_state(const std::vector<double>& standardized_features,
+                                    const SafetyObservation& observation,
+                                    const StateModel& model,
+                                    const SafetyLimits& limits);
+
 }  // namespace quant::biberion
