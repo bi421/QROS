@@ -77,6 +77,17 @@ def test_as_of_gate_rejects_future_report_data_range() -> None:
     ) == []
 
 
+def test_as_of_gate_treats_date_only_upper_bound_as_end_of_day() -> None:
+    report = _report(
+        _record("historical", "2024-12-31"),
+        generated_at="2024-12-31T08:00:00+00:00",
+        date_range=("2021-01-01", "2024-12-31"),
+    )
+    assert market_memory_to_decision_evidence_as_of(
+        report, decision_time=datetime(2024, 12, 31, 12, tzinfo=timezone.utc)
+    ) == []
+
+
 def test_as_of_gate_requires_timezone_aware_decision_time() -> None:
     report = _report(_record("historical", "2024-12-31T00:00:00+00:00"))
     try:
