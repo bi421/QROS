@@ -323,13 +323,16 @@ class XAUUSDResearchOrchestrator:
 
         # A collection-stage result must never be mistaken for calibrated probabilities.
         unique_ids = [item.evidence_id for item in accepted_evidence]
-        if len(unique_ids) != len(set(unique_ids)):
+        duplicate_evidence_ids = len(unique_ids) != len(set(unique_ids))
+        if duplicate_evidence_ids:
             accepted_evidence = []
             reasons.append("DUPLICATE_EVIDENCE_ID")
         if not accepted_evidence:
             reasons.append("NO_VALID_EVIDENCE")
 
-        insufficient = bool(missing_required) or not accepted_evidence
+        insufficient = (
+            bool(missing_required) or duplicate_evidence_ids or not accepted_evidence
+        )
         return XAUUSDResearchResult(
             request=request,
             status=(
