@@ -276,3 +276,16 @@ set_target_properties(qros_probability PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
   RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine")
 install(TARGETS qros_probability LIBRARY DESTINATION cpp_quant_engine RUNTIME DESTINATION cpp_quant_engine)
+
+
+# Biberion-inspired price/volume research kernel. Research-only: no order routing.
+nanobind_add_module(qros_biberion biberion.cpp)
+target_link_libraries(qros_biberion PRIVATE quant_engine)
+target_include_directories(qros_biberion PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+target_compile_features(qros_biberion PRIVATE cxx_std_20)
+set_target_properties(qros_biberion PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+    LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine")
+install(TARGETS qros_biberion LIBRARY DESTINATION cpp_quant_engine RUNTIME DESTINATION cpp_quant_engine)
