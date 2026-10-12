@@ -132,3 +132,15 @@ This is a typed adapter boundary only. A live macro source, transformation
 from the existing engine's persisted assessment objects, Market Memory
 integration, and a pinned historical replay are not yet implemented or proven.
 No calibrated outcome probabilities are produced.
+
+
+## Engine-specific input routing (implemented contract; integration tests pending)
+
+The orchestration API now accepts `XAUUSDResearchInputs`, which preserves the
+legacy shared-snapshot call shape while allowing a distinct immutable input per
+engine. This is required because technical/QuantMath adapters consume a bounded
+OHLC snapshot, while the macro adapter consumes timestamped macro-driver
+observations. The default snapshot is used for adapters without an explicit
+entry in `by_engine`; callers must deliberately provide the macro snapshot
+under the `macro` key. This routing change does not fetch data, alter engine
+calculations, or enable execution.
