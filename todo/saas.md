@@ -108,18 +108,17 @@
 - [x] Project ref: `yebwhcntiockckhdvawt`.
 - [x] Region: `ap-northeast-1`.
 - [x] PostgreSQL 17.6 / engine 17.
-- [x] 45 migration rows observed; the worker migration is present under its historical remote display name.
-- [ ] Current repository migration set must be fully reconciled with staging migration history and schema; current exact audit finds 20 historical canonical migration names not represented by live staging history; the missing `dataset_version_feed` schema contract was separately reconciled forward without rewriting history.
+- [x] Historical snapshot A recorded 45 migration rows; the worker migration appeared under its historical remote display name.
+- [x] A later historical audit recorded 46 staging migration rows after the forward-only `20261005050000_dataset_version_feed_reconciliation` reconciliation. These are distinct snapshots, not one simultaneous count.
+- [ ] Re-run one canonical migration-history and schema audit against the verified current staging deployment SHA. Record live row count, aliases, all canonical names, and the `dataset_version_feed` schema contract. Do not rewrite history to force name parity.
 - [x] 23 public tables observed.
 - [x] 23/23 public tables have RLS enabled; 0 disabled.
 
 ### Remaining
 - [x] Verify the worker execution version `20260928103556` is present; its historical remote display name remains `20260928103225_saas_worker_queue_consumer` and is not rewritten.
-- [x] Reconcile and verify the 20 canonical migrations not represented by live staging history; no additional forward-only schema migration was required.
-- [x] Verify staging QROS tables, RLS state, public policies/triggers, and governed queue function grants.
-- [x] Verify RLS is enabled on all 23 QROS public tables (23/23; 0 disabled).
-- [x] Review staging Security Advisor findings.
-- [x] Document the existing `pgtap`-in-public-schema warning; no live schema mutation performed.
+- [x] Historical review classified 20 canonical migration-name gaps without rewriting migration history; this does not prove current deployed parity.
+- [x] Historical review observed 23 public tables with RLS enabled (23/23, 0 disabled), and reviewed policies/triggers, queue-function grants, Security Advisor findings and the `pgtap` warning.
+- [ ] Re-run migration/schema/RLS/policy/trigger/grant/Security Advisor checks and retain an artifact bound to the verified staging deployment SHA.
 
 > **Important:** Manual migration application proves the SQL was applied; it does **not** by itself prove canonical migration-history parity. Do not rewrite migration history merely to obtain a green check.
 
@@ -370,7 +369,10 @@ QROS is **not production-ready** until all applicable gates below have independe
 ## Exact repository baseline
 
 - **Repository:** `bi421/QROS`
-- **Current main SHA observed 2026-10-12:** `f290044852929544454dee44fb1e80fc4adcea10` (PR #711 merge commit; verified from GitHub commit search and PR metadata).
+- **Previous main SHA observed during the PR #711 audit:** `f290044852929544454dee44fb1e80fc4adcea10`.
+- **Current main SHA for this refresh (2026-10-12):** `557640897592b28af37ce5e33dfd543d531a5ed0` (PR #713 roadmap synchronization commit).
+- **Requested historical baseline:** `40315d796f46ff4ec5b83b9811dae978c176c2af`; GitHub compare reports current main is 109 commits ahead and 0 behind.
+- **Exact-SHA status for current main:** combined status returned no status records; the available workflow-run lookup returned no runs. Current-main CI therefore remains **NOT VERIFIED**.
 - PR #711 (`fix(staging): normalize hostnames before production comparison`) merged 2026-10-11. It canonicalizes hostnames so DNS trailing-dot and IDNA Unicode/punycode forms compare consistently in the staging-vs-production guard. This is a workflow/code change only; it does not prove a real staging run.
 - **Exact-SHA CI for current main:** NOT VERIFIED. The combined commit-status lookup returned no separate status-check records, and the available workflow-run lookup is limited to pull-request-triggered runs. Do not reuse PR-head checks or earlier-SHA runs as proof for this main commit.
 - PR-head Git Governance evidence from older merges is historical and is not current-main proof. Require exact-SHA push-triggered workflow evidence before claiming current-main CI is green.
@@ -378,7 +380,7 @@ QROS is **not production-ready** until all applicable gates below have independe
 
 ## Post-merge CI proof for the exact SHA
 
-**NOT VERIFIED.** Do not infer successful post-merge CI from the PR-head checks. Verify push-triggered workflows against exact main SHA `3572a66360e00e6b5f5c36752d9734d6df185c93` before making a current-release CI claim.
+**NOT VERIFIED.** Do not infer successful post-merge CI from the PR-head checks. Verify push-triggered workflows against exact current main SHA `557640897592b28af37ce5e33dfd543d531a5ed0` before making a current-release CI claim.
 
 
 ## Roadmap synchronization — 2026-10-12
@@ -413,11 +415,15 @@ The previous roadmap snapshot was anchored to PR #670 / SHA `3572a66360e00e6b5f5
 - **#710:** reject the production hostname in the Staging Golden Path gate.
 - **#711:** canonicalize hostnames before staging-vs-production comparison, including DNS trailing-dot and IDNA forms.
 
+### Roadmap sync — PR #713
+
+- **#713:** synchronized this roadmap through PR #711, but the resulting document still contains conflicting historical migration-count snapshots and checked-off audit statements that are not bound to the current deployed release SHA. This follow-up resolves those evidence-labeling contradictions.
+
 These PR summaries are implementation-level evidence. They do **not** establish a successful current-main staging Golden Path, backup, isolated restore, DR drill, or production deployment.
 
 ### Current verified blocker state
 
-- Current main SHA: `f290044852929544454dee44fb1e80fc4adcea10`.
+- Current main SHA at this refresh: `557640897592b28af37ce5e33dfd543d531a5ed0`.
 - Exact-main CI/Git Governance: **NOT VERIFIED** by the available combined-status lookup (no separate status records returned); PR-head results are not substitutes.
 - Staging Golden Path: **NOT VERIFIED**; workflow must run against a confirmed non-production endpoint with two separate controlled identities.
 - Backup workflow: previously observed failure due to missing repository variable `BACKUP_AWS_ROLE_ARN`; OIDC role/variable configuration remains an external prerequisite, not something to fabricate in code.
@@ -498,9 +504,10 @@ These are **implementation facts**, not proof of a deployed production customer 
 # Immediate Next Actions
 
 ### P0 — Staging database proof
-- [x] Complete semantic migration reconciliation: canonical migration files vs live staging history were classified without rewriting historical migration names.
-- [x] Verify schema, RLS policies, functions, grants and required SaaS constraints against the live staging database; the full `verify_saas_contract.py` contract audit currently passes.
-- [ ] Review/document pgtap warning.
+- [x] Historical semantic migration review classified canonical files against staging history without rewriting historical names; current release parity is not thereby proven.
+- [x] Historical `verify_saas_contract.py` audit was recorded as passing, but the available roadmap evidence does not bind that result to current staging deployment SHA `557640897592b28af37ce5e33dfd543d531a5ed0`.
+- [ ] Re-run `verify_saas_contract.py` plus migration-history/schema/security checks against the verified staging deployment and attach the reproducible artifact.
+- [ ] Review/document the current `pgtap` warning.
 
 ### P0 — Staging identity & API
 - [ ] Verify two controlled Auth identities.
