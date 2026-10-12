@@ -135,7 +135,7 @@ def test_future_evidence_is_rejected_and_not_counted():
 
 
 def test_duplicate_evidence_ids_fail_closed():
-    shared = evidence(evidence_id="duplicate")
+    shared = evidence(engine="macro", evidence_id="duplicate")
     orchestrator = XAUUSDResearchOrchestrator(
         {"macro": ok_adapter("macro", shared), "technical": ok_adapter(
             "technical", evidence(engine="technical", evidence_id="duplicate")
