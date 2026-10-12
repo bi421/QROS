@@ -5,12 +5,14 @@
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
+#include <vector>
 
 using quant::microstructure::ExecutionPenalty;
 using quant::microstructure::LatencyBreakdown;
 using quant::microstructure::estimate_execution_penalty;
 using quant::microstructure::observed_feed_latency_ns;
 using quant::microstructure::project_price_after_latency;
+using quant::microstructure::project_price_by_velocity_integral;
 using quant::microstructure::total_latency_ns;
 
 TEST(LatencyModel, SumsMeasuredComponents) {
@@ -25,6 +27,27 @@ TEST(LatencyModel, RejectsComponentOverflow) {
 TEST(LatencyModel, FeedLatencyRequiresMonotonicSynchronizedClocks) {
   EXPECT_EQ(observed_feed_latency_ns(1'000, 1'250), 250U);
   EXPECT_THROW(observed_feed_latency_ns(1'250, 1'000), std::invalid_argument);
+}
+
+TEST(LatencyModel, IntegratesMeasuredVelocitySamplesAcrossLatency) {
+  // Integral of linearly sampled velocity: trapezoids give 0.5*(2+4)*1
+  // + 0.5*(4+6)*1 = 8 price units. Add the explicit residual 0.25.
+  EXPECT_NEAR(project_price_by_velocity_integral(
+                  2'000.0, std::vector<double>{0.0, 1.0, 2.0},
+                  std::vector<double>{2.0, 4.0, 6.0}, 0.25),
+              2'008.25, 1e-12);
+}
+
+TEST(LatencyModel, VelocityIntegralRejectsMalformedSamples) {
+  EXPECT_THROW(project_price_by_velocity_integral(
+      2'000.0, std::vector<double>{0.0, 1.0},
+      std::vector<double>{2.0}, 0.0), std::invalid_argument);
+  EXPECT_THROW(project_price_by_velocity_integral(
+      2'000.0, std::vector<double>{0.0, 0.0},
+      std::vector<double>{2.0, 4.0}, 0.0), std::invalid_argument);
+  EXPECT_THROW(project_price_by_velocity_integral(
+      2'000.0, std::vector<double>{0.1, 1.0},
+      std::vector<double>{2.0, 4.0}, 0.0), std::invalid_argument);
 }
 
 TEST(LatencyModel, ProjectsPriceUsingDriftAndExplicitResidual) {
