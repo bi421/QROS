@@ -36,6 +36,7 @@ Signal evaluate_cross(const std::vector<double>& closes,
 
 struct BasketLimits {
     double equity{0.0};
+    std::size_t max_assets{10};
     double max_basket_fraction{0.10};
     double max_asset_fraction{0.01};
     double max_asset_risk_fraction{0.001};
