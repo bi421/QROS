@@ -109,3 +109,17 @@ def test_missing_timezone_fails_closed():
             horizon="M15",
             evidence=[],
         )
+
+
+
+def test_canonical_pipeline_emits_verified_direction_proof():
+    from researchos.decision_engine.context import DecisionContext
+    from researchos.decision_engine.pipeline import DecisionPipeline
+
+    result = DecisionPipeline().run(DecisionContext(asset="XAUUSD", timeframe="M15"))
+    proof = result.direction_proof
+    proof.verify()
+    assert proof.probabilities["UP"] == pytest.approx(result.probability.bullish_probability)
+    assert proof.probabilities["DOWN"] == pytest.approx(result.probability.bearish_probability)
+    assert proof.probabilities["NEUTRAL"] == pytest.approx(result.probability.neutral_probability)
+    assert result.to_dict()["direction_proof"]["proof_sha256"] == proof.proof_sha256
