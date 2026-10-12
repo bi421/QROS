@@ -45,6 +45,52 @@ std::uint64_t observed_feed_latency_ns(const std::int64_t event_time_ns,
   return static_cast<std::uint64_t>(ingest_time_ns - event_time_ns);
 }
 
+double project_price_by_velocity_integral(
+    const double expected_price,
+    const std::vector<double>& sample_times_seconds,
+    const std::vector<double>& velocity_price_per_second,
+    const double epsilon_price) {
+  require_finite(expected_price, "expected_price");
+  require_finite(epsilon_price, "epsilon_price");
+  if (expected_price <= 0.0) {
+    throw std::invalid_argument("expected_price must be positive");
+  }
+  if (sample_times_seconds.size() < 2 ||
+      sample_times_seconds.size() != velocity_price_per_second.size()) {
+    throw std::invalid_argument(
+        "time and velocity samples must have equal length of at least two");
+  }
+  if (sample_times_seconds.front() != 0.0) {
+    throw std::invalid_argument("first sample time must be zero elapsed seconds");
+  }
+
+  double integrated_move = 0.0;
+  for (std::size_t i = 0; i < sample_times_seconds.size(); ++i) {
+    require_finite(sample_times_seconds[i], "sample_times_seconds");
+    require_finite(velocity_price_per_second[i], "velocity_price_per_second");
+    if (sample_times_seconds[i] < 0.0 ||
+        (i > 0 && sample_times_seconds[i] <= sample_times_seconds[i - 1])) {
+      throw std::invalid_argument("sample times must be non-negative and strictly increasing");
+    }
+    if (i > 0) {
+      const double dt = sample_times_seconds[i] - sample_times_seconds[i - 1];
+      const double interval_move =
+          0.5 * (velocity_price_per_second[i - 1] + velocity_price_per_second[i]) * dt;
+      if (!std::isfinite(interval_move) ||
+          !std::isfinite(integrated_move + interval_move)) {
+        throw std::overflow_error("integrated velocity movement overflow");
+      }
+      integrated_move += interval_move;
+    }
+  }
+
+  const double projected = expected_price + integrated_move + epsilon_price;
+  if (!std::isfinite(projected) || projected <= 0.0) {
+    throw std::overflow_error("projected price must be finite and positive");
+  }
+  return projected;
+}
+
 double project_price_after_latency(const double reference_price,
                                    const double drift_price_per_second,
                                    const std::uint64_t latency_ns,
