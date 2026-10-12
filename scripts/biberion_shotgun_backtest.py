@@ -20,6 +20,7 @@ import pandas as pd
 @dataclass
 class Position:
     symbol: str
+    signal_time: str
     entry_time: str
     entry: float
     stop: float
@@ -86,6 +87,12 @@ def run_backtest(
     """Replay bars without future information; all fractions are equity fractions."""
     if not np.isfinite(initial_cash) or initial_cash <= 0:
         raise ValueError("initial_cash must be finite and positive")
+    if not np.isfinite(volume_k) or volume_k < 0:
+        raise ValueError("volume_k must be finite and nonnegative")
+    if not np.isfinite(directionality_min) or not 0.0 <= directionality_min <= 1.0:
+        raise ValueError("directionality_min must be between 0 and 1")
+    if max_additions < 0:
+        raise ValueError("max_additions must be nonnegative")
     if (fast < 1 or slow <= fast or volume_window < 2 or max_assets < 1
             or correlation_lookback < 2 or min_correlation_observations < 2
             or min_correlation_observations > correlation_lookback):
@@ -101,6 +108,8 @@ def run_backtest(
         raise ValueError("cost and stop buffer parameters must be nonnegative")
 
     frame = _validate(data)
+    if frame.empty:
+        raise ValueError("dataset must contain at least one bar")
     dataset_hash = hashlib.sha256(
         frame.to_csv(index=False, date_format="%Y-%m-%dT%H:%M:%S.%fZ").encode()
     ).hexdigest()
@@ -161,7 +170,8 @@ def run_backtest(
         cash += proceeds - exit_fee
         pnl = proceeds - exit_fee - pos.notional - pos.notional * fee
         trades.append({
-            "symbol": sym, "entry_time": pos.entry_time, "exit_time": str(ts),
+            "symbol": sym, "signal_time": pos.signal_time, "entry_time": pos.entry_time,
+            "exit_time": str(ts),
             "entry": pos.entry, "exit": exit_px, "quantity": pos.quantity,
             "pnl_net": pnl, "initial_risk": pos.initial_risk,
             "r_multiple": pnl / pos.initial_risk if pos.initial_risk > 0 else None,
@@ -222,7 +232,7 @@ def run_backtest(
                 entry_fee = notional * fee
                 cash -= notional + entry_fee
                 risk = qty * stop_gap
-                positions[sym] = Position(sym, str(proposal["signal_time"]), open_px, stop,
+                positions[sym] = Position(sym, str(proposal["signal_time"]), str(ts), open_px, stop,
                                           qty, notional, risk)
             else:
                 pos = positions.get(sym)
