@@ -24,7 +24,7 @@ def test_parallel_engine_computes_quote_book_flow_and_macro_features():
                MacroPoint(clock("DXY-provider", 90), "DXY", 101.1),
                MacroPoint(clock("VXY-provider", 100), "VXY", 15.0)],
     )
-    assert result["features"]["broker_quote"]["spread"] == 0.2
+    assert abs(result["features"]["broker_quote"]["spread"] - 0.2) < 1e-9
     assert result["features"]["futures_order_book"]["depth_imbalance"] > 0
     assert result["features"]["futures_trade_flow"]["signed_volume"] == 3
     assert result["features"]["macro"]["DXY"]["return_since_previous"] > 0
