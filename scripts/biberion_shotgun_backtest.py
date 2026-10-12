@@ -20,6 +20,7 @@ import pandas as pd
 @dataclass
 class Position:
     symbol: str
+    signal_time: str
     entry_time: str
     entry: float
     stop: float
@@ -56,6 +57,7 @@ def _validate(frame: pd.DataFrame) -> pd.DataFrame:
     frame = frame.sort_values(["timestamp", "symbol"], kind="mergesort").reset_index(drop=True)
     if "flow_imbalance" in frame:
         frame["flow_imbalance"] = pd.to_numeric(frame["flow_imbalance"], errors="coerce")
+        frame.loc[~np.isfinite(frame["flow_imbalance"].to_numpy(dtype=float)), "flow_imbalance"] = np.nan
     else:
         frame["flow_imbalance"] = np.nan
     return frame
@@ -78,22 +80,38 @@ def run_backtest(
     fee_bps: float = 1.0,
     latency_slippage_bps: float = 2.0,
     directionality_min: float = 0.65,
+    correlation_lookback: int = 50,
+    max_pairwise_correlation: float = 0.70,
+    min_correlation_observations: int = 30,
     max_additions: int = 2,
 ) -> dict:
     """Replay bars without future information; all fractions are equity fractions."""
     if not np.isfinite(initial_cash) or initial_cash <= 0:
         raise ValueError("initial_cash must be finite and positive")
-    if fast < 1 or slow <= fast or volume_window < 2 or max_assets < 1:
-        raise ValueError("invalid windows or max_assets")
+    if not np.isfinite(volume_k) or volume_k < 0:
+        raise ValueError("volume_k must be finite and nonnegative")
+    if not np.isfinite(directionality_min) or not 0.0 <= directionality_min <= 1.0:
+        raise ValueError("directionality_min must be between 0 and 1")
+    if max_additions < 0:
+        raise ValueError("max_additions must be nonnegative")
+    if (fast < 1 or slow <= fast or volume_window < 2 or max_assets < 1
+            or correlation_lookback < 2 or min_correlation_observations < 2
+            or min_correlation_observations > correlation_lookback):
+        raise ValueError("invalid windows, correlation contract, or max_assets")
+    if not np.isfinite(max_pairwise_correlation) or not 0.0 <= max_pairwise_correlation <= 1.0:
+        raise ValueError("max_pairwise_correlation must be between 0 and 1")
     fractions = (basket_fraction, asset_fraction, asset_risk_fraction, basket_risk_fraction)
     if any(not np.isfinite(x) or x <= 0 for x in fractions):
         raise ValueError("risk fractions must be finite and positive")
     if basket_fraction > 1 or asset_fraction > basket_fraction:
         raise ValueError("invalid allocation caps")
-    if stop_buffer_bps < 0 or fee_bps < 0 or latency_slippage_bps < 0:
-        raise ValueError("cost and stop buffer parameters must be nonnegative")
+    numeric_costs = (stop_buffer_bps, fee_bps, latency_slippage_bps)
+    if any(not np.isfinite(value) or value < 0 for value in numeric_costs):
+        raise ValueError("cost and stop buffer parameters must be finite and nonnegative")
 
     frame = _validate(data)
+    if frame.empty:
+        raise ValueError("dataset must contain at least one bar")
     dataset_hash = hashlib.sha256(
         frame.to_csv(index=False, date_format="%Y-%m-%dT%H:%M:%S.%fZ").encode()
     ).hexdigest()
@@ -124,6 +142,27 @@ def run_backtest(
                 value += pos.notional
         return value
 
+    def pairwise_correlation_ok(candidate: str, peers: list[str], now_iso: str) -> bool:
+        candidate_map = {x["timestamp"]: x["close"] for x in histories[candidate]
+                         if x["timestamp"] < now_iso}
+        for peer in peers:
+            if peer == candidate:
+                continue
+            peer_map = {x["timestamp"]: x["close"] for x in histories[peer]
+                        if x["timestamp"] < now_iso}
+            common = sorted(set(candidate_map).intersection(peer_map))
+            common = common[-(correlation_lookback + 1):]
+            if len(common) - 1 < min_correlation_observations:
+                return False  # Unknown correlation is not assumed to be diversification.
+            left = np.diff(np.log(np.asarray([candidate_map[t] for t in common], dtype=float)))
+            right = np.diff(np.log(np.asarray([peer_map[t] for t in common], dtype=float)))
+            if not np.isfinite(left).all() or not np.isfinite(right).all():
+                return False
+            corr = float(np.corrcoef(left, right)[0, 1])
+            if not np.isfinite(corr) or abs(corr) > max_pairwise_correlation:
+                return False
+        return True
+
     def close_position(sym: str, px: float, ts, reason: str) -> None:
         nonlocal cash
         pos = positions.pop(sym)
@@ -133,7 +172,8 @@ def run_backtest(
         cash += proceeds - exit_fee
         pnl = proceeds - exit_fee - pos.notional - pos.notional * fee
         trades.append({
-            "symbol": sym, "entry_time": pos.entry_time, "exit_time": str(ts),
+            "symbol": sym, "signal_time": pos.signal_time, "entry_time": pos.entry_time,
+            "exit_time": str(ts),
             "entry": pos.entry, "exit": exit_px, "quantity": pos.quantity,
             "pnl_net": pnl, "initial_risk": pos.initial_risk,
             "r_multiple": pnl / pos.initial_risk if pos.initial_risk > 0 else None,
@@ -194,7 +234,7 @@ def run_backtest(
                 entry_fee = notional * fee
                 cash -= notional + entry_fee
                 risk = qty * stop_gap
-                positions[sym] = Position(sym, str(proposal["signal_time"]), open_px, stop,
+                positions[sym] = Position(sym, str(proposal["signal_time"]), str(ts), open_px, stop,
                                           qty, notional, risk)
             else:
                 pos = positions.get(sym)
@@ -202,10 +242,17 @@ def run_backtest(
                     equity = mark_equity(bars, "open")
                     new_stop = max(pos.stop, float(proposal["trail_stop"]))
                     cap = max(0.0, equity * asset_fraction - pos.notional)
+                    basket_notional = sum(item.notional for item in positions.values())
+                    basket_cap = max(0.0, equity * basket_fraction - basket_notional)
                     risk_cap = max(0.0, equity * asset_risk_fraction - pos.initial_risk)
+                    basket_risk = sum(item.initial_risk for item in positions.values())
+                    basket_risk_cap = max(0.0, equity * basket_risk_fraction - basket_risk)
                     stop_gap = max(open_px - new_stop, open_px * 1e-6)
-                    add_notional = min(cap, risk_cap * open_px / stop_gap,
-                                       max(0.0, cash / (1.0 + fee)))
+                    add_notional = min(
+                        cap, basket_cap, risk_cap * open_px / stop_gap,
+                        basket_risk_cap * open_px / stop_gap,
+                        max(0.0, cash / (1.0 + fee)),
+                    )
                     if add_notional > 0 and open_px > pos.entry:
                         qty = add_notional / open_px
                         cash -= add_notional * (1.0 + fee)
@@ -231,20 +278,30 @@ def run_backtest(
             for held_symbol in positions:
                 pending[held_symbol] = {"kind": "exit", "signal_time": ts}
 
+        # Ratchet stops only after the current bar is complete; these levels apply to future bars.
+        for held_symbol, held_position in list(positions.items()):
+            if held_symbol in bars.index:
+                held_position.stop = max(
+                    held_position.stop,
+                    float(bars.loc[held_symbol, "low"]) * (1.0 - buffer),
+                )
+
         # Winner pyramiding only: explicit flow proxy required, next bar executes the add.
         for sym, pos in list(positions.items()):
             if sym not in bars.index or pos.additions >= max_additions:
                 continue
             bar = bars.loc[sym]
             flow = float(bar["flow_imbalance"]) if pd.notna(bar["flow_imbalance"]) else 0.0
-            if float(bar["close"]) > pos.entry and flow > 0.0 and not lockdown:
+            prior_close = histories[sym][-1]["close"] if histories[sym] else pos.entry
+            if (float(bar["close"]) > pos.entry and float(bar["close"]) > prior_close
+                    and flow > 0.0 and not lockdown):
                 pending.setdefault(sym, {"kind": "add", "signal_time": ts, "stop": pos.stop,
                                          "trail_stop": pos.stop})
 
         # Record histories and form signals at this completed bar for next bar only.
         for sym, bar in bars.iterrows():
             histories[sym].append({
-                "close": float(bar["close"]), "volume": float(bar["volume"]),
+                "timestamp": ts.isoformat(), "close": float(bar["close"]), "volume": float(bar["volume"]),
                 "low": float(bar["low"]), "flow": bar["flow_imbalance"],
             })
             hist = histories[sym]
@@ -259,6 +316,11 @@ def run_backtest(
             benchmark_up = len(benchmark_history) >= 2 and benchmark_history[-1] > benchmark_history[-2]
             crossed_up = fast_prev <= slow_prev and fast_now > slow_now
             if crossed_up and benchmark_up and surge:
+                peer_symbols = sorted(set(positions).union(
+                    p for p, proposal in pending.items() if proposal["kind"] == "entry"
+                ))
+                if not pairwise_correlation_ok(sym, peer_symbols, ts.isoformat()):
+                    continue
                 stop = float(bar["low"]) * (1.0 - buffer)
                 if stop > 0 and stop < float(bar["close"]):
                     pending[sym] = {"kind": "entry", "signal_time": ts, "stop": stop}
@@ -292,7 +354,10 @@ def run_backtest(
             "asset_fraction": asset_fraction, "asset_risk_fraction": asset_risk_fraction,
             "basket_risk_fraction": basket_risk_fraction, "fee_bps": fee_bps,
             "latency_slippage_bps": latency_slippage_bps,
-            "directionality_min": directionality_min, "max_additions": max_additions,
+            "directionality_min": directionality_min, "correlation_lookback": correlation_lookback,
+            "max_pairwise_correlation": max_pairwise_correlation,
+            "min_correlation_observations": min_correlation_observations,
+            "max_additions": max_additions,
         },
         "summary": {
             "initial_cash": initial_cash, "final_equity": final_equity,
