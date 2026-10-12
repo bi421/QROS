@@ -36,7 +36,7 @@ class MacroDriverObservation:
     max_age_seconds: int
 
     def __post_init__(self) -> None:
-        if self.driver_name not in ALL_DRIVERS:
+        if not isinstance(self.driver_name, str) or self.driver_name not in ALL_DRIVERS:
             raise ValueError("UNSUPPORTED_MACRO_DRIVER")
         for name, value in (("score", self.score), ("confidence", self.confidence)):
             if isinstance(value, bool):
@@ -55,7 +55,11 @@ class MacroDriverObservation:
             raise ValueError("INVALID_MACRO_DIRECTION")
         if not isinstance(self.as_of, datetime) or self.as_of.tzinfo is None or self.as_of.utcoffset() is None:
             raise ValueError("MACRO_TIMESTAMP_MUST_BE_TIMEZONE_AWARE")
-        if not self.source_refs or any(not isinstance(ref, str) or not ref.strip() for ref in self.source_refs):
+        if (
+            not isinstance(self.source_refs, tuple)
+            or not self.source_refs
+            or any(not isinstance(ref, str) or not ref.strip() for ref in self.source_refs)
+        ):
             raise ValueError("MACRO_SOURCE_PROVENANCE_REQUIRED")
         if isinstance(self.max_age_seconds, bool) or not isinstance(self.max_age_seconds, int) or self.max_age_seconds <= 0:
             raise ValueError("MACRO_MAX_AGE_MUST_BE_POSITIVE_INTEGER")
@@ -69,13 +73,15 @@ class XAUUSDMacroSnapshot:
     observations: tuple[MacroDriverObservation, ...]
 
     def __post_init__(self) -> None:
-        if not self.provider_id.strip():
+        if not isinstance(self.provider_id, str) or not self.provider_id.strip():
             raise ValueError("MACRO_PROVIDER_ID_REQUIRED")
+        if not isinstance(self.observations, tuple) or not self.observations:
+            raise ValueError("MACRO_OBSERVATIONS_REQUIRED")
+        if any(not isinstance(item, MacroDriverObservation) for item in self.observations):
+            raise ValueError("INVALID_MACRO_OBSERVATION_TYPE")
         names = [observation.driver_name for observation in self.observations]
         if len(names) != len(set(names)):
             raise ValueError("DUPLICATE_MACRO_DRIVER")
-        if not self.observations:
-            raise ValueError("MACRO_OBSERVATIONS_REQUIRED")
 
 
 class XAUUSDMacroEvidenceAdapter:

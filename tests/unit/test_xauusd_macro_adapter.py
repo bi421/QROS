@@ -125,3 +125,29 @@ def test_duplicate_driver_names_are_rejected():
             "macro-provider-v1",
             (observation(ALL_DRIVERS[0]), observation(ALL_DRIVERS[0])),
         )
+
+
+@pytest.mark.parametrize("provider_id", [None, "", "   "])
+def test_invalid_provider_identity_is_rejected(provider_id):
+    with pytest.raises(ValueError, match="MACRO_PROVIDER_ID_REQUIRED"):
+        XAUUSDMacroSnapshot(provider_id, (observation(ALL_DRIVERS[0]),))
+
+
+def test_non_tuple_observation_collection_is_rejected():
+    with pytest.raises(ValueError, match="MACRO_OBSERVATIONS_REQUIRED"):
+        XAUUSDMacroSnapshot("macro-provider-v1", [observation(ALL_DRIVERS[0])])
+
+
+def test_invalid_observation_member_is_rejected():
+    with pytest.raises(ValueError, match="INVALID_MACRO_OBSERVATION_TYPE"):
+        XAUUSDMacroSnapshot("macro-provider-v1", ("not-an-observation",))
+
+
+def test_non_tuple_source_refs_are_rejected():
+    with pytest.raises(ValueError, match="MACRO_SOURCE_PROVENANCE_REQUIRED"):
+        observation(ALL_DRIVERS[0], source_refs="source:single-string")
+
+
+def test_non_string_driver_name_is_rejected():
+    with pytest.raises(ValueError, match="UNSUPPORTED_MACRO_DRIVER"):
+        observation(None)
