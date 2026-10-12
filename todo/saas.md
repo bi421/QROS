@@ -371,15 +371,15 @@ QROS is **not production-ready** until all applicable gates below have independe
 - **Repository:** `bi421/QROS`
 - **Previous roadmap baseline:** `3572a66360e00e6b5f5c36752d9734d6df185c93` (PR #670 merge; the prior roadmap incorrectly continued to call this current).
 - **Audit baseline requested:** `40315d796f46ff4ec5b83b9811dae978c176c2af`.
-- **Current `main` SHA:** `557640897592b28af37ce5e33dfd543d531a5ed0852929544454dee44fb1e80fc4adcea10`.
-- **Exact ref proof:** comparing `557640897592b28af37ce5e33dfd543d531a5ed0852929544454dee44fb1e80fc4adcea10` to `main` returned `identical` (0 ahead / 0 behind). Comparing `40315d796f46ff4ec5b83b9811dae978c176c2af` to `main` returned `ahead`, 108 commits, 0 behind.
-- **Latest main commit:** [`557640897592b28af37ce5e33dfd543d531a5ed0852929544454dee44fb1e80fc4adcea10`](https://github.com/bi421/QROS/commit/557640897592b28af37ce5e33dfd543d531a5ed0852929544454dee44fb1e80fc4adcea10), `fix(staging): canonicalize host comparison against production (#711)`.
+- **Current `main` SHA:** `1b2fac61062a9d90546ed399e489cae4f080a4dd`.
+- **Exact ref proof:** comparing `1b2fac61062a9d90546ed399e489cae4f080a4dd` to `main` returned `identical` (0 ahead / 0 behind). Comparing `40315d796f46ff4ec5b83b9811dae978c176c2af` to `main` returned `ahead`, 110 commits, 0 behind.
+- **Latest main commit:** [`1b2fac61062a9d90546ed399e489cae4f080a4dd`](https://github.com/bi421/QROS/commit/1b2fac61062a9d90546ed399e489cae4f080a4dd), `fix(staging): canonicalize host comparison against production (#711)`.
 - **File blob before this refresh:** `498ff68893935ba1cd9e270e84a8fc8e77f9e827`.
 - This section records repository state, not a claim that the running deployment uses this SHA.
 
 ## Exact-SHA CI evidence
 
-**NOT VERIFIED for current main SHA `557640897592b28af37ce5e33dfd543d531a5ed0852929544454dee44fb1e80fc4adcea10`.**
+**NOT VERIFIED for current main SHA `1b2fac61062a9d90546ed399e489cae4f080a4dd`.**
 
 - The combined commit-status lookup returned no status records for this exact SHA.
 - The available workflow-run lookup returned no runs; its connector currently filters to pull-request-triggered runs and therefore is not sufficient to prove push-triggered CI is absent or successful.
@@ -388,10 +388,10 @@ QROS is **not production-ready** until all applicable gates below have independe
 
 ## CI evidence for the roadmap PR
 
-- **Roadmap PR commit tested:** `12ca135eb3f8703744c6f65867336c76c53ea3b1`.
-- **CI run:** [#4230](https://github.com/bi421/QROS/actions/runs/38192356568) — `success`.
-- **Git Governance run:** [#765](https://github.com/bi421/QROS/actions/runs/38192356520) — `success`.
-- These runs validate that exact documentation-branch commit only. They do not prove CI for current `main` SHA `557640897592b28af37ce5e33dfd543d531a5ed0852929544454dee44fb1e80fc4adcea10`, and they do not prove staging or production behavior.
+- **Current roadmap PR commit checked:** `b448f6c61ea65463e5f732897c21941ea6a10a61` (superseded PR #717 head; its PR-triggered CI and Git Governance runs completed successfully, but the branch became diverged after `main` advanced).
+- **CI run:** [#4233](https://github.com/bi421/QROS/actions/runs/38201833618) — `success`.
+- **Git Governance run:** [#768](https://github.com/bi421/QROS/actions/runs/38201833706) — `success`.
+- These runs validate only that exact documentation-branch commit. They do not prove CI for current `main` SHA `1b2fac61062a9d90546ed399e489cae4f080a4dd`, and they do not prove staging or production behavior.
 
 ## Changes since the requested baseline — PRs #685–#711
 
@@ -435,7 +435,7 @@ These do not establish a deployed, externally accessible, paid customer path.
 
 | Gate | Current evidence status | What is still required |
 |---|---|---|
-| Exact-SHA CI | **NOT VERIFIED** for `557640897592b28af37ce5e33dfd543d531a5ed0852929544454dee44fb1e80fc4adcea10` | Inspect required GitHub Actions runs for this exact SHA |
+| Exact-SHA CI | **NOT VERIFIED** for `1b2fac61062a9d90546ed399e489cae4f080a4dd` | Inspect required GitHub Actions runs for this exact SHA |
 | Staging migration/schema parity | **NOT VERIFIED for current deployed release SHA** | Re-run canonical migration/schema/security audit and retain its artifact |
 | Staging identities and API | **NOT VERIFIED** | Two controlled identities; real endpoint; tenant isolation and authorization-failure evidence |
 | Staging Golden Path | **NOT VERIFIED** | Run the 13-stage gate against a verified non-production hostname; retain run URL/artifacts and exact SHA |
@@ -455,7 +455,7 @@ Historical staging details (including the previously observed project reference,
 ## Immediate next actions
 
 ### P0 — exact release evidence
-1. Verify required GitHub Actions workflows against exact main SHA `557640897592b28af37ce5e33dfd543d531a5ed0852929544454dee44fb1e80fc4adcea10`; record workflow names, run IDs, conclusion and SHA.
+1. Verify required GitHub Actions workflows against exact main SHA `1b2fac61062a9d90546ed399e489cae4f080a4dd`; record workflow names, run IDs, conclusion and SHA.
 2. Verify which deployed environment, if any, runs that exact SHA.
 3. Re-run staging migration/schema/RLS/policy/function/grant checks against the verified staging environment; attach the reproducible audit artifact.
 4. Configure the approved `BACKUP_AWS_ROLE_ARN` / AWS OIDC dependency without exposing credentials, then rerun the backup workflow and inspect checksum plus remote-manifest evidence.
