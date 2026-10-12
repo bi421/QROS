@@ -83,6 +83,7 @@ def run_backtest(
     correlation_lookback: int = 50,
     max_pairwise_correlation: float = 0.70,
     min_correlation_observations: int = 30,
+    min_flow_imbalance: float = 0.10,
     max_additions: int = 2,
 ) -> dict:
     """Replay bars without future information; all fractions are equity fractions."""
@@ -94,6 +95,8 @@ def run_backtest(
         raise ValueError("directionality_min must be between 0 and 1")
     if max_additions < 0:
         raise ValueError("max_additions must be nonnegative")
+    if not np.isfinite(min_flow_imbalance) or min_flow_imbalance < 0:
+        raise ValueError("min_flow_imbalance must be finite and nonnegative")
     if (fast < 1 or slow <= fast or volume_window < 2 or max_assets < 1
             or correlation_lookback < 2 or min_correlation_observations < 2
             or min_correlation_observations > correlation_lookback):
@@ -308,7 +311,7 @@ def run_backtest(
             flow = float(bar["flow_imbalance"]) if pd.notna(bar["flow_imbalance"]) else 0.0
             prior_close = histories[sym][-1]["close"] if histories[sym] else pos.entry
             if (float(bar["close"]) > pos.entry and float(bar["close"]) > prior_close
-                    and flow > 0.0 and not lockdown):
+                    and flow > min_flow_imbalance and not lockdown):
                 pending.setdefault(sym, {"kind": "add", "signal_time": ts, "stop": pos.stop,
                                          "trail_stop": pos.stop})
 
@@ -371,7 +374,7 @@ def run_backtest(
             "directionality_min": directionality_min, "correlation_lookback": correlation_lookback,
             "max_pairwise_correlation": max_pairwise_correlation,
             "min_correlation_observations": min_correlation_observations,
-            "max_additions": max_additions,
+            "min_flow_imbalance": min_flow_imbalance, "max_additions": max_additions,
         },
         "summary": {
             "initial_cash": initial_cash, "final_equity": final_equity,
