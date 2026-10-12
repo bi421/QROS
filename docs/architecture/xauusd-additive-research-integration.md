@@ -157,3 +157,14 @@ contract. It does not call or modify MacroAnalysisEngine scoring.
 The bridge is not yet connected to a configured repository query or live macro
 provider. Existence of persisted object classes does not prove current data
 availability or freshness. No probabilities or execution capability are added.
+
+## Engine-specific input routing (implemented contract; integration tests pending)
+
+The orchestration API now accepts `XAUUSDResearchInputs`, which preserves the
+legacy shared-snapshot call shape while allowing a distinct immutable input per
+engine. This is required because technical/QuantMath adapters consume a bounded
+OHLC snapshot, while the macro adapter consumes timestamped macro-driver
+observations. The default snapshot is used for adapters without an explicit
+entry in `by_engine`; callers must deliberately provide the macro snapshot
+under the `macro` key. This routing change does not fetch data, alter engine
+calculations, or enable execution.
