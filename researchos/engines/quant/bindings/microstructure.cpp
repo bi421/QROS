@@ -33,9 +33,18 @@ nb::ndarray<nb::numpy, T> owned_array(std::vector<T> values) {
 NB_MODULE(qros_microstructure, m) {
   m.doc() = "QROS deterministic C++20 microstructure kernels; contiguous NumPy inputs are borrowed without copying.";
 
+  nb::enum_<quant::microstructure::MarketEventKind>(m, "MarketEventKind")
+      .value("TRADE", quant::microstructure::MarketEventKind::Trade)
+      .value("QUOTE", quant::microstructure::MarketEventKind::Quote)
+      .value("BOOK_SNAPSHOT", quant::microstructure::MarketEventKind::BookSnapshot)
+      .value("BOOK_DELTA", quant::microstructure::MarketEventKind::BookDelta);
+
   nb::class_<quant::microstructure::TimedMarketEvent>(m, "TimedMarketEvent")
       .def(nb::init<>())
       .def_rw("symbol", &quant::microstructure::TimedMarketEvent::symbol)
+      .def_rw("source_id", &quant::microstructure::TimedMarketEvent::source_id)
+      .def_rw("venue", &quant::microstructure::TimedMarketEvent::venue)
+      .def_rw("kind", &quant::microstructure::TimedMarketEvent::kind)
       .def_rw("sequence", &quant::microstructure::TimedMarketEvent::sequence)
       .def_rw("event_time_ns", &quant::microstructure::TimedMarketEvent::event_time_ns)
       .def_rw("ingest_time_ns", &quant::microstructure::TimedMarketEvent::ingest_time_ns)
