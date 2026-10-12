@@ -242,10 +242,17 @@ def run_backtest(
                     equity = mark_equity(bars, "open")
                     new_stop = max(pos.stop, float(proposal["trail_stop"]))
                     cap = max(0.0, equity * asset_fraction - pos.notional)
+                    basket_notional = sum(item.notional for item in positions.values())
+                    basket_cap = max(0.0, equity * basket_fraction - basket_notional)
                     risk_cap = max(0.0, equity * asset_risk_fraction - pos.initial_risk)
+                    basket_risk = sum(item.initial_risk for item in positions.values())
+                    basket_risk_cap = max(0.0, equity * basket_risk_fraction - basket_risk)
                     stop_gap = max(open_px - new_stop, open_px * 1e-6)
-                    add_notional = min(cap, risk_cap * open_px / stop_gap,
-                                       max(0.0, cash / (1.0 + fee)))
+                    add_notional = min(
+                        cap, basket_cap, risk_cap * open_px / stop_gap,
+                        basket_risk_cap * open_px / stop_gap,
+                        max(0.0, cash / (1.0 + fee)),
+                    )
                     if add_notional > 0 and open_px > pos.entry:
                         qty = add_notional / open_px
                         cash -= add_notional * (1.0 + fee)
