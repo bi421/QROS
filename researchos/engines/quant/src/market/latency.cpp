@@ -3,6 +3,8 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <string>
+#include <initializer_list>
 
 namespace quant::microstructure {
 namespace {
