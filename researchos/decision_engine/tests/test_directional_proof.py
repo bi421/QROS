@@ -10,27 +10,34 @@ from researchos.decision_engine.directional_proof import (
 )
 
 
-SOURCE_HASH = "a" * 64
-AS_OF = "2026-10-12T09:00:00Z"
+def _evidence(directions_and_weights):
+    return [
+        {
+            "source_id": f"evidence-{index}",
+            "direction": direction,
+            "weight": weight,
+            "confidence": confidence,
+        }
+        for index, (direction, weight, confidence) in enumerate(directions_and_weights)
+    ]
 
 
 @pytest.mark.parametrize(
-    ("scores", "expected"),
+    ("items", "expected"),
     [
-        ({"UP": 3.0, "DOWN": 1.0, "NEUTRAL": 0.0}, "UP"),
-        ({"UP": -1.0, "DOWN": 4.0, "NEUTRAL": 0.0}, "DOWN"),
-        ({"UP": 0.0, "DOWN": 0.0, "NEUTRAL": 2.0}, "NEUTRAL"),
-        ({"UP": 1.0, "DOWN": 1.0, "NEUTRAL": 0.0}, "NEUTRAL"),
-        ({"UP": 0.0, "DOWN": 0.0, "NEUTRAL": 0.0}, "NEUTRAL"),
+        ([("Bullish", 1.0, 0.9), ("Bearish", 0.2, 0.5)], "UP"),
+        ([("Bearish", 1.0, 0.9), ("Bullish", 0.2, 0.5)], "DOWN"),
+        ([("Neutral", 1.0, 0.9), ("Bullish", 0.2, 0.1)], "NEUTRAL"),
+        ([("Bullish", 0.0, 0.9), ("Bearish", 0.0, 0.8)], "NEUTRAL"),
+        ([("Bullish", 1.0, 0.5), ("Bearish", 1.0, 0.5)], "NEUTRAL"),
     ],
 )
-def test_all_three_outputs_have_reproducible_mathematical_proof(scores, expected):
+def test_all_three_outputs_have_reproducible_mathematical_proof(items, expected):
     proof = build_direction_proof(
-        model_id="test-model-v1",
-        source_data_sha256=SOURCE_HASH,
-        as_of=AS_OF,
+        model_id="WEIGHTED_EVIDENCE_V1",
+        as_of="2026-10-12T09:00:00Z",
         horizon="M15",
-        scores=scores,
+        evidence=_evidence(items),
     )
 
     assert proof.direction == expected
@@ -42,76 +49,63 @@ def test_all_three_outputs_have_reproducible_mathematical_proof(scores, expected
 
 def test_proof_is_deterministic_for_identical_inputs():
     kwargs = {
-        "model_id": "test-model-v1",
-        "source_data_sha256": SOURCE_HASH,
-        "as_of": AS_OF,
+        "model_id": "WEIGHTED_EVIDENCE_V1",
+        "as_of": "2026-10-12T09:00:00Z",
         "horizon": "M15",
-        "scores": {"UP": 0.8, "DOWN": 0.2, "NEUTRAL": -0.1},
+        "evidence": _evidence([("Bullish", 0.8, 0.8), ("Neutral", 0.2, 0.5)]),
     }
     first = build_direction_proof(**kwargs)
     second = build_direction_proof(**kwargs)
     assert first.to_dict() == second.to_dict()
 
 
-def test_verifier_rejects_tampered_probability_even_if_hash_is_stale():
+def test_verifier_rejects_tampered_probability():
     proof = build_direction_proof(
-        model_id="test-model-v1",
-        source_data_sha256=SOURCE_HASH,
-        as_of=AS_OF,
+        model_id="WEIGHTED_EVIDENCE_V1",
+        as_of="2026-10-12T09:00:00Z",
         horizon="M15",
-        scores={"UP": 2.0, "DOWN": 1.0, "NEUTRAL": 0.0},
+        evidence=_evidence([("Bullish", 1.0, 0.9), ("Bearish", 1.0, 0.2)]),
     )
     altered = dict(proof.probabilities)
     altered["UP"] = 0.01
-    with pytest.raises(DirectionProofError, match="softmax recomputation"):
+    with pytest.raises(DirectionProofError, match="probability failed independent recomputation"):
         replace(proof, probabilities=altered).verify()
 
 
 def test_verifier_rejects_wrong_direction():
     proof = build_direction_proof(
-        model_id="test-model-v1",
-        source_data_sha256=SOURCE_HASH,
-        as_of=AS_OF,
+        model_id="WEIGHTED_EVIDENCE_V1",
+        as_of="2026-10-12T09:00:00Z",
         horizon="M15",
-        scores={"UP": 2.0, "DOWN": 1.0, "NEUTRAL": 0.0},
+        evidence=_evidence([("Bullish", 1.0, 0.9), ("Bearish", 1.0, 0.2)]),
     )
     with pytest.raises(DirectionProofError, match="direction does not match"):
         replace(proof, direction="DOWN").verify()
 
 
 @pytest.mark.parametrize(
-    ("scores", "message"),
+    ("items", "message"),
     [
-        ({"UP": 1.0, "DOWN": float("nan"), "NEUTRAL": 0.0}, "finite"),
-        ({"UP": 1.0, "DOWN": 0.0}, "exactly UP, DOWN, and NEUTRAL"),
-        ({"UP": True, "DOWN": 0.0, "NEUTRAL": 0.0}, "numeric"),
+        ([("Bullish", 1.0, float("nan"))], "finite"),
+        ([("sideways", 1.0, 0.5)], "unsupported evidence direction"),
+        ([("Bullish", 2.0, 0.5)], "in \\[0, 1\\]"),
     ],
 )
-def test_invalid_scores_fail_closed(scores, message):
+def test_invalid_evidence_fails_closed(items, message):
     with pytest.raises(DirectionProofError, match=message):
         build_direction_proof(
-            model_id="test-model-v1",
-            source_data_sha256=SOURCE_HASH,
-            as_of=AS_OF,
+            model_id="WEIGHTED_EVIDENCE_V1",
+            as_of="2026-10-12T09:00:00Z",
             horizon="M15",
-            scores=scores,
+            evidence=_evidence(items),
         )
 
 
-def test_missing_source_hash_or_timezone_fails_closed():
-    with pytest.raises(DirectionProofError, match="SHA-256"):
-        build_direction_proof(
-            model_id="test-model-v1",
-            source_data_sha256="missing",
-            as_of=AS_OF,
-            horizon="M15",
-            scores={"UP": 1.0, "DOWN": 0.0, "NEUTRAL": 0.0},
-        )
+def test_missing_timezone_fails_closed():
     with pytest.raises(DirectionProofError, match="timezone"):
         build_direction_proof(
-            model_id="test-model-v1",
-            source_data_sha256=SOURCE_HASH,
+            model_id="WEIGHTED_EVIDENCE_V1",
             as_of="2026-10-12T09:00:00",
             horizon="M15",
-            scores={"UP": 1.0, "DOWN": 0.0, "NEUTRAL": 0.0},
+            evidence=[],
         )
