@@ -108,3 +108,48 @@ install(
     LIBRARY DESTINATION cpp_quant_engine
     RUNTIME DESTINATION cpp_quant_engine
 )
+
+
+# Deterministic microstructure kernels. Inputs are borrowed contiguous NumPy
+# buffers (no input copy); returned arrays own their result storage.
+nanobind_add_module(
+    qros_microstructure
+    microstructure.cpp
+)
+
+target_link_libraries(
+    qros_microstructure
+    PRIVATE
+        quant_engine
+)
+
+target_compile_features(
+    qros_microstructure
+    PRIVATE
+        cxx_std_20
+)
+
+target_include_directories(
+    qros_microstructure
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../include
+)
+
+set_target_properties(
+    qros_microstructure
+    PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY
+            "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+        RUNTIME_OUTPUT_DIRECTORY
+            "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+        LIBRARY_OUTPUT_DIRECTORY_RELEASE
+            "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE
+            "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+)
+
+install(
+    TARGETS qros_microstructure
+    LIBRARY DESTINATION cpp_quant_engine
+    RUNTIME DESTINATION cpp_quant_engine
+)
