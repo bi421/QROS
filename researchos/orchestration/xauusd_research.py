@@ -306,6 +306,7 @@ class XAUUSDResearchOrchestrator:
                 )
 
             results.append(result)
+            reasons.extend(result.reason_codes)
             if result.status == EngineStatus.OK:
                 accepted_evidence.extend(result.evidence)
             elif engine_name in self._required_engines:
