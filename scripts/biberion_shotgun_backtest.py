@@ -259,6 +259,14 @@ def run_backtest(
             for held_symbol in positions:
                 pending[held_symbol] = {"kind": "exit", "signal_time": ts}
 
+        # Ratchet stops only after the current bar is complete; these levels apply to future bars.
+        for held_symbol, held_position in list(positions.items()):
+            if held_symbol in bars.index:
+                held_position.stop = max(
+                    held_position.stop,
+                    float(bars.loc[held_symbol, "low"]) * (1.0 - buffer),
+                )
+
         # Winner pyramiding only: explicit flow proxy required, next bar executes the add.
         for sym, pos in list(positions.items()):
             if sym not in bars.index or pos.additions >= max_additions:
