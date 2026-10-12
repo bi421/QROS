@@ -243,3 +243,23 @@ install(
     LIBRARY DESTINATION cpp_quant_engine
     RUNTIME DESTINATION cpp_quant_engine
 )
+
+
+# Four-dimensional dual-clock market data kernel; inputs are borrowed NumPy buffers.
+nanobind_add_module(
+    qros_market_state_4d
+    market_state_4d.cpp
+)
+target_link_libraries(qros_market_state_4d PRIVATE quant_engine)
+target_include_directories(qros_market_state_4d PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+target_compile_features(qros_market_state_4d PRIVATE cxx_std_20)
+set_target_properties(qros_market_state_4d PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+    LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+)
+install(TARGETS qros_market_state_4d
+    LIBRARY DESTINATION cpp_quant_engine
+    RUNTIME DESTINATION cpp_quant_engine
+)
