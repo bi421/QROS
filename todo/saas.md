@@ -370,16 +370,46 @@ QROS is **not production-ready** until all applicable gates below have independe
 ## Exact repository baseline
 
 - **Repository:** `bi421/QROS`
-- **Current main SHA observed 2026-10-10:** `3572a66360e00e6b5f5c36752d9734d6df185c93`
-- This SHA is the squash-merge commit for PR #670, which updates Git Governance to rerun validation when a PR title is edited.
-- **Post-merge exact-SHA CI:** NOT VERIFIED in this audit. The available workflow lookup only returns pull-request-triggered runs, and the combined commit-status lookup returned no separate status-check records. Do not reuse CI runs from earlier SHAs as proof for this main commit.
-- **Post-merge Git Governance:** PR #670's exact head SHA `ce2ef258552df50ebc5ec65facd7d244b133c2e6` passed run [38054110745](https://github.com/bi421/QROS/actions/runs/38054110745) before merge; the merge commit's push-triggered Governance result was not independently verified here.
-- Earlier run references [38047049481](https://github.com/bi421/QROS/actions/runs/38047049481) and [38047049445](https://github.com/bi421/QROS/actions/runs/38047049445) belong to a previous SHA and are historical, not current-release evidence.
+- **Current main SHA observed 2026-10-12:** `f290044852929544454dee44fb1e80fc4adcea10` (PR #711 merge commit; verified from GitHub commit search and PR metadata).
+- PR #711 (`fix(staging): normalize hostnames before production comparison`) merged 2026-10-11. It canonicalizes hostnames so DNS trailing-dot and IDNA Unicode/punycode forms compare consistently in the staging-vs-production guard. This is a workflow/code change only; it does not prove a real staging run.
+- **Exact-SHA CI for current main:** NOT VERIFIED. The combined commit-status lookup returned no separate status-check records, and the available workflow-run lookup is limited to pull-request-triggered runs. Do not reuse PR-head checks or earlier-SHA runs as proof for this main commit.
+- PR-head Git Governance evidence from older merges is historical and is not current-main proof. Require exact-SHA push-triggered workflow evidence before claiming current-main CI is green.
 - These repository CI facts do not prove staging, production deployment, migration execution, backup/restore, billing, or commercial readiness.
 
 ## Post-merge CI proof for the exact SHA
 
 **NOT VERIFIED.** Do not infer successful post-merge CI from the PR-head checks. Verify push-triggered workflows against exact main SHA `3572a66360e00e6b5f5c36752d9734d6df185c93` before making a current-release CI claim.
+
+
+## Roadmap synchronization — 2026-10-12
+
+The previous roadmap snapshot was anchored to PR #670 / SHA `3572a66360e00e6b5f5c36752d9734d6df185c93` and omitted the subsequent #685–#711 hardening sequence. This update records the current observed main SHA and the verified scope of the latest work without promoting implementation changes to operational PASS.
+
+### Recent merged work (PR #685–#711)
+
+- **#685:** stable conditional/bootstrap means to prevent overflow on repeated finite `1e308` observations.
+- **#686–#700:** subsequent merged work exists in repository history; do not infer test coverage or operational readiness from PR numbering alone. Verify individual PR/commit evidence when documenting a specific claim.
+- **#702:** accept the paginated dataset-versions response envelope in the staging Golden Path.
+- **#703:** isolate recovery-drill objects by workflow run.
+- **#704:** restore the drill object to an isolated Supabase target.
+- **#705:** unwrap the paginated tenant-isolation response in the staging gate.
+- **#706:** persist restore-failure evidence, including subprocess restore failures.
+- **#707:** write a valid JSON backup failure report.
+- **#708:** restrict recovery-drill object-key characters.
+- **#709:** reject the production Supabase project as a recovery restore target.
+- **#710:** reject the production hostname in the Staging Golden Path gate.
+- **#711:** canonicalize hostnames before staging-vs-production comparison, including DNS trailing-dot and IDNA forms.
+
+These PR summaries are implementation-level evidence. They do **not** establish a successful current-main staging Golden Path, backup, isolated restore, DR drill, or production deployment.
+
+### Current verified blocker state
+
+- Current main SHA: `f290044852929544454dee44fb1e80fc4adcea10`.
+- Exact-main CI/Git Governance: **NOT VERIFIED** by the available combined-status lookup (no separate status records returned); PR-head results are not substitutes.
+- Staging Golden Path: **NOT VERIFIED**; workflow must run against a confirmed non-production endpoint with two separate controlled identities.
+- Backup workflow: previously observed failure due to missing repository variable `BACKUP_AWS_ROLE_ARN`; OIDC role/variable configuration remains an external prerequisite, not something to fabricate in code.
+- Isolated DR target/storage and completed restore drill: **NOT VERIFIED**.
+- Production readiness: **BLOCKED** until environment-specific gates are evidenced.
 
 ## SaaS implementation status
 
