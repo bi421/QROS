@@ -83,6 +83,16 @@ def test_onboarding_page_exposes_minimal_research_workflow() -> None:
         assert expected in response.text
 
 
+def test_successful_workspace_provisioning_opens_research_workspace() -> None:
+    client = TestClient(create_app())
+    response = client.get("/onboarding/app.js")
+    assert response.status_code == 200
+    source = response.text
+    start = source.index("async function finishOnboarding")
+    end = source.index("\nfunction showResearchWorkspace", start)
+    assert "showResearchWorkspace();" in source[start:end]
+
+
 def test_onboarding_script_uses_governed_research_api_contract() -> None:
     client = TestClient(create_app())
     response = client.get("/onboarding/app.js")
