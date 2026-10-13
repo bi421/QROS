@@ -1,4 +1,4 @@
-# Minimal customer pilot before Product UI
+# Minimal customer pilot runbook — reconciled after the first Product UI slice
 
 ## Objective
 
@@ -67,16 +67,13 @@ Do not use profitable trading, predictive accuracy, or investment returns as pil
 
 Stop the pilot immediately on any cross-tenant data exposure, unexpected production write, unexplained evidence/provenance mismatch, data loss, or inability to restore. Preserve redacted logs and hashes; revoke pilot access if needed; do not silently repair evidence.
 
-## Product UI decision
+## Product UI decision — current repository state
 
-Do not build the full Product UI before the pilot. If the pilot passes, the smallest UI scope is:
+The first minimal Product UI slice is now present in the repository (PR #778) and the post-signup handoff fix is merged (PR #779). It includes signup/sign-in, workspace provisioning, CSV dataset upload/version hash, research-run submission/listing, and report/evidence retrieval. PR #780 reconciled the canonical SaaS roadmap with that implementation.
 
-1. Invite/login and workspace context.
-2. Dataset upload with validation and immutable-version confirmation.
-3. Research run submission and visible queued/running/failed/completed status.
-4. Result/report/evidence view with IDs, hashes, timestamps, and failure details.
+This is repository/CI evidence only. It does not prove a deployed public URL, live staging signup, tenant isolation through the deployed app, or production readiness. The pilot remains blocked until all entry gates above pass.
 
-Defer billing dashboard, self-service team administration, complex visualization, and live trading until the pilot demonstrates demand and the core safety gates remain green.
+Do not build additional broad UI before a pilot validates demand. Defer claim/plan-lock UI expansion, evidence lineage visualization, billing dashboard, self-service team administration, and live trading until the customer workflow demonstrates demand and the core safety gates remain green.
 
 ## Pilot report template
 
