@@ -19,7 +19,7 @@
 | Staging Golden Path | 🟡 Blocked | Auth/application identities and end-to-end operational evidence pending |
 | Disaster Recovery | 🔴 Blocked | Isolated recovery target and recovery storage not provisioned |
 | Observability | 🟡 In progress | Production-grade acceptance evidence pending |
-| Product UI | 🔴 Not complete | Core SaaS UI remains to be built |
+| Product UI | 🟡 Partially implemented | PR #778 adds signup/workspace, CSV upload, dataset-version, research-run, report, and evidence UI; PR #779 fixes the post-signup handoff. Claim/plan governance views, lineage visualization, validation/finding/replication views, and audit-trail UI remain incomplete. This is repository/CI evidence, not a live staging Golden Path. |
 | Billing/commercial | 🔴 Not complete | Paid pilot and external-user evidence pending |
 
 ---
@@ -174,16 +174,25 @@
 
 ---
 
-## 7. Product UI — 🔴 NOT COMPLETE
+## 7. Product UI — 🟡 PARTIALLY IMPLEMENTED
 
-- [ ] Tenant/workspace shell.
-- [ ] Claim creation and plan-lock workflow.
-- [ ] Dataset workflow.
-- [ ] Experiment/run/result explorer.
+### Verified in repository / exact-SHA CI
+- [x] Minimal signup/sign-in and workspace provisioning UI.
+- [x] CSV dataset upload and immutable dataset-version hash display.
+- [x] Governed research-run submission and run listing.
+- [x] Run status, report, and evidence retrieval views.
+- [x] Successful workspace provisioning reveals the research workspace (PR #779 regression test).
+- [x] Governed report export API.
+
+### Remaining / not yet proven end-to-end
+- [ ] Real staging signup, email confirmation, and workspace provisioning.
+- [ ] Claim creation and plan-lock workflow UI.
 - [ ] Evidence lineage graph.
 - [ ] Validation/finding/replication views.
-- [x] Governed report export API.
 - [ ] Audit trail UI.
+- [ ] Browser-level Golden Path against the deployed staging app with two controlled identities.
+
+**Evidence boundary:** PR #778 added the minimal research UI; PR #779 fixed the post-signup handoff. These changes passed exact-PR-head CI, but they do not establish a deployed public URL, live Supabase/Auth integration, tenant-isolation proof through the deployed app, or production readiness.
 
 ---
 
