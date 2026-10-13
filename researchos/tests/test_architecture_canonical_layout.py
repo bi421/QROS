@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import os
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,14 @@ IGNORED_SOURCE_DIRS = frozenset(
         ".ruff_cache",
         ".mypy_cache",
         "build",
+        ".venv",
+        ".venv-mypy",
+        "venv",
+        "env",
+        ".tox",
+        ".nox",
+        "node_modules",
+        ".qros-build-native",
         "_deps",
         "dist",
     }
@@ -26,11 +35,14 @@ IGNORED_SOURCE_DIRS = frozenset(
 
 
 def _iter_source_python_files(root: Path):
-    """Yield relevant repository Python source without generated/build residue."""
-    for path in sorted(root.rglob("*.py")):
-        if any(part in IGNORED_SOURCE_DIRS for part in path.parts):
-            continue
-        yield path
+    """Yield Python source while pruning generated and environment trees."""
+    for directory, dirnames, filenames in os.walk(root, topdown=True):
+        dirnames[:] = sorted(
+            name for name in dirnames if name not in IGNORED_SOURCE_DIRS
+        )
+        for filename in sorted(filenames):
+            if filename.endswith(".py"):
+                yield Path(directory) / filename
 
 
 def _imported_modules(path: Path) -> set[str]:
@@ -73,6 +85,32 @@ def test_source_scanner_rejects_forbidden_import_in_relevant_source(tmp_path: Pa
 
 def test_source_scanner_ignores_known_generated_tree(tmp_path: Path) -> None:
     generated = tmp_path / "build" / "generated.py"
+    generated.parent.mkdir(parents=True)
+    generated.write_text(
+        "from researchos.engines.data import DataEngine\n",
+        encoding="utf-8",
+    )
+
+    assert list(_iter_source_python_files(tmp_path)) == []
+
+
+@pytest.mark.parametrize(
+    "ignored_dir",
+    [
+        ".venv",
+        ".venv-mypy",
+        "venv",
+        "env",
+        ".tox",
+        ".nox",
+        "node_modules",
+        ".qros-build-native",
+    ],
+)
+def test_source_scanner_ignores_environment_and_native_build_trees(
+    tmp_path: Path, ignored_dir: str
+) -> None:
+    generated = tmp_path / ignored_dir / "Lib" / "site-packages" / "generated.py"
     generated.parent.mkdir(parents=True)
     generated.write_text(
         "from researchos.engines.data import DataEngine\n",
