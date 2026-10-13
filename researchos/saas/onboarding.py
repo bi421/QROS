@@ -160,6 +160,7 @@ async function finishOnboarding(workspaceName) {
   clearRememberedWorkspaceName();
   resultElement.textContent = JSON.stringify({ workspace, me }, null, 2);
   setStatus("Onboarding complete.");
+  showResearchWorkspace();
 }
 
 function showResearchWorkspace() {
