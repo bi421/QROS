@@ -11,6 +11,7 @@ RUN apk add --no-cache build-base cmake ninja
 COPY pyproject.toml README.md ./
 COPY researchos ./researchos
 COPY scripts ./scripts
+COPY financial_research_lab ./financial_research_lab
 COPY docs ./docs
 
 RUN python -m pip install --upgrade pip "setuptools>=78.1.1" \
