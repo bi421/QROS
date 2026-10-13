@@ -47,6 +47,15 @@ DROP POLICY IF EXISTS dataset_member_select ON public.dataset;
 CREATE POLICY dataset_member_select ON public.dataset
   FOR SELECT TO authenticated USING ((SELECT private.is_workspace_member(workspace_id)));
 
+-- Keep attempted client UPDATEs visible to RLS long enough for WITH CHECK to
+-- reject them with 42501, while never permitting the write itself. This also
+-- makes workspace_id rebind attempts fail loudly instead of returning zero rows.
+DROP POLICY IF EXISTS dataset_member_update_guard ON public.dataset;
+CREATE POLICY dataset_member_update_guard ON public.dataset
+  FOR UPDATE TO authenticated
+  USING ((SELECT private.is_workspace_member(workspace_id)))
+  WITH CHECK (false);
+
 DROP POLICY IF EXISTS dataset_version_member_select ON public.dataset_version;
 CREATE POLICY dataset_version_member_select ON public.dataset_version
   FOR SELECT TO authenticated USING (
