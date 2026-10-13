@@ -11,6 +11,7 @@ RUN apk add --no-cache build-base cmake ninja
 COPY pyproject.toml README.md ./
 COPY researchos ./researchos
 COPY scripts ./scripts
+COPY financial_research_lab ./financial_research_lab
 COPY docs ./docs
 
 RUN python -m pip install --upgrade pip "setuptools>=78.1.1" \
@@ -21,6 +22,8 @@ FROM python:3.12.14-alpine3.24
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
+
+RUN addgroup -S researchos && adduser -S -G researchos researchos
 
 WORKDIR /app
 
@@ -35,6 +38,7 @@ COPY researchos ./researchos
 COPY financial_research_lab ./financial_research_lab
 COPY scripts ./scripts
 COPY docs ./docs
+RUN chown -R researchos:researchos /app
 
 EXPOSE 8000
 

@@ -276,3 +276,16 @@ jobs:
             resolved-dependencies.txt
           if-no-files-found: warn
           retention-days: 90
+
+  docker-image-smoke:
+    name: Docker Image Build + Runtime User Smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Build runtime image
+        run: docker build --pull -t qros-api:ci .
+      - name: Verify configured runtime user exists and runs unprivileged
+        run: |
+          test "$(docker image inspect --format '{{.Config.User}}' qros-api:ci)" = "researchos"
+          docker run --rm --entrypoint python qros-api:ci -c "import os, pwd; user = pwd.getpwnam('researchos'); assert os.geteuid() == user.pw_uid and os.geteuid() != 0"
