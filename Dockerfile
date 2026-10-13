@@ -22,6 +22,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
+RUN addgroup -S researchos && adduser -S -G researchos researchos
+
 WORKDIR /app
 
 COPY pyproject.toml README.md ./
@@ -35,6 +37,7 @@ COPY researchos ./researchos
 COPY financial_research_lab ./financial_research_lab
 COPY scripts ./scripts
 COPY docs ./docs
+RUN chown -R researchos:researchos /app
 
 EXPOSE 8000
 
