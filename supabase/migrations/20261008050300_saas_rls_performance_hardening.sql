@@ -1,33 +1,9 @@
 -- QROS SaaS RLS performance hardening.
--- Preserve tenant isolation while using initplan-safe auth.jwt() evaluation.
--- Keep server-only tables client-denied; do not add client policies to those tables.
-
-DO $$
-DECLARE t text;
-BEGIN
-  FOREACH t IN ARRAY ARRAY[
-    'artifact','audit_log','dataset','dataset_version','evidence',
-    'research_claim','research_finding','research_run','research_validation',
-    'subscription','tenant_deletion_tombstone','usage_event','workspace',
-    'workspace_member','workspace_retention_policy'
-  ]
-  LOOP
-    EXECUTE format('DROP POLICY IF EXISTS tenant_select ON public.%I', t);
-    EXECUTE format('DROP POLICY IF EXISTS tenant_insert ON public.%I', t);
-    EXECUTE format('DROP POLICY IF EXISTS tenant_update ON public.%I', t);
-    EXECUTE format('DROP POLICY IF EXISTS tenant_delete ON public.%I', t);
-
-    EXECUTE format('CREATE POLICY tenant_select ON public.%I FOR SELECT TO authenticated USING ((select auth.jwt() ->> ''tenant_id'') = tenant_id::text)', t);
-    EXECUTE format('CREATE POLICY tenant_insert ON public.%I FOR INSERT TO authenticated WITH CHECK ((select auth.jwt() ->> ''tenant_id'') = tenant_id::text)', t);
-    EXECUTE format('CREATE POLICY tenant_update ON public.%I FOR UPDATE TO authenticated USING ((select auth.jwt() ->> ''tenant_id'') = tenant_id::text) WITH CHECK ((select auth.jwt() ->> ''tenant_id'') = tenant_id::text)', t);
-    EXECUTE format('CREATE POLICY tenant_delete ON public.%I FOR DELETE TO authenticated USING ((select auth.jwt() ->> ''tenant_id'') = tenant_id::text)', t);
-  END LOOP;
-
-  DROP POLICY IF EXISTS qros_api_rate_limit_client_delete_deny ON public.api_rate_limit;
-  DROP POLICY IF EXISTS qros_api_rate_limit_client_insert_deny ON public.api_rate_limit;
-  DROP POLICY IF EXISTS qros_api_rate_limit_client_select_deny ON public.api_rate_limit;
-  DROP POLICY IF EXISTS qros_api_rate_limit_client_update_deny ON public.api_rate_limit;
-END $$;
+-- Preserve the canonical workspace-membership policies already established by
+-- earlier migrations. Do not recreate legacy tenant_id policies: the governed
+-- schema is workspace_id-based and several records are intentionally server-only.
+-- A separate forward migration removes any legacy tenant_* policies that may
+-- already exist in environments where the original version of this migration ran.
 
 CREATE INDEX IF NOT EXISTS idx_billing_event_workspace_id
   ON public.billing_event (workspace_id);
