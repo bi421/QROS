@@ -42,7 +42,7 @@ def test_forward_return_sign_and_safety_exclusion() -> None:
 def test_fail_closed_on_invalid_state_or_price() -> None:
     with pytest.raises(ValueError, match="state values"):
         QROSPipelineEvaluator().ingest(pl.DataFrame({"state": [2], "close": [10.0]}))
-    with pytest.raises(ValueError, match="exactly -1, 0, or +1"):
+    with pytest.raises(ValueError, match=r"exactly -1, 0, or \+1"):
         QROSPipelineEvaluator().ingest(pl.DataFrame({"state": [1.5], "close": [10.0]}))
     with pytest.raises(ValueError, match="strictly positive"):
         QROSPipelineEvaluator().ingest(pl.DataFrame({"state": [1], "close": [0.0]}))
