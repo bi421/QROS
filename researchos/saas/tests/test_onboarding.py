@@ -66,3 +66,34 @@ def test_onboarding_client_uses_canonical_api_error_message_field() -> None:
     source = response.text
     assert 'data.message || data.detail || "Request failed"' in source
     assert 'data.detail || data.message || "Request failed"' not in source
+
+
+def test_onboarding_page_exposes_minimal_research_workflow() -> None:
+    client = TestClient(create_app())
+    response = client.get("/onboarding")
+    assert response.status_code == 200
+    for expected in (
+        'id="dataset-upload"',
+        'id="dataset-version"',
+        'id="run-research"',
+        'id="research-runs"',
+        'id="research-detail"',
+        "A completed run is not proof of profitability",
+    ):
+        assert expected in response.text
+
+
+def test_onboarding_script_uses_governed_research_api_contract() -> None:
+    client = TestClient(create_app())
+    response = client.get("/onboarding/app.js")
+    assert response.status_code == 200
+    for expected in (
+        'fetch("/v1/datasets"',
+        'qrosApi("/v1/datasets?page=1&page_size=100")',
+        'qrosApi("/v1/research-runs"',
+        'workflow_id: "xauusd_m1_frozen_research_v1"',
+        '"/evidence?page=1&page_size=50"',
+        '"/report"',
+        'showResearchWorkspace();',
+    ):
+        assert expected in response.text
