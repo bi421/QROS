@@ -41,3 +41,20 @@ The current staging schema does not have `tenant_id` on most inspected workspace
 - No claim that a paying customer, public HTTPS deployment, Stripe lifecycle, DR restore, or end-to-end staging Golden Path is proven.
 
 **Release decision:** remain blocked until the above evidence gates pass.
+
+## Post-merge re-audit — 2026-10-13 08:49 UTC
+
+The documentation snapshot above was merged as commit `5ab7f9d5ff44d0ab699ecb3be2fbc66010711d2e`. A subsequent comparison of the exact remote migration `version` values against the filename prefixes on current `main` found a broader mismatch than the two rows whose SQL source names are absent:
+
+- Repository: **69** migration files.
+- Production project `pvhdsngxyoiqhqwujfjt`: **57** remote ledger rows; **19** remote version values do not exactly match any local migration filename prefix.
+- Staging project `yebwhcntiockckhdvawt`: **46** remote ledger rows; **46** remote version values do not exactly match any local migration filename prefix.
+- In staging, many ledger `name` values correspond to local migration filenames but the recorded remote `version` is a different timestamp. This is a version-ledger mismatch, not evidence that all 46 SQL sources are absent.
+- Production also has the two previously identified entries whose `name` has no matching local SQL source: `20261008050100_saas_rls_restore_and_optimize` and `20261008050200_saas_qros_fk_indexes_v2`.
+- This exact-prefix comparison is a diagnostic signal, not a complete semantic migration diff. A verified export plus name/version/object-level comparison is still required.
+
+On merged `main` SHA `5ab7f9d5ff44d0ab699ecb3be2fbc66010711d2e`, GitHub check-runs were observed at **4 success, 1 failure, 8 in progress**. The failed check remains Supabase Preview with `Remote migration versions not found in local migrations directory.`; the other eight checks were still running at capture time. Do not report this SHA as fully green.
+
+The GitHub API also reports `main` branch protection disabled (`protected=false`, `protection.enabled=false`). This is a separate release-governance gap; no branch protection settings were changed during this audit.
+
+No staging or production database writes, migration applications, resets, history rewrites, or paid Supabase branch creation were performed.
