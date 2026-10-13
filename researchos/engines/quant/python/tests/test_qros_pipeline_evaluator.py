@@ -54,6 +54,28 @@ def test_dashboard_discloses_scope() -> None:
     assert "not upstream live-stream throughput" in dashboard
     assert "No alpha claim" in dashboard
 
+def test_fail_closed_on_null_or_invalid_safety_trigger() -> None:
+    with pytest.raises(ValueError, match="safety_gate_triggered must not contain null"):
+        QROSPipelineEvaluator().ingest(pl.DataFrame({
+            "state": [0, 1],
+            "close": [10.0, 11.0],
+            "safety_gate_triggered": [False, None],
+        })).compute()
+
+    with pytest.raises(ValueError, match="only boolean or numeric 0/1"):
+        QROSPipelineEvaluator().ingest(pl.DataFrame({
+            "state": [0, 1],
+            "close": [10.0, 11.0],
+            "safety_gate_triggered": [False, 2],
+        })).compute()
+
+    with pytest.raises(ValueError, match="safety_passed must contain only boolean or numeric 0/1"):
+        QROSPipelineEvaluator().ingest(pl.DataFrame({
+            "state": [0, 1],
+            "close": [10.0, 11.0],
+            "safety_passed": [True, 2],
+        })).compute()
+
 def test_safety_regime_diagnostics_handle_horizon_longer_than_stream() -> None:
     frame = pl.DataFrame({
         "state": [1, 0, -1],

@@ -75,10 +75,33 @@ class QROSPipelineEvaluator:
     def _safety_mask(self, frame: pl.DataFrame) -> np.ndarray:
         cfg = self.config
         if cfg.safety_trigger_col in frame.columns:
-            return frame.get_column(cfg.safety_trigger_col).fill_null(False).cast(pl.Boolean).to_numpy().astype(bool)
+            triggered = frame.get_column(cfg.safety_trigger_col)
+            if triggered.null_count():
+                raise ValueError("safety_gate_triggered must not contain null values")
+            if triggered.dtype == pl.Boolean:
+                return triggered.to_numpy().astype(bool)
+            try:
+                numeric = triggered.cast(pl.Float64, strict=True).to_numpy()
+            except Exception as exc:
+                raise ValueError(
+                    "safety_gate_triggered must contain booleans or numeric 0/1 values"
+                ) from exc
+            if not np.isfinite(numeric).all() or not np.isin(numeric, (0.0, 1.0)).all():
+                raise ValueError("safety_gate_triggered must contain only boolean or numeric 0/1 values")
+            return numeric.astype(bool)
         if cfg.safety_passed_col in frame.columns:
-            passed = frame.get_column(cfg.safety_passed_col).fill_null(False).cast(pl.Boolean).to_numpy()
-            return ~passed.astype(bool)
+            passed = frame.get_column(cfg.safety_passed_col)
+            if passed.dtype == pl.Boolean:
+                return ~passed.fill_null(False).to_numpy().astype(bool)
+            try:
+                numeric = passed.cast(pl.Float64, strict=True).fill_null(0.0).to_numpy()
+            except Exception as exc:
+                raise ValueError(
+                    "safety_passed must contain booleans or numeric 0/1 values"
+                ) from exc
+            if not np.isfinite(numeric).all() or not np.isin(numeric, (0.0, 1.0)).all():
+                raise ValueError("safety_passed must contain only boolean or numeric 0/1 values")
+            return ~numeric.astype(bool)
         if cfg.safety_reason_col in frame.columns:
             reasons = frame.get_column(cfg.safety_reason_col).cast(pl.String).fill_null("").to_list()
             return np.array([bool(str(x).strip()) and str(x).strip().lower() not in {"none", "ok", "passed"} for x in reasons])
