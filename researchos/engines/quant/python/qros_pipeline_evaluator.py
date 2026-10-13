@@ -90,9 +90,9 @@ class QROSPipelineEvaluator:
                 raise ValueError("safety_gate_triggered must contain only boolean or numeric 0/1 values")
             return numeric.astype(bool)
         if cfg.safety_passed_col in frame.columns:
-            passed = frame.get_column(cfg.safety_passed_col).fill_null(False)
+            passed = frame.get_column(cfg.safety_passed_col)
             if passed.dtype == pl.Boolean:
-                return ~passed.to_numpy().astype(bool)
+                return ~passed.fill_null(False).to_numpy().astype(bool)
             try:
                 numeric = passed.cast(pl.Float64, strict=True).fill_null(0.0).to_numpy()
             except Exception as exc:
