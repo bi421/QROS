@@ -90,8 +90,18 @@ class QROSPipelineEvaluator:
                 raise ValueError("safety_gate_triggered must contain only boolean or numeric 0/1 values")
             return numeric.astype(bool)
         if cfg.safety_passed_col in frame.columns:
-            passed = frame.get_column(cfg.safety_passed_col).fill_null(False).cast(pl.Boolean).to_numpy()
-            return ~passed.astype(bool)
+            passed = frame.get_column(cfg.safety_passed_col).fill_null(False)
+            if passed.dtype == pl.Boolean:
+                return ~passed.to_numpy().astype(bool)
+            try:
+                numeric = passed.cast(pl.Float64, strict=True).fill_null(0.0).to_numpy()
+            except Exception as exc:
+                raise ValueError(
+                    "safety_passed must contain booleans or numeric 0/1 values"
+                ) from exc
+            if not np.isfinite(numeric).all() or not np.isin(numeric, (0.0, 1.0)).all():
+                raise ValueError("safety_passed must contain only boolean or numeric 0/1 values")
+            return ~numeric.astype(bool)
         if cfg.safety_reason_col in frame.columns:
             reasons = frame.get_column(cfg.safety_reason_col).cast(pl.String).fill_null("").to_list()
             return np.array([bool(str(x).strip()) and str(x).strip().lower() not in {"none", "ok", "passed"} for x in reasons])
