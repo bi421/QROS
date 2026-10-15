@@ -4,8 +4,8 @@ This is a research diagnostic, not a broker simulator. It uses the local MT5
 bar dataset's recorded spread points, enters on the next available bar open,
 exits at the source event's realized_end_1d close, and fails closed on dataset
 identity mismatches. Event-level overlapping returns are reported separately
-from a non-overlapping 1-day holding diagnostic. Commissions, financing, market
-impact, and live execution latency are not modeled.
+from a non-overlapping 1-day holding diagnostic. Generic commission-basis-point
+stress is reported separately from broker-specific costs, which remain unknown.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ DEFAULT_OUTPUT = Path("artifacts/xauusd_m1_edge_cost_audit.json")
 POINT_SIZE = 0.01
 MAX_ENTRY_GAP_SECONDS = 300
 SLIPPAGE_POINTS_PER_SIDE = (0, 1, 2, 5, 10)
+COMMISSION_BPS_ROUND_TRIP = (0, 1, 2, 5, 10)
 
 
 def _time(value: str) -> datetime:
@@ -64,10 +65,22 @@ def _score(
             "win_rate_pct": None,
             "profit_factor": None,
             "compounded_return_pct": None,
+            "max_drawdown_pct": None,
         }
     positive = sum(value for value in returns if value > 0)
     negative = -sum(value for value in returns if value < 0)
     compounded = math.prod(1.0 + value for value in returns) - 1.0 if include_compounding else None
+    max_drawdown_pct: float | None = None
+    if include_compounding:
+        equity = 1.0
+        peak = 1.0
+        max_drawdown = 0.0
+        for value in returns:
+            equity *= 1.0 + value
+            peak = max(peak, equity)
+            if peak > 0.0:
+                max_drawdown = max(max_drawdown, (peak - equity) / peak)
+        max_drawdown_pct = round(max_drawdown * 100.0, 8)
     return {
         "trade_count": len(returns),
         "mean_return_pct": round(sum(returns) / len(returns) * 100.0, 8),
@@ -77,6 +90,7 @@ def _score(
         if negative > 0
         else (None if positive == 0 else "INF"),
         "compounded_return_pct": round(compounded * 100.0, 8) if compounded is not None else None,
+        "max_drawdown_pct": max_drawdown_pct,
     }
 
 
@@ -294,7 +308,11 @@ def audit(
         slip_points: int,
         include_uncertainty: bool = False,
         include_compounding: bool = True,
+        commission_bps_round_trip: int = 0,
     ) -> dict[str, Any]:
+        if commission_bps_round_trip < 0:
+            raise ValueError("commission_bps_round_trip must be non-negative")
+        commission_fraction = commission_bps_round_trip / 10000.0
         signal_returns: list[float] = []
         long_returns: list[float] = []
         short_returns: list[float] = []
@@ -302,12 +320,18 @@ def audit(
         delta_vs_short: list[float] = []
         for item in items:
             signal_ret, long_ret, short_ret = _fill_returns(item, item["direction"], slip_points)
+            # Transparent notional-based approximation; not a substitute for a broker's
+            # contract-specific per-lot commission schedule.
+            signal_ret -= commission_fraction
+            long_ret -= commission_fraction
+            short_ret -= commission_fraction
             signal_returns.append(signal_ret)
             long_returns.append(long_ret)
             short_returns.append(short_ret)
             delta_vs_long.append(signal_ret - long_ret)
             delta_vs_short.append(signal_ret - short_ret)
         return {
+            "commission_bps_round_trip_assumption": commission_bps_round_trip,
             "signal_direction": _score(signal_returns, include_compounding=include_compounding),
             "always_long_baseline": _score(long_returns, include_compounding=include_compounding),
             "always_short_baseline": _score(short_returns, include_compounding=include_compounding),
@@ -364,10 +388,31 @@ def audit(
             {
                 "slippage_points_per_side": slip_points,
                 "spread_source": "observed MT5 bar spread at entry/exit; points × 0.01 USD",
-                "commission_model": "excluded; broker commission not present in source dataset",
+                "commission_model": (
+                    "generic round-trip notional-bps stress; not broker-specific"
+                ),
                 "full_history_overlapping_event_diagnostic": _scenario(
                     rows, slip_points, include_compounding=False
                 ),
+                "full_history_non_overlapping_commission_stress": [
+                    _scenario(
+                        non_overlapping,
+                        slip_points,
+                        commission_bps_round_trip=commission_bps,
+                    )
+                    for commission_bps in COMMISSION_BPS_ROUND_TRIP
+                ],
+                "final_holdout_non_overlapping_commission_stress": [
+                    _scenario(
+                        holdout_non_overlapping,
+                        slip_points,
+                        include_uncertainty=True,
+                        commission_bps_round_trip=commission_bps,
+                    )
+                    for commission_bps in COMMISSION_BPS_ROUND_TRIP
+                ]
+                if holdout_ids is not None
+                else None,
                 "full_history_non_overlapping_1d_diagnostic": _scenario(
                     non_overlapping, slip_points
                 ),
@@ -399,10 +444,18 @@ def audit(
             "entry": "next available M1 bar open after signal timestamp",
             "exit": "source-defined realized_end_1d M1 bar close",
             "direction": "signal direction from event ID / explicit direction field",
-            "costs": "observed entry/exit spread plus deterministic slippage stress per side",
+            "costs": (
+                "observed entry/exit spread plus deterministic slippage stress and "
+                "separate generic round-trip commission-bps assumptions"
+            ),
             "slippage_scenarios_points_per_side": list(SLIPPAGE_POINTS_PER_SIDE),
+            "commission_bps_round_trip_scenarios": list(COMMISSION_BPS_ROUND_TRIP),
+            "commission_assumption": (
+                "basis points of notional deducted once per completed trade; sensitivity "
+                "analysis only, not a broker-specific commission schedule"
+            ),
             "excluded_costs": [
-                "commission",
+                "broker-specific per-lot commission schedule",
                 "financing/swap",
                 "market impact",
                 "latency beyond next-bar entry",
@@ -413,6 +466,7 @@ def audit(
                 "event-level results are not a broker-executable portfolio backtest",
                 "non-overlapping diagnostic is an idealized fixed-horizon event study",
                 "slippage values are stress assumptions, not measured historical fills",
+                "commission bps are generic assumptions, not broker-specific per-lot costs",
                 "always-long/short baselines use the same event timestamps, holding windows, and cost assumptions",
             ],
         },
