@@ -1,4 +1,5 @@
 """Independently audit the XAUUSD M1 OOS calibration artifact."""
+
 from __future__ import annotations
 
 import argparse
@@ -120,8 +121,8 @@ def audit(source_path: Path, result_path: Path, calibration_path: Path) -> dict:
     if not isinstance(source_contract, dict):
         failures.append("invalid source contract")
     else:
-        for key, expected in required_contract.items():
-            if source_contract.get(key) != expected:
+        for key, expected_value in required_contract.items():
+            if source_contract.get(key) != expected_value:
                 failures.append(f"invalid source contract: {key}")
 
     if result_contract != source_contract or calibration_contract != source_contract:
@@ -236,6 +237,9 @@ def audit(source_path: Path, result_path: Path, calibration_path: Path) -> dict:
                 }
             )
 
+        if breakpoints is None:
+            failures.append("calibration breakpoints are missing after refit")
+            continue
         calibrated = _predict(breakpoints, row["probability"])
         raw_scores.append(row["probability"])
         calibrated_scores.append(calibrated)
@@ -263,6 +267,31 @@ def audit(source_path: Path, result_path: Path, calibration_path: Path) -> dict:
         failures.append("raw score differs from independent reconstruction")
     if calibration.get("calibrated_score") != expected_calibrated_score:
         failures.append("calibrated score differs from independent reconstruction")
+    if expected_raw_score is not None and expected_calibrated_score is not None:
+        raw_brier = float(expected_raw_score["brier_score"])
+        calibrated_brier = float(expected_calibrated_score["brier_score"])
+        raw_log_loss = float(expected_raw_score["log_loss"])
+        calibrated_log_loss = float(expected_calibrated_score["log_loss"])
+        if calibrated_brier > raw_brier or calibrated_log_loss > raw_log_loss:
+            expected_scoring_status = "DEGRADED"
+        elif calibrated_brier < raw_brier and calibrated_log_loss < raw_log_loss:
+            expected_scoring_status = "IMPROVED"
+        else:
+            expected_scoring_status = "NO_CLEAR_IMPROVEMENT"
+        expected_assessment = {
+            "status": expected_scoring_status,
+            "brier_delta_calibrated_minus_raw": round(calibrated_brier - raw_brier, 10),
+            "log_loss_delta_calibrated_minus_raw": round(calibrated_log_loss - raw_log_loss, 10),
+            "downstream_use": (
+                "BLOCK_CALIBRATED_PROBABILITIES"
+                if expected_scoring_status != "IMPROVED"
+                else "REQUIRES_SEPARATE_HOLDOUT_REVIEW"
+            ),
+        }
+        if calibration.get("scoring_assessment") != expected_assessment:
+            failures.append(
+                "calibration scoring assessment differs from independent reconstruction"
+            )
     if metadata.get("eligible_oos_predictions") != len(expected):
         failures.append("eligible OOS prediction count mismatch")
     if metadata.get("warmup_excluded_predictions") != warmup_count:

@@ -80,6 +80,18 @@ def test_independent_audit_rejects_tampered_calibration(tmp_path: Path) -> None:
     assert any("independent reconstruction" in failure for failure in report["failures"])
 
 
+def test_independent_audit_rejects_scoring_assessment_tampering(tmp_path: Path) -> None:
+    source, result, calibration = _fixture(tmp_path)
+    data = json.loads(calibration.read_text(encoding="utf-8"))
+    data["scoring_assessment"]["status"] = "DEGRADED"
+    calibration.write_text(json.dumps(data), encoding="utf-8")
+
+    report = audit(source, result, calibration)
+
+    assert report["status"] == "FAIL"
+    assert any("scoring assessment" in failure for failure in report["failures"])
+
+
 def test_independent_audit_rejects_result_sha_tampering(tmp_path: Path) -> None:
     source, result, calibration = _fixture(tmp_path)
     data = json.loads(result.read_text(encoding="utf-8"))

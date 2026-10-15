@@ -7,7 +7,6 @@
 #include <cstdint>
 #include <iterator>
 #include <limits>
-#include <stdexcept>
 #include <vector>
 
 namespace nb = nanobind;
@@ -29,20 +28,20 @@ NB_MODULE(qros_constraint_engine, m) {
          double minimum_probability = 0.0, std::int64_t minimum_samples = 1) {
         const std::size_t n = closes.shape(0);
         const std::size_t count = target_bps.shape(0);
-        if (n < 3) throw std::invalid_argument("closes must contain at least 3 prices");
+        if (n < 3) throw nb::value_error("closes must contain at least 3 prices");
         if (horizons.shape(0) != count || directions.shape(0) != count)
-          throw std::invalid_argument("candidate arrays must have equal lengths");
+          throw nb::value_error("candidate arrays must have equal lengths");
         if (max_unique_horizons == 0)
-          throw std::invalid_argument("max_unique_horizons must be positive");
+          throw nb::value_error("max_unique_horizons must be positive");
         if (!std::isfinite(minimum_probability) || minimum_probability < 0.0 ||
             minimum_probability > 1.0)
-          throw std::invalid_argument("minimum_probability must be in [0, 1]");
+          throw nb::value_error("minimum_probability must be in [0, 1]");
         if (minimum_samples < 1)
-          throw std::invalid_argument("minimum_samples must be positive");
+          throw nb::value_error("minimum_samples must be positive");
 
         for (std::size_t i = 0; i < n; ++i) {
           if (!std::isfinite(closes.data()[i]) || closes.data()[i] <= 0.0)
-            throw std::invalid_argument("closes must be finite and strictly positive");
+            throw nb::value_error("closes must be finite and strictly positive");
         }
 
         std::vector<std::int32_t> unique_horizons;
@@ -54,17 +53,17 @@ NB_MODULE(qros_constraint_engine, m) {
           const double target = target_bps.data()[i];
           const auto direction = directions.data()[i];
           if (h <= 0 || static_cast<std::size_t>(h) >= n - 1)
-            throw std::invalid_argument("candidate horizon must be in [1, candle_count - 2]");
+            throw nb::value_error("candidate horizon must be in [1, candle_count - 2]");
           if (!std::isfinite(target) || target <= 0.0)
-            throw std::invalid_argument("target_bps must be finite and positive");
+            throw nb::value_error("target_bps must be finite and positive");
           if (direction != 1 && direction != -1)
-            throw std::invalid_argument("direction must be +1 (long) or -1 (short)");
+            throw nb::value_error("direction must be +1 (long) or -1 (short)");
           auto it = std::find(unique_horizons.begin(), unique_horizons.end(), h);
           if (it == unique_horizons.end()) {
             unique_horizons.push_back(h);
             candidate_indices_by_horizon.emplace_back();
             if (unique_horizons.size() > max_unique_horizons)
-              throw std::invalid_argument("candidate set exceeds max_unique_horizons; split into bounded batches");
+              throw nb::value_error("candidate set exceeds max_unique_horizons; split into bounded batches");
             it = std::prev(unique_horizons.end());
           }
           const auto horizon_index = static_cast<std::size_t>(it - unique_horizons.begin());
@@ -80,19 +79,24 @@ NB_MODULE(qros_constraint_engine, m) {
           const auto h = unique_horizons[horizon_index];
           std::vector<double> values;
           values.reserve(n - static_cast<std::size_t>(h));
+          bool non_finite_forward_return = false;
           {
             nb::gil_scoped_release release;
             for (std::size_t i = 0; i + static_cast<std::size_t>(h) < n; ++i) {
               const double r = (closes.data()[i + static_cast<std::size_t>(h)] /
                                 closes.data()[i] - 1.0) * 10000.0;
               if (!std::isfinite(r)) {
-                throw std::invalid_argument(
-                    "forward return must be finite for every evaluated horizon");
+                non_finite_forward_return = true;
+                break;
               }
               values.push_back(r);
             }
-            std::sort(values.begin(), values.end());
+            if (!non_finite_forward_return)
+              std::sort(values.begin(), values.end());
           }
+          if (non_finite_forward_return)
+            throw nb::value_error(
+                "forward return must be finite for every evaluated horizon");
 
           for (const auto i : candidate_indices_by_horizon[horizon_index]) {
             const double target = target_bps.data()[i];
