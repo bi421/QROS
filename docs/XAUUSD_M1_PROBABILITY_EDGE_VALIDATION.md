@@ -63,7 +63,7 @@ The following results were computed from the local artifacts bound to these iden
 - Dataset SHA-256: `632950ee767eb8968a00331e6f8da35d3bc73e937bcb3ceb5c1b15f596939da9`
 - Source outcome artifact SHA-256: `8a2ba847da994dc0f570b7d63bdae3ff7d976d87260ff0f533a83b26079843e4`
 - Walk-forward result SHA-256: `e08786bfe8b944823b1f20087e58112fb8d920f394979ecf5fd79d6cc7a49cc2`
-- Cost-audit report SHA-256: `38e030514709532d2fce7ba7be8e8e8603ad7c71d05e5ac9727e27682205a424`
+- Cost-audit report SHA-256: `7d36f60a0a84b937df7f63ae8a66f40459a75e7714fb6775d54c0f4c7d95b4`
 - Calibration artifact SHA-256: `08e88b4abe05dee0e8a8a1123b368e995e8a6a6f167487b222927734b7a041e5`
 - Independent calibration-audit report SHA-256: `88d34dd5110babca6997efe26dc8dfdb88f5399834d351adfaf1592d70ba6dd0`
 - Cost-audit script SHA-256: `fbf68f426659655de19a4e7e18705f3707406f5f45e52ae56023930953e96cfb`
