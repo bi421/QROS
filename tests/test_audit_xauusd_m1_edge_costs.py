@@ -81,6 +81,19 @@ def test_cost_audit_uses_verified_dataset_and_reports_slippage_stress(tmp_path: 
     ]
     assert ten_points < no_slippage
 
+    commission_stress = scenarios[0]["full_history_non_overlapping_commission_stress"]
+    assert [row["commission_bps_round_trip_assumption"] for row in commission_stress] == [
+        0,
+        1,
+        2,
+        5,
+        10,
+    ]
+    zero_commission = commission_stress[0]["signal_direction"]["mean_return_pct"]
+    ten_bps_commission = commission_stress[-1]["signal_direction"]["mean_return_pct"]
+    assert ten_bps_commission < zero_commission
+    assert commission_stress[0]["signal_direction"]["max_drawdown_pct"] is not None
+
 
 def test_cost_audit_binds_final_holdout_to_walkforward_artifact(tmp_path: Path) -> None:
     source, data = _fixture(tmp_path)
