@@ -32,8 +32,13 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${SUPABASE_ACCESS_TOKEN}" || { echo "::error::SUPABASE_ACCESS_TOKEN is not configured"; exit 1; }
+          case "${SUPABASE_ACCESS_TOKEN}" in
+            sbp_*) ;;
+            *) echo "::error::SUPABASE_ACCESS_TOKEN has an unsupported format; configure a Supabase personal access token beginning with sbp_ in the production environment"; exit 1 ;;
+          esac
           test -n "${SUPABASE_DB_PASSWORD}" || { echo "::error::PRODUCTION_DB_PASSWORD is not configured"; exit 1; }
           test -n "${SUPABASE_PROJECT_ID}" || { echo "::error::PRODUCTION_PROJECT_ID is not configured"; exit 1; }
+          test "${SUPABASE_PROJECT_ID}" = "pvhdsngxyoiqhqwujfjt" || { echo "::error::PRODUCTION_PROJECT_ID does not match the documented governed QROS production project ref"; exit 1; }
 
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@afb1b15109756ea5cf9d8985a359d9095235ca2b # v2
