@@ -289,3 +289,25 @@ jobs:
         run: |
           test "$(docker image inspect --format '{{.Config.User}}' qros-api:ci)" = "researchos"
           docker run --rm --entrypoint python qros-api:ci -c "import os, pwd; user = pwd.getpwnam('researchos'); assert os.geteuid() == user.pw_uid and os.geteuid() != 0"
+      - name: Verify SaaS runtime dependencies are installed
+        run: docker run --rm --entrypoint python qros-api:ci -c "import fastapi, uvicorn, supabase"
+      - name: Start app and verify health endpoint
+        run: |
+          set -euo pipefail
+          cleanup() { docker rm -f qros-api-runtime-smoke >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker run -d --name qros-api-runtime-smoke \
+            -p 127.0.0.1:18000:8000 \
+            -e SUPABASE_URL=https://example.supabase.co \
+            -e SUPABASE_SERVICE_ROLE_KEY=smoke-service-role-key \
+            -e SUPABASE_PUBLISHABLE_KEY=smoke-publishable-key \
+            qros-api:ci
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18000/healthz; then
+              echo
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs qros-api-runtime-smoke
+          exit 1
