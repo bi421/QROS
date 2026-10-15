@@ -414,7 +414,7 @@ def audit(
                 if holdout_ids is not None
                 else None,
                 "full_history_non_overlapping_1d_diagnostic": _scenario(
-                    non_overlapping, slip_points
+                    non_overlapping, slip_points, include_uncertainty=True
                 ),
                 "final_holdout_non_overlapping_1d_diagnostic": _scenario(
                     holdout_non_overlapping, slip_points, include_uncertainty=True
