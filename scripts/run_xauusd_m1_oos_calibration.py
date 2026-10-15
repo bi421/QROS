@@ -8,6 +8,7 @@ Calibration is fit with a causal expanding window and periodic refits. Reusing a
 mapping between refits is safe because the mapping was fitted only from outcomes
 that were already realized before the fit timestamp.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -53,12 +54,14 @@ def _pava(rows: list[tuple[float, int]]) -> tuple[tuple[float, float], ...]:
             a, b = blocks[-2], blocks[-1]
             if float(a[3]) / int(a[2]) <= float(b[3]) / int(b[2]):
                 break
-            blocks[-2:] = [[
-                min(float(a[0]), float(b[0])),
-                0.0,
-                int(a[2]) + int(b[2]),
-                float(a[3]) + float(b[3]),
-            ]]
+            blocks[-2:] = [
+                [
+                    min(float(a[0]), float(b[0])),
+                    0.0,
+                    int(a[2]) + int(b[2]),
+                    float(a[3]) + float(b[3]),
+                ]
+            ]
     return tuple(
         (float(block[0]), round(max(0.0, min(1.0, float(block[3]) / int(block[2]))), 12))
         for block in blocks
@@ -160,13 +163,15 @@ def run(
                 raise ValueError(f"Prediction timestamp differs from source: {event_id}")
             if source_row["label"] != int(prediction["label"]):
                 raise ValueError(f"Prediction label differs from source: {event_id}")
-            predictions.append({
-                "event_id": event_id,
-                "timestamp": source_row["timestamp"],
-                "probability": p,
-                "label": source_row["label"],
-                "realized_end": source_row["realized_end"],
-            })
+            predictions.append(
+                {
+                    "event_id": event_id,
+                    "timestamp": source_row["timestamp"],
+                    "probability": p,
+                    "label": source_row["label"],
+                    "realized_end": source_row["realized_end"],
+                }
+            )
             seen.add(event_id)
 
     predictions.sort(key=lambda row: (row["timestamp"], row["event_id"]))
@@ -214,37 +219,66 @@ def run(
             refit_count += 1
             fit_id += 1
             fit_cutoff_timestamp = row["timestamp"]
-            fit_summaries.append({
-                "fit_id": fit_id,
-                "fit_cutoff_timestamp": row["timestamp"].isoformat(),
-                "training_event_count": len(prior),
-                "training_positive_count": sum(item["label"] for item in prior),
-                "training_negative_count": sum(1 - item["label"] for item in prior),
-            })
+            fit_summaries.append(
+                {
+                    "fit_id": fit_id,
+                    "fit_cutoff_timestamp": row["timestamp"].isoformat(),
+                    "training_event_count": len(prior),
+                    "training_positive_count": sum(item["label"] for item in prior),
+                    "training_negative_count": sum(1 - item["label"] for item in prior),
+                }
+            )
 
+        if breakpoints is None:
+            raise RuntimeError("Calibration breakpoints are missing after refit")
         calibrated_probability = _predict(breakpoints, row["probability"])
         raw_eligible.append(row["probability"])
         calibrated.append(calibrated_probability)
         labels.append(row["label"])
-        records.append({
-            "event_id": row["event_id"],
-            "timestamp": row["timestamp"].isoformat(),
-            "raw_probability": round(row["probability"], 12),
-            "calibrated_probability": round(calibrated_probability, 12),
-            "label": row["label"],
-            "calibration_fit_id": fit_id,
-            "calibration_fit_cutoff_timestamp": fit_cutoff_timestamp.isoformat() if fit_cutoff_timestamp else None,
-            "calibration_training_event_count": len(prior),
-        })
+        records.append(
+            {
+                "event_id": row["event_id"],
+                "timestamp": row["timestamp"].isoformat(),
+                "raw_probability": round(row["probability"], 12),
+                "calibrated_probability": round(calibrated_probability, 12),
+                "label": row["label"],
+                "calibration_fit_id": fit_id,
+                "calibration_fit_cutoff_timestamp": fit_cutoff_timestamp.isoformat()
+                if fit_cutoff_timestamp
+                else None,
+                "calibration_training_event_count": len(prior),
+            }
+        )
 
     if len(records) < 1:
         raise ValueError("No OOS predictions have sufficient leakage-safe calibration history")
 
+    raw_score = _score(raw_eligible, labels)
+    calibrated_score = _score(calibrated, labels)
+    if (
+        calibrated_score["brier_score"] > raw_score["brier_score"]
+        or calibrated_score["log_loss"] > raw_score["log_loss"]
+    ):
+        scoring_status = "DEGRADED"
+    elif (
+        calibrated_score["brier_score"] < raw_score["brier_score"]
+        and calibrated_score["log_loss"] < raw_score["log_loss"]
+    ):
+        scoring_status = "IMPROVED"
+    else:
+        scoring_status = "NO_CLEAR_IMPROVEMENT"
+
     output = {
         "stage": "M1_OOS_ISOTONIC_CALIBRATION",
         "scientific_status": "OOS_CALIBRATION_ONLY_NO_EDGE_CLAIM",
-        "source_artifact": {"path": str(source_path), "sha256": hashlib.sha256(source_raw).hexdigest()},
-        "result_artifact": {"path": str(result_path), "sha256": hashlib.sha256(result_raw).hexdigest()},
+        "source_artifact": {
+            "path": str(source_path),
+            "sha256": hashlib.sha256(source_raw).hexdigest(),
+        },
+        "result_artifact": {
+            "path": str(result_path),
+            "sha256": hashlib.sha256(result_raw).hexdigest(),
+        },
         "contract": result_contract,
         "calibration": {
             "method": "isotonic_pava",
@@ -260,8 +294,22 @@ def run(
             "refit_count": refit_count,
             "fit_summaries": fit_summaries,
         },
-        "raw_score": _score(raw_eligible, labels),
-        "calibrated_score": _score(calibrated, labels),
+        "raw_score": raw_score,
+        "calibrated_score": calibrated_score,
+        "scoring_assessment": {
+            "status": scoring_status,
+            "brier_delta_calibrated_minus_raw": round(
+                float(calibrated_score["brier_score"]) - float(raw_score["brier_score"]), 10
+            ),
+            "log_loss_delta_calibrated_minus_raw": round(
+                float(calibrated_score["log_loss"]) - float(raw_score["log_loss"]), 10
+            ),
+            "downstream_use": (
+                "BLOCK_CALIBRATED_PROBABILITIES"
+                if scoring_status != "IMPROVED"
+                else "REQUIRES_SEPARATE_HOLDOUT_REVIEW"
+            ),
+        },
         "predictions": records,
     }
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -273,7 +321,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("source", type=Path)
     parser.add_argument("result", type=Path)
-    parser.add_argument("--output", type=Path, default=Path("artifacts/xauusd_m1_oos_calibration.json"))
+    parser.add_argument(
+        "--output", type=Path, default=Path("artifacts/xauusd_m1_oos_calibration.json")
+    )
     parser.add_argument("--refit-interval", type=int, default=REFIT_INTERVAL)
     args = parser.parse_args()
     output = run(args.source, args.result, args.output, args.refit_interval)

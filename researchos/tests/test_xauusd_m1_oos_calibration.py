@@ -60,12 +60,14 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path]:
         "dataset": source["dataset"],
         "folds": [{"predictions": predictions}],
         "holdout": {
-            "predictions": [{
-                "event_id": "holdout-only",
-                "timestamp": "2025-02-01T00:00:00+00:00",
-                "probability": 0.99,
-                "label": 0,
-            }],
+            "predictions": [
+                {
+                    "event_id": "holdout-only",
+                    "timestamp": "2025-02-01T00:00:00+00:00",
+                    "probability": 0.99,
+                    "label": 0,
+                }
+            ],
         },
     }
     result_path = tmp_path / "result.json"
@@ -90,6 +92,8 @@ def test_oos_calibration_uses_prior_realized_outcomes_only(tmp_path: Path) -> No
     source, result = _fixture(tmp_path)
     output = run(source, result, tmp_path / "calibrated.json")
     assert output["scientific_status"] == "OOS_CALIBRATION_ONLY_NO_EDGE_CLAIM"
+    assert output["scoring_assessment"]["status"] == "IMPROVED"
+    assert output["scoring_assessment"]["downstream_use"] == "REQUIRES_SEPARATE_HOLDOUT_REVIEW"
     assert len(output["predictions"]) == 2
     assert output["calibration"]["warmup_excluded_predictions"] == 10
     assert output["calibration"]["eligible_oos_predictions"] == 2
