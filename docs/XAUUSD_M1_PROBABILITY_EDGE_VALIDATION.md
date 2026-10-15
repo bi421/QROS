@@ -23,7 +23,7 @@ python scripts/audit_xauusd_m1_walkforward.py artifacts/xauusd_m1_walkforward.js
 python scripts/run_xauusd_m1_oos_calibration.py artifacts/xauusd_m1_real_events_outcomes.json artifacts/xauusd_m1_walkforward.json --output artifacts/xauusd_m1_oos_calibration_rerun.json
 python scripts/audit_xauusd_m1_oos_calibration.py artifacts/xauusd_m1_real_events_outcomes.json artifacts/xauusd_m1_walkforward.json artifacts/xauusd_m1_oos_calibration_rerun.json --output artifacts/xauusd_m1_oos_calibration_audit_rerun.json
 python scripts/audit_xauusd_m1_probability_skill.py --output artifacts/xauusd_m1_probability_skill_audit.json
-python scripts/audit_xauusd_m1_edge_costs.py --output artifacts/xauusd_m1_edge_cost_audit.json
+python scripts/audit_xauusd_m1_edge_costs.py --source artifacts/xauusd_m1_real_events_outcomes.json --data data/mt5/xauusd/XAUUSD_M1_2021_2025_MT5.csv --walkforward artifacts/xauusd_m1_walkforward.json --output artifacts/xauusd_m1_edge_cost_audit_commission_rerun.json
 python -m pytest tests/test_audit_xauusd_m1_probability_skill.py tests/test_audit_xauusd_m1_edge_costs.py researchos/tests/test_xauusd_m1_oos_calibration.py researchos/tests/test_xauusd_m1_oos_calibration_audit.py tests/test_audit_xauusd_m1_walkforward.py -q
 ```
 
@@ -56,17 +56,17 @@ Otherwise report **EDGE NOT PROVEN**. A failed economic test is a valid result a
 
 ## Observed local evidence run — 2026-10-15
 
-**Reproduction note:** the numeric results in this section are from the previously computed local cost-audit artifact and do not include the newly added generic commission-bps sensitivity grid. The new grid must be recomputed against the exact local CSV and source artifacts before any commission-stress result is reported. CI tests use synthetic fixtures and do not recreate the full local-market-data audit.
+**Reproduction note:** the commission sensitivity grid was recomputed on 2026-10-15 against the exact local CSV, source outcome artifact, and walk-forward artifact. The complete JSON result is recorded at artifacts/xauusd_m1_edge_cost_audit_commission_rerun.json (SHA-256 below). CI tests use synthetic fixtures and do not recreate the full local-market-data audit.
 
 The following results were computed from the local artifacts bound to these identities:
 
 - Dataset SHA-256: `632950ee767eb8968a00331e6f8da35d3bc73e937bcb3ceb5c1b15f596939da9`
 - Source outcome artifact SHA-256: `8a2ba847da994dc0f570b7d63bdae3ff7d976d87260ff0f533a83b26079843e4`
 - Walk-forward result SHA-256: `e08786bfe8b944823b1f20087e58112fb8d920f394979ecf5fd79d6cc7a49cc2`
-- Cost-audit report SHA-256: `17c5b2ec6a15340cca654be49760331b0efbb6893b539a858838cd46044b220c`
+- Cost-audit report SHA-256: `38e030514709532d2fce7ba7be8e8e8603ad7c71d05e5ac9727e27682205a424`
 - Calibration artifact SHA-256: `08e88b4abe05dee0e8a8a1123b368e995e8a6a6f167487b222927734b7a041e5`
 - Independent calibration-audit report SHA-256: `88d34dd5110babca6997efe26dc8dfdb88f5399834d351adfaf1592d70ba6dd0`
-- Cost-audit script SHA-256: `aad98a46590705c65f2f45c69c1d99d93c3d79c622989472801ed45ad778ad85`
+- Cost-audit script SHA-256: `fbf68f426659655de19a4e7e18705f3707406f5f45e52ae56023930953e96cfb`
 - Calibration script SHA-256: `036705a042c523802139eddb3b587b0ff8a076444c43ab22da3e65e30a34c46a`
 - Independent calibration-audit script SHA-256: `22f50889e00436e1b8865735c9d893854c4b9d6ef78fe04790453f8c54684aa1`
 
@@ -91,6 +91,8 @@ The new cost audit verifies the dataset SHA before calculation, uses observed en
 - Compounded returns are deliberately omitted from overlapping-event diagnostics; overlapping event returns are not a valid portfolio equity curve.
 - At 0 slippage points per side, signal mean return was **0.5691%** per event versus **0.1871%** for always-long on the same timestamps. Paired mean difference: **+38.19 bps**, bootstrap 95% interval **−6.13 to +107.69 bps**.
 - At 10 slippage points per side, signal mean return was **0.5644%** versus **0.1824%** always-long; the paired interval still includes zero.
+- At zero slippage, applying a generic **5 bps round-trip commission** reduced the final-holdout signal mean to **0.5191%** per trade; at **10 bps**, it was **0.4691%**. These holdout point estimates remain uncertain: the paired interval versus always-long stays **−6.13 to +107.69 bps** across the generic commission grid.
+- The full report covers **25 combinations** (five slippage assumptions × five commission assumptions) and includes non-overlapping drawdown diagnostics. Commission assumptions are not broker-specific fees.
 - The interval is a deterministic IID bootstrap and is **not adjusted for serial dependence**. Only 26 non-overlapping holdout trades are available. Broker commission, swap/financing, market impact, and measured live slippage are not included.
 
 ### Full-history directional baseline check
@@ -99,6 +101,7 @@ The economic result does not generalize cleanly from the final holdout to the fu
 
 - Across **24,826 overlapping event diagnostics**, the signal averaged **−0.00444%** per event versus **+0.06161%** for always-long at zero assumed slippage; signal minus always-long was **−6.61 bps/event**. These overlapping returns are not a portfolio curve.
 - Across **1,289 non-overlapping fixed-horizon events**, the signal averaged **+0.04438%** versus **+0.05028%** for always-long; signal minus always-long was **−0.59 bps/event**.
+- At zero slippage, **5 bps round-trip commission** reduced the full-history signal mean to **−0.00562%** per event (always-long: **+0.00028%**); at **10 bps**, the signal mean was **−0.05562%** (always-long: **−0.04972%**). This sensitivity further fails to establish an economic edge; these are generic assumptions, not a broker fee quote.
 - The final holdout's 26 non-overlapping events gave a positive point estimate (**+38.19 bps/event**) but the IID bootstrap 95% interval was **−6.13 to +107.69 bps**. It includes zero and does not account for temporal dependence.
 - The 0/1/2/5/10-point slippage stress is paired with a separate 0/1/2/5/10-bps round-trip commission sensitivity. Commission bps are generic assumptions, not a broker-specific schedule; swap/financing, market impact, and measured live fills remain excluded. A complete net-execution edge is therefore not established.
 
