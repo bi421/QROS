@@ -23,6 +23,9 @@ jobs:
           QROS_PRODUCTION_BASE_URL: ${{ secrets.QROS_PRODUCTION_BASE_URL }}
           QROS_JWT: ${{ secrets.QROS_STAGING_JWT }}
           QROS_ISOLATION_JWT: ${{ secrets.QROS_STAGING_ISOLATION_JWT }}
+          QROS_STAGING_SUPABASE_URL: ${{ secrets.QROS_STAGING_SUPABASE_URL }}
+          QROS_PRODUCTION_SUPABASE_URL: ${{ secrets.QROS_PRODUCTION_SUPABASE_URL }}
+          QROS_STAGING_SUPABASE_ANON_KEY: ${{ secrets.QROS_STAGING_SUPABASE_ANON_KEY }}
         shell: bash
         run: |
           set -euo pipefail
@@ -55,12 +58,35 @@ jobs:
           PY
           test -n "${QROS_JWT}" || { echo "QROS_STAGING_JWT is required"; exit 1; }
           test -n "${QROS_ISOLATION_JWT}" || { echo "QROS_STAGING_ISOLATION_JWT is required for the tenant-isolation gate"; exit 1; }
+          test -n "${QROS_STAGING_SUPABASE_URL}" || { echo "QROS_STAGING_SUPABASE_URL is required for direct Storage isolation verification"; exit 1; }
+          test -n "${QROS_PRODUCTION_SUPABASE_URL}" || { echo "QROS_PRODUCTION_SUPABASE_URL is required to prevent targeting production Storage"; exit 1; }
+          test -n "${QROS_STAGING_SUPABASE_ANON_KEY}" || { echo "QROS_STAGING_SUPABASE_ANON_KEY is required for authenticated Storage verification"; exit 1; }
+          python3 - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          staging = urlparse(os.environ["QROS_STAGING_SUPABASE_URL"].strip())
+          production = urlparse(os.environ["QROS_PRODUCTION_SUPABASE_URL"].strip())
+          if staging.scheme != "https" or not staging.hostname:
+              raise SystemExit("::error::QROS_STAGING_SUPABASE_URL must be an HTTPS URL")
+          if production.scheme != "https" or not production.hostname:
+              raise SystemExit("::error::QROS_PRODUCTION_SUPABASE_URL must be an HTTPS URL")
+          try:
+              staging_host = staging.hostname.rstrip(".").encode("idna").decode("ascii").lower()
+              production_host = production.hostname.rstrip(".").encode("idna").decode("ascii").lower()
+          except UnicodeError as exc:
+              raise SystemExit("::error::Supabase hostname is invalid") from exc
+          if staging_host == production_host:
+              raise SystemExit("::error::Staging Storage gate must not target the production Supabase host")
+          print("staging_supabase_host_differs_from_production=true")
+          PY
 
       - name: Execute Golden Path
         env:
           QROS_BASE_URL: ${{ secrets.QROS_STAGING_BASE_URL }}
           QROS_JWT: ${{ secrets.QROS_STAGING_JWT }}
           QROS_ISOLATION_JWT: ${{ secrets.QROS_STAGING_ISOLATION_JWT }}
+          QROS_STAGING_SUPABASE_URL: ${{ secrets.QROS_STAGING_SUPABASE_URL }}
+          QROS_STAGING_SUPABASE_ANON_KEY: ${{ secrets.QROS_STAGING_SUPABASE_ANON_KEY }}
         shell: bash
         run: |
           set -euo pipefail
@@ -123,12 +149,37 @@ jobs:
             echo "actual=${version_sha}"
             exit 1
           }
+          storage_path="$(jq -er '.version.storage_path' "${work}/dataset.json")"
+          expected_storage_path="tenant/${workspace_id}/datasets/${expected_sha}/1/"
+          test "${storage_path}" = "${expected_storage_path}" || {
+            echo "dataset storage path is not the canonical workspace/content-addressed path"
+            exit 1
+          }
 
           versions_status="$(call GET "${base}/v1/datasets/${dataset_id}/versions" "${work}/versions.json")"
           test "${versions_status}" = "200" || { echo "GET dataset versions returned HTTP ${versions_status}"; cat "${work}/versions.json"; exit 1; }
           test "$(jq -er '(.data // .) | length' "${work}/versions.json")" = "1"
           listed_sha="$(jq -er '(.data // .)[0].content_sha256' "${work}/versions.json")"
           test "${listed_sha}" = "${expected_sha}" || { echo "listed dataset hash mismatch"; exit 1; }
+
+          echo "3b/13 direct private Storage access: owner allowed, other workspace denied"
+          storage_url="${QROS_STAGING_SUPABASE_URL%/}/storage/v1/object/authenticated/qros-datasets/${storage_path}"
+          storage_owner_status="$(curl --silent --show-error --retry 2 --retry-delay 2 \
+            -o "${work}/storage-owner.bin" -w '%{http_code}' \
+            -H "apikey: ${QROS_STAGING_SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${QROS_JWT}" "${storage_url}")"
+          test "${storage_owner_status}" = "200" || { echo "owner Storage read returned HTTP ${storage_owner_status}"; exit 1; }
+          storage_owner_sha="$(sha256sum "${work}/storage-owner.bin" | cut -d' ' -f1)"
+          test "${storage_owner_sha}" = "${expected_sha}" || { echo "owner Storage download hash mismatch"; exit 1; }
+          storage_other_status="$(curl --silent --show-error --retry 2 --retry-delay 2 \
+            -o "${work}/storage-other.bin" -w '%{http_code}' \
+            -H "apikey: ${QROS_STAGING_SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${QROS_ISOLATION_JWT}" "${storage_url}")"
+          case "${storage_other_status}" in
+            200|206) echo "::error::cross-workspace Storage read unexpectedly succeeded"; exit 1 ;;
+            400|401|403|404) echo "cross_workspace_storage_denied_http=${storage_other_status}" ;;
+            *) echo "unexpected cross-workspace Storage response HTTP ${storage_other_status}"; exit 1 ;;
+          esac
 
           echo "4/13 tenant boundary for dataset"
           other_status="$(curl --silent --show-error --retry 2 --retry-delay 2 \
@@ -267,6 +318,10 @@ jobs:
             "dataset_id": "${dataset_id}",
             "dataset_version_id": "${version_id}",
             "dataset_sha256": "${expected_sha}",
+            "storage": {
+              "owner_read": "verified_sha256_match",
+              "cross_workspace_read": "verified_denied_http_${storage_other_status}"
+            },
             "claim_id": "${claim_id}",
             "plan_hash": "${plan_hash}",
             "research_run_id": "${run_id}",
@@ -279,7 +334,8 @@ jobs:
               "claim": "verified_404",
               "research_run": "verified_404",
               "result": "verified_404",
-              "evidence": "verified_empty"
+              "evidence": "verified_empty",
+              "private_storage": "verified_denied"
             }
           }
           EOF
@@ -294,4 +350,3 @@ jobs:
           name: staging-golden-path-evidence-${{ github.sha }}
           path: golden_path_evidence.json
           if-no-files-found: error
-
