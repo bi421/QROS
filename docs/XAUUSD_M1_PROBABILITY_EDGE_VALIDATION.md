@@ -22,8 +22,9 @@ Run from repository root with the configured Python environment:
 python scripts/audit_xauusd_m1_walkforward.py artifacts/xauusd_m1_walkforward.json
 python scripts/run_xauusd_m1_oos_calibration.py artifacts/xauusd_m1_real_events_outcomes.json artifacts/xauusd_m1_walkforward.json --output artifacts/xauusd_m1_oos_calibration_rerun.json
 python scripts/audit_xauusd_m1_oos_calibration.py artifacts/xauusd_m1_real_events_outcomes.json artifacts/xauusd_m1_walkforward.json artifacts/xauusd_m1_oos_calibration_rerun.json --output artifacts/xauusd_m1_oos_calibration_audit_rerun.json
+python scripts/audit_xauusd_m1_probability_skill.py --output artifacts/xauusd_m1_probability_skill_audit.json
 python scripts/audit_xauusd_m1_edge_costs.py --output artifacts/xauusd_m1_edge_cost_audit.json
-python -m pytest tests/test_audit_xauusd_m1_edge_costs.py -q
+python -m pytest tests/test_audit_xauusd_m1_probability_skill.py tests/test_audit_xauusd_m1_edge_costs.py researchos/tests/test_xauusd_m1_oos_calibration.py researchos/tests/test_xauusd_m1_oos_calibration_audit.py tests/test_audit_xauusd_m1_walkforward.py -q
 ```
 
 The data file is local research input and must not be committed. The cost audit verifies the raw CSV SHA-256 against the source artifact before calculating results.
@@ -73,6 +74,10 @@ The following results were computed from the local artifacts bound to these iden
 - Walk-forward OOS model: Brier **0.2489701**, log loss **0.6910857**.
 - Walk-forward chronological baseline: Brier **0.2500046**, log loss **0.6931564**.
 - Final holdout (500 events): model Brier **0.2421406**, log loss **0.6774056**; baseline Brier **0.2500087**, log loss **0.6931645**.
+- A reproducible probability-skill audit uses a circular moving-block bootstrap over UTC days (1/3/5-day blocks; 5,000 replicates per length). On 22,000 walk-forward validation predictions, model-minus-baseline Brier delta was **−0.0010345** and log-loss delta **−0.0020707**; all three 95% block-bootstrap intervals were below zero. On the 500-event final holdout, Brier delta was **−0.0078681** and log-loss delta **−0.0157589**, but all 1/3/5-day block-bootstrap intervals included zero. The holdout improvement is therefore not statistically established.
+- Raw reliability bins (21,974 causal-calibration OOS predictions) had 10,986 predictions in [0.4, 0.5) with mean predicted **0.4832** vs observed positive rate **0.4674**, and 10,988 in [0.5, 0.6) with mean predicted **0.5184** vs observed rate **0.5339**. The raw probability stream is tightly clustered around 0.5 and has limited resolution.
+- The isotonic calibration produced extreme bins that were poorly supported: the [0.0, 0.1) bin had 132 predictions with observed positive rate **0.6061** despite mean calibrated probability **0.0769**; the [0.9, 1.0] bin had 131 predictions with observed positive rate **0.4046** despite mean calibrated probability **0.9231**. This is consistent with the degraded Brier/log-loss scores; calibrated outputs remain blocked.
+- Probability skill audit SHA-256: `33c815de678ff2871e6fd5b6b7375ba802be1adf4c3e70eb36b62f9b894acfa8`.
 - Causal isotonic calibration was independently audited against the current result SHA. It **degraded** the proper scores: raw Brier **0.2489784** → calibrated **0.2523406**; raw log loss **0.6911023** → calibrated **0.7020845**. The calibration artifact now explicitly reports `DEGRADED` and `BLOCK_CALIBRATED_PROBABILITIES`. Do not consume those calibrated probabilities downstream.
 
 ### Spread/slippage diagnostic
@@ -86,17 +91,23 @@ The new cost audit verifies the dataset SHA before calculation, uses observed en
 - At 10 slippage points per side, signal mean return was **0.5644%** versus **0.1824%** always-long; the paired interval still includes zero.
 - The interval is a deterministic IID bootstrap and is **not adjusted for serial dependence**. Only 26 non-overlapping holdout trades are available. Broker commission, swap/financing, market impact, and measured live slippage are not included.
 
-### Decision
+### Full-history directional baseline check
 
-**Trading edge: NOT PROVEN.** The point estimate is positive against the always-long benchmark in this small retrospective holdout diagnostic, but its uncertainty interval includes zero, two of 500 holdout events lack cost inputs, and full net execution costs are incomplete. The observed probability calibration is explicitly rejected for downstream use. This result is a reason to collect a new untouched holdout and complete a commission-inclusive portfolio simulation—not a reason to tune the current holdout.
+The economic result does not generalize cleanly from the final holdout to the full historical event set:
 
-### Local implementation verification
+- Across **24,826 overlapping event diagnostics**, the signal averaged **−0.00444%** per event versus **+0.06161%** for always-long at zero assumed slippage; signal minus always-long was **−6.61 bps/event**. These overlapping returns are not a portfolio curve.
+- Across **1,289 non-overlapping fixed-horizon events**, the signal averaged **+0.04438%** versus **+0.05028%** for always-long; signal minus always-long was **−0.59 bps/event**.
+- The final holdout's 26 non-overlapping events gave a positive point estimate (**+38.19 bps/event**) but the IID bootstrap 95% interval was **−6.13 to +107.69 bps**. It includes zero and does not account for temporal dependence.
+- The 0/1/2/5/10-point slippage stress runs do not include commission, swap/financing, market impact, or measured live fills. A complete net-execution edge is therefore not established.
 
-- C++ engine full build: `cmake --build .qros-build-native --config Release --target ALL_BUILD` — exit code 0.
-- Constraint-first C++ binding rebuild after fail-closed exception fix — exit code 0; constraint-first tests **12 passed**.
-- Native quant integration/regression suite: **142 passed, 2 skipped**.
-- Probability calibration, independent audit, walk-forward audit, and cost-audit tests: **20 passed**.
-- Full configured local Python suite with the native backend import path set: **4,398 passed, 19 skipped**.
-- Targeted Ruff check and format check passed; targeted mypy returned `Success: no issues found in 3 source files`.
+**Trading edge: NOT PROVEN.** The final holdout point estimate is not enough: the interval includes zero, two holdout events lack cost inputs, the all-history signal underperforms the always-long baseline, and the calibrated probabilities worsen Brier and log loss. Do not enable the degraded calibration output or describe this strategy as profitable. The next valid economic test needs a pre-registered future holdout and commission-inclusive, non-overlapping portfolio accounting. Do not tune on the existing holdout.
 
-These are local Windows/Python 3.12 results. GitHub CI for the new commit must still pass before the change is considered merged or release-ready.
+### Verification and limitations
+
+- Walk-forward structural audit: **PASS** — 44 folds, 22,000 unique OOS validation events, and 500 final-holdout predictions.
+- Independent calibration audit: **PASS** for source/result binding and score reconstruction; calibration quality itself is **DEGRADED** (Brier 0.2489784 → 0.2523406; log loss 0.6911023 → 0.7020845).
+- Focused probability-skill, calibration, walk-forward, and cost tests: **25 passed**. Targeted Ruff and format checks passed; targeted mypy returned `Success: no issues found in 1 source file` for the new probability-skill audit.
+- GitHub CI at exact SHA `270d0ae92fd37c5749f180b6c201eb2b90e5bfee` completed successfully, including the C++ quant backend build, Python 3.11/3.12 tests, and full configured test suite with coverage: [CI run 38726553677](https://github.com/bi421/QROS/actions/runs/38726553677).
+- A separate full local pytest run in the current Windows shell produced **4,233 passed, 3 failed, 90 errors, 79 skipped** because the C++ engine was not active in that test import context; C++ integration tests correctly refused to fall back to Python. This local run is **not** claimed as a pass. The exact-SHA GitHub CI run above is green.
+
+CI green verifies code/test integration, not trading profitability. Probability-score uncertainty is now reported with 1/3/5-day temporal block-bootstrap diagnostics and reliability bins; the final-holdout intervals still include zero. Live measured execution costs and a commission-inclusive portfolio backtest remain unproven.
