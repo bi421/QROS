@@ -34,10 +34,10 @@ The data file is local research input and must not be committed. The cost audit 
 - A walk-forward audit passing proves structural and arithmetic invariants for the artifact, not a market edge.
 - Brier/log-loss improvement over the chronological baseline is evidence about probability quality, not trade profitability.
 - If calibration worsens proper scoring rules, the calibrated probability must not replace the raw probability in downstream decisions.
-- Cost results include the observed MT5 spread field (in points) at entry/exit and stress slippage of 0, 1, 2, 5, and 10 points per side. Slippage values are assumptions, not measured historical fills.
+- Cost results include the observed MT5 spread field (in points) at entry/exit and stress slippage of 0, 1, 2, 5, and 10 points per side. Generic round-trip commission assumptions of 0, 1, 2, 5, and 10 basis points of notional are also reported separately. Neither stress grid is a broker quote or measured fill cost.
 - Entry is the next available M1 bar open after the signal; exit is the source-defined realized 1-day endpoint close. Entries with a gap greater than five minutes are excluded.
 - Event-level observations may overlap. They are diagnostics, not a deployable equity curve. The non-overlapping diagnostic only accepts the next event after the previous event's realized endpoint; it is still an idealized fixed-horizon event study.
-- Commissions, swaps/financing, market impact, and execution latency beyond next-bar entry are not included. Their absence prevents a complete net-profit claim.
+- The cost audit now subtracts a generic commission-bps stress from each completed trade and reports maximum drawdown for the idealized non-overlapping compounded sequence. These bps are not mapped to a broker's per-lot schedule; swaps/financing, market impact, and execution latency beyond next-bar entry remain excluded. The drawdown is a diagnostic at implicit 100% equity allocation per trade, not a recommended sizing rule or broker-executable portfolio simulation.
 - The final holdout must remain untouched while selecting features, thresholds, calibration methods, and cost assumptions. Any post-holdout tuning requires a new future holdout.
 
 ## Acceptance gate
@@ -98,9 +98,9 @@ The economic result does not generalize cleanly from the final holdout to the fu
 - Across **24,826 overlapping event diagnostics**, the signal averaged **−0.00444%** per event versus **+0.06161%** for always-long at zero assumed slippage; signal minus always-long was **−6.61 bps/event**. These overlapping returns are not a portfolio curve.
 - Across **1,289 non-overlapping fixed-horizon events**, the signal averaged **+0.04438%** versus **+0.05028%** for always-long; signal minus always-long was **−0.59 bps/event**.
 - The final holdout's 26 non-overlapping events gave a positive point estimate (**+38.19 bps/event**) but the IID bootstrap 95% interval was **−6.13 to +107.69 bps**. It includes zero and does not account for temporal dependence.
-- The 0/1/2/5/10-point slippage stress runs do not include commission, swap/financing, market impact, or measured live fills. A complete net-execution edge is therefore not established.
+- The 0/1/2/5/10-point slippage stress is paired with a separate 0/1/2/5/10-bps round-trip commission sensitivity. Commission bps are generic assumptions, not a broker-specific schedule; swap/financing, market impact, and measured live fills remain excluded. A complete net-execution edge is therefore not established.
 
-**Trading edge: NOT PROVEN.** The final holdout point estimate is not enough: the interval includes zero, two holdout events lack cost inputs, the all-history signal underperforms the always-long baseline, and the calibrated probabilities worsen Brier and log loss. Do not enable the degraded calibration output or describe this strategy as profitable. The next valid economic test needs a pre-registered future holdout and commission-inclusive, non-overlapping portfolio accounting. Do not tune on the existing holdout.
+**Trading edge: NOT PROVEN.** The final holdout point estimate is not enough: the interval includes zero, two holdout events lack cost inputs, the all-history signal underperforms the always-long baseline, and the calibrated probabilities worsen Brier and log loss. The cost audit now provides generic commission-bps sensitivity and drawdown diagnostics, but it still does not reproduce a broker's contract-specific commission schedule or include swaps, market impact, and measured fills. Do not enable the degraded calibration output or describe this strategy as profitable. The next valid economic test needs a pre-registered future holdout and broker-specific, commission-inclusive, non-overlapping portfolio accounting. Do not tune on the existing holdout.
 
 ### Verification and limitations
 
