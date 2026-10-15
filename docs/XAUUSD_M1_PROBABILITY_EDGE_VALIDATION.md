@@ -56,6 +56,8 @@ Otherwise report **EDGE NOT PROVEN**. A failed economic test is a valid result a
 
 ## Observed local evidence run — 2026-10-15
 
+**Reproduction note:** the numeric results in this section are from the previously computed local cost-audit artifact and do not include the newly added generic commission-bps sensitivity grid. The new grid must be recomputed against the exact local CSV and source artifacts before any commission-stress result is reported. CI tests use synthetic fixtures and do not recreate the full local-market-data audit.
+
 The following results were computed from the local artifacts bound to these identities:
 
 - Dataset SHA-256: `632950ee767eb8968a00331e6f8da35d3bc73e937bcb3ceb5c1b15f596939da9`
