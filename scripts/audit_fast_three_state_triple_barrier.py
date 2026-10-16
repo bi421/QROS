@@ -238,7 +238,7 @@ def main():
                 "limitations": [
                     "offline diagnostic only; classifier output is not a probability",
                     "no costs, slippage, confidence intervals, Brier score, LogLoss, or IC",
-                    "Triple Barrier labels are target definitions, not predictors; current 16-bar target may not match 32-bar close-only regime horizon",
+                    "Triple Barrier labels are target definitions, not predictors; interpret results only against a predeclared horizon and barrier specification",
                     "not evidence of profitability",
                 ],
             },
