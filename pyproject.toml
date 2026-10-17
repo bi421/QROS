@@ -86,6 +86,7 @@ researchos-health = "scripts.final_health_check:main"
 qros-worker = "researchos.saas.worker_runtime:main"
 qros-audit-edge = "scripts.audit_edge_validation_suite:main"
 qros-purged-cpcv = "scripts.run_combinatorial_purged_cv:main"
+qros = "scripts.qros_cli:main"
 
 [project.urls]
 Homepage = "https://github.com/bi421/QROS"
