@@ -132,6 +132,8 @@ def test_grid_fails_closed_without_verified_cost_model() -> None:
     assert report["cost_model"]["verified"] is False
     assert all(item["net_expectancy"] is None for item in report["candidates"])
     assert len(report["paired_directional_comparisons"]) == 1
+    assert report["paired_comparison_summary"]["comparison_count"] == 1
+    assert report["paired_comparison_summary"]["interval_basis"] == "GROSS_DIAGNOSTIC_ONLY"
     paired = report["paired_directional_comparisons"][0]
     assert paired["status"] == "UNVERIFIED_COSTS"
     assert paired["net_expectancy_difference_follow_minus_reverse"] is None

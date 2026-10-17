@@ -454,6 +454,37 @@ def run_grid(
             item["status"] = "REVERSE_SIGNAL_BETTER_REQUIRES_INDEPENDENT_CONFIRMATION"
         elif isinstance(lower_diff, (int, float)) and isinstance(upper_diff, (int, float)) and lower_diff <= 0 <= upper_diff:
             item["status"] = "INCONCLUSIVE"
+    paired_status_counts = {
+        status: sum(item.get("status") == status for item in paired_comparisons)
+        for status in sorted({str(item.get("status")) for item in paired_comparisons})
+    }
+    paired_deltas = [
+        item for item in paired_comparisons
+        if isinstance(item.get("gross_expectancy_difference_follow_minus_reverse"), (int, float))
+    ]
+    interval_lower_key = "ci_lower" if costs_verified else "gross_ci_lower_diagnostic_only"
+    interval_upper_key = "ci_upper" if costs_verified else "gross_ci_upper_diagnostic_only"
+    paired_interval_rows = [
+        item for item in paired_deltas
+        if isinstance(item.get(interval_lower_key), (int, float))
+        and isinstance(item.get(interval_upper_key), (int, float))
+    ]
+    paired_comparison_summary = {
+        "comparison_count": len(paired_comparisons),
+        "status_counts": paired_status_counts,
+        "follow_minus_reverse_gross_positive": sum(
+            item["gross_expectancy_difference_follow_minus_reverse"] > 0 for item in paired_deltas
+        ),
+        "follow_minus_reverse_gross_negative": sum(
+            item["gross_expectancy_difference_follow_minus_reverse"] < 0 for item in paired_deltas
+        ),
+        "interval_basis": "NET_AFTER_VERIFIED_COSTS" if costs_verified else "GROSS_DIAGNOSTIC_ONLY",
+        "interval_upper_below_zero": sum(item[interval_upper_key] < 0 for item in paired_interval_rows),
+        "interval_lower_above_zero": sum(item[interval_lower_key] > 0 for item in paired_interval_rows),
+        "interval_spans_zero": sum(
+            item[interval_lower_key] <= 0 <= item[interval_upper_key] for item in paired_interval_rows
+        ),
+    }
     certified = [
         r
         for r in results
@@ -499,6 +530,7 @@ def run_grid(
             "confidence": "95% percentile interval using circular blocks of consecutive observed trading days; no synthetic weekend bars",
         },
         "candidates": results,
+        "paired_comparison_summary": paired_comparison_summary,
         "paired_directional_comparisons": paired_comparisons,
         "paired_comparison_fdr": {
             "method": "Benjamini-Hochberg applied separately to paired FOLLOW-minus-REVERSE and REVERSE-minus-FOLLOW hypotheses",
