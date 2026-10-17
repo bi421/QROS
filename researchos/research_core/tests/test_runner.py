@@ -50,6 +50,17 @@ def test_runner_converts_pipeline_failure_to_failed_result() -> None:
     assert result.failures == ("RuntimeError: pipeline exploded",)
 
 
+def test_runner_rejects_empty_pipeline_output_as_failed() -> None:
+    def pipeline(request: ResearchRequest) -> tuple[PipelineArtifact, ...]:
+        return ()
+
+    result = FrozenXauusdM1Runner(pipeline).run(_request())
+
+    assert result.status == "FAILED"
+    assert result.artifacts == ()
+    assert result.failures == ("ValueError: scientific pipeline returned no artifacts",)
+
+
 def test_runner_rejects_wrong_workflow_before_pipeline_execution() -> None:
     called = False
 

@@ -50,6 +50,8 @@ class FrozenXauusdM1Runner:
 
         try:
             artifacts = tuple(self._pipeline(request))
+            if not artifacts:
+                raise ValueError("scientific pipeline returned no artifacts")
             result_artifacts = tuple(
                 ResearchArtifact(
                     artifact_id=artifact.artifact_id,
