@@ -14,10 +14,10 @@ Research-only; never places orders. The engine evaluates a bounded parameter gri
 
 - Causal signal: close-to-close move normalized by historical ATR scale; signal is known at close `i`.
 - Entry: open of bar `i+1`.
-- Triple barrier: TP/SL distances are ATR multiples from entry; scan future OHLC bars, stop-loss takes precedence if both hit in the same candle; otherwise time exit at close of the configured horizon.
+- Triple barrier: TP/SL distances are ATR multiples from entry; scan future OHLC bars, stop-loss takes precedence if both hit in the same candle; a stop crossed by an opening gap fills at the worse bar-open price, otherwise at the stop level; time exit is at close of the configured horizon. Take-profit fills at its limit level for conservative, reproducible OHLC handling.
 - Session gaps: candidates are excluded when their feature lookback or forward barrier horizon crosses a non-15-minute timestamp gap.
 - Cost: `base_spread_price + alpha_cost_price * (ATR / trailing_mean_ATR) + commission_roundtrip_price`. All inputs are round-trip XAUUSD price units per ounce and require conversion against broker contract/commission specifications. The `--cost-model-verified` flag is an operator attestation, not automatic broker verification.
-- Statistics: chronological final 20% holdout, 20-observed-trading-day circular block bootstrap, one-sided bootstrap p-values and Benjamini-Hochberg FDR correction. This v1 is an event-study screening tool: candidate events can overlap, so results are not a single-position account-equity simulation. Candidate selection and holdout reuse still require an independently untouched confirmation dataset.
+- Statistics: chronological final 20% holdout, 20-observed-trading-day circular block bootstrap, one-sided bootstrap p-values and Benjamini-Hochberg FDR correction. Bootstrap block totals use prefix sums to avoid materializing a full replicate-by-day index tensor. The final reduction uses ndarray.sum: this is a small reduction, not dense matrix multiplication, so einsum(optimize=True) or BLAS GEMM is not assumed to be faster. This v1 is an event-study screening tool: candidate events can overlap, so results are not a single-position account-equity simulation. Candidate selection and holdout reuse still require an independently untouched confirmation dataset.
 
 ## Run
 
@@ -31,7 +31,8 @@ The full default grid is 972 candidates and is intentionally not run in the smok
 ## Current evidence and limitations
 
 - Local smoke input: 211,868 M15 rows, 2017-10-10 01:00 through 2026-10-14 06:15.
-- Latest quick run: two candidates, 100 bootstrap replicates; data load 0.035 s, evaluation 0.106 s, total 0.142 s on the current Windows host. These are one-run local timings, not a stable benchmark.
+- Quick smoke: two candidates, 100 bootstrap replicates; data load 0.035 s, evaluation 0.106 s, total 0.142 s on the current Windows host.
+- Full default grid: 972 candidates, 100 bootstrap replicates; data load 0.045 s, evaluation 80.099 s, total 80.144 s on the same host. Approximate throughput was 12.1 candidates/s. This is one run, not a repeated benchmark distribution; the default 1,000-replicate run was not measured.
 - Status: `NO_TRADE_COST_AUDIT_UNVERIFIED`; no spread/commission evidence was supplied, so net expectancy and edge certification are withheld.
 - No news CSV or live-candle feed was located in the inspected Documents data listing; news filter reports `NOT_CONFIGURED`. Live ingestion is not part of this offline CSV runner.
 - SIMD/AVX-512 and C++ acceleration are not claimed by this NumPy/Polars v1. The existing C++ backtest is separate and has not been replaced.

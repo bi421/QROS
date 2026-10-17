@@ -145,17 +145,32 @@ def _bootstrap_daily_blocks(
     block = min(block_days, len(days))
     blocks = math.ceil(len(days) / block)
     starts = rng.integers(0, len(days), size=(reps, blocks))
-    offsets = np.arange(block)
-    ix = ((starts[:, :, None] + offsets[None, None, :]) % len(days)).reshape(reps, -1)[
-        :, : len(days)
-    ]
-    sampled_sums = sums[ix].sum(axis=1)
-    sampled_counts = counts[ix].sum(axis=1)
+    # Prefix sums avoid materializing the much larger (replicates, days)
+    # circular-index tensor. Only (replicates, blocks) block aggregates are
+    # gathered; ordinary reductions are used because this is not a GEMM.
+    remainder = len(days) - block * (blocks - 1)
+    sums_twice = np.concatenate((sums, sums))
+    counts_twice = np.concatenate((counts, counts))
+    centered = sums - observed * counts
+    centered_twice = np.concatenate((centered, centered))
+    sums_prefix = np.r_[0.0, np.cumsum(sums_twice)]
+    counts_prefix = np.r_[0.0, np.cumsum(counts_twice)]
+    centered_prefix = np.r_[0.0, np.cumsum(centered_twice)]
+
+    full_starts = starts[:, :-1]
+    full_sum_blocks = sums_prefix[full_starts + block] - sums_prefix[full_starts]
+    full_count_blocks = counts_prefix[full_starts + block] - counts_prefix[full_starts]
+    full_centered_blocks = centered_prefix[full_starts + block] - centered_prefix[full_starts]
+    tail_starts = starts[:, -1]
+    tail_sums = sums_prefix[tail_starts + remainder] - sums_prefix[tail_starts]
+    tail_counts = counts_prefix[tail_starts + remainder] - counts_prefix[tail_starts]
+    tail_centered = centered_prefix[tail_starts + remainder] - centered_prefix[tail_starts]
+    sampled_sums = full_sum_blocks.sum(axis=1) + tail_sums
+    sampled_counts = full_count_blocks.sum(axis=1) + tail_counts
+    null_sums = full_centered_blocks.sum(axis=1) + tail_centered
     valid = sampled_counts > 0
     means = np.full(reps, np.nan)
     means[valid] = sampled_sums[valid] / sampled_counts[valid]
-    centered = sums - observed * counts
-    null_sums = centered[ix].sum(axis=1)
     null_means = np.full(reps, np.nan)
     null_means[valid] = null_sums[valid] / sampled_counts[valid]
     return (
@@ -165,6 +180,29 @@ def _bootstrap_daily_blocks(
             (1 + np.count_nonzero(null_means[valid] >= observed)) / (1 + np.count_nonzero(valid))
         ),
     )
+
+
+def _apply_barrier_step(
+    open_price: np.ndarray,
+    high: np.ndarray,
+    low: np.ndarray,
+    direction: np.ndarray,
+    stop_price: np.ndarray,
+    take_price: np.ndarray,
+    alive: np.ndarray,
+    exit_price: np.ndarray,
+) -> None:
+    """Apply one OHLC bar, conservatively filling stop gaps at the bar open."""
+    long = direction > 0
+    stop = alive & np.where(long, low <= stop_price, high >= stop_price)
+    take = alive & ~stop & np.where(long, high >= take_price, low <= take_price)
+    # Stops crossed by an opening gap fill at the worse open, not the stale stop
+    # level. If both barriers touch intrabar, stop-first remains conservative.
+    stop_gap = stop & np.where(long, open_price < stop_price, open_price > stop_price)
+    exit_price[stop] = stop_price[stop]
+    exit_price[stop_gap] = open_price[stop_gap]
+    exit_price[take] = take_price[take]
+    alive[stop | take] = False
 
 
 def run_grid(
@@ -262,12 +300,9 @@ def run_grid(
             alive = np.ones(len(sig), bool)
             for step in range(hz):
                 j = entry_ix + step
-                long = direction > 0
-                stop = alive & np.where(long, low[j] <= sl_price, h[j] >= sl_price)
-                take = alive & ~stop & np.where(long, h[j] >= tp_price, low[j] <= tp_price)
-                exit_price[stop] = sl_price[stop]
-                exit_price[take] = tp_price[take]
-                alive[stop | take] = False
+                _apply_barrier_step(
+                    o[j], h[j], low[j], direction, sl_price, tp_price, alive, exit_price
+                )
             gross = direction * (exit_price - entry)
             net = gross.copy()
             if costs_configured:
