@@ -79,7 +79,7 @@ def load_ohlcv_csv(path: str | Path) -> dict[str, Any]:
 
 
 def load_news_mask(path: str | Path | None, timestamps: np.ndarray, buffer_bars: int) -> np.ndarray:
-    blocked = np.zeros(len(timestamps), dtype=bool)
+    blocked: np.ndarray = np.zeros(len(timestamps), dtype=bool)
     if path is None:
         return blocked
     p = Path(path)
@@ -92,7 +92,8 @@ def load_news_mask(path: str | Path | None, timestamps: np.ndarray, buffer_bars:
     news = f[col].cast(pl.String).str.to_datetime(strict=False).drop_nulls().to_numpy()
     if not len(news):
         raise ValueError("No parseable news timestamps")
-    for i in np.searchsorted(timestamps, news):
+    news_indices: np.ndarray = np.asarray(np.searchsorted(timestamps, news), dtype=np.int64).reshape(-1)
+    for i in news_indices:
         blocked[max(0, int(i) - buffer_bars) : min(len(blocked), int(i) + buffer_bars + 1)] = True
     return blocked
 
@@ -109,7 +110,7 @@ def _atr(high: np.ndarray, low: np.ndarray, close: np.ndarray, period: int = 14)
 
 def _bh(p: np.ndarray, q: float) -> tuple[np.ndarray, float | None]:
     ids = np.flatnonzero(np.isfinite(p))
-    passed = np.zeros(len(p), dtype=bool)
+    passed: np.ndarray = np.zeros(len(p), dtype=bool)
     if not len(ids):
         return passed, None
     order = ids[np.argsort(p[ids])]
@@ -129,13 +130,14 @@ def _bootstrap_daily_blocks(
     reps: int,
     block_days: int,
     rng: np.random.Generator,
-) -> tuple[float, float, float]:
+) -> tuple[float, float, float, float, float]:
     values = np.asarray(values, dtype=np.float64)
     signal_indices = np.asarray(signal_indices, dtype=np.int64)
-    day_axis = timestamps[hold_start:].astype("datetime64[D]")
+    day_axis: np.ndarray = timestamps[hold_start:].astype("datetime64[D]")
     days = np.unique(day_axis)
     if len(days) < max(20, block_days) or not len(values):
-        return (float(values.mean()) if len(values) else 0.0, float("-inf"), 1.0)
+        observed = float(values.mean()) if len(values) else 0.0
+        return (observed, float("-inf"), float("inf"), 1.0, 1.0)
     sums = np.zeros(len(days))
     counts = np.zeros(len(days))
     ids = np.searchsorted(days, timestamps[signal_indices].astype("datetime64[D]"))
@@ -176,9 +178,9 @@ def _bootstrap_daily_blocks(
     return (
         observed,
         float(np.nanquantile(means, 0.025)),
-        float(
-            (1 + np.count_nonzero(null_means[valid] >= observed)) / (1 + np.count_nonzero(valid))
-        ),
+        float(np.nanquantile(means, 0.975)),
+        float((1 + np.count_nonzero(null_means[valid] >= observed)) / (1 + np.count_nonzero(valid))),
+        float((1 + np.count_nonzero(null_means[valid] <= observed)) / (1 + np.count_nonzero(valid))),
     )
 
 
@@ -224,16 +226,20 @@ def run_grid(
     costs_verified = costs_configured and config.cost_model_verified
     timestamps = data["timestamp"]
     gap = np.r_[False, np.diff(timestamps) != np.timedelta64(15, "m")]
-    gap_prefix = np.cumsum(gap)
+    gap_prefix: np.ndarray = np.cumsum(gap)
     rng = np.random.default_rng(config.random_seed)
+    # Without a news feed, the buffer parameter has no effect. Collapse its
+    # redundant variants instead of counting identical hypotheses multiple times.
+    effective_news_buffers = config.news_buffers_bars if news_csv else (0,)
     specs = [
-        (lb, z, tp, sl, hz, nb)
+        (lb, z, tp, sl, hz, nb, mode)
+        for mode in ("FOLLOW_SIGNAL", "REVERSE_SIGNAL")
         for lb in config.lookbacks
         for z in config.z_thresholds
         for tp in config.take_profit_atr
         for sl in config.stop_loss_atr
         for hz in config.horizons
-        for nb in config.news_buffers_bars
+        for nb in effective_news_buffers
     ]
     scores = {}
     for lb in config.lookbacks:
@@ -252,13 +258,14 @@ def run_grid(
         score[crosses_gap] = np.nan
         scores[lb] = score
     news_masks = (
-        {nb: load_news_mask(news_csv, data["timestamp"], nb) for nb in config.news_buffers_bars}
+        {nb: load_news_mask(news_csv, data["timestamp"], nb) for nb in effective_news_buffers}
         if news_csv
-        else {nb: np.zeros(n, dtype=bool) for nb in config.news_buffers_bars}
+        else {0: np.zeros(n, dtype=bool)}
     )
     results = []
+    paired_samples: dict[tuple[Any, ...], dict[str, dict[str, np.ndarray]]] = {}
     for start in range(0, len(specs), max(1, config.candidate_chunk_size)):
-        for lb, z, tp, sl, hz, nb in specs[start : start + max(1, config.candidate_chunk_size)]:
+        for lb, z, tp, sl, hz, nb, direction_mode in specs[start : start + max(1, config.candidate_chunk_size)]:
             score = scores[lb]
             idx = np.arange(n)
             contiguous = (idx + hz < n) & (
@@ -278,6 +285,7 @@ def run_grid(
                 "sl_atr": sl,
                 "horizon": hz,
                 "news_buffer_bars": nb,
+                "direction_mode": direction_mode,
             }
             if len(sig) < 20:
                 results.append(
@@ -290,16 +298,16 @@ def run_grid(
                     }
                 )
                 continue
-            direction = np.sign(score[sig])
-            entry_ix = sig + 1
+            direction = np.sign(score[sig]) * (1.0 if direction_mode == "FOLLOW_SIGNAL" else -1.0)
+            entry_ix: np.ndarray = sig + 1
             entry = o[entry_ix]
             risk = atr[sig]
             tp_price = entry + direction * tp * risk
             sl_price = entry - direction * sl * risk
             exit_price = c[sig + hz].copy()
-            alive = np.ones(len(sig), bool)
+            alive: np.ndarray = np.ones(len(sig), bool)
             for step in range(hz):
-                j = entry_ix + step
+                j: np.ndarray = entry_ix + step
                 _apply_barrier_step(
                     o[j], h[j], low[j], direction, sl_price, tp_price, alive, exit_price
                 )
@@ -322,7 +330,13 @@ def run_grid(
             hold_start = int(n * 0.8)
             oos = sig >= hold_start
             values = net[oos]
-            mean, lower, pval = (
+            pair_key = (lb, z, tp, sl, hz, nb)
+            paired_samples.setdefault(pair_key, {})[direction_mode] = {
+                "indices": sig[oos].copy(),
+                "gross": gross[oos].copy(),
+                "net": net[oos].copy(),
+            }
+            mean, lower, upper, pval_positive, pval_negative = (
                 _bootstrap_daily_blocks(
                     values,
                     sig[oos],
@@ -333,10 +347,10 @@ def run_grid(
                     rng,
                 )
                 if len(values)
-                else (0.0, float("-inf"), 1.0)
+                else (0.0, float("-inf"), float("inf"), 1.0, 1.0)
             )
             if not costs_verified:
-                pval = 1.0
+                pval_positive = pval_negative = 1.0
             results.append(
                 {
                     "params": params,
@@ -346,36 +360,120 @@ def run_grid(
                     "net_expectancy": float(mean) if costs_verified else None,
                     "ci_lower": float(lower) if costs_verified else None,
                     "gross_ci_lower_diagnostic_only": float(lower) if not costs_verified else None,
-                    "p_value": pval,
+                    "ci_upper": float(upper) if costs_verified else None,
+                    "gross_ci_upper_diagnostic_only": float(upper) if not costs_verified else None,
+                    "p_value": pval_positive,
+                    "p_value_positive": pval_positive,
+                    "p_value_negative": pval_negative,
                     "fdr_pass": False,
+                    "fdr_negative_pass": False,
                     "status": "COST_MODEL_UNVERIFIED"
                     if not costs_verified
                     else "TESTED_NOT_CERTIFIED",
                 }
             )
-    pvals = np.array([r["p_value"] for r in results])
-    fdr, cutoff = _bh(pvals, config.fdr_q)
+    pvals_positive = np.array([r.get("p_value_positive", 1.0) for r in results])
+    pvals_negative = np.array([r.get("p_value_negative", 1.0) for r in results])
+    fdr_positive, cutoff_positive = _bh(pvals_positive, config.fdr_q)
+    fdr_negative, cutoff_negative = _bh(pvals_negative, config.fdr_q)
     for i, r in enumerate(results):
-        r["fdr_pass"] = bool(fdr[i])
+        r["fdr_pass"] = bool(fdr_positive[i])
+        r["fdr_negative_pass"] = bool(fdr_negative[i])
         if r["status"] == "COST_MODEL_UNVERIFIED":
             r["status"] = "NO_TRADE_COST_AUDIT_UNVERIFIED"
         else:
             ci_lower = r.get("ci_lower")
-            if isinstance(ci_lower, (int, float)) and ci_lower > 0 and fdr[i]:
+            ci_upper = r.get("ci_upper")
+            if isinstance(ci_lower, (int, float)) and ci_lower > 0 and fdr_positive[i]:
                 r["status"] = "EDGE_CANDIDATE_REQUIRES_INDEPENDENT_CONFIRMATION"
+            elif isinstance(ci_upper, (int, float)) and ci_upper < 0 and fdr_negative[i]:
+                r["status"] = "REJECTED_NEGATIVE_EDGE"
+            elif isinstance(ci_lower, (int, float)) and isinstance(ci_upper, (int, float)) and ci_lower <= 0 <= ci_upper:
+                r["status"] = "INCONCLUSIVE"
+    paired_comparisons: list[dict[str, Any]] = []
+    for pair_key, modes in paired_samples.items():
+        if "FOLLOW_SIGNAL" not in modes or "REVERSE_SIGNAL" not in modes:
+            continue
+        follow = modes["FOLLOW_SIGNAL"]
+        reverse = modes["REVERSE_SIGNAL"]
+        if not np.array_equal(follow["indices"], reverse["indices"]):
+            paired_comparisons.append({
+                "params": dict(zip(
+                    ("lookback", "z", "tp_atr", "sl_atr", "horizon", "news_buffer_bars"),
+                    pair_key,
+                )),
+                "status": "REJECTED_VALIDATION",
+                "reason": "directional event indices differ; paired comparison is invalid",
+            })
+            continue
+        gross_diff = follow["gross"] - reverse["gross"]
+        net_diff = follow["net"] - reverse["net"]
+        diff = net_diff if costs_verified else gross_diff
+        hold_indices = follow["indices"]
+        hold_start = int(n * 0.8)
+        mean_diff, lower_diff, upper_diff, p_diff_positive, p_diff_negative = (
+            _bootstrap_daily_blocks(
+                diff, hold_indices, timestamps, hold_start,
+                config.bootstrap_replicates, config.bootstrap_block_trading_days, rng,
+            )
+            if len(diff)
+            else (0.0, float("-inf"), float("inf"), 1.0, 1.0)
+        )
+        paired_comparisons.append({
+            "params": dict(zip(
+                ("lookback", "z", "tp_atr", "sl_atr", "horizon", "news_buffer_bars"),
+                pair_key,
+            )),
+            "holdout_trades": int(len(diff)),
+            "gross_expectancy_difference_follow_minus_reverse": float(gross_diff.mean()) if len(gross_diff) else None,
+            "net_expectancy_difference_follow_minus_reverse": float(mean_diff) if costs_verified else None,
+            "ci_lower": float(lower_diff) if costs_verified else None,
+            "ci_upper": float(upper_diff) if costs_verified else None,
+            "gross_ci_lower_diagnostic_only": float(lower_diff) if not costs_verified else None,
+            "gross_ci_upper_diagnostic_only": float(upper_diff) if not costs_verified else None,
+            "p_value_follow_better": p_diff_positive if costs_verified else 1.0,
+            "p_value_reverse_better": p_diff_negative if costs_verified else 1.0,
+            "fdr_follow_better": False,
+            "fdr_reverse_better": False,
+            "status": "UNVERIFIED_COSTS" if not costs_verified else "INCONCLUSIVE",
+        })
+    pair_p_follow = np.array([item["p_value_follow_better"] for item in paired_comparisons])
+    pair_p_reverse = np.array([item["p_value_reverse_better"] for item in paired_comparisons])
+    pair_fdr_follow, pair_cutoff_follow = _bh(pair_p_follow, config.fdr_q)
+    pair_fdr_reverse, pair_cutoff_reverse = _bh(pair_p_reverse, config.fdr_q)
+    for i, item in enumerate(paired_comparisons):
+        item["fdr_follow_better"] = bool(pair_fdr_follow[i])
+        item["fdr_reverse_better"] = bool(pair_fdr_reverse[i])
+        if item["status"] == "REJECTED_VALIDATION" or item["status"] == "UNVERIFIED_COSTS":
+            continue
+        lower_diff = item["ci_lower"]
+        upper_diff = item["ci_upper"]
+        if isinstance(lower_diff, (int, float)) and lower_diff > 0 and pair_fdr_follow[i]:
+            item["status"] = "FOLLOW_SIGNAL_BETTER_REQUIRES_INDEPENDENT_CONFIRMATION"
+        elif isinstance(upper_diff, (int, float)) and upper_diff < 0 and pair_fdr_reverse[i]:
+            item["status"] = "REVERSE_SIGNAL_BETTER_REQUIRES_INDEPENDENT_CONFIRMATION"
+        elif isinstance(lower_diff, (int, float)) and isinstance(upper_diff, (int, float)) and lower_diff <= 0 <= upper_diff:
+            item["status"] = "INCONCLUSIVE"
     certified = [
         r
         for r in results
         if r["status"] == "EDGE_CANDIDATE_REQUIRES_INDEPENDENT_CONFIRMATION" and costs_verified
     ]
     return {
-        "schema_version": "qros.vectorized-backtest.v1",
+        "schema_version": "qros.vectorized-backtest.v2",
         "research_only": True,
         "status": "EDGE_CANDIDATE_REQUIRES_INDEPENDENT_CONFIRMATION"
         if certified
         else ("NO_TRADE_COST_AUDIT_UNVERIFIED" if not costs_verified else "NO_CERTIFIED_EDGE"),
         "rows": n,
         "candidate_count": len(results),
+        "grid": {
+            "direction_modes": ["FOLLOW_SIGNAL", "REVERSE_SIGNAL"],
+            "parameter_combinations": len(results) // 2,
+            "news_buffers_evaluated": list(effective_news_buffers),
+            "news_buffer_variants_collapsed": not bool(news_csv),
+            "reason": "No news CSV supplied; buffer lengths are observationally identical" if not news_csv else None,
+        },
         "cost_model": {
             "configured": costs_configured,
             "verified": costs_verified,
@@ -388,8 +486,12 @@ def run_grid(
         "fdr": {
             "method": "Benjamini-Hochberg",
             "q": config.fdr_q,
-            "p_value_cutoff": cutoff,
-            "discoveries": int(fdr.sum()),
+            "p_value_cutoff": cutoff_positive,
+            "discoveries": int(fdr_positive.sum()),
+            "positive_p_value_cutoff": cutoff_positive,
+            "negative_p_value_cutoff": cutoff_negative,
+            "positive_discoveries": int(fdr_positive.sum()),
+            "negative_discoveries": int(fdr_negative.sum()),
         },
         "bootstrap": {
             "replicates": config.bootstrap_replicates,
@@ -397,6 +499,15 @@ def run_grid(
             "confidence": "95% percentile interval using circular blocks of consecutive observed trading days; no synthetic weekend bars",
         },
         "candidates": results,
+        "paired_directional_comparisons": paired_comparisons,
+        "paired_comparison_fdr": {
+            "method": "Benjamini-Hochberg applied separately to paired FOLLOW-minus-REVERSE and REVERSE-minus-FOLLOW hypotheses",
+            "q": config.fdr_q,
+            "follow_better_p_value_cutoff": pair_cutoff_follow,
+            "reverse_better_p_value_cutoff": pair_cutoff_reverse,
+            "follow_better_discoveries": int(pair_fdr_follow.sum()),
+            "reverse_better_discoveries": int(pair_fdr_reverse.sum()),
+        },
         "config": asdict(config),
     }
 
