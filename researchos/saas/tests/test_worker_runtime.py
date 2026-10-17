@@ -131,3 +131,29 @@ def test_worker_runtime_survives_executor_setup_failure(monkeypatch):
     worker.run_forever(stop)
 
     assert queue.acked == []
+
+
+def test_source_commit_is_set_only_from_clean_git_checkout(monkeypatch):
+    import os
+    from types import SimpleNamespace
+
+    from researchos.saas import worker_runtime
+
+    monkeypatch.delenv("QROS_SOURCE_COMMIT", raising=False)
+    outputs = [SimpleNamespace(stdout="a" * 40), SimpleNamespace(stdout="")]
+    monkeypatch.setattr(worker_runtime.subprocess, "run", lambda *args, **kwargs: outputs.pop(0))
+    assert worker_runtime.configure_source_commit() == "a" * 40
+    assert os.environ["QROS_SOURCE_COMMIT"] == "a" * 40
+
+
+def test_source_commit_stays_undeclared_for_dirty_checkout(monkeypatch):
+    import os
+    from types import SimpleNamespace
+
+    from researchos.saas import worker_runtime
+
+    monkeypatch.delenv("QROS_SOURCE_COMMIT", raising=False)
+    outputs = [SimpleNamespace(stdout="b" * 40), SimpleNamespace(stdout=" M file.py")]
+    monkeypatch.setattr(worker_runtime.subprocess, "run", lambda *args, **kwargs: outputs.pop(0))
+    assert worker_runtime.configure_source_commit() is None
+    assert "QROS_SOURCE_COMMIT" not in os.environ

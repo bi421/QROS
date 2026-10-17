@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+from pathlib import Path
 from threading import Event
 from typing import Final
 
@@ -19,7 +21,37 @@ QUEUE_VISIBILITY_TIMEOUT_SECONDS: Final = 1200
 IDLE_POLL_SECONDS: Final = 1.0
 
 
+def configure_source_commit() -> str | None:
+    """Set source provenance from git only when the checkout is clean.
+
+    Container deployments without .git must inject QROS_SOURCE_COMMIT at build/runtime.
+    A dirty checkout is deliberately left undeclared so audit records remain INVALID.
+    """
+    configured = os.environ.get("QROS_SOURCE_COMMIT")
+    if configured:
+        return configured
+    repo_root = Path(__file__).resolve().parents[2]
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=repo_root, check=True,
+            capture_output=True, text=True, timeout=3,
+        ).stdout.strip()
+        status = subprocess.run(
+            ["git", "status", "--porcelain"], cwd=repo_root, check=True,
+            capture_output=True, text=True, timeout=3,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if len(commit) not in {40, 64} or any(char not in "0123456789abcdefABCDEF" for char in commit):
+        return None
+    if status.strip():
+        return None
+    os.environ["QROS_SOURCE_COMMIT"] = commit
+    return commit
+
+
 def build_production_worker() -> "StandaloneResearchWorker":
+    configure_source_commit()
     url = os.environ["SUPABASE_URL"]
     key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
     client = create_client(url, key)

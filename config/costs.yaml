@@ -1,0 +1,44 @@
+schema_version: qros-xauusd-costs.v1
+instrument: XAUUSD
+timeframe_scope: [M15, H1, H4, D1]
+metadata_source:
+  type: measured
+  path: data/mt5/xauusd/XAUUSD_M1_2021_2025_MT5.manifest.json
+  sha256: b8b428ad271185cd75e2299447ea1b6266954695cbc849bbe39d24d33a17b5e9
+symbol_point:
+  value: 0.01
+  source: measured
+digits:
+  value: 2
+  source: measured
+contract_size:
+  value: 100.0
+  unit: XAU_per_lot
+  source: measured
+quote_basis:
+  source: measured
+  value: bid
+  evidence: MT5 historical OHLC is bid-side; spread column is points
+spread:
+  column: spread
+  raw_unit: MT5_points
+  conversion: price_units = spread_points * symbol_point
+  application: entry_ask_for_long_exit_ask_for_short
+commission:
+  round_turn_usd_per_lot:
+    value: 7.0
+    source: assumed
+  status: ILLUSTRATIVE_ASSUMPTION_NOT_BROKER_VERIFIED
+slippage:
+  model: volatility_scaled_per_side
+  atr_window: 14
+  atr_fraction_per_side:
+    value: 0.05
+    source: assumed
+  status: ILLUSTRATIVE_ASSUMPTION_NOT_CALIBRATED
+policy:
+  allow_assumed_nonzero_costs_for_sensitivity: true
+  allow_assumed_costs_to_claim_verified: false
+  zero_assumed_cost_fields_are_invalid: true
+  net_return_gate_requires_all_cost_terms: true
+  execution_authorized: false

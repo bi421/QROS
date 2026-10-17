@@ -23,6 +23,7 @@ def _cost_metadata(n: int) -> dict[str, object]:
         "spread_log_sha256": hashlib.sha256(b"frozen spread log").hexdigest(),
         "spread_observation_count": n,
         "net_return_definition": "NET_OF_SPREAD_COMMISSION_SLIPPAGE",
+        "all_in_costs_verified": True,
     }
 
 
@@ -163,4 +164,6 @@ def test_audit_record_is_deterministic_and_hashed() -> None:
     assert first == second
     assert len(first["input_sha256"]) == 64
     assert len(first["decision_sha256"]) == 64
+    assert first["status"] == "INVALID"
+    assert first["failure_reason"] == "QROS_SOURCE_COMMIT_UNDECLARED_OR_INVALID"
     assert first["execution_authorized"] is False

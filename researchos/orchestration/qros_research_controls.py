@@ -100,6 +100,8 @@ def _validate_cost_metadata(metadata: Mapping[str, Any] | None, observation_coun
         failures.append("COST_SPREAD_LOG_COVERAGE_INSUFFICIENT")
     if metadata.get("net_return_definition") != "NET_OF_SPREAD_COMMISSION_SLIPPAGE":
         failures.append("COST_NET_RETURN_BASIS_UNDECLARED")
+    if metadata.get("all_in_costs_verified") is not True:
+        failures.append("COSTS_NOT_VERIFIED")
     return not failures, failures
 
 
@@ -331,10 +333,14 @@ def build_audit_record(
     """Build deterministic provenance record with canonical SHA-256 hashes."""
     if not source_commit or not config_version:
         raise ValueError("SOURCE_COMMIT_AND_CONFIG_VERSION_REQUIRED")
+    source_commit_valid = len(source_commit) in {40, 64} and all(char in "0123456789abcdefABCDEF" for char in source_commit)
+    audit_status = "VALID" if source_commit_valid else "INVALID"
     canonical_input = json.dumps(input_payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
     canonical_decision = json.dumps(decision, sort_keys=True, separators=(",", ":"), allow_nan=False)
     return {
-        "version": QROS_RESEARCH_CONTROLS_VERSION, "source_commit": source_commit,
+        "version": QROS_RESEARCH_CONTROLS_VERSION, "status": audit_status,
+        "failure_reason": None if source_commit_valid else "QROS_SOURCE_COMMIT_UNDECLARED_OR_INVALID",
+        "source_commit": source_commit,
         "config_version": config_version,
         "input_sha256": hashlib.sha256(canonical_input.encode("utf-8")).hexdigest(),
         "decision_sha256": hashlib.sha256(canonical_decision.encode("utf-8")).hexdigest(),
