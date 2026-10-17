@@ -47,6 +47,7 @@ def test_pipeline_binds_all_frozen_stages(monkeypatch) -> None:
     monkeypatch.setattr("researchos.research_adapters.xauusd_m1.run_real_pipeline", fake_real)
     monkeypatch.setattr("researchos.research_adapters.xauusd_m1.run_walkforward", fake_walkforward)
     monkeypatch.setattr("researchos.research_adapters.xauusd_m1.run_calibration", fake_calibration)
+    monkeypatch.setattr("researchos.research_adapters.xauusd_m1.evaluate_xauusd_m1_run", lambda *_: {"overall_status": "INSUFFICIENT_EVIDENCE"})
 
     artifacts = tuple(FrozenXauusdM1Pipeline(lambda _request: b"raw-csv")(_request()))
 
@@ -55,5 +56,6 @@ def test_pipeline_binds_all_frozen_stages(monkeypatch) -> None:
         "xauusd_m1_real_events",
         "xauusd_m1_walkforward",
         "xauusd_m1_oos_calibration",
+        "xauusd_m1_meta_evaluation",
     ]
     assert all(len(artifact.content) > 0 for artifact in artifacts)

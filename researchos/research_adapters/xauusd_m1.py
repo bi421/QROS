@@ -8,6 +8,7 @@ only receives immutable contracts and content-addressed output metadata.
 from __future__ import annotations
 
 import hashlib
+import json
 import tempfile
 from collections.abc import Iterable
 from pathlib import Path
@@ -15,6 +16,7 @@ from typing import Protocol
 
 from researchos.research_core.contracts import ResearchRequest
 from researchos.research_core.runner import PipelineArtifact
+from researchos.evaluation.research_run_metrics import evaluate_xauusd_m1_run
 from scripts.run_xauusd_m1_oos_calibration import run as run_calibration
 from scripts.run_xauusd_m1_real_pipeline import run as run_real_pipeline
 from scripts.run_xauusd_m1_walkforward import run as run_walkforward
@@ -47,6 +49,7 @@ class FrozenXauusdM1Pipeline:
             real_path = root / "xauusd_m1_real_events_outcomes.json"
             walkforward_path = root / "xauusd_m1_walkforward.json"
             calibration_path = root / "xauusd_m1_oos_calibration.json"
+            metrics_path = root / "xauusd_m1_meta_evaluation.json"
             source_path.write_bytes(raw)
 
             run_real_pipeline(source_path, real_path, threshold=0.0)
@@ -59,10 +62,19 @@ class FrozenXauusdM1Pipeline:
             )
             run_calibration(real_path, walkforward_path, calibration_path)
 
+            meta_metrics = evaluate_xauusd_m1_run(
+                real_path.read_bytes(), walkforward_path.read_bytes(), calibration_path.read_bytes()
+            )
+            metrics_path.write_text(
+                json.dumps(meta_metrics, ensure_ascii=False, sort_keys=True, indent=2),
+                encoding="utf-8",
+            )
+
             outputs = (
                 ("xauusd_m1_real_events", real_path),
                 ("xauusd_m1_walkforward", walkforward_path),
                 ("xauusd_m1_oos_calibration", calibration_path),
+                ("xauusd_m1_meta_evaluation", metrics_path),
             )
             for kind, path in outputs:
                 content = path.read_bytes()
