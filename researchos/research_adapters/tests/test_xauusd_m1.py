@@ -29,6 +29,8 @@ def test_pipeline_rejects_resolver_provenance_mismatch() -> None:
 
 
 def test_pipeline_binds_all_frozen_stages(monkeypatch) -> None:
+    # Verify fail-closed behavior independent of environment left by prior tests.
+    monkeypatch.delenv('QROS_SOURCE_COMMIT', raising=False)
     calls: list[str] = []
 
     def fake_real(source, output, threshold):
