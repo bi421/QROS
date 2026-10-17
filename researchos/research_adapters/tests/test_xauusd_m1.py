@@ -49,9 +49,12 @@ def test_pipeline_binds_all_frozen_stages(monkeypatch) -> None:
     monkeypatch.setattr("researchos.research_adapters.xauusd_m1.run_calibration", fake_calibration)
     monkeypatch.setattr("researchos.research_adapters.xauusd_m1.evaluate_xauusd_m1_run", lambda *_: {"overall_status": "INSUFFICIENT_EVIDENCE"})
 
-    artifacts = tuple(FrozenXauusdM1Pipeline(lambda _request: b"raw-csv")(_request()))
+    pipeline = FrozenXauusdM1Pipeline(lambda _request: b"raw-csv")
+    artifacts = tuple(pipeline(_request()))
+    repeated_artifacts = tuple(pipeline(_request()))
 
-    assert calls == ["real", "walkforward", "calibration"]
+    assert calls == ["real", "walkforward", "calibration"] * 2
+    assert [artifact.content for artifact in artifacts] == [artifact.content for artifact in repeated_artifacts]
     assert [artifact.kind for artifact in artifacts] == [
         "xauusd_m1_real_events",
         "xauusd_m1_walkforward",
@@ -59,3 +62,9 @@ def test_pipeline_binds_all_frozen_stages(monkeypatch) -> None:
         "xauusd_m1_meta_evaluation",
     ]
     assert all(len(artifact.content) > 0 for artifact in artifacts)
+    report = json.loads(artifacts[-1].content)
+    assert report["research_gate"]["status"] == "NO_TRADE_COST_PROVENANCE_INVALID"
+    assert report["research_gate"]["execution_authorized"] is False
+    assert len(report["research_audit"]["input_sha256"]) == 64
+    assert len(report["research_audit"]["decision_sha256"]) == 64
+    assert report["research_audit"]["decision"] == report["research_gate"]
