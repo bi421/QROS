@@ -1,0 +1,109 @@
+{
+  "schema_version": "qros.vectorized-backtest.v1",
+  "research_only": true,
+  "status": "NO_TRADE_COST_AUDIT_UNVERIFIED",
+  "rows": 211868,
+  "candidate_count": 2,
+  "cost_model": {
+    "configured": false,
+    "verified": false,
+    "base_spread_price": null,
+    "alpha_price": null,
+    "commission_roundtrip_price": null,
+    "units": "XAUUSD price units per ounce; broker contract conversion required"
+  },
+  "holdout": "chronological final 20%; independent untouched holdout required before production certification",
+  "fdr": {
+    "method": "Benjamini-Hochberg",
+    "q": 0.05,
+    "p_value_cutoff": null,
+    "discoveries": 0
+  },
+  "bootstrap": {
+    "replicates": 100,
+    "block_trading_days": 20,
+    "confidence": "95% percentile interval using circular blocks of consecutive observed trading days; no synthetic weekend bars"
+  },
+  "candidates": [
+    {
+      "params": {
+        "lookback": 4,
+        "z": 1.0,
+        "tp_atr": 1.0,
+        "sl_atr": 1.0,
+        "horizon": 8,
+        "news_buffer_bars": 0
+      },
+      "trades": 73460,
+      "holdout_trades": 14634,
+      "gross_expectancy": -0.1299239051914345,
+      "net_expectancy": null,
+      "ci_lower": null,
+      "gross_ci_lower_diagnostic_only": -0.26611376954643795,
+      "p_value": 1.0,
+      "fdr_pass": false,
+      "status": "NO_TRADE_COST_AUDIT_UNVERIFIED"
+    },
+    {
+      "params": {
+        "lookback": 8,
+        "z": 1.0,
+        "tp_atr": 1.0,
+        "sl_atr": 1.0,
+        "horizon": 8,
+        "news_buffer_bars": 0
+      },
+      "trades": 96962,
+      "holdout_trades": 19338,
+      "gross_expectancy": -0.14324826765952944,
+      "net_expectancy": null,
+      "ci_lower": null,
+      "gross_ci_lower_diagnostic_only": -0.2990682109786365,
+      "p_value": 1.0,
+      "fdr_pass": false,
+      "status": "NO_TRADE_COST_AUDIT_UNVERIFIED"
+    }
+  ],
+  "config": {
+    "lookbacks": [
+      4,
+      8
+    ],
+    "z_thresholds": [
+      1.0
+    ],
+    "take_profit_atr": [
+      1.0
+    ],
+    "stop_loss_atr": [
+      1.0
+    ],
+    "horizons": [
+      8
+    ],
+    "news_buffers_bars": [
+      0
+    ],
+    "candidate_chunk_size": 64,
+    "bootstrap_replicates": 100,
+    "bootstrap_block_trading_days": 20,
+    "fdr_q": 0.05,
+    "cost_alpha_price": null,
+    "base_spread_price": null,
+    "commission_roundtrip_price": null,
+    "cost_model_verified": false,
+    "random_seed": 421
+  },
+  "performance": {
+    "load_seconds": 0.035244,
+    "evaluation_seconds": 0.106383,
+    "total_seconds": 0.141627
+  },
+  "source": {
+    "path": "C:\\Users\\User\\Documents\\XAUUSDM15.csv",
+    "first_timestamp": "2017-10-10T01:00:00.000000",
+    "last_timestamp": "2026-10-14T06:15:00.000000",
+    "news_path": null,
+    "news_filter_status": "NOT_CONFIGURED"
+  }
+}
