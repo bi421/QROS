@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "instrument": "XAUUSD",
+  "timeframe": "M15",
+  "status": "UNVERIFIED",
+  "units": "XAUUSD price units per ounce, round trip unless specified",
+  "spread": {
+    "status": "assumed",
+    "base_price": null,
+    "session_multipliers": {
+      "ASIA": null,
+      "LONDON": null,
+      "NEW_YORK": null,
+      "OVERLAP": null,
+      "ROLLOVER": null
+    },
+    "source": null
+  },
+  "commission": {
+    "status": "assumed",
+    "round_trip_price_per_ounce": null,
+    "contract_size_ounces": null,
+    "source": null
+  },
+  "slippage": {
+    "status": "assumed",
+    "base_price": null,
+    "volatility_multiplier": null,
+    "formula": "base_price + volatility_multiplier * (ATR / trailing_mean_ATR)",
+    "source": null
+  },
+  "swap": {
+    "status": "assumed",
+    "long_daily_price_per_ounce": null,
+    "short_daily_price_per_ounce": null,
+    "triple_swap_day": null,
+    "source": null
+  },
+  "verification": {
+    "verified_by": null,
+    "verified_at_utc": null,
+    "evidence_sha256": null
+  }
+}
