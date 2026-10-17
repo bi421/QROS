@@ -1,0 +1,203 @@
+{
+  "cost_model": {
+    "commission_source": "frozen config/costs.yaml; still assumed, not broker verified",
+    "cost_config_sha256": "2c8e2bac8969944958ecc18651e1d8aec9fd6f75e7726edb9ef57592f1d45607",
+    "cost_model_code_sha256": "615f7cdbe3ec874dcb2b74e13d783aa35c3a481d36acea21e2f3b01d5f4df7eb",
+    "slippage_source": "frozen per-order-type assumptions in config/costs.yaml; not observed fills"
+  },
+  "created_date": "2026-10-17",
+  "entry_rule": "Signal confirmed at M15 close; enter at next M15 bar open; order type market_entry.",
+  "execution_authorized": false,
+  "exit_rule": "Keep original M15 TP/SL barrier prices, stop-first tie policy, and horizon unchanged; classify TP as tp_limit, SL as sl_stop, timeout as market_exit.",
+  "forward_start_in_source_time": "2026-10-15 00:00:00",
+  "frozen_pair_count": 19,
+  "frozen_pairs": [
+    {
+      "horizon": 32,
+      "lookback": 8,
+      "news_buffer_bars": 0,
+      "sl_atr": 1.5,
+      "tp_atr": 2.0,
+      "z": 0.5
+    },
+    {
+      "horizon": 32,
+      "lookback": 16,
+      "news_buffer_bars": 0,
+      "sl_atr": 0.75,
+      "tp_atr": 1.0,
+      "z": 0.5
+    },
+    {
+      "horizon": 32,
+      "lookback": 16,
+      "news_buffer_bars": 0,
+      "sl_atr": 1.0,
+      "tp_atr": 1.0,
+      "z": 0.5
+    },
+    {
+      "horizon": 32,
+      "lookback": 16,
+      "news_buffer_bars": 0,
+      "sl_atr": 1.5,
+      "tp_atr": 1.0,
+      "z": 0.5
+    },
+    {
+      "horizon": 32,
+      "lookback": 16,
+      "news_buffer_bars": 0,
+      "sl_atr": 1.0,
+      "tp_atr": 1.5,
+      "z": 0.5
+    },
+    {
+      "horizon": 32,
+      "lookback": 16,
+      "news_buffer_bars": 0,
+      "sl_atr": 0.75,
+      "tp_atr": 2.0,
+      "z": 0.5
+    },
+    {
+      "horizon": 32,
+      "lookback": 16,
+      "news_buffer_bars": 0,
+      "sl_atr": 0.75,
+      "tp_atr": 1.0,
+      "z": 1.0
+    },
+    {
+      "horizon": 32,
+      "lookback": 16,
+      "news_buffer_bars": 0,
+      "sl_atr": 1.0,
+      "tp_atr": 1.0,
+      "z": 1.0
+    },
+    {
+      "horizon": 32,
+      "lookback": 16,
+      "news_buffer_bars": 0,
+      "sl_atr": 1.5,
+      "tp_atr": 1.0,
+      "z": 1.0
+    },
+    {
+      "horizon": 32,
+      "lookback": 16,
+      "news_buffer_bars": 0,
+      "sl_atr": 0.75,
+      "tp_atr": 1.5,
+      "z": 1.0
+    },
+    {
+      "horizon": 32,
+      "lookback": 16,
+      "news_buffer_bars": 0,
+      "sl_atr": 1.0,
+      "tp_atr": 1.5,
+      "z": 1.0
+    },
+    {
+      "horizon": 32,
+      "lookback": 16,
+      "news_buffer_bars": 0,
+      "sl_atr": 1.5,
+      "tp_atr": 1.5,
+      "z": 1.0
+    },
+    {
+      "horizon": 32,
+      "lookback": 16,
+      "news_buffer_bars": 0,
+      "sl_atr": 0.75,
+      "tp_atr": 2.0,
+      "z": 1.0
+    },
+    {
+      "horizon": 32,
+      "lookback": 16,
+      "news_buffer_bars": 0,
+      "sl_atr": 1.5,
+      "tp_atr": 2.0,
+      "z": 1.0
+    },
+    {
+      "horizon": 32,
+      "lookback": 16,
+      "news_buffer_bars": 0,
+      "sl_atr": 0.75,
+      "tp_atr": 1.0,
+      "z": 1.5
+    },
+    {
+      "horizon": 32,
+      "lookback": 16,
+      "news_buffer_bars": 0,
+      "sl_atr": 0.75,
+      "tp_atr": 1.0,
+      "z": 2.0
+    },
+    {
+      "horizon": 32,
+      "lookback": 16,
+      "news_buffer_bars": 0,
+      "sl_atr": 1.0,
+      "tp_atr": 1.0,
+      "z": 2.0
+    },
+    {
+      "horizon": 32,
+      "lookback": 16,
+      "news_buffer_bars": 0,
+      "sl_atr": 0.75,
+      "tp_atr": 1.5,
+      "z": 2.0
+    },
+    {
+      "horizon": 32,
+      "lookback": 16,
+      "news_buffer_bars": 0,
+      "sl_atr": 0.75,
+      "tp_atr": 2.0,
+      "z": 2.0
+    }
+  ],
+  "historical_selection_overlaps_prior_data": true,
+  "historical_source_latest_timestamp": "2026-10-14T06:15:00.000000",
+  "if_sample_minimum_not_met": "INCONCLUSIVE; do not extend cutoff or alter rules in this preregistration",
+  "instrument": "XAUUSD",
+  "interim_performance_lookups_allowed": false,
+  "interpretation_limit": "Forward results apply only to this frozen family and cost assumptions; a failed/insufficient test is not proof that all XAUUSD strategies lack edge.",
+  "minimum_calendar_days": 92,
+  "minimum_exact_spread_trades_per_direction_per_pair": 100,
+  "number_of_evaluations": 1,
+  "rules_mutable": false,
+  "schema_version": "qros-forward-preregistration.v1",
+  "single_fixed_evaluation_cutoff_in_source_time": "2027-01-15 00:00:00",
+  "source_hashes": {
+    "C:\\Users\\User\\Documents\\XAUUSDM15.csv": "bc574cba7eedca456333ee736adf81639f379ed58213e18e076b9b7003783e0b",
+    "artifacts\\qros_follow_19_cost_reassessment_20261017.json": "07f216b83fd7f8bb0b69ad521dadac917639d7d155228d64403218d73c00b0ea",
+    "artifacts\\qros_follow_original_engine_rerun_20261017.json": "994b9d931a17c26f6fcb420883cc5ee86e782a351ea2c4694d38d9af3f0ade3f",
+    "researchos\\orchestration\\vectorized_backtest.py": "a15566bf7e8267bdeb46f7cfc36057a7ff82a9003feaa2bab1598497712ea4c2",
+    "researchos\\orchestration\\xauusd_cost_model.py": "615f7cdbe3ec874dcb2b74e13d783aa35c3a481d36acea21e2f3b01d5f4df7eb"
+  },
+  "source_timestamp_timezone": "naive timestamps as supplied by original broker export; do not reinterpret as UTC",
+  "spread_rule": "Use same bar-level spread and executable side accounting; reject trades with incomplete exit-minute spread instead of proxy filling.",
+  "statistics": {
+    "alpha": 0.05,
+    "block_bootstrap_replicates": 1000,
+    "block_length": "per-pair ceiling of larger median FOLLOW/REVERSE holding period, computed by frozen code",
+    "directional_absolute_edge_family_size": 38,
+    "fdr_method": "Benjamini-Hochberg",
+    "no_reoptimization": true,
+    "paired_endpoint": "FOLLOW minus REVERSE net expectancy",
+    "paired_family_size": 19,
+    "primary_endpoint": "mean net return per trade after spread, commission, and order-type slippage"
+  },
+  "status": "PREREGISTERED_WAITING_FOR_FORWARD_DATA",
+  "strategy_or_parameter_changes_allowed": false,
+  "timeframe": "M15"
+}

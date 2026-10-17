@@ -1,4 +1,4 @@
-schema_version: qros-xauusd-costs.v1
+schema_version: qros-xauusd-costs.v2
 instrument: XAUUSD
 timeframe_scope: [M15, H1, H4, D1]
 metadata_source:
@@ -23,19 +23,33 @@ spread:
   column: spread
   raw_unit: MT5_points
   conversion: price_units = spread_points * symbol_point
-  application: entry_ask_for_long_exit_ask_for_short
+  application: long_entry_ask_exit_bid_short_entry_bid_exit_ask
 commission:
   round_turn_usd_per_lot:
     value: 7.0
     source: assumed
   status: ILLUSTRATIVE_ASSUMPTION_NOT_BROKER_VERIFIED
 slippage:
-  model: volatility_scaled_per_side
-  atr_window: 14
-  atr_fraction_per_side:
-    value: 0.05
-    source: assumed
+  model: order_type_adverse_price_units_per_fill
+  unit: XAUUSD_price_units
   status: ILLUSTRATIVE_ASSUMPTION_NOT_CALIBRATED
+  order_types:
+    market_entry:
+      price_units_per_fill: 0.10
+      source: assumed
+      rationale: Placeholder sensitivity only; replace with measured MT5 deal-vs-request/quote data.
+    tp_limit:
+      price_units_per_fill: 0.01
+      source: assumed
+      rationale: Small adverse-fill placeholder; limit price is not guaranteed to fill.
+    sl_stop:
+      price_units_per_fill: 0.15
+      source: assumed
+      rationale: Placeholder for stop-trigger gap/slippage; must be calibrated from stop fills.
+    market_exit:
+      price_units_per_fill: 0.10
+      source: assumed
+      rationale: Placeholder sensitivity only; replace with measured MT5 deal-vs-request/quote data.
 policy:
   allow_assumed_nonzero_costs_for_sensitivity: true
   allow_assumed_costs_to_claim_verified: false

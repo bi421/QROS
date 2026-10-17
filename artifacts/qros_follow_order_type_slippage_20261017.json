@@ -1,0 +1,369 @@
+{
+  "break_even_definition": "For each order class, sum per-trade pre-slippage net return multiplied by executable entry price across all included trades, divided by count of fills of that class; assumes all other slippage classes are zero. A negative result means no nonnegative adverse slippage allowance can break even under that allocation.",
+  "cost_config": "config\\costs.yaml",
+  "cost_config_sha256": "2c8e2bac8969944958ecc18651e1d8aec9fd6f75e7726edb9ef57592f1d45607",
+  "costs_verified": false,
+  "execution_authorized": false,
+  "input_parquet": "artifacts\\qros_follow_19_costed_trade_rows_20261017.parquet",
+  "input_parquet_sha256": "7462c88c66f80452f601965f8f6fc7cc90f63ee92254eb590a5b4a074269e074",
+  "limitations": [
+    "Existing ledger omits 1,451 rows with incomplete M1 exit spread; missingness bias is reported separately.",
+    "Commission and each order-type slippage value remain assumptions, not observed broker fills.",
+    "The historical selected period is not an untouched holdout."
+  ],
+  "results": {
+    "FOLLOW_SIGNAL": {
+      "all_period": {
+        "assumed_slippage_price_units_per_fill": {
+          "market_entry": 0.1,
+          "market_exit": 0.1,
+          "sl_stop": 0.15,
+          "tp_limit": 0.01
+        },
+        "break_even_slippage_budget_price_units_per_trade_all_orders": -0.1536801492912999,
+        "break_even_slippage_price_units_per_fill_if_only_this_order_type_has_slippage": {
+          "market_entry": -0.1536801492912999,
+          "market_exit": -115.42836118390697,
+          "sl_stop": -0.26922626831372876,
+          "tp_limit": -0.35919410217166403
+        },
+        "gross_mean": 2.813284016810735e-06,
+        "n": 736824,
+        "net_mean": -0.00016462178752910163,
+        "net_mean_x0.5": -8.090425175614547e-05,
+        "net_mean_x1": -0.00016462178752910163,
+        "net_mean_x1.5": -0.00024833932330205785,
+        "net_mean_x2": -0.00033205685907501404,
+        "net_median": -0.0008269566789177213,
+        "net_win_rate": 0.4285283866975017,
+        "order_fill_counts": {
+          "market_entry": 736824,
+          "market_exit": 981,
+          "sl_stop": 420595,
+          "tp_limit": 315248
+        },
+        "order_type_slippage_mean": 8.950140433760024e-05,
+        "spread_plus_commission_mean": -7.512038319150142e-05
+      },
+      "by_exit_order_type": {
+        "market_exit": {
+          "assumed_slippage_price_units_per_fill": {
+            "market_entry": 0.1,
+            "market_exit": 0.1,
+            "sl_stop": 0.15,
+            "tp_limit": 0.01
+          },
+          "break_even_slippage_budget_price_units_per_trade_all_orders": 0.8170030581040143,
+          "break_even_slippage_price_units_per_fill_if_only_this_order_type_has_slippage": {
+            "market_entry": 0.8170030581040143,
+            "market_exit": 0.8170030581040143,
+            "sl_stop": null,
+            "tp_limit": null
+          },
+          "gross_mean": 0.00038370864451420196,
+          "n": 981,
+          "net_mean": 0.0002089683346365109,
+          "net_mean_x0.5": 0.0002963384895753564,
+          "net_mean_x1": 0.0002089683346365109,
+          "net_mean_x1.5": 0.00012159817969766531,
+          "net_mean_x2": 3.422802475881978e-05,
+          "net_median": 4.2330090042186844e-05,
+          "net_win_rate": 0.5117227319062182,
+          "order_fill_counts": {
+            "market_entry": 981,
+            "market_exit": 981,
+            "sl_stop": 0,
+            "tp_limit": 0
+          },
+          "order_type_slippage_mean": 8.411983597845134e-05,
+          "spread_plus_commission_mean": 0.0002930881706149622
+        },
+        "sl_stop": {
+          "assumed_slippage_price_units_per_fill": {
+            "market_entry": 0.1,
+            "market_exit": 0.1,
+            "sl_stop": 0.15,
+            "tp_limit": 0.01
+          },
+          "break_even_slippage_budget_price_units_per_trade_all_orders": -2.938721381529206,
+          "break_even_slippage_price_units_per_fill_if_only_this_order_type_has_slippage": {
+            "market_entry": -2.938721381529206,
+            "market_exit": null,
+            "sl_stop": -2.938721381529206,
+            "tp_limit": null
+          },
+          "gross_mean": -0.001167747445452195,
+          "n": 420595,
+          "net_mean": -0.0013638086484985413,
+          "net_mean_x0.5": -0.0012657780469753682,
+          "net_mean_x1": -0.0013638086484985413,
+          "net_mean_x1.5": -0.0014618392500217144,
+          "net_mean_x2": -0.001559869851544888,
+          "net_median": -0.0012036230552249538,
+          "net_win_rate": 0.0,
+          "order_fill_counts": {
+            "market_entry": 420595,
+            "market_exit": 0,
+            "sl_stop": 420595,
+            "tp_limit": 0
+          },
+          "order_type_slippage_mean": 0.00011786242851294044,
+          "spread_plus_commission_mean": -0.0012459462199856009
+        },
+        "tp_limit": {
+          "assumed_slippage_price_units_per_fill": {
+            "market_entry": 0.1,
+            "market_exit": 0.1,
+            "sl_stop": 0.15,
+            "tp_limit": 0.01
+          },
+          "break_even_slippage_budget_price_units_per_trade_all_orders": 3.5590227920331414,
+          "break_even_slippage_price_units_per_fill_if_only_this_order_type_has_slippage": {
+            "market_entry": 3.5590227920331414,
+            "market_exit": null,
+            "sl_stop": null,
+            "tp_limit": 3.5590227920331414
+          },
+          "gross_mean": 0.0015633571468244049,
+          "n": 315248,
+          "net_mean": 0.0014341369861335291,
+          "net_mean_x0.5": 0.0014987470664789674,
+          "net_mean_x1": 0.0014341369861335291,
+          "net_mean_x1.5": 0.0013695269057880913,
+          "net_mean_x2": 0.001304916825442653,
+          "net_median": 0.0012152735433984718,
+          "net_win_rate": 1.0,
+          "order_fill_counts": {
+            "market_entry": 315248,
+            "market_exit": 0,
+            "sl_stop": 0,
+            "tp_limit": 315248
+          },
+          "order_type_slippage_mean": 5.167967146549037e-05,
+          "spread_plus_commission_mean": 0.0014858166575990193
+        }
+      },
+      "holdout_period": {
+        "assumed_slippage_price_units_per_fill": {
+          "market_entry": 0.1,
+          "market_exit": 0.1,
+          "sl_stop": 0.15,
+          "tp_limit": 0.01
+        },
+        "break_even_slippage_budget_price_units_per_trade_all_orders": -0.05419555074322287,
+        "break_even_slippage_price_units_per_fill_if_only_this_order_type_has_slippage": {
+          "market_entry": -0.05419555074322287,
+          "market_exit": -21.120654114914576,
+          "sl_stop": -0.096473663678875,
+          "tp_limit": -0.12439622788189311
+        },
+        "gross_mean": 4.386883371393031e-05,
+        "n": 143414,
+        "net_mean": -7.503133134926231e-05,
+        "net_mean_x0.5": -1.5581248817666004e-05,
+        "net_mean_x1": -7.503133134926231e-05,
+        "net_mean_x1.5": -0.00013448141388085864,
+        "net_mean_x2": -0.00019393149641245495,
+        "net_median": -0.0009001687892048266,
+        "net_win_rate": 0.4371958107297753,
+        "order_fill_counts": {
+          "market_entry": 143414,
+          "market_exit": 368,
+          "sl_stop": 80565,
+          "tp_limit": 62481
+        },
+        "order_type_slippage_mean": 5.601478692669726e-05,
+        "spread_plus_commission_mean": -1.901654442256505e-05
+      }
+    },
+    "REVERSE_SIGNAL": {
+      "all_period": {
+        "assumed_slippage_price_units_per_fill": {
+          "market_entry": 0.1,
+          "market_exit": 0.1,
+          "sl_stop": 0.15,
+          "tp_limit": 0.01
+        },
+        "break_even_slippage_budget_price_units_per_trade_all_orders": -0.2239412951507881,
+        "break_even_slippage_price_units_per_fill_if_only_this_order_type_has_slippage": {
+          "market_entry": -0.2239412951507881,
+          "market_exit": -149.3493883322413,
+          "sl_stop": -0.38714424414848203,
+          "tp_limit": -0.5331218716714475
+        },
+        "gross_mean": -1.890910443362967e-05,
+        "n": 736939,
+        "net_mean": -0.00018674111030526094,
+        "net_mean_x0.5": -0.0001028251073694453,
+        "net_mean_x1": -0.00018674111030526094,
+        "net_mean_x1.5": -0.0002706571132410765,
+        "net_mean_x2": -0.00035457311617689233,
+        "net_median": -0.0008362462825815387,
+        "net_win_rate": 0.4210552026694204,
+        "order_fill_counts": {
+          "market_entry": 736939,
+          "market_exit": 1105,
+          "sl_stop": 426278,
+          "tp_limit": 309556
+        },
+        "order_type_slippage_mean": 8.994820337759362e-05,
+        "spread_plus_commission_mean": -9.679290692766732e-05
+      },
+      "by_exit_order_type": {
+        "market_exit": {
+          "assumed_slippage_price_units_per_fill": {
+            "market_entry": 0.1,
+            "market_exit": 0.1,
+            "sl_stop": 0.15,
+            "tp_limit": 0.01
+          },
+          "break_even_slippage_budget_price_units_per_trade_all_orders": 1.7034027149321305,
+          "break_even_slippage_price_units_per_fill_if_only_this_order_type_has_slippage": {
+            "market_entry": 1.7034027149321305,
+            "market_exit": 1.7034027149321305,
+            "sl_stop": null,
+            "tp_limit": null
+          },
+          "gross_mean": 0.0007419675598902444,
+          "n": 1105,
+          "net_mean": 0.0005674676418526732,
+          "net_mean_x0.5": 0.0006547176008714588,
+          "net_mean_x1": 0.0005674676418526732,
+          "net_mean_x1.5": 0.00048021768283388775,
+          "net_mean_x2": 0.0003929677238151022,
+          "net_median": 0.0004352338544979609,
+          "net_win_rate": 0.6660633484162896,
+          "order_fill_counts": {
+            "market_entry": 1105,
+            "market_exit": 1105,
+            "sl_stop": 0,
+            "tp_limit": 0
+          },
+          "order_type_slippage_mean": 8.624344688684674e-05,
+          "spread_plus_commission_mean": 0.00065371108873952
+        },
+        "sl_stop": {
+          "assumed_slippage_price_units_per_fill": {
+            "market_entry": 0.1,
+            "market_exit": 0.1,
+            "sl_stop": 0.15,
+            "tp_limit": 0.01
+          },
+          "break_even_slippage_budget_price_units_per_trade_all_orders": -2.9538922198156183,
+          "break_even_slippage_price_units_per_fill_if_only_this_order_type_has_slippage": {
+            "market_entry": -2.9538922198156183,
+            "market_exit": null,
+            "sl_stop": -2.9538922198156183,
+            "tp_limit": null
+          },
+          "gross_mean": -0.0011687145507825343,
+          "n": 426278,
+          "net_mean": -0.0013639601502413066,
+          "net_mean_x0.5": -0.0012663373505119202,
+          "net_mean_x1": -0.0013639601502413066,
+          "net_mean_x1.5": -0.0014615829499706925,
+          "net_mean_x2": -0.0015592057497000784,
+          "net_median": -0.0012010662155251064,
+          "net_win_rate": 0.0,
+          "order_fill_counts": {
+            "market_entry": 426278,
+            "market_exit": 0,
+            "sl_stop": 426278,
+            "tp_limit": 0
+          },
+          "order_type_slippage_mean": 0.00011766242949070042,
+          "spread_plus_commission_mean": -0.001246297720750606
+        },
+        "tp_limit": {
+          "assumed_slippage_price_units_per_fill": {
+            "market_entry": 0.1,
+            "market_exit": 0.1,
+            "sl_stop": 0.15,
+            "tp_limit": 0.01
+          },
+          "break_even_slippage_budget_price_units_per_trade_all_orders": 3.5284922068105136,
+          "break_even_slippage_price_units_per_fill_if_only_this_order_type_has_slippage": {
+            "market_entry": 3.5284922068105136,
+            "market_exit": null,
+            "sl_stop": null,
+            "tp_limit": 3.5284922068105136
+          },
+          "gross_mean": 0.001561728962167052,
+          "n": 309556,
+          "net_mean": 0.0014316709935942697,
+          "net_mean_x0.5": 0.001496699977880661,
+          "net_mean_x1": 0.0014316709935942697,
+          "net_mean_x1.5": 0.0013666420093078788,
+          "net_mean_x2": 0.0013016130250214876,
+          "net_median": 0.0012206466440447487,
+          "net_win_rate": 1.0,
+          "order_fill_counts": {
+            "market_entry": 309556,
+            "market_exit": 0,
+            "sl_stop": 0,
+            "tp_limit": 309556
+          },
+          "order_type_slippage_mean": 5.179720283772145e-05,
+          "spread_plus_commission_mean": 0.0014834681964319913
+        }
+      },
+      "holdout_period": {
+        "assumed_slippage_price_units_per_fill": {
+          "market_entry": 0.1,
+          "market_exit": 0.1,
+          "sl_stop": 0.15,
+          "tp_limit": 0.01
+        },
+        "break_even_slippage_budget_price_units_per_trade_all_orders": -0.37156502137395075,
+        "break_even_slippage_price_units_per_fill_if_only_this_order_type_has_slippage": {
+          "market_entry": -0.37156502137395075,
+          "market_exit": -150.514272598879,
+          "sl_stop": -0.6387969368181653,
+          "tp_limit": -0.8934694810095274
+        },
+        "gross_mean": -4.490051875897343e-05,
+        "n": 143399,
+        "net_mean": -0.00016468262642986608,
+        "net_mean_x0.5": -0.00010479157259441972,
+        "net_mean_x1": -0.00016468262642986608,
+        "net_mean_x1.5": -0.0002245736802653124,
+        "net_mean_x2": -0.0002844647341007587,
+        "net_median": -0.0009436921272620806,
+        "net_win_rate": 0.4173669272449599,
+        "order_fill_counts": {
+          "market_entry": 143399,
+          "market_exit": 354,
+          "sl_stop": 83410,
+          "tp_limit": 59635
+        },
+        "order_type_slippage_mean": 5.687040337386061e-05,
+        "spread_plus_commission_mean": -0.00010781222305600546
+      }
+    }
+  },
+  "rows": 1473763,
+  "schema_version": "qros-order-type-slippage-screen.v1",
+  "slippage_assumptions": {
+    "market_entry": {
+      "price_units_per_fill": 0.1,
+      "rationale": "Placeholder sensitivity only; replace with measured MT5 deal-vs-request/quote data.",
+      "source": "assumed"
+    },
+    "market_exit": {
+      "price_units_per_fill": 0.1,
+      "rationale": "Placeholder sensitivity only; replace with measured MT5 deal-vs-request/quote data.",
+      "source": "assumed"
+    },
+    "sl_stop": {
+      "price_units_per_fill": 0.15,
+      "rationale": "Placeholder for stop-trigger gap/slippage; must be calibrated from stop fills.",
+      "source": "assumed"
+    },
+    "tp_limit": {
+      "price_units_per_fill": 0.01,
+      "rationale": "Small adverse-fill placeholder; limit price is not guaranteed to fill.",
+      "source": "assumed"
+    }
+  },
+  "slippage_model": "order_type_adverse_price_units_per_fill"
+}

@@ -20,7 +20,7 @@ MANIFEST = ROOT / "data" / "mt5" / "xauusd" / "XAUUSD_M1_2021_2025_MT5.manifest.
 
 def load_cost_config(path: Path = DEFAULT_COSTS) -> dict[str, Any]:
     config = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if not isinstance(config, dict) or config.get("schema_version") != "qros-xauusd-costs.v1":
+    if not isinstance(config, dict) or config.get("schema_version") != "qros-xauusd-costs.v2":
         raise ValueError("INVALID_COST_CONFIG_SCHEMA")
     metadata = json.loads(MANIFEST.read_text(encoding="utf-8"))
     actual_manifest_sha = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()
@@ -50,8 +50,8 @@ def mt5_spread_points_to_price(spread_points: float, symbol_point: float) -> flo
 def cost_config_completeness(config: dict[str, Any]) -> dict[str, Any]:
     failures: list[str] = []
     commission = config.get("commission", {}).get("round_turn_usd_per_lot", {})
-    slip = config.get("slippage", {}).get("atr_fraction_per_side", {})
-    for name, field in (("commission", commission), ("slippage", slip)):
+    order_slippage = config.get("slippage", {}).get("order_types", {})
+    for name, field in (("commission", commission),):
         value = field.get("value")
         source = field.get("source")
         if source not in {"measured", "assumed"}:
@@ -62,15 +62,36 @@ def cost_config_completeness(config: dict[str, Any]) -> dict[str, Any]:
             failures.append(f"{name.upper()}_VALUE_NEGATIVE")
         elif value == 0 and source == "assumed":
             failures.append(f"{name.upper()}_ASSUMED_ZERO_FORBIDDEN")
+    required_order_types = ("market_entry", "tp_limit", "sl_stop", "market_exit")
+    for order_type in required_order_types:
+        field = order_slippage.get(order_type, {})
+        value = field.get("price_units_per_fill")
+        source = field.get("source")
+        if source not in {"measured", "assumed"}:
+            failures.append(f"SLIPPAGE_{order_type.upper()}_SOURCE_INVALID")
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+            failures.append(f"SLIPPAGE_{order_type.upper()}_VALUE_MISSING")
+        elif value < 0:
+            failures.append(f"SLIPPAGE_{order_type.upper()}_VALUE_NEGATIVE")
+        elif value == 0 and source == "assumed":
+            failures.append(f"SLIPPAGE_{order_type.upper()}_ASSUMED_ZERO_FORBIDDEN")
     if config.get("spread", {}).get("raw_unit") != "MT5_points":
         failures.append("SPREAD_UNIT_UNDECLARED")
     return {
         "cost_basis_declared": not failures,
-        "costs_verified": not failures and commission.get("source") == "measured" and slip.get("source") == "measured",
+        "costs_verified": (
+            not failures
+            and commission.get("source") == "measured"
+            and all(order_slippage.get(name, {}).get("source") == "measured" for name in required_order_types)
+        ),
         "failures": failures,
         "assumption_fields": [
-            name for name, field in (("commission", commission), ("slippage", slip))
-            if field.get("source") == "assumed"
+            *([ "commission" ] if commission.get("source") == "assumed" else []),
+            *[
+                f"slippage.{order_type}"
+                for order_type, field in order_slippage.items()
+                if isinstance(field, dict) and field.get("source") == "assumed"
+            ],
         ],
     }
 
@@ -86,6 +107,7 @@ def calculate_trade_costs(
     exit_atr: float,
     config: dict[str, Any],
     cost_multiplier: float = 1.0,
+    exit_reason: str = "TIMEOUT",
 ) -> dict[str, Any]:
     """Return auditable costs and net return under declared model parameters."""
     numbers = {
@@ -107,7 +129,16 @@ def calculate_trade_costs(
     point = float(config["symbol_point"]["value"])
     contract = float(config["contract_size"]["value"])
     commission = float(config["commission"]["round_turn_usd_per_lot"]["value"])
-    slip_fraction = float(config["slippage"]["atr_fraction_per_side"]["value"])
+    exit_order_type = {
+        "TAKE_PROFIT": "tp_limit",
+        "STOP_LOSS": "sl_stop",
+        "TIMEOUT": "market_exit",
+    }.get(exit_reason)
+    if exit_order_type is None:
+        raise ValueError(f"INVALID_EXIT_REASON:{exit_reason}")
+    order_slippage = config["slippage"]["order_types"]
+    entry_slippage_price = float(order_slippage["market_entry"]["price_units_per_fill"])
+    exit_slippage_price = float(order_slippage[exit_order_type]["price_units_per_fill"])
     spread_entry_price = mt5_spread_points_to_price(entry_spread_points, point)
     spread_exit_price = mt5_spread_points_to_price(exit_spread_points, point)
     # MT5 historical OHLC is bid-side. A long enters at ask and exits at bid;
@@ -122,7 +153,9 @@ def calculate_trade_costs(
         executable_return = 1.0 - (exit_price + spread_exit_price) / entry_price
         spread_return = gross_return - executable_return
         executable_entry_price = entry_price
-    slippage_cost_price = (entry_atr + exit_atr) * slip_fraction
+    # Order-type adverse fill assumptions are explicit price units per fill.
+    # They are not ATR-scaled and remain unverified until backed by broker fills.
+    slippage_cost_price = entry_slippage_price + exit_slippage_price
     commission_return = commission / (contract * executable_entry_price)
     slippage_return = slippage_cost_price / executable_entry_price
     spread_cost_price = spread_return * entry_price
@@ -141,6 +174,10 @@ def calculate_trade_costs(
         "spread_cost_return": spread_return * cost_multiplier,
         "commission_usd_per_lot_round_turn": commission * cost_multiplier,
         "commission_cost_return": commission_return * cost_multiplier,
+        "slippage_entry_order_type": "market_entry",
+        "slippage_exit_order_type": exit_order_type,
+        "slippage_entry_price_units": entry_slippage_price * cost_multiplier,
+        "slippage_exit_price_units": exit_slippage_price * cost_multiplier,
         "slippage_cost_price": slippage_cost_price * cost_multiplier,
         "slippage_cost_return": slippage_return * cost_multiplier,
         "total_cost_return": total_cost_return,
@@ -164,6 +201,7 @@ def append_trade_costs(trades: pl.DataFrame, config: dict[str, Any], multiplier:
             direction=row["direction"], entry_spread_points=row["entry_spread"],
             exit_spread_points=row["exit_spread"], entry_atr=row["entry_atr"],
             exit_atr=row["exit_atr"], config=config, cost_multiplier=multiplier,
+            exit_reason=row.get("exit_reason", "TIMEOUT"),
         )
         for row in trades.iter_rows(named=True)
     ]

@@ -1,0 +1,47 @@
+{
+  "blocker": "No local XAGUSD/EURUSD spread-bearing M1 CSV, symbol manifest, or symbol-specific cost config was found. XAUUSD metadata must not be reused for other symbols.",
+  "execution_authorized": false,
+  "required_before_comparison": [
+    "MT5 M1 OHLC plus per-bar spread for each instrument, with source timestamp/timezone and SHA-256",
+    "Symbol point, digits, contract size, tick size/value and quote-side semantics from the exact broker symbol specification",
+    "Commission schedule by side/lot and account currency",
+    "Order-type slippage observations or clearly labelled assumptions",
+    "Same frozen 19 parameter pairs and identical evaluation windows; no instrument-specific retuning",
+    "Report data coverage, missingness, spread distribution, sample size, net expectancy and cost multipliers"
+  ],
+  "results": {
+    "EURUSD": {
+      "execution_authorized": false,
+      "inputs": {
+        "cost_config": "config\\costs_eurusd.yaml",
+        "csv": "data\\mt5\\eurusd\\EURUSD_M1_2021_2025_MT5.csv",
+        "manifest": "data\\mt5\\eurusd\\EURUSD_M1_2021_2025_MT5.manifest.json"
+      },
+      "instrument": "EURUSD",
+      "missing_inputs": [
+        "csv",
+        "manifest",
+        "cost_config"
+      ],
+      "status": "BLOCKED_MISSING_DATA_OR_METADATA"
+    },
+    "XAGUSD": {
+      "execution_authorized": false,
+      "inputs": {
+        "cost_config": "config\\costs_xagusd.yaml",
+        "csv": "data\\mt5\\xagusd\\XAGUSD_M1_2021_2025_MT5.csv",
+        "manifest": "data\\mt5\\xagusd\\XAGUSD_M1_2021_2025_MT5.manifest.json"
+      },
+      "instrument": "XAGUSD",
+      "missing_inputs": [
+        "csv",
+        "manifest",
+        "cost_config"
+      ],
+      "status": "BLOCKED_MISSING_DATA_OR_METADATA"
+    }
+  },
+  "schema_version": "qros-cross-instrument-readiness.v1",
+  "status": "BLOCKED",
+  "strategy_changed": false
+}

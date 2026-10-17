@@ -533,9 +533,17 @@ def run() -> dict[str, Any]:
             commission_base = float(cost_config["commission"]["round_turn_usd_per_lot"]["value"]) / (
                 float(cost_config["contract_size"]["value"]) * entry_exec_px
             )
-            slippage_base = (tr["entry_atr"] + tr["exit_atr"]) * float(
-                cost_config["slippage"]["atr_fraction_per_side"]["value"]
-            ) / entry_exec_px
+            slip_orders = cost_config["slippage"]["order_types"]
+            entry_slip = float(slip_orders["market_entry"]["price_units_per_fill"])
+            exit_slip = np.select(
+                [tr["exit_reason"] == 2, tr["exit_reason"] == 1],
+                [
+                    float(slip_orders["tp_limit"]["price_units_per_fill"]),
+                    float(slip_orders["sl_stop"]["price_units_per_fill"]),
+                ],
+                default=float(slip_orders["market_exit"]["price_units_per_fill"]),
+            )
+            slippage_base = (entry_slip + exit_slip) / entry_exec_px
             exact = tr["exit_spread_exact"]
             spread_base[~exact] = np.nan
             commission_base[~exact] = np.nan
@@ -835,7 +843,8 @@ def run() -> dict[str, Any]:
         "cost_assumptions": completeness["assumption_fields"],
         "quote_basis": "MT5 BID OHLC; long entry ASK / exit BID; short entry BID / exit ASK",
         "commission_assumption_usd_per_lot_round_turn": cost_config["commission"]["round_turn_usd_per_lot"]["value"],
-        "slippage_assumption_atr_fraction_per_side": cost_config["slippage"]["atr_fraction_per_side"]["value"],
+        "slippage_model": cost_config["slippage"]["model"],
+        "slippage_assumptions_by_order_type": cost_config["slippage"]["order_types"],
         "entry_timing": "Signal is confirmed at M15 bar close; entry uses the next M15 bar's first observed M1 open and the matching first-row spread.",
         "spread_application": "MT5 BID OHLC; long entry ASK / exit BID, short entry BID / exit ASK. TP/SL spread is from the first M1 minute touching the selected original M15 barrier; timeout spread is from the last M1 row in the exit bar. Incomplete TP/SL M1 buckets are excluded, never filled with a proxy spread.",
         "exit_fill_policy": "Preserves original M15 engine barrier prices and stop-first rule for gross parity. M1 is used to identify the exact observed exit minute and spread; this is not a full M1 quote-side barrier replay.",

@@ -148,3 +148,9 @@ supabase/.branches/
 artifacts/*.parquet
 artifacts/**/*.parquet
 artifacts/_qros_follow_trade_parts/
+
+# Explicitly track small QROS evidence JSON; generated Parquet remains ignored.
+!artifacts/qros_follow_missing_data_bias_20261017.json
+!artifacts/qros_follow_order_type_slippage_20261017.json
+!artifacts/qros_cross_instrument_readiness_20261017.json
+!config/forward_validation_preregistration_20261017.json

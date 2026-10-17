@@ -15,7 +15,12 @@ def _config():
         "contract_size": {"value": 100.0, "source": "measured"},
         "spread": {"raw_unit": "MT5_points"},
         "commission": {"round_turn_usd_per_lot": {"value": 7.0, "source": "assumed"}},
-        "slippage": {"atr_fraction_per_side": {"value": 0.05, "source": "assumed"}},
+        "slippage": {"order_types": {
+            "market_entry": {"price_units_per_fill": 0.10, "source": "assumed"},
+            "tp_limit": {"price_units_per_fill": 0.01, "source": "assumed"},
+            "sl_stop": {"price_units_per_fill": 0.15, "source": "assumed"},
+            "market_exit": {"price_units_per_fill": 0.10, "source": "assumed"},
+        }},
     }
 
 
@@ -34,7 +39,10 @@ def test_cost_config_explicit_nonzero_assumptions_are_declared_but_not_verified(
     result = cost_config_completeness(_config())
     assert result["cost_basis_declared"] is True
     assert result["costs_verified"] is False
-    assert set(result["assumption_fields"]) == {"commission", "slippage"}
+    assert set(result["assumption_fields"]) == {
+        "commission", "slippage.market_entry", "slippage.tp_limit",
+        "slippage.sl_stop", "slippage.market_exit",
+    }
 
 
 def test_assumed_zero_cost_is_invalid():
@@ -79,9 +87,40 @@ def test_short_uses_entry_bid_exit_ask_and_counts_spread_once():
     assert result["net_return"] < result["gross_return"]
 
 
+@pytest.mark.parametrize(
+    ("exit_reason", "expected_exit_type", "expected_slippage"),
+    [
+        ("TAKE_PROFIT", "tp_limit", 0.11),
+        ("STOP_LOSS", "sl_stop", 0.25),
+        ("TIMEOUT", "market_exit", 0.20),
+    ],
+)
+def test_slippage_is_selected_by_order_type_not_atr(exit_reason, expected_exit_type, expected_slippage):
+    result = calculate_trade_costs(
+        entry_price=2500, exit_price=2501, direction=1,
+        entry_spread_points=9, exit_spread_points=9,
+        entry_atr=100.0, exit_atr=500.0, config=_config(),
+        exit_reason=exit_reason,
+    )
+    assert result["slippage_exit_order_type"] == expected_exit_type
+    assert result["slippage_cost_price"] == pytest.approx(expected_slippage)
+    assert result["slippage_cost_return"] == pytest.approx(expected_slippage / 2500.09)
+    assert result["execution_authorized"] is False
+
+
+def test_unknown_exit_reason_fails_closed():
+    with pytest.raises(ValueError, match="INVALID_EXIT_REASON"):
+        calculate_trade_costs(
+            entry_price=2500, exit_price=2501, direction=1,
+            entry_spread_points=9, exit_spread_points=9,
+            entry_atr=1.0, exit_atr=1.0, config=_config(),
+            exit_reason="UNKNOWN",
+        )
+
+
 def test_missing_cost_terms_do_not_emit_net_return():
     config = _config()
-    config["slippage"]["atr_fraction_per_side"]["value"] = None
+    config["slippage"]["order_types"]["market_entry"]["price_units_per_fill"] = None
     result = calculate_trade_costs(
         entry_price=2500, exit_price=2501, direction=1,
         entry_spread_points=9, exit_spread_points=9,
