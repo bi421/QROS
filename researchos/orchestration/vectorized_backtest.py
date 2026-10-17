@@ -167,6 +167,29 @@ def _bootstrap_daily_blocks(
     )
 
 
+def _apply_barrier_step(
+    open_price: np.ndarray,
+    high: np.ndarray,
+    low: np.ndarray,
+    direction: np.ndarray,
+    stop_price: np.ndarray,
+    take_price: np.ndarray,
+    alive: np.ndarray,
+    exit_price: np.ndarray,
+) -> None:
+    """Apply one OHLC bar, conservatively filling stop gaps at the bar open."""
+    long = direction > 0
+    stop = alive & np.where(long, low <= stop_price, high >= stop_price)
+    take = alive & ~stop & np.where(long, high >= take_price, low <= take_price)
+    # Stops crossed by an opening gap fill at the worse open, not the stale stop
+    # level. If both barriers touch intrabar, stop-first remains conservative.
+    stop_gap = stop & np.where(long, open_price < stop_price, open_price > stop_price)
+    exit_price[stop] = stop_price[stop]
+    exit_price[stop_gap] = open_price[stop_gap]
+    exit_price[take] = take_price[take]
+    alive[stop | take] = False
+
+
 def run_grid(
     data: dict[str, Any], config: EngineConfig, news_csv: str | None = None
 ) -> dict[str, Any]:
@@ -262,12 +285,9 @@ def run_grid(
             alive = np.ones(len(sig), bool)
             for step in range(hz):
                 j = entry_ix + step
-                long = direction > 0
-                stop = alive & np.where(long, low[j] <= sl_price, h[j] >= sl_price)
-                take = alive & ~stop & np.where(long, h[j] >= tp_price, low[j] <= tp_price)
-                exit_price[stop] = sl_price[stop]
-                exit_price[take] = tp_price[take]
-                alive[stop | take] = False
+                _apply_barrier_step(
+                    o[j], h[j], low[j], direction, sl_price, tp_price, alive, exit_price
+                )
             gross = direction * (exit_price - entry)
             net = gross.copy()
             if costs_configured:

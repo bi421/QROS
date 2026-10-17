@@ -8,6 +8,7 @@ import pytest
 
 from researchos.orchestration.vectorized_backtest import (
     EngineConfig,
+    _apply_barrier_step,
     _bh,
     load_news_mask,
     load_ohlcv_csv,
@@ -57,6 +58,23 @@ def test_news_mask_blocks_both_sides_of_event(tmp_path: Path) -> None:
     ts = np.datetime64("2025-01-01T00:00") + np.arange(10) * np.timedelta64(15, "m")
     mask = load_news_mask(p, ts, 1)
     assert np.flatnonzero(mask).tolist() == [3, 4, 5]
+
+
+def test_barrier_uses_open_price_for_stop_loss_gap() -> None:
+    alive = np.array([True, True, True])
+    exit_price = np.array([100.0, 100.0, 100.0])
+    _apply_barrier_step(
+        open_price=np.array([95.0, 105.0, 100.0]),
+        high=np.array([97.0, 106.0, 106.0]),
+        low=np.array([94.0, 103.0, 98.0]),
+        direction=np.array([1.0, -1.0, 1.0]),
+        stop_price=np.array([98.0, 102.0, 99.0]),
+        take_price=np.array([105.0, 95.0, 105.0]),
+        alive=alive,
+        exit_price=exit_price,
+    )
+    assert exit_price.tolist() == [95.0, 105.0, 99.0]
+    assert alive.tolist() == [False, False, False]
 
 
 def test_grid_fails_closed_without_verified_cost_model() -> None:
