@@ -66,7 +66,7 @@ def test_fail_closed_on_null_or_invalid_safety_trigger() -> None:
         QROSPipelineEvaluator().ingest(pl.DataFrame({
             "state": [0, 1],
             "close": [10.0, 11.0],
-            "safety_gate_triggered": [0, 2],
+            "safety_gate_triggered": pl.Series("safety_gate_triggered", [0, 2], dtype=pl.Int64),
         })).compute()
 
     with pytest.raises(ValueError, match="safety_passed must contain only boolean or numeric 0/1"):

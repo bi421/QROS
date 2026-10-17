@@ -27,6 +27,7 @@ class EngineConfig:
     base_spread_price: float | None = None
     commission_roundtrip_price: float | None = None
     cost_model_verified: bool = False
+    cost_evidence_sha256: str | None = None
     random_seed: int = 421
 
 
@@ -58,9 +59,11 @@ def load_ohlcv_csv(path: str | Path) -> dict[str, Any]:
     )
     if frame["ts"].null_count():
         raise ValueError("Timestamp parse failed; expected YYYY.MM.DD HH:MM")
-    frame = frame.sort("ts")
+    parsed_timestamps = frame["ts"].to_numpy()
     if frame["ts"].is_duplicated().any():
         raise ValueError("Duplicate timestamps: refusing ambiguous data")
+    if len(parsed_timestamps) > 1 and np.any(np.diff(parsed_timestamps) <= np.timedelta64(0, "ns")):
+        raise ValueError("Out-of-order timestamps: refusing to silently reorder source rows")
     out = {
         k: frame[k].to_numpy().astype(np.float64, copy=False)
         for k in ("open", "high", "low", "close", "tick_volume", "real_volume")
@@ -92,7 +95,9 @@ def load_news_mask(path: str | Path | None, timestamps: np.ndarray, buffer_bars:
     news = f[col].cast(pl.String).str.to_datetime(strict=False).drop_nulls().to_numpy()
     if not len(news):
         raise ValueError("No parseable news timestamps")
-    news_indices: np.ndarray = np.asarray(np.searchsorted(timestamps, news), dtype=np.int64).reshape(-1)
+    news_indices: np.ndarray = np.asarray(
+        np.searchsorted(timestamps, news), dtype=np.int64
+    ).reshape(-1)
     for i in news_indices:
         blocked[max(0, int(i) - buffer_bars) : min(len(blocked), int(i) + buffer_bars + 1)] = True
     return blocked
@@ -179,8 +184,12 @@ def _bootstrap_daily_blocks(
         observed,
         float(np.nanquantile(means, 0.025)),
         float(np.nanquantile(means, 0.975)),
-        float((1 + np.count_nonzero(null_means[valid] >= observed)) / (1 + np.count_nonzero(valid))),
-        float((1 + np.count_nonzero(null_means[valid] <= observed)) / (1 + np.count_nonzero(valid))),
+        float(
+            (1 + np.count_nonzero(null_means[valid] >= observed)) / (1 + np.count_nonzero(valid))
+        ),
+        float(
+            (1 + np.count_nonzero(null_means[valid] <= observed)) / (1 + np.count_nonzero(valid))
+        ),
     )
 
 
@@ -207,11 +216,96 @@ def _apply_barrier_step(
     alive[stop | take] = False
 
 
+def _validate_backtest_data(data: dict[str, Any]) -> int:
+    """Fail closed on malformed in-memory OHLCV arrays before any simulation."""
+    required = ("open", "high", "low", "close", "timestamp")
+    missing = [key for key in required if key not in data]
+    if missing:
+        raise ValueError(f"Missing required backtest fields: {','.join(missing)}")
+    lengths = {key: len(data[key]) for key in required}
+    if len(set(lengths.values())) != 1:
+        raise ValueError("OHLC and timestamp arrays must have equal lengths")
+    n = lengths["close"]
+    if n == 0:
+        raise ValueError("Empty OHLCV input")
+    prices = {
+        key: np.asarray(data[key], dtype=np.float64) for key in ("open", "high", "low", "close")
+    }
+    for key, values in prices.items():
+        if values.ndim != 1 or not np.isfinite(values).all() or np.any(values <= 0):
+            raise ValueError(f"Invalid positive finite price series: {key}")
+    if (
+        np.any(prices["high"] < np.maximum(prices["open"], prices["close"]))
+        or np.any(prices["low"] > np.minimum(prices["open"], prices["close"]))
+        or np.any(prices["high"] < prices["low"])
+    ):
+        raise ValueError("Invalid OHLC geometry")
+    timestamps = np.asarray(data["timestamp"])
+    if timestamps.ndim != 1 or not np.issubdtype(timestamps.dtype, np.datetime64):
+        raise ValueError("Timestamps must be a one-dimensional datetime64 array")
+    if n > 1 and np.any(np.diff(timestamps) <= np.timedelta64(0, "ns")):
+        raise ValueError("Timestamps must be strictly increasing and unique")
+    for key in ("tick_volume", "real_volume"):
+        if key in data:
+            values = np.asarray(data[key], dtype=np.float64)
+            if (
+                values.ndim != 1
+                or len(values) != n
+                or not np.isfinite(values).all()
+                or np.any(values < 0)
+            ):
+                raise ValueError(f"{key} must be finite, nonnegative and match OHLC row count")
+    return n
+
+
+def _causal_signal_score(
+    close: np.ndarray,
+    atr: np.ndarray,
+    timestamps: np.ndarray,
+    lookback: int,
+) -> np.ndarray:
+    """Compute a close-confirmed score using no data later than each row.
+
+    A signal at t is only eligible for entry at the next bar's open. Any gap in
+    the lookback window invalidates that score instead of bridging missing bars.
+    """
+    if isinstance(lookback, bool) or not isinstance(lookback, int) or lookback < 1:
+        raise ValueError("lookback must be an integer >= 1")
+    close = np.asarray(close, dtype=np.float64)
+    atr = np.asarray(atr, dtype=np.float64)
+    timestamps = np.asarray(timestamps)
+    if (
+        close.ndim != 1
+        or atr.ndim != 1
+        or timestamps.ndim != 1
+        or not (len(close) == len(atr) == len(timestamps))
+    ):
+        raise ValueError("close, ATR and timestamps must be one-dimensional arrays of equal length")
+    n = len(close)
+    score = np.full(n, np.nan)
+    if n <= lookback:
+        return score
+    move = close[lookback:] - close[:-lookback]
+    prior_atr = atr[:-1]
+    finite = np.isfinite(prior_atr)
+    vals = np.nan_to_num(prior_atr, nan=0.0)
+    sums = np.convolve(vals, np.ones(lookback), mode="valid")
+    counts = np.convolve(finite.astype(float), np.ones(lookback), mode="valid")
+    scale = sums / np.where(counts > 0, counts, np.nan)
+    score[lookback:] = move / np.where(scale > 0, scale, np.nan)
+    gap = np.r_[False, np.diff(timestamps) != np.timedelta64(15, "m")]
+    gap_prefix = np.cumsum(gap)
+    idx = np.arange(n)
+    crosses_gap = gap_prefix[idx] - gap_prefix[np.maximum(0, idx - lookback)] > 0
+    score[crosses_gap] = np.nan
+    return score
+
+
 def run_grid(
     data: dict[str, Any], config: EngineConfig, news_csv: str | None = None
 ) -> dict[str, Any]:
-    o, h, low, c = (data[k] for k in ("open", "high", "low", "close"))
-    n = len(c)
+    n = _validate_backtest_data(data)
+    o, h, low, c = (np.asarray(data[k], dtype=np.float64) for k in ("open", "high", "low", "close"))
     if n < 100:
         raise ValueError("At least 100 bars required")
     atr = _atr(h, low, c)
@@ -223,7 +317,13 @@ def run_grid(
             config.commission_roundtrip_price,
         )
     )
-    costs_verified = costs_configured and config.cost_model_verified
+    evidence_hash = config.cost_evidence_sha256
+    evidence_hash_valid = (
+        isinstance(evidence_hash, str)
+        and len(evidence_hash) == 64
+        and all(char in "0123456789abcdef" for char in evidence_hash)
+    )
+    costs_verified = costs_configured and config.cost_model_verified and evidence_hash_valid
     timestamps = data["timestamp"]
     gap = np.r_[False, np.diff(timestamps) != np.timedelta64(15, "m")]
     gap_prefix: np.ndarray = np.cumsum(gap)
@@ -265,7 +365,9 @@ def run_grid(
     results = []
     paired_samples: dict[tuple[Any, ...], dict[str, dict[str, np.ndarray]]] = {}
     for start in range(0, len(specs), max(1, config.candidate_chunk_size)):
-        for lb, z, tp, sl, hz, nb, direction_mode in specs[start : start + max(1, config.candidate_chunk_size)]:
+        for lb, z, tp, sl, hz, nb, direction_mode in specs[
+            start : start + max(1, config.candidate_chunk_size)
+        ]:
             score = scores[lb]
             idx = np.arange(n)
             contiguous = (idx + hz < n) & (
@@ -388,7 +490,11 @@ def run_grid(
                 r["status"] = "EDGE_CANDIDATE_REQUIRES_INDEPENDENT_CONFIRMATION"
             elif isinstance(ci_upper, (int, float)) and ci_upper < 0 and fdr_negative[i]:
                 r["status"] = "REJECTED_NEGATIVE_EDGE"
-            elif isinstance(ci_lower, (int, float)) and isinstance(ci_upper, (int, float)) and ci_lower <= 0 <= ci_upper:
+            elif (
+                isinstance(ci_lower, (int, float))
+                and isinstance(ci_upper, (int, float))
+                and ci_lower <= 0 <= ci_upper
+            ):
                 r["status"] = "INCONCLUSIVE"
     paired_comparisons: list[dict[str, Any]] = []
     for pair_key, modes in paired_samples.items():
@@ -397,14 +503,18 @@ def run_grid(
         follow = modes["FOLLOW_SIGNAL"]
         reverse = modes["REVERSE_SIGNAL"]
         if not np.array_equal(follow["indices"], reverse["indices"]):
-            paired_comparisons.append({
-                "params": dict(zip(
-                    ("lookback", "z", "tp_atr", "sl_atr", "horizon", "news_buffer_bars"),
-                    pair_key,
-                )),
-                "status": "REJECTED_VALIDATION",
-                "reason": "directional event indices differ; paired comparison is invalid",
-            })
+            paired_comparisons.append(
+                {
+                    "params": dict(
+                        zip(
+                            ("lookback", "z", "tp_atr", "sl_atr", "horizon", "news_buffer_bars"),
+                            pair_key,
+                        )
+                    ),
+                    "status": "REJECTED_VALIDATION",
+                    "reason": "directional event indices differ; paired comparison is invalid",
+                }
+            )
             continue
         gross_diff = follow["gross"] - reverse["gross"]
         net_diff = follow["net"] - reverse["net"]
@@ -413,30 +523,43 @@ def run_grid(
         hold_start = int(n * 0.8)
         mean_diff, lower_diff, upper_diff, p_diff_positive, p_diff_negative = (
             _bootstrap_daily_blocks(
-                diff, hold_indices, timestamps, hold_start,
-                config.bootstrap_replicates, config.bootstrap_block_trading_days, rng,
+                diff,
+                hold_indices,
+                timestamps,
+                hold_start,
+                config.bootstrap_replicates,
+                config.bootstrap_block_trading_days,
+                rng,
             )
             if len(diff)
             else (0.0, float("-inf"), float("inf"), 1.0, 1.0)
         )
-        paired_comparisons.append({
-            "params": dict(zip(
-                ("lookback", "z", "tp_atr", "sl_atr", "horizon", "news_buffer_bars"),
-                pair_key,
-            )),
-            "holdout_trades": int(len(diff)),
-            "gross_expectancy_difference_follow_minus_reverse": float(gross_diff.mean()) if len(gross_diff) else None,
-            "net_expectancy_difference_follow_minus_reverse": float(mean_diff) if costs_verified else None,
-            "ci_lower": float(lower_diff) if costs_verified else None,
-            "ci_upper": float(upper_diff) if costs_verified else None,
-            "gross_ci_lower_diagnostic_only": float(lower_diff) if not costs_verified else None,
-            "gross_ci_upper_diagnostic_only": float(upper_diff) if not costs_verified else None,
-            "p_value_follow_better": p_diff_positive if costs_verified else 1.0,
-            "p_value_reverse_better": p_diff_negative if costs_verified else 1.0,
-            "fdr_follow_better": False,
-            "fdr_reverse_better": False,
-            "status": "UNVERIFIED_COSTS" if not costs_verified else "INCONCLUSIVE",
-        })
+        paired_comparisons.append(
+            {
+                "params": dict(
+                    zip(
+                        ("lookback", "z", "tp_atr", "sl_atr", "horizon", "news_buffer_bars"),
+                        pair_key,
+                    )
+                ),
+                "holdout_trades": int(len(diff)),
+                "gross_expectancy_difference_follow_minus_reverse": float(gross_diff.mean())
+                if len(gross_diff)
+                else None,
+                "net_expectancy_difference_follow_minus_reverse": float(mean_diff)
+                if costs_verified
+                else None,
+                "ci_lower": float(lower_diff) if costs_verified else None,
+                "ci_upper": float(upper_diff) if costs_verified else None,
+                "gross_ci_lower_diagnostic_only": float(lower_diff) if not costs_verified else None,
+                "gross_ci_upper_diagnostic_only": float(upper_diff) if not costs_verified else None,
+                "p_value_follow_better": p_diff_positive if costs_verified else 1.0,
+                "p_value_reverse_better": p_diff_negative if costs_verified else 1.0,
+                "fdr_follow_better": False,
+                "fdr_reverse_better": False,
+                "status": "UNVERIFIED_COSTS" if not costs_verified else "INCONCLUSIVE",
+            }
+        )
     pair_p_follow = np.array([item["p_value_follow_better"] for item in paired_comparisons])
     pair_p_reverse = np.array([item["p_value_reverse_better"] for item in paired_comparisons])
     pair_fdr_follow, pair_cutoff_follow = _bh(pair_p_follow, config.fdr_q)
@@ -452,20 +575,26 @@ def run_grid(
             item["status"] = "FOLLOW_SIGNAL_BETTER_REQUIRES_INDEPENDENT_CONFIRMATION"
         elif isinstance(upper_diff, (int, float)) and upper_diff < 0 and pair_fdr_reverse[i]:
             item["status"] = "REVERSE_SIGNAL_BETTER_REQUIRES_INDEPENDENT_CONFIRMATION"
-        elif isinstance(lower_diff, (int, float)) and isinstance(upper_diff, (int, float)) and lower_diff <= 0 <= upper_diff:
+        elif (
+            isinstance(lower_diff, (int, float))
+            and isinstance(upper_diff, (int, float))
+            and lower_diff <= 0 <= upper_diff
+        ):
             item["status"] = "INCONCLUSIVE"
     paired_status_counts = {
         status: sum(item.get("status") == status for item in paired_comparisons)
         for status in sorted({str(item.get("status")) for item in paired_comparisons})
     }
     paired_deltas = [
-        item for item in paired_comparisons
+        item
+        for item in paired_comparisons
         if isinstance(item.get("gross_expectancy_difference_follow_minus_reverse"), (int, float))
     ]
     interval_lower_key = "ci_lower" if costs_verified else "gross_ci_lower_diagnostic_only"
     interval_upper_key = "ci_upper" if costs_verified else "gross_ci_upper_diagnostic_only"
     paired_interval_rows = [
-        item for item in paired_deltas
+        item
+        for item in paired_deltas
         if isinstance(item.get(interval_lower_key), (int, float))
         and isinstance(item.get(interval_upper_key), (int, float))
     ]
@@ -479,10 +608,15 @@ def run_grid(
             item["gross_expectancy_difference_follow_minus_reverse"] < 0 for item in paired_deltas
         ),
         "interval_basis": "NET_AFTER_VERIFIED_COSTS" if costs_verified else "GROSS_DIAGNOSTIC_ONLY",
-        "interval_upper_below_zero": sum(item[interval_upper_key] < 0 for item in paired_interval_rows),
-        "interval_lower_above_zero": sum(item[interval_lower_key] > 0 for item in paired_interval_rows),
+        "interval_upper_below_zero": sum(
+            item[interval_upper_key] < 0 for item in paired_interval_rows
+        ),
+        "interval_lower_above_zero": sum(
+            item[interval_lower_key] > 0 for item in paired_interval_rows
+        ),
         "interval_spans_zero": sum(
-            item[interval_lower_key] <= 0 <= item[interval_upper_key] for item in paired_interval_rows
+            item[interval_lower_key] <= 0 <= item[interval_upper_key]
+            for item in paired_interval_rows
         ),
     }
     certified = [
@@ -503,11 +637,15 @@ def run_grid(
             "parameter_combinations": len(results) // 2,
             "news_buffers_evaluated": list(effective_news_buffers),
             "news_buffer_variants_collapsed": not bool(news_csv),
-            "reason": "No news CSV supplied; buffer lengths are observationally identical" if not news_csv else None,
+            "reason": "No news CSV supplied; buffer lengths are observationally identical"
+            if not news_csv
+            else None,
         },
         "cost_model": {
             "configured": costs_configured,
             "verified": costs_verified,
+            "evidence_sha256": config.cost_evidence_sha256 if evidence_hash_valid else None,
+            "verification_requirement": "explicit_verified_flag_and_sha256_of_cost_evidence_file",
             "base_spread_price": config.base_spread_price,
             "alpha_price": config.cost_alpha_price,
             "commission_roundtrip_price": config.commission_roundtrip_price,

@@ -9,6 +9,9 @@ import pytest
 from researchos.orchestration.vectorized_backtest import (
     EngineConfig,
     _apply_barrier_step,
+    _atr,
+    _causal_signal_score,
+    _validate_backtest_data,
     _bootstrap_daily_blocks,
     _bh,
     load_news_mask,
@@ -127,7 +130,8 @@ def test_grid_fails_closed_without_verified_cost_model() -> None:
     assert report["grid"]["news_buffers_evaluated"] == [0]
     assert report["grid"]["news_buffer_variants_collapsed"] is True
     assert {item["params"]["direction_mode"] for item in report["candidates"]} == {
-        "FOLLOW_SIGNAL", "REVERSE_SIGNAL"
+        "FOLLOW_SIGNAL",
+        "REVERSE_SIGNAL",
     }
     assert report["cost_model"]["verified"] is False
     assert all(item["net_expectancy"] is None for item in report["candidates"])
@@ -155,4 +159,74 @@ def test_grid_rejects_signals_crossing_data_gaps() -> None:
     )
     report = run_grid(data, cfg)
     assert report["rows"] == 600
+    assert report["status"] == "NO_TRADE_COST_AUDIT_UNVERIFIED"
+
+
+def test_csv_loader_rejects_out_of_order_source_rows(tmp_path: Path) -> None:
+    p = tmp_path / "out_of_order.csv"
+    p.write_text(
+        "2025.01.01 00:15,100,101,99,100.5,10,20\n2025.01.01 00:00,100.5,102,100,101.5,11,21\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="Out-of-order timestamps"):
+        load_ohlcv_csv(p)
+
+
+def test_direct_backtest_input_fails_closed_on_duplicate_timestamps() -> None:
+    data = synthetic_data()
+    data["timestamp"][200] = data["timestamp"][199]
+    with pytest.raises(ValueError, match="strictly increasing and unique"):
+        _validate_backtest_data(data)
+
+
+def test_causal_signal_scores_are_invariant_to_future_data_perturbation() -> None:
+    data = synthetic_data(400)
+    close = data["close"].copy()
+    atr = _atr(data["high"], data["low"], close)
+    baseline = _causal_signal_score(close, atr, data["timestamp"], lookback=8)
+
+    cutoff = 250
+    perturbed_close = close.copy()
+    perturbed_close[cutoff + 1 :] += np.linspace(10.0, 100.0, len(close) - cutoff - 1)
+    perturbed_high = data["high"].copy()
+    perturbed_low = data["low"].copy()
+    perturbed_high[cutoff + 1 :] += 120.0
+    perturbed_low[cutoff + 1 :] += 5.0
+    perturbed_atr = _atr(perturbed_high, perturbed_low, perturbed_close)
+    changed = _causal_signal_score(perturbed_close, perturbed_atr, data["timestamp"], lookback=8)
+
+    np.testing.assert_allclose(baseline[: cutoff + 1], changed[: cutoff + 1], equal_nan=True)
+    assert not np.allclose(baseline[cutoff + 1 :], changed[cutoff + 1 :], equal_nan=True)
+
+
+def test_signal_score_invalidates_lookback_window_crossing_a_gap() -> None:
+    data = synthetic_data(200)
+    timestamps = data["timestamp"].copy()
+    timestamps[100:] += np.timedelta64(60, "m")
+    atr = _atr(data["high"], data["low"], data["close"])
+    score = _causal_signal_score(data["close"], atr, timestamps, lookback=8)
+    assert np.isnan(score[100:108]).all()
+    assert np.isfinite(score[110])
+
+
+def test_cost_model_boolean_alone_does_not_certify_costs() -> None:
+    data = synthetic_data()
+    cfg = EngineConfig(
+        lookbacks=(3,),
+        z_thresholds=(0.5,),
+        take_profit_atr=(1.0,),
+        stop_loss_atr=(1.0,),
+        horizons=(4,),
+        news_buffers_bars=(0,),
+        bootstrap_replicates=100,
+        bootstrap_block_trading_days=5,
+        base_spread_price=0.2,
+        cost_alpha_price=0.1,
+        commission_roundtrip_price=0.1,
+        cost_model_verified=True,
+        cost_evidence_sha256=None,
+    )
+    report = run_grid(data, cfg)
+    assert report["cost_model"]["configured"] is True
+    assert report["cost_model"]["verified"] is False
     assert report["status"] == "NO_TRADE_COST_AUDIT_UNVERIFIED"

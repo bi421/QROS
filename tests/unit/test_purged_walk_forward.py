@@ -44,3 +44,14 @@ def test_walk_forward_rejects_duplicate_event_timestamps():
     except ValueError as exc:
         assert "unique" in str(exc)
     assert result is None
+
+
+def test_walk_forward_rejects_out_of_order_source_rows_without_sorting():
+    rows = _rows(80)
+    rows[10], rows[11] = rows[11], rows[10]
+    try:
+        purged_walk_forward_evaluate(rows, n_splits=2, min_train_rows=20)
+    except ValueError as exc:
+        assert "refusing to reorder" in str(exc)
+    else:
+        raise AssertionError("out-of-order source rows must be rejected")
