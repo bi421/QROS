@@ -9,6 +9,7 @@ import pytest
 from researchos.orchestration.vectorized_backtest import (
     EngineConfig,
     _apply_barrier_step,
+    _bootstrap_daily_blocks,
     _bh,
     load_news_mask,
     load_ohlcv_csv,
@@ -75,6 +76,35 @@ def test_barrier_uses_open_price_for_stop_loss_gap() -> None:
     )
     assert exit_price.tolist() == [95.0, 105.0, 99.0]
     assert alive.tolist() == [False, False, False]
+
+
+def test_block_bootstrap_prefix_sum_matches_reference() -> None:
+    n_days = 53
+    timestamps = np.datetime64("2025-01-01", "D") + np.arange(n_days).astype("timedelta64[D]")
+    signal_indices = np.arange(n_days)
+    values = np.random.default_rng(7).normal(0.2, 1.0, n_days)
+    reps = 200
+    block_days = 20
+    actual = _bootstrap_daily_blocks(
+        values, signal_indices, timestamps, 0, reps, block_days, np.random.default_rng(421)
+    )
+
+    reference_rng = np.random.default_rng(421)
+    observed = float(values.mean())
+    blocks = int(np.ceil(n_days / block_days))
+    starts = reference_rng.integers(0, n_days, size=(reps, blocks))
+    offsets = np.arange(block_days)
+    ix = ((starts[:, :, None] + offsets[None, None, :]) % n_days).reshape(reps, -1)[:, :n_days]
+    sampled_sums = values[ix].sum(axis=1)
+    means = sampled_sums / n_days
+    centered = values - observed
+    null_means = centered[ix].sum(axis=1) / n_days
+    expected = (
+        observed,
+        float(np.nanquantile(means, 0.025)),
+        float((1 + np.count_nonzero(null_means >= observed)) / (1 + reps)),
+    )
+    np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
 
 
 def test_grid_fails_closed_without_verified_cost_model() -> None:
