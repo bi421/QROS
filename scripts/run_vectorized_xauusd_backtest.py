@@ -86,6 +86,8 @@ def main() -> int:
                     "cost_model",
                     "fdr",
                     "bootstrap",
+                    "paired_comparison_summary",
+                    "paired_comparison_fdr",
                     "performance",
                     "source",
                 )

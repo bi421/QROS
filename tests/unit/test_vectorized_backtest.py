@@ -102,7 +102,9 @@ def test_block_bootstrap_prefix_sum_matches_reference() -> None:
     expected = (
         observed,
         float(np.nanquantile(means, 0.025)),
+        float(np.nanquantile(means, 0.975)),
         float((1 + np.count_nonzero(null_means >= observed)) / (1 + reps)),
+        float((1 + np.count_nonzero(null_means <= observed)) / (1 + reps)),
     )
     np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
 
@@ -115,15 +117,27 @@ def test_grid_fails_closed_without_verified_cost_model() -> None:
         take_profit_atr=(1.0,),
         stop_loss_atr=(1.0,),
         horizons=(4,),
-        news_buffers_bars=(0,),
+        news_buffers_bars=(0, 1, 2),
         bootstrap_replicates=100,
         bootstrap_block_trading_days=5,
     )
     report = run_grid(data, cfg)
     assert report["status"] == "NO_TRADE_COST_AUDIT_UNVERIFIED"
-    assert report["candidate_count"] == 1
+    assert report["candidate_count"] == 2
+    assert report["grid"]["news_buffers_evaluated"] == [0]
+    assert report["grid"]["news_buffer_variants_collapsed"] is True
+    assert {item["params"]["direction_mode"] for item in report["candidates"]} == {
+        "FOLLOW_SIGNAL", "REVERSE_SIGNAL"
+    }
     assert report["cost_model"]["verified"] is False
-    assert report["candidates"][0]["net_expectancy"] is None
+    assert all(item["net_expectancy"] is None for item in report["candidates"])
+    assert len(report["paired_directional_comparisons"]) == 1
+    assert report["paired_comparison_summary"]["comparison_count"] == 1
+    assert report["paired_comparison_summary"]["interval_basis"] == "GROSS_DIAGNOSTIC_ONLY"
+    paired = report["paired_directional_comparisons"][0]
+    assert paired["status"] == "UNVERIFIED_COSTS"
+    assert paired["net_expectancy_difference_follow_minus_reverse"] is None
+    assert paired["gross_expectancy_difference_follow_minus_reverse"] is not None
 
 
 def test_grid_rejects_signals_crossing_data_gaps() -> None:
