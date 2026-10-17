@@ -30,14 +30,14 @@ def main() -> int:
     parser.add_argument("--alpha-cost-price", type=float, default=None)
     parser.add_argument("--commission-roundtrip-price", type=float, default=None)
     parser.add_argument(
-        "--cost-model-verified",
-        action="store_true",
-        help="Only after independently verifying target broker/account costs",
-    )
-    parser.add_argument(
         "--cost-evidence-file",
         default=None,
         help="Existing broker/account cost evidence file; SHA-256 is recorded in the audit",
+    )
+    parser.add_argument(
+        "--cost-model-verified",
+        action="store_true",
+        help="Only after independently verifying target broker/account costs",
     )
     parser.add_argument("--bootstrap-replicates", type=int, default=1000)
     parser.add_argument(
@@ -103,6 +103,8 @@ def main() -> int:
                     "cost_model",
                     "fdr",
                     "bootstrap",
+                    "paired_comparison_summary",
+                    "paired_comparison_fdr",
                     "performance",
                     "source",
                 )

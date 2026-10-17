@@ -12,6 +12,7 @@ from researchos.orchestration.vectorized_backtest import (
     _atr,
     _causal_signal_score,
     _validate_backtest_data,
+    _bootstrap_daily_blocks,
     _bh,
     load_news_mask,
     load_ohlcv_csv,
@@ -80,6 +81,37 @@ def test_barrier_uses_open_price_for_stop_loss_gap() -> None:
     assert alive.tolist() == [False, False, False]
 
 
+def test_block_bootstrap_prefix_sum_matches_reference() -> None:
+    n_days = 53
+    timestamps = np.datetime64("2025-01-01", "D") + np.arange(n_days).astype("timedelta64[D]")
+    signal_indices = np.arange(n_days)
+    values = np.random.default_rng(7).normal(0.2, 1.0, n_days)
+    reps = 200
+    block_days = 20
+    actual = _bootstrap_daily_blocks(
+        values, signal_indices, timestamps, 0, reps, block_days, np.random.default_rng(421)
+    )
+
+    reference_rng = np.random.default_rng(421)
+    observed = float(values.mean())
+    blocks = int(np.ceil(n_days / block_days))
+    starts = reference_rng.integers(0, n_days, size=(reps, blocks))
+    offsets = np.arange(block_days)
+    ix = ((starts[:, :, None] + offsets[None, None, :]) % n_days).reshape(reps, -1)[:, :n_days]
+    sampled_sums = values[ix].sum(axis=1)
+    means = sampled_sums / n_days
+    centered = values - observed
+    null_means = centered[ix].sum(axis=1) / n_days
+    expected = (
+        observed,
+        float(np.nanquantile(means, 0.025)),
+        float(np.nanquantile(means, 0.975)),
+        float((1 + np.count_nonzero(null_means >= observed)) / (1 + reps)),
+        float((1 + np.count_nonzero(null_means <= observed)) / (1 + reps)),
+    )
+    np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+
+
 def test_grid_fails_closed_without_verified_cost_model() -> None:
     data = synthetic_data()
     cfg = EngineConfig(
@@ -88,15 +120,28 @@ def test_grid_fails_closed_without_verified_cost_model() -> None:
         take_profit_atr=(1.0,),
         stop_loss_atr=(1.0,),
         horizons=(4,),
-        news_buffers_bars=(0,),
+        news_buffers_bars=(0, 1, 2),
         bootstrap_replicates=100,
         bootstrap_block_trading_days=5,
     )
     report = run_grid(data, cfg)
     assert report["status"] == "NO_TRADE_COST_AUDIT_UNVERIFIED"
-    assert report["candidate_count"] == 1
+    assert report["candidate_count"] == 2
+    assert report["grid"]["news_buffers_evaluated"] == [0]
+    assert report["grid"]["news_buffer_variants_collapsed"] is True
+    assert {item["params"]["direction_mode"] for item in report["candidates"]} == {
+        "FOLLOW_SIGNAL",
+        "REVERSE_SIGNAL",
+    }
     assert report["cost_model"]["verified"] is False
-    assert report["candidates"][0]["net_expectancy"] is None
+    assert all(item["net_expectancy"] is None for item in report["candidates"])
+    assert len(report["paired_directional_comparisons"]) == 1
+    assert report["paired_comparison_summary"]["comparison_count"] == 1
+    assert report["paired_comparison_summary"]["interval_basis"] == "GROSS_DIAGNOSTIC_ONLY"
+    paired = report["paired_directional_comparisons"][0]
+    assert paired["status"] == "UNVERIFIED_COSTS"
+    assert paired["net_expectancy_difference_follow_minus_reverse"] is None
+    assert paired["gross_expectancy_difference_follow_minus_reverse"] is not None
 
 
 def test_grid_rejects_signals_crossing_data_gaps() -> None:
