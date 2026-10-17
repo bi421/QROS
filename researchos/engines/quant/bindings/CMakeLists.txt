@@ -289,3 +289,14 @@ set_target_properties(qros_biberion PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine")
 install(TARGETS qros_biberion LIBRARY DESTINATION cpp_quant_engine RUNTIME DESTINATION cpp_quant_engine)
+
+# Isolated Kelly sizing + BNF kernels. Research-only; never routes orders.
+nanobind_add_module(qros_research_controls qros_research_controls.cpp)
+target_link_libraries(qros_research_controls PRIVATE quant_engine)
+target_compile_features(qros_research_controls PRIVATE cxx_std_20)
+set_target_properties(qros_research_controls PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+    LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/../python/cpp_quant_engine")
+install(TARGETS qros_research_controls LIBRARY DESTINATION cpp_quant_engine RUNTIME DESTINATION cpp_quant_engine)
