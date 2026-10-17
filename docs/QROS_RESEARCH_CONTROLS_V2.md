@@ -31,7 +31,7 @@ Run the timeframe diagnostic:
 python scripts\audit_qros_bnf_timeframes.py
 ```
 
-The report covers M15/H1/H4/D1 signal counts, NO_TRADE fractions, and gross 1/3/5-bar forward-return distributions. These are descriptive diagnostics only: they do not include costs, do not establish an edge, and are not used as proof for the frozen M1 gate.
+The report covers M15/H1/H4/D1 signal counts, NO_TRADE fractions, gross 1/3/5-bar forward-return distributions, and seeded random-entry / shuffled-signal controls matched by sample count. These controls are descriptive single-seed comparisons, not significance tests. The report does not include costs, does not establish an edge, and is not used as proof for the frozen M1 gate.
 
 Audit the historical MT5 spread field:
 

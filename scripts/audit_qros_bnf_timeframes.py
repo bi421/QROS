@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
 from pathlib import Path
 from typing import Any
 
@@ -80,18 +81,36 @@ def _timeframe_report(frame: pl.DataFrame, timeframe: str, every: str) -> dict[s
     labels = signals["bnf_signal"].to_list()
     close = signals["close"].to_list()
     count = len(labels)
-    strong_indices = [i for i, value in enumerate(labels) if value == "BUY_STRONG"]
+    strong_signal_indices = [i for i, value in enumerate(labels) if value == "BUY_STRONG"]
+    strong_indices = [i for i in strong_signal_indices if i < max(0, count - 5)]
     candidate_indices = [i for i, value in enumerate(labels) if value == "CANDIDATE"]
     no_trade_count = sum(value == "NO_TRADE" for value in labels)
 
-    forward: dict[str, Any] = {}
-    for horizon in (1, 3, 5):
+    z_values_all = signals["zscore"].to_list()
+    strong_thresholds = signals["strong_threshold"].to_list()
+    candidate_thresholds = signals["candidate_threshold"].to_list()
+    eligible_indices = [
+        i for i in range(max(0, count - 5))
+        if z_values_all[i] is not None and strong_thresholds[i] is not None
+        and candidate_thresholds[i] is not None and close[i] > 0
+    ]
+    control_count = min(len(strong_indices), len(eligible_indices))
+    seed = 20261017 + {"M15": 15, "H1": 60, "H4": 240, "D1": 1440}[timeframe]
+    rng = random.Random(seed)
+    random_entry_indices = rng.sample(eligible_indices, control_count) if control_count else []
+    shuffled_labels = [labels[i] for i in eligible_indices]
+    rng.shuffle(shuffled_labels)
+    shuffled_signal_indices = [
+        i for i, label in zip(eligible_indices, shuffled_labels) if label == "BUY_STRONG"
+    ][:control_count]
+
+    def return_summary(indices: list[int], horizon: int) -> dict[str, Any]:
         returns = [
             close[i + horizon] / close[i] - 1.0
-            for i in strong_indices
+            for i in indices
             if i + horizon < count and close[i] > 0 and close[i + horizon] > 0
         ]
-        forward[str(horizon)] = {
+        return {
             "horizon_bars": horizon,
             "sample_count": len(returns),
             "mean_gross_return": sum(returns) / len(returns) if returns else None,
@@ -101,19 +120,31 @@ def _timeframe_report(frame: pl.DataFrame, timeframe: str, every: str) -> dict[s
             "positive_fraction": sum(value > 0 for value in returns) / len(returns) if returns else None,
             "costs_included": False,
         }
+
+    forward: dict[str, Any] = {}
+    negative_controls: dict[str, Any] = {}
+    for horizon in (1, 3, 5):
+        forward[str(horizon)] = return_summary(strong_indices, horizon)
+        negative_controls[str(horizon)] = {
+            "random_entry_same_sample_count": return_summary(random_entry_indices, horizon),
+            "shuffled_signal_same_sample_count": return_summary(shuffled_signal_indices, horizon),
+            "seed": seed,
+            "interpretation": "NEGATIVE_CONTROL_GROSS_DIAGNOSTIC_NOT_A_SIGNIFICANCE_TEST",
+        }
     z_values = [float(value) for value in signals["zscore"].to_list() if value is not None and value == value]
     return {
         "timeframe": timeframe,
         "bars": count,
-        "strong_signal_count": len(strong_indices),
+        "strong_signal_count": len(strong_signal_indices),
         "candidate_signal_count": len(candidate_indices),
         "no_trade_count": no_trade_count,
         "no_trade_fraction": no_trade_count / count if count else None,
-        "strong_signal_fraction": len(strong_indices) / count if count else None,
+        "strong_signal_fraction": len(strong_signal_indices) / count if count else None,
         "candidate_signal_fraction": len(candidate_indices) / count if count else None,
         "zscore_min": min(z_values) if z_values else None,
         "zscore_max": max(z_values) if z_values else None,
         "forward_gross_returns_after_buy_strong": forward,
+        "negative_controls": negative_controls,
         "interpretation": "DESCRIPTIVE_GROSS_ONLY_NOT_A_VALIDATED_EDGE",
     }
 
