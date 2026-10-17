@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import time
 from pathlib import Path
@@ -33,6 +34,11 @@ def main() -> int:
         action="store_true",
         help="Only after independently verifying target broker/account costs",
     )
+    parser.add_argument(
+        "--cost-evidence-file",
+        default=None,
+        help="Existing broker/account cost evidence file; SHA-256 is recorded in the audit",
+    )
     parser.add_argument("--bootstrap-replicates", type=int, default=1000)
     parser.add_argument(
         "--bootstrap-block-trading-days",
@@ -43,6 +49,16 @@ def main() -> int:
     args = parser.parse_args()
     if args.bootstrap_replicates < 100 or args.bootstrap_block_trading_days < 2:
         parser.error("bootstrap replicates >=100 and block length >=2 required")
+    cost_evidence_sha256 = None
+    if args.cost_evidence_file:
+        evidence_path = Path(args.cost_evidence_file).expanduser().resolve()
+        if not evidence_path.is_file():
+            parser.error("--cost-evidence-file must point to an existing file")
+        cost_evidence_sha256 = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+    if args.cost_model_verified and not cost_evidence_sha256:
+        parser.error(
+            "--cost-model-verified requires --cost-evidence-file with broker/account evidence"
+        )
     config = EngineConfig(
         lookbacks=(4, 8) if args.quick else (4, 8, 16),
         z_thresholds=(1.0,) if args.quick else (0.5, 1.0, 1.5, 2.0),
@@ -56,6 +72,7 @@ def main() -> int:
         cost_alpha_price=args.alpha_cost_price,
         commission_roundtrip_price=args.commission_roundtrip_price,
         cost_model_verified=args.cost_model_verified,
+        cost_evidence_sha256=cost_evidence_sha256,
     )
     started = time.perf_counter()
     data = load_ohlcv_csv(args.ohlcv)

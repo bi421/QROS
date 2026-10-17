@@ -27,6 +27,7 @@ class EngineConfig:
     base_spread_price: float | None = None
     commission_roundtrip_price: float | None = None
     cost_model_verified: bool = False
+    cost_evidence_sha256: str | None = None
     random_seed: int = 421
 
 
@@ -58,9 +59,13 @@ def load_ohlcv_csv(path: str | Path) -> dict[str, Any]:
     )
     if frame["ts"].null_count():
         raise ValueError("Timestamp parse failed; expected YYYY.MM.DD HH:MM")
-    frame = frame.sort("ts")
+    # Do not silently sort: row order is part of the source evidence. Duplicate
+    # or out-of-order timestamps must be reconciled at ingestion, not hidden.
+    parsed_timestamps = frame["ts"].to_numpy()
     if frame["ts"].is_duplicated().any():
         raise ValueError("Duplicate timestamps: refusing ambiguous data")
+    if len(parsed_timestamps) > 1 and np.any(np.diff(parsed_timestamps) <= np.timedelta64(0, "ns")):
+        raise ValueError("Out-of-order timestamps: refusing to silently reorder source rows")
     out = {
         k: frame[k].to_numpy().astype(np.float64, copy=False)
         for k in ("open", "high", "low", "close", "tick_volume", "real_volume")
@@ -167,11 +172,121 @@ def _bootstrap_daily_blocks(
     )
 
 
+def _apply_barrier_step(
+    open_price: np.ndarray,
+    high: np.ndarray,
+    low: np.ndarray,
+    direction: np.ndarray,
+    stop_price: np.ndarray,
+    take_price: np.ndarray,
+    alive: np.ndarray,
+    exit_price: np.ndarray,
+) -> None:
+    """Apply one OHLC bar, conservatively filling stop gaps at the bar open."""
+    long = direction > 0
+    stop = alive & np.where(long, low <= stop_price, high >= stop_price)
+    take = alive & ~stop & np.where(long, high >= take_price, low <= take_price)
+
+    # A stop crossed by an opening gap cannot realistically fill at the stale
+    # stop level. Use the worse opening price; if both barriers touch intrabar,
+    # stop-first remains the conservative ambiguity policy.
+    stop_gap = stop & np.where(long, open_price < stop_price, open_price > stop_price)
+    exit_price[stop] = stop_price[stop]
+    exit_price[stop_gap] = open_price[stop_gap]
+    exit_price[take] = take_price[take]
+    alive[stop | take] = False
+
+
+def _validate_backtest_data(data: dict[str, Any]) -> int:
+    """Fail closed on malformed in-memory OHLCV arrays before any simulation."""
+    required = ("open", "high", "low", "close", "timestamp")
+    missing = [key for key in required if key not in data]
+    if missing:
+        raise ValueError(f"Missing required backtest fields: {','.join(missing)}")
+    lengths = {key: len(data[key]) for key in required}
+    if len(set(lengths.values())) != 1:
+        raise ValueError("OHLC and timestamp arrays must have equal lengths")
+    n = lengths["close"]
+    if n == 0:
+        raise ValueError("Empty OHLCV input")
+    prices = {
+        key: np.asarray(data[key], dtype=np.float64) for key in ("open", "high", "low", "close")
+    }
+    for key, values in prices.items():
+        if values.ndim != 1 or not np.isfinite(values).all() or np.any(values <= 0):
+            raise ValueError(f"Invalid positive finite price series: {key}")
+    if (
+        np.any(prices["high"] < np.maximum(prices["open"], prices["close"]))
+        or np.any(prices["low"] > np.minimum(prices["open"], prices["close"]))
+        or np.any(prices["high"] < prices["low"])
+    ):
+        raise ValueError("Invalid OHLC geometry")
+    timestamps = np.asarray(data["timestamp"])
+    if timestamps.ndim != 1 or not np.issubdtype(timestamps.dtype, np.datetime64):
+        raise ValueError("Timestamps must be a one-dimensional datetime64 array")
+    if n > 1 and np.any(np.diff(timestamps) <= np.timedelta64(0, "ns")):
+        raise ValueError("Timestamps must be strictly increasing and unique")
+    for key in ("tick_volume", "real_volume"):
+        if key in data:
+            values = np.asarray(data[key], dtype=np.float64)
+            if (
+                values.ndim != 1
+                or len(values) != n
+                or not np.isfinite(values).all()
+                or np.any(values < 0)
+            ):
+                raise ValueError(f"{key} must be finite, nonnegative and match OHLC row count")
+    return n
+
+
+def _causal_signal_score(
+    close: np.ndarray,
+    atr: np.ndarray,
+    timestamps: np.ndarray,
+    lookback: int,
+) -> np.ndarray:
+    """Compute a close-confirmed score using no data later than each row.
+
+    A signal at t is only eligible for entry at the next bar's open. Any gap in
+    the lookback window invalidates that score instead of bridging missing bars.
+    """
+    if isinstance(lookback, bool) or not isinstance(lookback, int) or lookback < 1:
+        raise ValueError("lookback must be an integer >= 1")
+    close = np.asarray(close, dtype=np.float64)
+    atr = np.asarray(atr, dtype=np.float64)
+    timestamps = np.asarray(timestamps)
+    if (
+        close.ndim != 1
+        or atr.ndim != 1
+        or timestamps.ndim != 1
+        or not (len(close) == len(atr) == len(timestamps))
+    ):
+        raise ValueError("close, ATR and timestamps must be one-dimensional arrays of equal length")
+    n = len(close)
+    score = np.full(n, np.nan)
+    if n <= lookback:
+        return score
+    move = close[lookback:] - close[:-lookback]
+    prior_atr = atr[:-1]
+    finite = np.isfinite(prior_atr)
+    vals = np.nan_to_num(prior_atr, nan=0.0)
+    sums = np.convolve(vals, np.ones(lookback), mode="valid")
+    counts = np.convolve(finite.astype(float), np.ones(lookback), mode="valid")
+    scale = sums / np.where(counts > 0, counts, np.nan)
+    score[lookback:] = move / np.where(scale > 0, scale, np.nan)
+    gap = np.r_[False, np.diff(timestamps) != np.timedelta64(15, "m")]
+    gap_prefix = np.cumsum(gap)
+    idx = np.arange(n)
+    crosses_gap = gap_prefix[idx] - gap_prefix[np.maximum(0, idx - lookback)] > 0
+    score[crosses_gap] = np.nan
+    return score
+
+
 def run_grid(
     data: dict[str, Any], config: EngineConfig, news_csv: str | None = None
 ) -> dict[str, Any]:
-    o, h, low, c = (data[k] for k in ("open", "high", "low", "close"))
-    n = len(c)
+    n = _validate_backtest_data(data)
+    o, h, low, c = (np.asarray(data[k], dtype=np.float64) for k in ("open", "high", "low", "close"))
     if n < 100:
         raise ValueError("At least 100 bars required")
     atr = _atr(h, low, c)
@@ -183,7 +298,13 @@ def run_grid(
             config.commission_roundtrip_price,
         )
     )
-    costs_verified = costs_configured and config.cost_model_verified
+    evidence_hash = config.cost_evidence_sha256
+    evidence_hash_valid = (
+        isinstance(evidence_hash, str)
+        and len(evidence_hash) == 64
+        and all(char in "0123456789abcdef" for char in evidence_hash)
+    )
+    costs_verified = costs_configured and config.cost_model_verified and evidence_hash_valid
     timestamps = data["timestamp"]
     gap = np.r_[False, np.diff(timestamps) != np.timedelta64(15, "m")]
     gap_prefix = np.cumsum(gap)
@@ -197,22 +318,7 @@ def run_grid(
         for hz in config.horizons
         for nb in config.news_buffers_bars
     ]
-    scores = {}
-    for lb in config.lookbacks:
-        move = np.full(n, np.nan)
-        move[lb:] = c[lb:] - c[:-lb]
-        scale = np.full(n, np.nan)
-        prior_atr = atr[:-1]
-        finite = np.isfinite(prior_atr)
-        vals = np.nan_to_num(prior_atr, nan=0.0)
-        sums = np.convolve(vals, np.ones(lb), mode="valid")
-        counts = np.convolve(finite.astype(float), np.ones(lb), mode="valid")
-        scale[lb:] = sums / np.where(counts > 0, counts, np.nan)
-        idx = np.arange(n)
-        crosses_gap = gap_prefix[idx] - gap_prefix[np.maximum(0, idx - lb)] > 0
-        score = move / np.where(scale > 0, scale, np.nan)
-        score[crosses_gap] = np.nan
-        scores[lb] = score
+    scores = {lb: _causal_signal_score(c, atr, timestamps, lb) for lb in config.lookbacks}
     news_masks = (
         {nb: load_news_mask(news_csv, data["timestamp"], nb) for nb in config.news_buffers_bars}
         if news_csv
@@ -262,12 +368,9 @@ def run_grid(
             alive = np.ones(len(sig), bool)
             for step in range(hz):
                 j = entry_ix + step
-                long = direction > 0
-                stop = alive & np.where(long, low[j] <= sl_price, h[j] >= sl_price)
-                take = alive & ~stop & np.where(long, h[j] >= tp_price, low[j] <= tp_price)
-                exit_price[stop] = sl_price[stop]
-                exit_price[take] = tp_price[take]
-                alive[stop | take] = False
+                _apply_barrier_step(
+                    o[j], h[j], low[j], direction, sl_price, tp_price, alive, exit_price
+                )
             gross = direction * (exit_price - entry)
             net = gross.copy()
             if costs_configured:
@@ -344,6 +447,8 @@ def run_grid(
         "cost_model": {
             "configured": costs_configured,
             "verified": costs_verified,
+            "evidence_sha256": config.cost_evidence_sha256 if evidence_hash_valid else None,
+            "verification_requirement": "explicit_verified_flag_and_sha256_of_cost_evidence_file",
             "base_spread_price": config.base_spread_price,
             "alpha_price": config.cost_alpha_price,
             "commission_roundtrip_price": config.commission_roundtrip_price,

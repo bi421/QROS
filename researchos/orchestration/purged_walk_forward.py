@@ -34,9 +34,11 @@ def purged_walk_forward_evaluate(
         for row in rows
     ):
         raise ValueError("every row requires ISO timestamp and label_end_timestamp strings")
-    ordered = sorted(rows, key=lambda row: row["timestamp"])
+    ordered = list(rows)
     if any(ordered[i]["timestamp"] >= ordered[i + 1]["timestamp"] for i in range(len(ordered) - 1)):
-        raise ValueError("event timestamps must be unique")
+        raise ValueError(
+            "event timestamps must be strictly increasing and unique; refusing to reorder source rows"
+        )
     if not ordered:
         return {"status": "INSUFFICIENT_DATA", "folds": [], "n_events": 0}
 

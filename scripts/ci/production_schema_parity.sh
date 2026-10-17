@@ -9,31 +9,7 @@ echo "== migration history parity =="
 output="$(supabase migration list --linked 2>&1)"
 printf '%s\n' "${output}"
 
-python3 - "${output}" <<'PY'
-import sys
-
-text = sys.argv[1]
-rows = []
-for raw in text.splitlines():
-    line = raw.replace("│", "|").strip()
-    if not line or not line[:8].isdigit() or line[8:9] not in "_-":
-        continue
-    cols = [part.strip() for part in line.split("|")]
-    if len(cols) < 2:
-        raise SystemExit("migration list format could not be parsed safely")
-    rows.append((cols[0], cols[1]))
-
-if not rows:
-    raise SystemExit("migration list contained no parseable migration rows")
-
-mismatches = [(local, remote) for local, remote in rows if not local or not remote or local != remote]
-if mismatches:
-    for local, remote in mismatches:
-        print(f"local={local} remote={remote}")
-    raise SystemExit("production and repository migration histories differ")
-
-print(f"verified {len(rows)} migration version rows with exact local/remote equality")
-PY
+printf '%s\n' "${output}" | python3 scripts/ci/check_migration_history_parity.py
 
 echo "== db push dry-run =="
 supabase db push --linked --dry-run

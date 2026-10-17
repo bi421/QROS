@@ -6,7 +6,7 @@ Research-only; never places orders. The engine evaluates a bounded parameter gri
 
 ## Inputs
 
-- Headerless MetaTrader CSV: `timestamp,open,high,low,close,tick_volume,real_volume`; UTF-16 LE and UTF-8 supported through a cached UTF-8 conversion for UTF-16 source files.
+- Headerless MetaTrader CSV: `timestamp,open,high,low,close,tick_volume,real_volume`; UTF-16 LE and UTF-8 supported through a cached UTF-8 conversion for UTF-16 source files. Source rows must already be strictly chronological and unique; ingestion rejects rather than silently sorts them.
 - Optional news CSV with `timestamp`, `time`, `datetime`, or `date` column. The news timestamps must be timezone-aligned to the broker candle timestamps by the data owner. No news data is inferred if the file is absent.
 - The current XAUUSD M15 CSV has no spread column; costs cannot be inferred from OHLCV alone.
 
@@ -16,7 +16,7 @@ Research-only; never places orders. The engine evaluates a bounded parameter gri
 - Entry: open of bar `i+1`.
 - Triple barrier: TP/SL distances are ATR multiples from entry; scan future OHLC bars, stop-loss takes precedence if both hit in the same candle; otherwise time exit at close of the configured horizon.
 - Session gaps: candidates are excluded when their feature lookback or forward barrier horizon crosses a non-15-minute timestamp gap.
-- Cost: `base_spread_price + alpha_cost_price * (ATR / trailing_mean_ATR) + commission_roundtrip_price`. All inputs are round-trip XAUUSD price units per ounce and require conversion against broker contract/commission specifications. The `--cost-model-verified` flag is an operator attestation, not automatic broker verification.
+- Cost: `base_spread_price + alpha_cost_price * (ATR / trailing_mean_ATR) + commission_roundtrip_price`. All inputs are XAUUSD price units per ounce and require conversion against broker contract/commission specifications. `--cost-model-verified` now requires `--cost-evidence-file`; the report records its SHA-256. This provides traceability, not independent proof that the evidence or assumptions are correct.
 - Statistics: chronological final 20% holdout, 20-observed-trading-day circular block bootstrap, one-sided bootstrap p-values and Benjamini-Hochberg FDR correction. This v1 is an event-study screening tool: candidate events can overlap, so results are not a single-position account-equity simulation. Candidate selection and holdout reuse still require an independently untouched confirmation dataset.
 
 ## Run
