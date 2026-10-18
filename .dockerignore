@@ -22,3 +22,18 @@ data
 *.db
 *.sqlite
 *.sqlite3
+
+# Exclude local native build outputs and Windows binaries from the Linux image.
+**/build-*/
+**/CMakeFiles/
+**/CMakeCache.txt
+**/Release/
+**/*.obj
+**/*.lib
+**/*.pyd
+**/*.bak
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.hypothesis/

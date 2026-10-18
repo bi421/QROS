@@ -49,7 +49,14 @@ class StaticRateLimiter:
         return self.allowed
 
 
-def _client(workspace_id: UUID | None = None, *, billing_store=None, billing_secret=None, rate_limiter=None):
+def _client(
+    workspace_id: UUID | None = None,
+    *,
+    billing_store=None,
+    billing_secret=None,
+    rate_limiter=None,
+    job_queue=None,
+):
     context = TenantContext(
         user_id=uuid4(),
         workspace_id=workspace_id or uuid4(),
@@ -63,6 +70,7 @@ def _client(workspace_id: UUID | None = None, *, billing_store=None, billing_sec
             job_store=InMemoryResearchJobStore(),
             dataset_store=dataset_store,
             dataset_storage=dataset_storage,
+            job_queue=job_queue,
             billing_store=billing_store,
             billing_webhook_secret=billing_secret,
             rate_limiter=rate_limiter,
@@ -225,6 +233,50 @@ def test_create_research_job_requires_existing_tenant_dataset_version() -> None:
         json={"dataset_version_id": str(uuid4())},
     )
     assert response.status_code == 404
+
+
+def test_research_run_enqueue_preserves_request_id_without_retrying() -> None:
+    class RecordingQueue:
+        def __init__(self) -> None:
+            self.calls: list[tuple[UUID, UUID, str | None]] = []
+
+        def enqueue(
+            self,
+            workspace_id: UUID,
+            job_id: UUID,
+            *,
+            request_id: str | None = None,
+        ) -> int:
+            self.calls.append((workspace_id, job_id, request_id))
+            return len(self.calls)
+
+        def receive(self):
+            return None
+
+        def ack(self, message_id: int) -> None:
+            return None
+
+    queue = RecordingQueue()
+    client, context, _, _ = _client(job_queue=queue)
+    uploaded = _upload(client, "sample-request-correlation", b"x")
+    version_id = uploaded.json()["version"]["id"]
+    request_id = "api-request-correlation-123"
+
+    response = client.post(
+        "/v1/research-runs",
+        headers={
+            "Authorization": "Bearer test",
+            "Idempotency-Key": "request-correlation",
+            "X-Request-ID": request_id,
+        },
+        json={"dataset_version_id": version_id},
+    )
+
+    assert response.status_code == 202
+    assert len(queue.calls) == 1
+    assert queue.calls[0][0] == context.workspace_id
+    assert queue.calls[0][1] == UUID(response.json()["id"])
+    assert queue.calls[0][2] == request_id
 
 
 def test_research_run_idempotency_replays_without_creating_or_enqueueing_twice() -> None:
