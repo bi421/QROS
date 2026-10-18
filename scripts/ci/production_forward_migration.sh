@@ -6,7 +6,7 @@ set -euo pipefail
 : "${MIGRATION_FILE:?MIGRATION_FILE is required}"
 
 case "${MIGRATION_FILE}" in
-  202610060001_production_forward_reconciliation.sql|20261005041000_billing_subscription_identity.sql|20260928123000_dataset_version_storage_path_reconciliation.sql|20260928124500_workspace_billing_admin_role_reconciliation.sql|20260928120000_storage_authorization_workspace_membership_reconciliation.sql)
+  20261018000100_research_queue_request_correlation.sql|202610060001_production_forward_reconciliation.sql|20261005041000_billing_subscription_identity.sql|20260928123000_dataset_version_storage_path_reconciliation.sql|20260928124500_workspace_billing_admin_role_reconciliation.sql|20260928120000_storage_authorization_workspace_membership_reconciliation.sql)
     ;;
   *)
     echo "::error::migration is not in the governed M1 forward-migration allowlist: ${MIGRATION_FILE}"
@@ -106,6 +106,18 @@ echo "migration_sha256=${migration_sha}"
 
 echo "== postflight: schema contract =="
 case "$MIGRATION_FILE" in
+  20261018000100_research_queue_request_correlation.sql)
+    supabase --workdir "$bundle" db query --linked "
+select 1 / case when
+  exists (
+    select 1
+    from pg_proc
+    where oid = to_regprocedure('public.receive_research_run(integer)')
+      and proargnames @> array['request_id']::text[]
+  )
+then 1 else 0 end as postcondition_ok;
+"
+    ;;
   202610060001_production_forward_reconciliation.sql)
     supabase --workdir "$bundle" db query --linked "
 select 1 / case when

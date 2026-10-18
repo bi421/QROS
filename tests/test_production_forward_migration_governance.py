@@ -4,8 +4,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "ci" / "production_forward_migration.sh"
 WORKFLOW = ROOT / ".github" / "workflows" / "production-forward-migration.yml"
+QUEUE_CORRELATION = ROOT / "supabase" / "migrations" / "20261018000100_research_queue_request_correlation.sql"
 
 ALLOWLIST = (
+    "20261018000100_research_queue_request_correlation.sql",
     "202610060001_production_forward_reconciliation.sql",
     "20261005041000_billing_subscription_identity.sql",
     "20260928123000_dataset_version_storage_path_reconciliation.sql",
@@ -61,13 +63,25 @@ def test_workflow_is_manual_and_protected() -> None:
     assert "pvhdsngxyoiqhqwujfjt" in text
 
 
-def test_allowlist_has_exactly_five_entries_and_excludes_worker() -> None:
+def test_allowlist_contains_six_explicit_entries_and_excludes_legacy_worker_migration() -> None:
     script = SCRIPT.read_text(encoding="utf-8")
     workflow = WORKFLOW.read_text(encoding="utf-8")
     assert all(script.count(migration) == 2 for migration in ALLOWLIST)
-    assert sum(workflow.count(migration) for migration in ALLOWLIST) == 5
+    assert sum(workflow.count(migration) for migration in ALLOWLIST) == 6
     assert "20260928103556_saas_worker_queue_consumer.sql" not in script
     assert "20260928103556_saas_worker_queue_consumer.sql" not in workflow
+    assert QUEUE_CORRELATION.is_file()
+
+
+def test_queue_correlation_migration_accepts_current_and_legacy_payloads() -> None:
+    sql = QUEUE_CORRELATION.read_text(encoding="utf-8")
+    assert "drop function if exists public.receive_research_run(integer)" in sql
+    assert "request_id text" in sql
+    assert "v_message.message - 'workspace_id' - 'research_run_id' - 'request_id'" in sql
+    assert "v_message.message ? 'request_id'" in sql
+    assert "pg_catalog.length(v_message.message ->> 'request_id') > 128" in sql
+    assert "request_id := v_message.message ->> 'request_id'" in sql
+    assert "grant execute on function public.receive_research_run(integer) to service_role" in sql
 
 
 def test_mutation_requires_both_apply_and_confirmation() -> None:

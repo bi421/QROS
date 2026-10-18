@@ -131,3 +131,54 @@ def test_worker_runtime_survives_executor_setup_failure(monkeypatch):
     worker.run_forever(stop)
 
     assert queue.acked == []
+
+
+def test_worker_runtime_preserves_queue_request_id(monkeypatch):
+    from researchos.saas import worker_runtime
+
+    stop = Event()
+    workspace_id = uuid4()
+    research_run_id = uuid4()
+    request_id = "api-request-123"
+
+    class Queue:
+        def __init__(self):
+            self.received = False
+            self.acked = []
+
+        def receive(self):
+            if self.received:
+                stop.set()
+                return None
+            self.received = True
+            return ResearchQueueMessage(1, workspace_id, research_run_id, request_id)
+
+        def ack(self, message_id):
+            self.acked.append(message_id)
+
+    class Executor:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class Worker:
+        def __init__(self, store, executor):
+            pass
+
+        def run_once(self, received_workspace_id, received_job_id, *, request_id=None):
+            assert received_workspace_id == workspace_id
+            assert received_job_id == research_run_id
+            assert request_id == "api-request-123"
+
+    monkeypatch.setattr(worker_runtime, "GovernedResearchExecutor", Executor)
+    monkeypatch.setattr(worker_runtime, "ResearchWorker", Worker)
+    queue = Queue()
+    worker = worker_runtime.StandaloneResearchWorker(
+        object(),
+        InMemoryDatasetStore(),
+        InMemoryDatasetStorage(),
+        queue,
+    )
+
+    worker.run_forever(stop)
+
+    assert queue.acked == [1]

@@ -1078,16 +1078,12 @@ def create_app(
             )
         jobs_created_total.inc()
         try:
-            queue.enqueue(tenant.workspace_id, created.id)
+            queue.enqueue(
+                tenant.workspace_id,
+                created.id,
+                request_id=getattr(request.state, "request_id", None),
+            )
         except Exception as exc:
-            try:
-                queue.enqueue(
-                    tenant.workspace_id,
-                    created.id,
-                    request_id=getattr(request.state, "request_id", None),
-                )
-            except Exception:
-                pass
             jobs_failed_total.inc()
             raise RuntimeError("research job queue unavailable") from exc
         return JSONResponse(status_code=202, content=body)

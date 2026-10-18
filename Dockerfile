@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 FROM python:3.12.14-alpine3.24 AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -27,18 +28,8 @@ RUN addgroup -S researchos && adduser -S -G researchos researchos
 
 WORKDIR /app
 
-COPY pyproject.toml README.md ./
-COPY --from=builder /wheels /wheels
-RUN python -m pip install --upgrade pip "setuptools>=78.1.1" \
-    && python -m pip install --no-index --find-links=/wheels "researchos[saas]==1.0.1" \
-    && rm -rf /wheels
-
-COPY pyproject.toml README.md ./
-COPY researchos ./researchos
-COPY financial_research_lab ./financial_research_lab
-COPY scripts ./scripts
-COPY docs ./docs
-RUN chown -R researchos:researchos /app
+RUN --mount=type=bind,from=builder,source=/wheels,target=/wheels,ro \
+    python -m pip install --no-index --find-links=/wheels "researchos[saas]==1.0.1"
 
 EXPOSE 8000
 

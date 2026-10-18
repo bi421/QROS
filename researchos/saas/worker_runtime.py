@@ -64,7 +64,11 @@ class StandaloneResearchWorker:
                     message.workspace_id,
                 )
                 worker = ResearchWorker(self._store, executor)
-                worker.run_once(message.workspace_id, message.research_run_id)
+                worker.run_once(
+                    message.workspace_id,
+                    message.research_run_id,
+                    request_id=message.request_id,
+                )
             except Exception:
                 job = self._store.get(message.workspace_id, message.research_run_id)
                 if job is not None and job.status.value in {"succeeded", "failed", "cancelled"}:
