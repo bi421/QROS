@@ -17,6 +17,7 @@ from researchos.orchestration.vectorized_backtest import (
     load_news_mask,
     load_ohlcv_csv,
     run_grid,
+    write_report,
 )
 
 
@@ -142,6 +143,56 @@ def test_grid_fails_closed_without_verified_cost_model() -> None:
     assert paired["status"] == "UNVERIFIED_COSTS"
     assert paired["net_expectancy_difference_follow_minus_reverse"] is None
     assert paired["gross_expectancy_difference_follow_minus_reverse"] is not None
+
+
+def test_short_holdout_report_serializes_unavailable_intervals_as_null(tmp_path: Path) -> None:
+    cfg = EngineConfig(
+        lookbacks=(3,),
+        z_thresholds=(0.5,),
+        take_profit_atr=(1.0,),
+        stop_loss_atr=(1.0,),
+        horizons=(4,),
+        news_buffers_bars=(0,),
+        bootstrap_replicates=100,
+        bootstrap_block_trading_days=5,
+    )
+    report = run_grid(synthetic_data(600), cfg)
+    candidate = report["candidates"][0]
+    paired = report["paired_directional_comparisons"][0]
+
+    assert candidate["gross_ci_lower_diagnostic_only"] is None
+    assert candidate["gross_ci_upper_diagnostic_only"] is None
+    assert candidate["confidence_interval_status"] == "INSUFFICIENT_TRADING_DAYS"
+    assert paired["gross_ci_lower_diagnostic_only"] is None
+    assert paired["gross_ci_upper_diagnostic_only"] is None
+    assert paired["confidence_interval_status"] == "INSUFFICIENT_TRADING_DAYS"
+
+    path = tmp_path / "short-holdout-report.json"
+    write_report(report, path)
+    serialized = path.read_text(encoding="utf-8")
+    assert "Infinity" not in serialized
+    assert "NaN" not in serialized
+    assert path.exists()
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"z_thresholds": (-0.5,)}, "z_thresholds"),
+        ({"take_profit_atr": (0.0,)}, "take_profit_atr"),
+        ({"stop_loss_atr": (-1.0,)}, "stop_loss_atr"),
+        ({"horizons": (0,)}, "horizons"),
+        ({"fdr_q": 1.0}, "fdr_q"),
+        ({"bootstrap_replicates": 99}, "bootstrap_replicates"),
+        ({"base_spread_price": float("nan")}, "base_spread_price"),
+    ],
+)
+def test_grid_rejects_invalid_engine_configuration(
+    overrides: dict[str, Any], message: str
+) -> None:
+    config = EngineConfig(**overrides)
+    with pytest.raises(ValueError, match=message):
+        run_grid({}, config)
 
 
 def test_grid_rejects_signals_crossing_data_gaps() -> None:
