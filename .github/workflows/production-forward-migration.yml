@@ -9,6 +9,7 @@ on:
         required: true
         type: choice
         options:
+          - 20261018000100_research_queue_request_correlation.sql
           - 202610060001_production_forward_reconciliation.sql
           - 20261005041000_billing_subscription_identity.sql
           - 20260928123000_dataset_version_storage_path_reconciliation.sql

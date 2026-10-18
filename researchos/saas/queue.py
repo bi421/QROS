@@ -9,11 +9,12 @@ from uuid import UUID
 
 @dataclass(frozen=True)
 class ResearchQueueMessage:
-    """One identifier-only message received from the governed research queue."""
+    """One tenant-bound message received from the governed research queue."""
 
     message_id: int
     workspace_id: UUID
     research_run_id: UUID
+    request_id: str | None = None
 
 
 class ResearchJobQueue(Protocol):
@@ -46,13 +47,25 @@ class InMemoryResearchJobQueue:
         for message_id, workspace_id, job_id in self.messages:
             if message_id not in self._received:
                 self._received.add(message_id)
-                return ResearchQueueMessage(message_id, workspace_id, job_id)
+                return ResearchQueueMessage(
+                    message_id,
+                    workspace_id,
+                    job_id,
+                    self.request_ids.get(job_id),
+                )
         return None
 
     def ack(self, message_id: int) -> None:
         if message_id <= 0:
             raise ValueError("message_id must be positive")
+        removed_job_ids = {
+            job_id
+            for queued_id, _workspace_id, job_id in self.messages
+            if queued_id == message_id
+        }
         self.messages = [message for message in self.messages if message[0] != message_id]
+        for job_id in removed_job_ids:
+            self.request_ids.pop(job_id, None)
         self._received.discard(message_id)
 
 
@@ -106,11 +119,14 @@ class SupabaseResearchJobQueue:
             message_id = int(row["msg_id"])
             workspace_id = UUID(str(row["workspace_id"]))
             research_run_id = UUID(str(row["research_run_id"]))
+            request_id = row.get("request_id")
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError("research queue message failed identifier validation") from exc
         if message_id <= 0:
             raise ValueError("research queue message id must be positive")
-        return ResearchQueueMessage(message_id, workspace_id, research_run_id)
+        if request_id is not None and (not isinstance(request_id, str) or len(request_id) > 128):
+            raise ValueError("research queue request_id failed validation")
+        return ResearchQueueMessage(message_id, workspace_id, research_run_id, request_id)
 
     def ack(self, message_id: int) -> None:
         if message_id <= 0:

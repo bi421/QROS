@@ -53,6 +53,19 @@ def test_in_memory_queue_ack_removes_message() -> None:
     assert queue.receive() is None
 
 
+def test_in_memory_queue_preserves_request_id_through_receive_and_ack() -> None:
+    queue = InMemoryResearchJobQueue()
+    workspace_id = uuid4()
+    job_id = uuid4()
+    queue.enqueue(workspace_id, job_id, request_id="api-request-123")
+
+    assert queue.receive() == ResearchQueueMessage(
+        1, workspace_id, job_id, "api-request-123"
+    )
+    queue.ack(1)
+    assert job_id not in queue.request_ids
+
+
 def test_supabase_queue_calls_protected_enqueue_rpc() -> None:
     client = RpcCall([[42]])
     queue = SupabaseResearchJobQueue(client)
@@ -73,10 +86,11 @@ def test_supabase_queue_receives_and_validates_identifier_message() -> None:
         "msg_id": 7,
         "workspace_id": str(workspace_id),
         "research_run_id": str(job_id),
+        "request_id": "api-request-123",
     }]])
     queue = SupabaseResearchJobQueue(client)
 
-    assert queue.receive() == ResearchQueueMessage(7, workspace_id, job_id)
+    assert queue.receive() == ResearchQueueMessage(7, workspace_id, job_id, "api-request-123")
     assert client.params == [("receive_research_run", {"p_visibility_timeout": 1200})]
 
 
@@ -85,6 +99,19 @@ def test_supabase_queue_rejects_malformed_message() -> None:
     queue = SupabaseResearchJobQueue(client)
 
     with pytest.raises(ValueError, match="identifier validation"):
+        queue.receive()
+
+
+def test_supabase_queue_rejects_invalid_request_id() -> None:
+    client = RpcCall([[{
+        "msg_id": 7,
+        "workspace_id": str(uuid4()),
+        "research_run_id": str(uuid4()),
+        "request_id": "r" * 129,
+    }]])
+    queue = SupabaseResearchJobQueue(client)
+
+    with pytest.raises(ValueError, match="request_id"):
         queue.receive()
 
 
