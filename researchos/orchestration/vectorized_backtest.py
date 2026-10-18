@@ -31,6 +31,67 @@ class EngineConfig:
     random_seed: int = 421
 
 
+def _validate_engine_config(config: EngineConfig) -> None:
+    """Reject parameter grids that could silently produce meaningless results."""
+    if not isinstance(config, EngineConfig):
+        raise TypeError("config must be an EngineConfig")
+
+    integer_grids = {
+        "lookbacks": (config.lookbacks, 1),
+        "horizons": (config.horizons, 1),
+        "news_buffers_bars": (config.news_buffers_bars, 0),
+    }
+    for name, (values, minimum) in integer_grids.items():
+        if not values or any(
+            isinstance(value, bool) or not isinstance(value, int) or value < minimum
+            for value in values
+        ):
+            raise ValueError(f"{name} must be a non-empty tuple of integers >= {minimum}")
+
+    positive_grids = {
+        "z_thresholds": config.z_thresholds,
+        "take_profit_atr": config.take_profit_atr,
+        "stop_loss_atr": config.stop_loss_atr,
+    }
+    for grid_name, grid_values in positive_grids.items():
+        if not grid_values or any(
+            isinstance(number, bool)
+            or not isinstance(number, (int, float, np.integer, np.floating))
+            or not np.isfinite(number)
+            or number <= 0
+            for number in grid_values
+        ):
+            raise ValueError(f"{grid_name} must be a non-empty tuple of finite positive numbers")
+
+    for name, value, minimum in (
+        ("candidate_chunk_size", config.candidate_chunk_size, 1),
+        ("bootstrap_replicates", config.bootstrap_replicates, 100),
+        ("bootstrap_block_trading_days", config.bootstrap_block_trading_days, 2),
+        ("random_seed", config.random_seed, 0),
+    ):
+        if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+            raise ValueError(f"{name} must be an integer >= {minimum}")
+
+    if not isinstance(config.fdr_q, (int, float)) or not np.isfinite(config.fdr_q) or not (
+        0 < config.fdr_q < 1
+    ):
+        raise ValueError("fdr_q must be finite and strictly between 0 and 1")
+    if not isinstance(config.cost_model_verified, bool):
+        raise ValueError("cost_model_verified must be a boolean")
+    for cost_name, cost_value in (
+        ("base_spread_price", config.base_spread_price),
+        ("cost_alpha_price", config.cost_alpha_price),
+        ("commission_roundtrip_price", config.commission_roundtrip_price),
+    ):
+        if cost_value is not None and (
+            isinstance(cost_value, bool)
+            or not isinstance(cost_value, (int, float, np.integer, np.floating))
+            or not np.isfinite(cost_value)
+            or cost_value < 0
+        ):
+            raise ValueError(f"{cost_name} must be None or a finite nonnegative number")
+
+
 def load_ohlcv_csv(path: str | Path) -> dict[str, Any]:
     source = Path(path)
     with source.open("rb") as probe:
@@ -141,8 +202,10 @@ def _bootstrap_daily_blocks(
     day_axis: np.ndarray = timestamps[hold_start:].astype("datetime64[D]")
     days = np.unique(day_axis)
     if len(days) < max(20, block_days) or not len(values):
+        # An unavailable interval is represented as NaN internally and serialized
+        # as null by the report builder; infinite bounds are not valid JSON.
         observed = float(values.mean()) if len(values) else 0.0
-        return (observed, float("-inf"), float("inf"), 1.0, 1.0)
+        return (observed, float("nan"), float("nan"), 1.0, 1.0)
     sums = np.zeros(len(days))
     counts = np.zeros(len(days))
     ids = np.searchsorted(days, timestamps[signal_indices].astype("datetime64[D]"))
@@ -304,6 +367,7 @@ def _causal_signal_score(
 def run_grid(
     data: dict[str, Any], config: EngineConfig, news_csv: str | None = None
 ) -> dict[str, Any]:
+    _validate_engine_config(config)
     n = _validate_backtest_data(data)
     o, h, low, c = (np.asarray(data[k], dtype=np.float64) for k in ("open", "high", "low", "close"))
     if n < 100:
@@ -460,10 +524,19 @@ def run_grid(
                     "holdout_trades": int(oos.sum()),
                     "gross_expectancy": float(gross[oos].mean()) if oos.any() else None,
                     "net_expectancy": float(mean) if costs_verified else None,
-                    "ci_lower": float(lower) if costs_verified else None,
-                    "gross_ci_lower_diagnostic_only": float(lower) if not costs_verified else None,
-                    "ci_upper": float(upper) if costs_verified else None,
-                    "gross_ci_upper_diagnostic_only": float(upper) if not costs_verified else None,
+                    "ci_lower": float(lower) if costs_verified and np.isfinite(lower) else None,
+                    "gross_ci_lower_diagnostic_only": float(lower)
+                    if not costs_verified and np.isfinite(lower)
+                    else None,
+                    "ci_upper": float(upper) if costs_verified and np.isfinite(upper) else None,
+                    "gross_ci_upper_diagnostic_only": float(upper)
+                    if not costs_verified and np.isfinite(upper)
+                    else None,
+                    "confidence_interval_status": (
+                        "AVAILABLE"
+                        if np.isfinite(lower) and np.isfinite(upper)
+                        else ("NO_HOLDOUT_TRADES" if not len(values) else "INSUFFICIENT_TRADING_DAYS")
+                    ),
                     "p_value": pval_positive,
                     "p_value_positive": pval_positive,
                     "p_value_negative": pval_negative,
@@ -549,10 +622,25 @@ def run_grid(
                 "net_expectancy_difference_follow_minus_reverse": float(mean_diff)
                 if costs_verified
                 else None,
-                "ci_lower": float(lower_diff) if costs_verified else None,
-                "ci_upper": float(upper_diff) if costs_verified else None,
-                "gross_ci_lower_diagnostic_only": float(lower_diff) if not costs_verified else None,
-                "gross_ci_upper_diagnostic_only": float(upper_diff) if not costs_verified else None,
+                "ci_lower": float(lower_diff)
+                if costs_verified and np.isfinite(lower_diff)
+                else None,
+                "ci_upper": float(upper_diff)
+                if costs_verified and np.isfinite(upper_diff)
+                else None,
+                "gross_ci_lower_diagnostic_only": float(lower_diff)
+                if not costs_verified and np.isfinite(lower_diff)
+                else None,
+                "gross_ci_upper_diagnostic_only": float(upper_diff)
+                if not costs_verified and np.isfinite(upper_diff)
+                else None,
+                "confidence_interval_status": (
+                    "AVAILABLE"
+                    if np.isfinite(lower_diff) and np.isfinite(upper_diff)
+                    else (
+                        "NO_PAIRED_HOLDOUT_TRADES" if not len(diff) else "INSUFFICIENT_TRADING_DAYS"
+                    )
+                ),
                 "p_value_follow_better": p_diff_positive if costs_verified else 1.0,
                 "p_value_reverse_better": p_diff_negative if costs_verified else 1.0,
                 "fdr_follow_better": False,
