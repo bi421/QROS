@@ -11,6 +11,7 @@ from typing import Any
 ARTIFACT_TYPES: tuple[str, ...] = (
     "Dataset",
     "Feature",
+    "QuoteSnapshot",
     "Experiment",
     "Run",
     "Result",
