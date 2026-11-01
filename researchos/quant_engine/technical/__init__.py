@@ -28,6 +28,10 @@ from researchos.quant_engine.technical.market_structure import (
     run_market_structure_variants,
 )
 
+from researchos.quant_engine.technical.market_structure_adapter import (
+    MarketStructureInput,
+    market_structure_input_from_frame,
+)
 from researchos.quant_engine.technical.market_structure_definition import (
     StructureDefinition,
     definitions_from_grid_payload,
@@ -39,6 +43,8 @@ from researchos.quant_engine.technical.validation import (
 )
 
 __all__ = [
+    "MarketStructureInput",
+    "market_structure_input_from_frame",
     "StructureDefinition",
     "definitions_from_grid_payload",
     "MarketStructureConfig",
