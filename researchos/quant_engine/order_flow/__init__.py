@@ -44,6 +44,26 @@ from researchos.quant_engine.order_flow.features import (
     price_progress_ticks,
 )
 
+from researchos.quant_engine.order_flow.detectors import (
+    AbsorptionCandidate,
+    DetectorDefinition,
+    FlowResponse,
+    FlowSource,
+    FootprintState,
+    LargePrintCandidate,
+    LargeTradeCluster,
+    LiquiditySweepCandidate,
+    ReferenceLevel,
+    SizeReference,
+    SweepObservation,
+    classify_aggression_price_response,
+    detect_absorption_candidate,
+    detect_large_trade_clusters,
+    detect_liquidity_sweep_candidate,
+    detect_unusually_large_prints,
+)
+
+
 __all__ += [
     "CvdPoint",
     "FlowWindow",
@@ -52,4 +72,20 @@ __all__ += [
     "classify_trade",
     "compute_cvd",
     "price_progress_ticks",
+    "AbsorptionCandidate",
+    "DetectorDefinition",
+    "FlowResponse",
+    "FlowSource",
+    "FootprintState",
+    "LargePrintCandidate",
+    "LargeTradeCluster",
+    "LiquiditySweepCandidate",
+    "ReferenceLevel",
+    "SizeReference",
+    "SweepObservation",
+    "classify_aggression_price_response",
+    "detect_absorption_candidate",
+    "detect_large_trade_clusters",
+    "detect_liquidity_sweep_candidate",
+    "detect_unusually_large_prints",
 ]
