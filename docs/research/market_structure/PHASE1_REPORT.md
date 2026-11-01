@@ -2,6 +2,7 @@
 
 **Phase / Status:** Phase 1 — `BLOCKED` (draft SPEC/grid committed; effective pre-registration not accepted)
 **Base commit:** `8e756c889003e4686e96fd20427b218f24f3b461`
+**Draft SPEC/grid commit:** `5e8dc90e58c5c944774ecd2d92f6a1d3063bceab`
 **Branch:** `feat/market-structure-variants`
 
 ## Goal
@@ -27,14 +28,13 @@ sha256=e09001e1602cf5624e72ea35ab6c37a43db6a5fa3aa487705073cad81603726a
 bom=False
 
 Get-Item SPEC.md,grid.json
-SPEC.md 16699 bytes (before the final holdout-provenance clarification)
-grid.json 28593 bytes
+
 
 git diff --check
 DIFF_CHECK_EXIT=0
 ```
 
-The final SPEC was then clarified to record the proposed 2025 UTC boundary, while explicitly marking the slice hash unavailable and the boundary invalid as a fresh untouched holdout. The grid file was not changed by that clarification; its SHA-256 remains the value above and must be rechecked before relying on it.
+The final SPEC records the proposed 2025 UTC boundary, explicitly marking its slice hash unavailable and the boundary invalid as a fresh untouched holdout. After commit, the grid was reloaded as JSON: 56 variants, 56 unique keys, SHA-256 `e09001e1602cf5624e72ea35ab6c37a43db6a5fa3aa487705073cad81603726a`.
 
 ## Dataset and cost blockers
 
@@ -50,7 +50,7 @@ The final SPEC was then clarified to record the proposed 2025 UTC boundary, whil
 
 - SPEC and grid drafts created: `PASS`.
 - Grid enumerates 56 unique keys: `PASS`.
-- Grid SHA reproduced: `PASS` (must re-run after commit).
+- Grid SHA reproduced after commit: `PASS` — `e09001e1602cf5624e72ea35ab6c37a43db6a5fa3aa487705073cad81603726a`.
 - Effective locked holdout dataset hash and fresh boundaries: `BLOCKED`.
 - Verified spread, commission, slippage evidence: `BLOCKED`.
 - No Market Structure variant was run on market data: `PASS`.
