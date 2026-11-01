@@ -1,71 +1,97 @@
 # Market Structure Variant Study — Phase 1 Report
 
-**Phase / Status:** Phase 1 — `BLOCKED` (draft SPEC/grid committed; effective pre-registration not accepted)
+**Phase / Status:** `DRAFT ACCEPTED FOR STRUCTURAL IMPLEMENTATION; MARKET-DATA EXECUTION BLOCKED`
 **Base commit:** `8e756c889003e4686e96fd20427b218f24f3b461`
-**Draft SPEC/grid commit:** `5e8dc90e58c5c944774ecd2d92f6a1d3063bceab`
+**Initial Phase 1 SPEC/grid commit:** `5e8dc90e58c5c944774ecd2d92f6a1d3063bceab`
+**Previous report commit:** `f9daf51858179e4277fa383cf383e943ffc841a5`
 **Branch:** `feat/market-structure-variants`
 
 ## Goal
 
-Write exact, reproducible Market Structure definitions, the full parameter grid, execution rules, costs, metrics, splits, and decision gates before any variant result is computed.
+Freeze the 56-definition Market Structure hypothesis family, acquire a broker-specific XAUUSD M1 development dataset, verify its byte integrity, and define chronological development/walk-forward/future-OOS boundaries before any variant result is computed.
 
-## Files created
+## Files created or updated
 
-- `docs/research/market_structure/SPEC.md`
-- `docs/research/market_structure/grid.json`
-- `docs/research/market_structure/PHASE1_REPORT.md`
+- `docs/research/market_structure/SPEC.md` — updated dataset identity, split hashes, cost evidence, and phase gates.
+- `docs/research/market_structure/grid.json` — unchanged, 56 unique variants.
+- `docs/research/market_structure/DATASET_CARD.md` — source, provenance, audit, spread/cost caveats, and storage limits.
+- `docs/research/market_structure/PHASE1_REPORT.md` — this report.
+- `scripts/audit_mt5_monthly_dataset.py` — reproducible independent monthly-file auditor.
+- `tests/unit/test_audit_mt5_monthly_dataset.py` — synthetic integrity/fail-closed tests.
 
-## Commands run and literal outputs
+Raw data remains local and Git-ignored under `data/raw/mt5/ftmo_demo_xauusd_2021_2026/`; it is not committed.
+
+## Acquisition evidence
+
+Read-only terminal probe confirmed MT5 build `6292`, `maxbars=5,000,000`, server `FTMO-Demo`, symbol `XAUUSD`, point `0.01`, contract size `100`. Small history probes returned M1 bars in Jan 2021, Dec 2025, and Oct 2026.
+
+Acquisition command:
+
+```powershell
+py -3 scripts/acquisition/mt5_xauusd_m1.py --start 2021-01-01 --end 2026-10-31 --output-dir data/raw/mt5/ftmo_demo_xauusd_2021_2026 --retries 5 --retry-delay 2
+```
+
+Observed result: exit `0`; 70 monthly chunks; `2,046,268` rows; actual range `2021-01-01T00:00:00Z` through `2026-10-30T23:49:00Z`. The source is the FTMO-Demo simulated feed; it is not represented as a centralized global gold tape or equivalent to the earlier unverified 1,764,176-row dataset.
+
+## Dataset hashes
+
+- Concatenated monthly CSV bytes SHA-256: `e63acae2c39ff2b14538c1a3e696aa9e90da59274e4ca6184c1542dc5b812c06`.
+- Inventory SHA-256: `44c9ceef74bad2a40ffb50ea246f10bbf4e3cc3455b6f4f4698c81f1b3a8fb11`.
+- `manifest.json`: `f756e2721f5d272c3dd09a60f69f37887ffc653d20aff35c11c64336912810bf`.
+- `source_context.json`: `8115cdc76e400da5027f72bc357ec66cea0014aa9aa177630e76913677eca060`.
+- `independent_audit.json`: `63c31451806d510e8eb01902a9df39609e7de70727117cb14c8491da7edbd389`.
+- Development 2021–2025: `1,753,910` rows; raw-slice SHA-256 `e2e754cabf133436f91b0592aaf7b9a1d9161037171355ffcb0357f2fe77a507`.
+- Exploratory 2026-01–2026-10: `292,358` rows; raw-slice SHA-256 `f5bc8c6aca03a3e6c0ab7c21e68bddb4f493074e6423e0feb0b3842ec7feccd0`.
+
+## Independent audit and code checks
+
+Command:
+
+```powershell
+py -3 scripts/audit_mt5_monthly_dataset.py data/raw/mt5/ftmo_demo_xauusd_2021_2026
+```
+
+Literal result: `INTEGRITY_PASS=True`; all 70/70 chunk hashes and row counts matched; timestamp parse failures `0`; out-of-range rows `0`; duplicate timestamps `0`; non-increasing intervals `0`; invalid OHLC `0`; negative tick volume, real volume, or spread `0`. There are `1,917` timestamp gaps greater than 60 seconds, retained and reported rather than repaired or silently dropped.
+
+Spread field diagnostics: median 15 points (`0.15` price units), 95th percentile 47 points (`0.47`), max 1,718 points (`17.18`); 34,022 zero-spread rows; 1,318 rows above 100 points. These are not interpreted as guaranteed executable bid/ask costs.
+
+Focused tests:
 
 ```text
-Get-FileHash docs/research/market_structure/grid.json -Algorithm SHA256
-SHA256: e09001e1602cf5624e72ea35ab6c37a43db6a5fa3aa487705073cad81603726a
+py -3 -m pytest -q tests/unit/test_audit_mt5_monthly_dataset.py
+4 passed in 0.97s
 
-python -c JSON verification
-variants=56
-unique_keys=56
-sha256=e09001e1602cf5624e72ea35ab6c37a43db6a5fa3aa487705073cad81603726a
-bom=False
+py -3 -m ruff check scripts/audit_mt5_monthly_dataset.py tests/unit/test_audit_mt5_monthly_dataset.py
+All checks passed!
 
-Get-Item SPEC.md,grid.json
-
+py -3 -m pytest -q tests/unit/test_audit_mt5_monthly_dataset.py
+4 passed
 
 git diff --check
 DIFF_CHECK_EXIT=0
 ```
 
-The final SPEC records the proposed 2025 UTC boundary, explicitly marking its slice hash unavailable and the boundary invalid as a fresh untouched holdout. After commit, the grid was reloaded as JSON: 56 variants, 56 unique keys, SHA-256 `e09001e1602cf5624e72ea35ab6c37a43db6a5fa3aa487705073cad81603726a`.
+No full repository test suite was run in this phase.
 
-## Dataset and cost blockers
+## Cost and holdout decisions
 
-- QROS `data/curated/xauusd` does not exist in the current checkout.
-- `data/mt5/xauusd/README.md` requires a versioned external dataset and fail-closed behavior when absent.
-- No `.dvc/config`, `.dvc` dataset pointer, or installed `dvc` command was found.
-- A prior audit reports 1,764,176 XAUUSD M1 rows and full-dataset SHA-256 `632950ee767eb8968a00331e6f8da35d3bc73e937bcb3ceb5c1b15f596939da9`; the bytes are not available to re-hash.
-- Proposed 2025 OOS window: `2025-01-01T00:00:00Z` to `2025-12-31T23:59:59Z`; slice SHA-256 unavailable and the period was exposed in unrelated prior audits. It is not accepted as a fresh holdout.
-- `config/costs.yaml` is `UNVERIFIED`; spread scenario 0.36 price units is explicitly not a verified historical average and excludes slippage/commission. Commission and slippage evidence is unavailable.
-- The 500-row M15 CSV in `ForexCourse/mt5_audit_output` is not an approved frozen M1 dataset and is below the 1,245 observation gate; it was not used for variant evaluation.
+- FTMO's published Metals CFD commission change to `0.0007%` per volume per side from 29 Sep 2025 is documented; the prior rate was `0.0005%`.
+- FTMO says volume-band execution was extended to all active accounts, Challenges, Verifications, and Free Trials from 20 Apr 2026. Exact XAUUSD tiers and account-level realized commission are not verified.
+- Historical slippage is not recoverable from M1 OHLC bars; no verified slippage evidence exists. `config/costs.yaml` was not modified and remains `UNVERIFIED`.
+- 2021–2025 has prior QROS research exposure and is development-only. 2026-01–2026-10 is exploratory only because previous M15 research used this period.
+- Prospective study-locked OOS is fixed at `2026-11-02T00:00:00Z` through `2027-04-30T23:59:59Z`; data/hash are pending until that future period closes.
+- QROS Staging `qros-datasets` bucket had zero objects; no DVC remote is configured. Raw dataset is local-only, Git-ignored, and not backed by a remote immutable store.
 
 ## Acceptance status
 
-- SPEC and grid drafts created: `PASS`.
-- Grid enumerates 56 unique keys: `PASS`.
-- Grid SHA reproduced after commit: `PASS` — `e09001e1602cf5624e72ea35ab6c37a43db6a5fa3aa487705073cad81603726a`.
-- Effective locked holdout dataset hash and fresh boundaries: `BLOCKED`.
-- Verified spread, commission, slippage evidence: `BLOCKED`.
-- No Market Structure variant was run on market data: `PASS`.
-- Effective Phase 1 pre-registration acceptance: `BLOCKED`.
+- 56-variant grid, unique keys, and grid SHA: `PASS`.
+- FTMO-Demo dataset acquisition and local byte integrity: `PASS`.
+- Development/walk-forward raw slice identities and future OOS date boundary: `PASS` (future OOS hash pending by design).
+- Account-specific XAUUSD volume-band and commission reconciliation: `BLOCKED`.
+- Slippage model/evidence: `BLOCKED`.
+- Remote immutable storage/backup: `BLOCKED`.
+- Market Structure variants run on market data: `NO — NOT AUTHORIZED`.
 
-## Deviations
+## Decision
 
-The files are explicitly marked as a draft, not an effective pre-registration. The holdout slice hash and verified cost values were not fabricated. The draft grid retains the existing QROS detector's 56-definition axes; `choch_rule` and `trend_filter` are fixed constants, not additional axes. This differs from possible example axes in the user specification and is declared explicitly in `SPEC.md`.
-
-## Open risks
-
-1. Dataset bytes and immutable source manifest must be recovered and independently verified.
-2. A genuinely unused chronological OOS slice must be selected and hashed before results.
-3. Broker/account-specific spread, commission, and slippage evidence is required.
-4. The future adapter must expose the opposite confirmed swing anchor for the stop rule.
-5. The prior uncommitted detector worktree changes remain separate and untouched by this phase.
-
-**Decision:** stop here. Do not start Phase 2 or compute variant results until the blockers are resolved and an effective pre-registration is committed.
+Phase 1 is accepted for structural implementation and synthetic detector testing only. Market-data execution remains blocked until the account-specific cost model is evidenced and the prospective OOS interval is collected, hashed, and locked. The next permitted implementation work is Phase 2 immutable definition and Phase 3 detector with synthetic fixtures only. No strategy is declared profitable; no candidate result exists.
