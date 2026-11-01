@@ -1,12 +1,15 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
+import pytest
+
 from researchos.quant_engine.order_flow.contracts import AggressorMethod, AggressorSide, TradeEvent
 from researchos.quant_engine.order_flow.features import FlowWindow, TradeClassification
 from researchos.quant_engine.order_flow.detectors import (
     DetectorDefinition,
     FlowSource,
     FootprintState,
+    LargePrintCandidate,
     ReferenceLevel,
     SizeReference,
     SweepObservation,
@@ -77,13 +80,24 @@ def test_d01_requires_prior_reference_percentile_and_sample_floor():
     rows = [classified(0, "25"), classified(1, "5")]
     refs = {
         rows[0].trade.raw_event_hash: SizeReference(
-            "GC-RTH", Decimal("20"), Decimal("0.995"), 200, NOW - timedelta(seconds=1)
+            "GCZ6",
+            "RTH",
+            "GC-RTH",
+            Decimal("20"),
+            Decimal("0.995"),
+            200,
+            NOW - timedelta(seconds=1),
         ),
         rows[1].trade.raw_event_hash: SizeReference(
-            "GC-RTH", Decimal("2"), Decimal("0.999"), 20, NOW - timedelta(seconds=1)
+            "GCZ6", "RTH", "GC-RTH", Decimal("2"), Decimal("0.999"), 20, NOW - timedelta(seconds=1)
         ),
     }
-    found = detect_unusually_large_prints(rows, refs, d)
+    found = detect_unusually_large_prints(
+        rows,
+        refs,
+        d,
+        session_ids={item.trade.raw_event_hash: "RTH" for item in rows},
+    )
     assert len(found) == 1
     assert found[0].quantity == Decimal("25")
     assert found[0].side == AggressorSide.BUY
@@ -103,14 +117,15 @@ def test_d02_clusters_are_fixed_window_non_overlapping_and_keep_unknown():
         classified(7, "10"),
         classified(8, "10"),
     ]
-    # Make the last cluster a distinct instrument-independent time group.
+    # A separate later cluster remains within the same session/cohort.
     found = detect_large_trade_clusters(
         [
-            __import__(
-                "researchos.quant_engine.order_flow.detectors", fromlist=["LargePrintCandidate"]
-            ).LargePrintCandidate(
+            LargePrintCandidate(
                 x.trade.raw_event_hash,
+                x.trade.source_id,
+                x.trade.dataset_id,
                 x.trade.instrument_id,
+                "RTH",
                 x.trade.event_time_utc,
                 x.trade.quantity,
                 x.side,
@@ -219,12 +234,19 @@ def test_d08_requires_preexisting_level_trade_through_and_timed_response():
         "market_structure_confirmed_swing",
     )
     obs = SweepObservation(
-        level, NOW, Decimal("2399"), Decimal("4"), NOW + timedelta(seconds=2), Decimal("2400")
+        level,
+        "GCZ6",
+        HASH,
+        NOW,
+        Decimal("2399"),
+        Decimal("4"),
+        NOW + timedelta(seconds=2),
+        Decimal("2400.1"),
     )
     found = detect_liquidity_sweep_candidate(obs, tick_size=Decimal("0.1"), definition=d)
     assert found is not None
     assert found.direction == "BELOW_REFERENCE"
-    assert found.response == "REJECTION"
+    assert found.response == "RECLAIMED_REFERENCE_BY_WINDOW_END"
     future_level = ReferenceLevel(
         "future", "GCZ6", Decimal("2400"), "swing_low", NOW + timedelta(seconds=1), "not_yet_known"
     )
@@ -232,11 +254,13 @@ def test_d08_requires_preexisting_level_trade_through_and_timed_response():
         detect_liquidity_sweep_candidate(
             SweepObservation(
                 future_level,
+                "GCZ6",
+                HASH,
                 NOW,
                 Decimal("2399"),
                 Decimal("4"),
                 NOW + timedelta(seconds=2),
-                Decimal("2400"),
+                Decimal("2400.1"),
             ),
             tick_size=Decimal("0.1"),
             definition=d,
@@ -248,8 +272,16 @@ def test_d08_requires_preexisting_level_trade_through_and_timed_response():
 def test_d01_rejects_reference_distribution_that_ends_at_or_after_trade():
     d = DetectorDefinition(minimum_reference_count=1)
     item = classified(0, "25")
-    ref = SizeReference("GC-RTH", Decimal("20"), Decimal("0.999"), 200, NOW)
-    assert detect_unusually_large_prints([item], {item.trade.raw_event_hash: ref}, d) == ()
+    ref = SizeReference("GCZ6", "RTH", "GC-RTH", Decimal("20"), Decimal("0.999"), 200, NOW)
+    assert (
+        detect_unusually_large_prints(
+            [item],
+            {item.trade.raw_event_hash: ref},
+            d,
+            session_ids={item.trade.raw_event_hash: "RTH"},
+        )
+        == ()
+    )
 
 
 def test_d05_rejects_volatility_estimate_from_after_the_flow_window():
@@ -288,4 +320,188 @@ def test_d06_rejects_level_that_was_not_known_before_flow_window():
             definition=d,
         )
         is None
+    )
+
+
+def test_d01_rejects_reference_from_another_instrument():
+    item = classified(0, "25")
+    wrong_instrument = SizeReference(
+        "MGCZ6", "RTH", "MGC-RTH", Decimal("20"), Decimal("0.999"), 200, NOW - timedelta(seconds=1)
+    )
+    assert (
+        detect_unusually_large_prints(
+            [item],
+            {item.trade.raw_event_hash: wrong_instrument},
+            DetectorDefinition(minimum_reference_count=1),
+            session_ids={item.trade.raw_event_hash: "RTH"},
+        )
+        == ()
+    )
+
+
+def test_d02_never_clusters_across_session_boundaries():
+    d = DetectorDefinition(cluster_minimum_prints=3, cluster_minimum_quantity=Decimal("1"))
+    rows = []
+    for n, session in ((0, "RTH"), (1, "RTH"), (2, "ETH")):
+        item = classified(n, "10")
+        rows.append(
+            LargePrintCandidate(
+                item.trade.raw_event_hash,
+                item.trade.source_id,
+                item.trade.dataset_id,
+                item.trade.instrument_id,
+                session,
+                item.trade.event_time_utc,
+                item.trade.quantity,
+                item.side,
+                item.method,
+                f"GC-{session}",
+                Decimal("0.995"),
+                200,
+                NOW - timedelta(seconds=1),
+                d.definition_id,
+            )
+        )
+    assert detect_large_trade_clusters(rows, d) == ()
+
+
+def test_d08_exact_reference_touch_is_not_mislabelled_acceptance():
+    level = ReferenceLevel(
+        "prior-swing-low",
+        "GCZ6",
+        Decimal("2400"),
+        "swing_low",
+        NOW - timedelta(seconds=2),
+        "confirmed_swing",
+    )
+    observation = SweepObservation(
+        level,
+        "GCZ6",
+        HASH,
+        NOW,
+        Decimal("2399"),
+        Decimal("2"),
+        NOW + timedelta(seconds=1),
+        Decimal("2400"),
+    )
+    result = detect_liquidity_sweep_candidate(
+        observation, tick_size=Decimal("0.1"), definition=DetectorDefinition()
+    )
+    assert result is not None
+    assert result.response == "AT_REFERENCE_AT_WINDOW_END"
+
+
+def test_d08_rejects_mismatched_instrument_and_off_tick_prices():
+    level = ReferenceLevel(
+        "prior-swing-low",
+        "GCZ6",
+        Decimal("2400"),
+        "swing_low",
+        NOW - timedelta(seconds=2),
+        "confirmed_swing",
+    )
+    with pytest.raises(ValueError, match="instrument does not match"):
+        SweepObservation(
+            level,
+            "MGCZ6",
+            HASH,
+            NOW,
+            Decimal("2399"),
+            Decimal("2"),
+            NOW + timedelta(seconds=1),
+            Decimal("2400"),
+        )
+    valid_identity = SweepObservation(
+        level,
+        "GCZ6",
+        HASH,
+        NOW,
+        Decimal("2399.05"),
+        Decimal("2"),
+        NOW + timedelta(seconds=1),
+        Decimal("2400"),
+    )
+    with pytest.raises(ValueError, match="align to tick_size"):
+        detect_liquidity_sweep_candidate(
+            valid_identity, tick_size=Decimal("0.1"), definition=DetectorDefinition()
+        )
+
+
+def test_d06_does_not_combine_exchange_and_quote_inferred_evidence():
+    from dataclasses import replace
+
+    d = DetectorDefinition(absorption_minimum_tests=2)
+    f = flow(ex_buy="10")
+    exchange = classify_aggression_price_response(
+        f,
+        source=FlowSource.EXCHANGE_FLAG,
+        price_progress_ticks=Decimal("1"),
+        trailing_volatility_ticks=Decimal("4"),
+        volatility_as_of_utc=NOW - timedelta(seconds=1),
+        definition=d,
+    )
+    quote_inferred = replace(exchange, source=FlowSource.QUOTE_INFERRED)
+    assert (
+        detect_absorption_candidate(
+            [exchange, quote_inferred],
+            side=AggressorSide.BUY,
+            contested_level=Decimal("2400"),
+            contested_level_available_at_utc=NOW - timedelta(seconds=1),
+            test_count=2,
+            definition=d,
+        )
+        is None
+    )
+
+
+def test_d08_distinguishes_still_beyond_reference_from_reclaim():
+    level = ReferenceLevel(
+        "prior-swing-low",
+        "GCZ6",
+        Decimal("2400"),
+        "swing_low",
+        NOW - timedelta(seconds=2),
+        "confirmed_swing",
+    )
+    observation = SweepObservation(
+        level,
+        "GCZ6",
+        HASH,
+        NOW,
+        Decimal("2399"),
+        Decimal("2"),
+        NOW + timedelta(seconds=1),
+        Decimal("2398.9"),
+    )
+    result = detect_liquidity_sweep_candidate(
+        observation, tick_size=Decimal("0.1"), definition=DetectorDefinition()
+    )
+    assert result is not None
+    assert result.response == "REMAINS_BEYOND_REFERENCE_AT_WINDOW_END"
+
+
+def test_d01_rejects_reference_from_another_session_and_requires_session_mapping():
+    item = classified(0, "25")
+    reference = SizeReference(
+        "GCZ6",
+        "ETH",
+        "GC-ETH",
+        Decimal("20"),
+        Decimal("0.999"),
+        200,
+        NOW - timedelta(seconds=1),
+    )
+    refs = {item.trade.raw_event_hash: reference}
+    with pytest.raises(ValueError, match="missing session mapping"):
+        detect_unusually_large_prints(
+            [item], refs, DetectorDefinition(minimum_reference_count=1), session_ids={}
+        )
+    assert (
+        detect_unusually_large_prints(
+            [item],
+            refs,
+            DetectorDefinition(minimum_reference_count=1),
+            session_ids={item.trade.raw_event_hash: "RTH"},
+        )
+        == ()
     )

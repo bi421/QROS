@@ -34,6 +34,16 @@ __all__ = [
     "TradeEvent",
 ]
 
+from researchos.quant_engine.order_flow.audit import (
+    LineageRecord,
+    PrefixInvariantResult,
+    ReplayAudit,
+    audit_prefix_invariance,
+    build_lineage_record,
+    build_replay_audit,
+    canonical_bytes,
+)
+
 from researchos.quant_engine.order_flow.features import (
     CvdPoint,
     FlowWindow,
@@ -65,6 +75,13 @@ from researchos.quant_engine.order_flow.detectors import (
 
 
 __all__ += [
+    "LineageRecord",
+    "PrefixInvariantResult",
+    "ReplayAudit",
+    "audit_prefix_invariance",
+    "build_lineage_record",
+    "build_replay_audit",
+    "canonical_bytes",
     "CvdPoint",
     "FlowWindow",
     "TradeClassification",

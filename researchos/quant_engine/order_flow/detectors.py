@@ -84,6 +84,8 @@ class DetectorDefinition:
 
 @dataclass(frozen=True, slots=True)
 class SizeReference:
+    instrument_id: str
+    session_id: str
     cohort_id: str
     quantity_threshold: Decimal
     percentile: Decimal
@@ -96,9 +98,17 @@ class SizeReference:
         ):
             raise ValueError("reference_end_utc must be timezone-aware UTC")
         if (
-            not self.cohort_id.strip()
+            not self.instrument_id.strip()
+            or not self.session_id.strip()
+            or not self.cohort_id.strip()
+        ):
+            raise ValueError("size reference identity fields must be non-empty")
+        if (
+            not self.quantity_threshold.is_finite()
+            or not self.percentile.is_finite()
             or self.quantity_threshold <= 0
             or not 0 < self.percentile <= 1
+            or isinstance(self.reference_count, bool)
             or self.reference_count < 0
         ):
             raise ValueError("invalid size reference")
@@ -107,7 +117,10 @@ class SizeReference:
 @dataclass(frozen=True, slots=True)
 class LargePrintCandidate:
     trade_hash: str
+    source_id: str
+    dataset_id: str
     instrument_id: str
+    session_id: str
     event_time_utc: datetime
     quantity: Decimal
     side: AggressorSide
@@ -121,7 +134,11 @@ class LargePrintCandidate:
 
 @dataclass(frozen=True, slots=True)
 class LargeTradeCluster:
+    source_id: str
+    dataset_id: str
     instrument_id: str
+    session_id: str
+    cohort_id: str
     start_utc: datetime
     end_utc: datetime
     print_count: int
@@ -176,21 +193,57 @@ class ReferenceLevel:
     available_at_utc: datetime
     source: str
 
+    def __post_init__(self):
+        if (
+            not self.level_id.strip()
+            or not self.instrument_id.strip()
+            or not self.kind.strip()
+            or not self.source.strip()
+        ):
+            raise ValueError("reference level identity fields must be non-empty")
+        if self.available_at_utc.tzinfo is None or self.available_at_utc.utcoffset() != timedelta(
+            0
+        ):
+            raise ValueError("reference level availability must be timezone-aware UTC")
+        if not self.price.is_finite() or self.price <= 0:
+            raise ValueError("reference level price must be finite and positive")
+
 
 @dataclass(frozen=True, slots=True)
 class SweepObservation:
     reference: ReferenceLevel
+    instrument_id: str
+    trade_through_raw_event_hash: str
     trade_through_time_utc: datetime
     trade_through_price: Decimal
     trade_through_quantity: Decimal
     response_end_utc: datetime
     response_price: Decimal
 
+    def __post_init__(self):
+        if self.instrument_id != self.reference.instrument_id:
+            raise ValueError("sweep observation instrument does not match reference level")
+        for name in ("trade_through_time_utc", "response_end_utc"):
+            value = getattr(self, name)
+            if value.tzinfo is None or value.utcoffset() != timedelta(0):
+                raise ValueError(f"{name} must be timezone-aware UTC")
+        if self.response_end_utc < self.trade_through_time_utc:
+            raise ValueError("response_end_utc cannot precede trade-through")
+        if len(self.trade_through_raw_event_hash) != 64 or any(
+            char not in "0123456789abcdef" for char in self.trade_through_raw_event_hash
+        ):
+            raise ValueError("trade_through_raw_event_hash must be lowercase SHA-256")
+        for name in ("trade_through_price", "trade_through_quantity", "response_price"):
+            value = getattr(self, name)
+            if not value.is_finite() or value <= 0:
+                raise ValueError(f"{name} must be finite and positive")
+
 
 @dataclass(frozen=True, slots=True)
 class LiquiditySweepCandidate:
     level_id: str
     instrument_id: str
+    trade_through_raw_event_hash: str
     direction: str
     level_price: Decimal
     trade_through_quantity: Decimal
@@ -204,13 +257,21 @@ def detect_unusually_large_prints(
     classifications: Iterable[TradeClassification],
     references: Mapping[str, SizeReference],
     definition: DetectorDefinition,
+    *,
+    session_ids: Mapping[str, str],
 ) -> tuple[LargePrintCandidate, ...]:
-    """D01: supplied reference must be computed only from prior cohort data."""
+    """D01: references must match exact instrument/session and precede the trade."""
     out = []
     for item in classifications:
-        t, ref = item.trade, references.get(item.trade.raw_event_hash)
+        t = item.trade
+        session_id = session_ids.get(t.raw_event_hash)
+        if session_id is None or not session_id.strip():
+            raise ValueError(f"missing session mapping for trade {t.raw_event_hash}")
+        ref = references.get(t.raw_event_hash)
         if (
             ref is None
+            or ref.instrument_id != t.instrument_id
+            or ref.session_id != session_id
             or ref.reference_count < definition.minimum_reference_count
             or ref.percentile < definition.large_print_percentile
             or t.quantity < ref.quantity_threshold
@@ -220,7 +281,10 @@ def detect_unusually_large_prints(
         out.append(
             LargePrintCandidate(
                 t.raw_event_hash,
+                t.source_id,
+                t.dataset_id,
                 t.instrument_id,
+                ref.session_id,
                 t.event_time_utc,
                 t.quantity,
                 item.side,
@@ -239,14 +303,38 @@ def detect_large_trade_clusters(
     candidates: Iterable[LargePrintCandidate], definition: DetectorDefinition
 ) -> tuple[LargeTradeCluster, ...]:
     """D02: non-overlapping windows anchored at each first qualifying print."""
-    rows = sorted(candidates, key=lambda x: (x.instrument_id, x.event_time_utc, x.trade_hash))
+    rows = sorted(
+        candidates,
+        key=lambda x: (
+            x.instrument_id,
+            x.session_id,
+            x.source_id,
+            x.dataset_id,
+            x.cohort_id,
+            x.event_time_utc,
+            x.trade_hash,
+        ),
+    )
     out, i = [], 0
     while i < len(rows):
         first, cutoff = rows[i], rows[i].event_time_utc + definition.cluster_window
         j = i
         while (
             j < len(rows)
-            and rows[j].instrument_id == first.instrument_id
+            and (
+                rows[j].instrument_id,
+                rows[j].session_id,
+                rows[j].source_id,
+                rows[j].dataset_id,
+                rows[j].cohort_id,
+            )
+            == (
+                first.instrument_id,
+                first.session_id,
+                first.source_id,
+                first.dataset_id,
+                first.cohort_id,
+            )
             and rows[j].event_time_utc < cutoff
         ):
             j += 1
@@ -270,7 +358,11 @@ def detect_large_trade_clusters(
             )
             out.append(
                 LargeTradeCluster(
+                    first.source_id,
+                    first.dataset_id,
                     first.instrument_id,
+                    first.session_id,
+                    first.cohort_id,
                     first.event_time_utc,
                     group[-1].event_time_utc,
                     len(group),
@@ -299,8 +391,12 @@ def classify_aggression_price_response(
     definition: DetectorDefinition,
 ) -> FlowResponse:
     """D05: source-separated aggression and signed price response."""
-    if trailing_volatility_ticks <= 0:
-        raise ValueError("trailing_volatility_ticks must be positive")
+    if (
+        not trailing_volatility_ticks.is_finite()
+        or not price_progress_ticks.is_finite()
+        or trailing_volatility_ticks <= 0
+    ):
+        raise ValueError("price progress must be finite and volatility must be finite and positive")
     if (
         volatility_as_of_utc.tzinfo is None
         or volatility_as_of_utc.utcoffset() != timedelta(0)
@@ -356,7 +452,12 @@ def detect_absorption_candidate(
     """D06: trade-price absorption pattern only; never asserts hidden liquidity."""
     if side not in (AggressorSide.BUY, AggressorSide.SELL):
         raise ValueError("side must be BUY or SELL")
-    if contested_level <= 0 or test_count < 0:
+    if (
+        not contested_level.is_finite()
+        or contested_level <= 0
+        or isinstance(test_count, bool)
+        or test_count < 0
+    ):
         raise ValueError("invalid level or test_count")
     if (
         contested_level_available_at_utc.tzinfo is None
@@ -381,14 +482,22 @@ def detect_absorption_candidate(
         ),
         key=lambda x: (x.start_utc, x.end_utc),
     )
-    if not rows or test_count < definition.absorption_minimum_tests:
+    if (
+        len(rows) < definition.absorption_minimum_tests
+        or test_count < definition.absorption_minimum_tests
+    ):
         return None
     first, last = rows[0], rows[-1]
     if contested_level_available_at_utc > first.start_utc:
         return None
     if any(
-        x.instrument_id != first.instrument_id or x.session_id != first.session_id for x in rows
+        x.instrument_id != first.instrument_id
+        or x.session_id != first.session_id
+        or x.source != first.source
+        for x in rows
     ):
+        return None
+    if any(current.start_utc < previous.end_utc for previous, current in zip(rows, rows[1:])):
         return None
     return AbsorptionCandidate(
         first.instrument_id,
@@ -410,30 +519,44 @@ def detect_liquidity_sweep_candidate(
 ) -> LiquiditySweepCandidate | None:
     """D08: prior reference + actual trade-through + bounded post-event response."""
     ref = observation.reference
-    if tick_size <= 0 or observation.trade_through_quantity <= 0:
-        raise ValueError("tick_size and trade-through quantity must be positive")
+    if not tick_size.is_finite() or tick_size <= 0:
+        raise ValueError("tick_size must be finite and positive")
     if (
-        ref.available_at_utc >= observation.trade_through_time_utc
-        or observation.response_end_utc < observation.trade_through_time_utc
+        observation.trade_through_quantity <= 0
+        or observation.trade_through_price % tick_size != 0
+        or observation.response_price % tick_size != 0
+        or ref.price % tick_size != 0
     ):
+        raise ValueError("sweep prices must align to tick_size and quantity must be positive")
+    if ref.available_at_utc >= observation.trade_through_time_utc:
         return None
     elapsed = observation.response_end_utc - observation.trade_through_time_utc
     if elapsed > definition.sweep_response_window or ref.price == observation.trade_through_price:
         return None
     if ref.price < observation.trade_through_price:
-        direction, move = (
-            "ABOVE_REFERENCE",
-            (observation.response_price - observation.trade_through_price) / tick_size,
+        direction = "ABOVE_REFERENCE"
+        move = (observation.response_price - observation.trade_through_price) / tick_size
+        response = (
+            "RECLAIMED_REFERENCE_BY_WINDOW_END"
+            if observation.response_price < ref.price
+            else "REMAINS_BEYOND_REFERENCE_AT_WINDOW_END"
+            if observation.response_price > ref.price
+            else "AT_REFERENCE_AT_WINDOW_END"
         )
     else:
-        direction, move = (
-            "BELOW_REFERENCE",
-            (observation.trade_through_price - observation.response_price) / tick_size,
+        direction = "BELOW_REFERENCE"
+        move = (observation.trade_through_price - observation.response_price) / tick_size
+        response = (
+            "RECLAIMED_REFERENCE_BY_WINDOW_END"
+            if observation.response_price > ref.price
+            else "REMAINS_BEYOND_REFERENCE_AT_WINDOW_END"
+            if observation.response_price < ref.price
+            else "AT_REFERENCE_AT_WINDOW_END"
         )
-    response = "REJECTION" if move < 0 else "ACCEPTANCE"
     return LiquiditySweepCandidate(
         ref.level_id,
         ref.instrument_id,
+        observation.trade_through_raw_event_hash,
         direction,
         ref.price,
         observation.trade_through_quantity,

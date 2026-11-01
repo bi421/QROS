@@ -42,7 +42,7 @@ Added `researchos/quant_engine/order_flow/detectors.py` and exported the public 
 ### D08 â€” Liquidity sweep candidate
 
 - Requires a reference level available before the trade-through event, a nonzero trade-through quantity, and a bounded post-event response window.
-- Records direction relative to the reference and response as `REJECTION` or `ACCEPTANCE`.
+- Records direction relative to the reference and the bounded window-end state as RECLAIMED_REFERENCE_BY_WINDOW_END, REMAINS_BEYOND_REFERENCE_AT_WINDOW_END, or AT_REFERENCE_AT_WINDOW_END; these endpoint observations are not proof of sustained acceptance or rejection.
 - The reported elapsed time is the post-event response-window duration, not the exact duration price remained beyond the level.
 - The reference-level adapter and trade-through event extraction are caller responsibilities; a wick-only OHLC pattern is insufficient.
 
