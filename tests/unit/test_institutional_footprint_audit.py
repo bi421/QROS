@@ -9,6 +9,7 @@ from researchos.quant_engine.order_flow.audit import (
     build_lineage_record,
     canonical_bytes,
     build_replay_audit,
+    build_lineage_record_from_events,
 )
 from researchos.quant_engine.order_flow.contracts import (
     AggressorSide,
@@ -237,3 +238,48 @@ def test_canonical_json_is_mapping_order_invariant_and_rejects_float():
     )
     with pytest.raises(TypeError, match="float is not accepted"):
         canonical_bytes({"unsafe": 0.1})
+
+
+def test_lineage_derives_hashes_and_input_clocks_from_events():
+    from dataclasses import dataclass
+
+    @dataclass(frozen=True)
+    class Output:
+        label: str
+
+    events = (trade(1), trade(2))
+    record = build_lineage_record_from_events(
+        Output("detector-output"),
+        input_events=events,
+        definition_id="f" * 64,
+        code_revision=REVISION,
+        output_available_at_utc=NOW + timedelta(seconds=3),
+    )
+    assert record.input_event_hashes == tuple(sorted((HASH_A, HASH_B)))
+    assert record.latest_input_event_time_utc == NOW + timedelta(seconds=2)
+    assert record.latest_input_available_at_utc == NOW + timedelta(seconds=2, milliseconds=1)
+
+
+def test_lineage_from_events_rejects_empty_or_conflicting_input_set():
+    from dataclasses import replace
+
+    from researchos.quant_engine.order_flow.audit import build_lineage_record_from_events
+
+    with pytest.raises(ValueError, match="non-empty"):
+        build_lineage_record_from_events(
+            {"result": "none"},
+            input_events=(),
+            definition_id="f" * 64,
+            code_revision=REVISION,
+            output_available_at_utc=NOW,
+        )
+    first = trade(1, digest=HASH_A)
+    conflicting = replace(first, quantity=Decimal("9"))
+    with pytest.raises(ValueError, match="conflicting event payload"):
+        build_lineage_record_from_events(
+            {"result": "conflict"},
+            input_events=(first, conflicting),
+            definition_id="f" * 64,
+            code_revision=REVISION,
+            output_available_at_utc=NOW + timedelta(seconds=2),
+        )
