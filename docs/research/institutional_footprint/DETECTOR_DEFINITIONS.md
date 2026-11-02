@@ -1,4 +1,4 @@
-﻿# Institutional Footprint Engine — Detector Definitions
+# Institutional Footprint Engine — Detector Definitions
 
 **Version:** `0.1.0` — draft. Thresholds are intentionally not selected from market outcomes.
 

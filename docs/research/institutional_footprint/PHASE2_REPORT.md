@@ -1,4 +1,4 @@
-﻿# Phase 2 Report — Institutional Footprint Engine
+# Phase 2 Report — Institutional Footprint Engine
 
 **Study ID:** `IFE1-2026-11-02`
 **Phase:** `2 — Deterministic trade/quote feature engine`

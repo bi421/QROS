@@ -1,4 +1,4 @@
-﻿# Institutional Footprint Engine — Data Contract
+# Institutional Footprint Engine — Data Contract
 
 **Version:** `0.1.0` — draft; synthetic implementation only.
 

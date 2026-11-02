@@ -1,4 +1,4 @@
-﻿# Institutional Footprint Engine — Validation Plan
+# Institutional Footprint Engine — Validation Plan
 
 **Version:** `0.1.0` — draft; synthetic tests only until Phase 5 gates.
 

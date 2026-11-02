@@ -1,4 +1,4 @@
-﻿# Phase 1 Report — Institutional Footprint Engine
+# Phase 1 Report — Institutional Footprint Engine
 
 **Study ID:** `IFE1-2026-11-02`
 **Phase:** `1 — Immutable contracts and synthetic fixtures`

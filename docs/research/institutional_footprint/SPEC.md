@@ -1,4 +1,4 @@
-﻿# Institutional Footprint Engine — Research Specification
+# Institutional Footprint Engine — Research Specification
 
 **Study ID:** `IFE1-2026-11-02`
 **Version:** `0.1.0`
