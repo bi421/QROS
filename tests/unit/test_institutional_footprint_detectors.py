@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -5,9 +6,12 @@ import pytest
 
 from researchos.quant_engine.order_flow.contracts import AggressorMethod, AggressorSide, TradeEvent
 from researchos.quant_engine.order_flow.features import FlowWindow, TradeClassification
+from researchos.quant_engine.order_flow.lineage import InputLineage
+from researchos.quant_engine.order_flow.event_ledger import TradeMutation, TradeMutationAction
 from researchos.quant_engine.order_flow.detectors import (
     DetectorDefinition,
     FlowSource,
+    FlowResponse,
     FootprintState,
     LargePrintCandidate,
     ReferenceLevel,
@@ -505,3 +509,330 @@ def test_d01_rejects_reference_from_another_session_and_requires_session_mapping
         )
         == ()
     )
+
+
+def test_d01_lineage_includes_scored_trade_and_reference_sample_events():
+    definition = DetectorDefinition(minimum_reference_count=100)
+    sample = classified(0, "30")
+    scored = classified(2, "25")
+    reference = SizeReference(
+        "GCZ6",
+        "RTH",
+        "GC-RTH",
+        Decimal("20"),
+        Decimal("0.995"),
+        200,
+        NOW + timedelta(seconds=1),
+        InputLineage.from_events((sample.trade,)),
+    )
+    candidates = detect_unusually_large_prints(
+        (scored,),
+        {scored.trade.raw_event_hash: reference},
+        definition,
+        session_ids={scored.trade.raw_event_hash: "RTH"},
+    )
+    assert len(candidates) == 1
+    assert candidates[0].input_lineage is not None
+    assert candidates[0].input_lineage.complete
+    assert set(candidates[0].input_lineage.input_event_hashes) == {
+        sample.trade.raw_event_hash,
+        scored.trade.raw_event_hash,
+    }
+
+
+def test_d01_rejects_reference_lineage_received_after_scored_trade():
+    definition = DetectorDefinition(minimum_reference_count=100)
+    from dataclasses import replace
+
+    sample = replace(
+        classified(1, "30").trade,
+        receive_time_utc=NOW + timedelta(seconds=4),
+    )
+    scored = classified(2, "25")
+    reference = SizeReference(
+        "GCZ6",
+        "RTH",
+        "GC-RTH",
+        Decimal("20"),
+        Decimal("0.995"),
+        200,
+        NOW + timedelta(seconds=1),
+        InputLineage.from_events((sample,)),
+    )
+    candidates = detect_unusually_large_prints(
+        (scored,),
+        {scored.trade.raw_event_hash: reference},
+        definition,
+        session_ids={scored.trade.raw_event_hash: "RTH"},
+    )
+    assert candidates == ()
+
+
+def test_d05_lineage_requires_flow_price_and_volatility_raw_events():
+    from dataclasses import replace
+
+    definition = DetectorDefinition()
+    flow_event = classified(3).trade
+    price_event = classified(4).trade
+    volatility_event = classified(1).trade
+    flow_window = replace(
+        flow(),
+        start_utc=NOW + timedelta(seconds=3),
+        end_utc=NOW + timedelta(seconds=4),
+        input_lineage=InputLineage.from_events((flow_event,)),
+    )
+    response = classify_aggression_price_response(
+        flow_window,
+        source=FlowSource.EXCHANGE_FLAG,
+        price_progress_ticks=Decimal("0"),
+        trailing_volatility_ticks=Decimal("4"),
+        volatility_as_of_utc=NOW + timedelta(seconds=2),
+        definition=definition,
+        price_input_events=(price_event,),
+        volatility_input_events=(volatility_event,),
+    )
+    assert response.input_lineage is not None
+    assert response.input_lineage.complete
+    assert len(response.input_lineage.input_event_hashes) == 3
+
+
+def test_d06_lineage_includes_supporting_flow_and_contested_level_events():
+    definition = DetectorDefinition()
+    first_event = classified(3).trade
+    second_event = classified(5).trade
+    level_event = classified(1).trade
+    first = FlowResponse(
+        "GCZ6",
+        "RTH",
+        NOW + timedelta(seconds=3),
+        NOW + timedelta(seconds=4),
+        FlowSource.EXCHANGE_FLAG,
+        Decimal("10"),
+        Decimal("0"),
+        Decimal("1"),
+        Decimal("0"),
+        Decimal("4"),
+        NOW + timedelta(seconds=2),
+        Decimal("0"),
+        FootprintState.HIGH_AGGRESSION_LOW_PROGRESS,
+        definition.definition_id,
+        InputLineage.from_events((first_event,)),
+    )
+    second = FlowResponse(
+        "GCZ6",
+        "RTH",
+        NOW + timedelta(seconds=5),
+        NOW + timedelta(seconds=6),
+        FlowSource.EXCHANGE_FLAG,
+        Decimal("12"),
+        Decimal("0"),
+        Decimal("1"),
+        Decimal("0"),
+        Decimal("4"),
+        NOW + timedelta(seconds=4),
+        Decimal("0"),
+        FootprintState.HIGH_AGGRESSION_LOW_PROGRESS,
+        definition.definition_id,
+        InputLineage.from_events((second_event,)),
+    )
+    candidate = detect_absorption_candidate(
+        (first, second),
+        side=AggressorSide.BUY,
+        contested_level=Decimal("2400.0"),
+        contested_level_available_at_utc=NOW + timedelta(seconds=2),
+        test_count=2,
+        definition=definition,
+        contested_level_input_events=(level_event,),
+    )
+    assert candidate is not None
+    assert candidate.input_lineage is not None
+    assert candidate.input_lineage.complete
+    assert len(candidate.input_lineage.input_event_hashes) == 3
+
+
+def test_d08_lineage_requires_reference_trade_through_and_response_events():
+    definition = DetectorDefinition()
+    level_event = classified(0).trade
+    trade_through = classified(2).trade
+    response_event = classified(3).trade
+    reference = ReferenceLevel(
+        "prior-high",
+        "GCZ6",
+        Decimal("2399.9"),
+        "PRIOR_HIGH",
+        NOW + timedelta(seconds=1),
+        "SYNTHETIC",
+        InputLineage.from_events((level_event,)),
+    )
+    observation = SweepObservation(
+        reference,
+        "GCZ6",
+        trade_through.raw_event_hash,
+        trade_through.event_time_utc,
+        trade_through.price,
+        trade_through.quantity,
+        NOW + timedelta(seconds=3),
+        response_event.price,
+        trade_through,
+        response_event,
+    )
+    candidate = detect_liquidity_sweep_candidate(
+        observation, tick_size=Decimal("0.1"), definition=definition
+    )
+    assert candidate is not None
+    assert candidate.input_lineage is not None
+    assert candidate.input_lineage.complete
+    assert len(candidate.input_lineage.input_event_hashes) == 3
+
+
+def test_d06_rejects_cross_instrument_contested_level_lineage():
+    definition = DetectorDefinition()
+    first_event = classified(3).trade
+    second_event = classified(5).trade
+    wrong_instrument_level_event = replace(classified(1).trade, instrument_id="MGCZ6")
+    first = FlowResponse(
+        "GCZ6",
+        "RTH",
+        NOW + timedelta(seconds=3),
+        NOW + timedelta(seconds=4),
+        FlowSource.EXCHANGE_FLAG,
+        Decimal("10"),
+        Decimal("0"),
+        Decimal("1"),
+        Decimal("0"),
+        Decimal("4"),
+        NOW + timedelta(seconds=2),
+        Decimal("0"),
+        FootprintState.HIGH_AGGRESSION_LOW_PROGRESS,
+        definition.definition_id,
+        InputLineage.from_events((first_event,)),
+    )
+    second = FlowResponse(
+        "GCZ6",
+        "RTH",
+        NOW + timedelta(seconds=5),
+        NOW + timedelta(seconds=6),
+        FlowSource.EXCHANGE_FLAG,
+        Decimal("12"),
+        Decimal("0"),
+        Decimal("1"),
+        Decimal("0"),
+        Decimal("4"),
+        NOW + timedelta(seconds=4),
+        Decimal("0"),
+        FootprintState.HIGH_AGGRESSION_LOW_PROGRESS,
+        definition.definition_id,
+        InputLineage.from_events((second_event,)),
+    )
+    with pytest.raises(ValueError, match="match the flow instrument"):
+        detect_absorption_candidate(
+            (first, second),
+            side=AggressorSide.BUY,
+            contested_level=Decimal("2400.0"),
+            contested_level_available_at_utc=NOW + timedelta(seconds=2),
+            test_count=2,
+            definition=definition,
+            contested_level_input_events=(wrong_instrument_level_event,),
+        )
+
+
+def test_d08_rejects_response_event_that_precedes_trade_through():
+    level_event = classified(0).trade
+    trade_through = classified(2).trade
+    earlier_response = classified(1).trade
+    reference = ReferenceLevel(
+        "prior-high",
+        "GCZ6",
+        Decimal("2399.9"),
+        "PRIOR_HIGH",
+        NOW + timedelta(seconds=1),
+        "SYNTHETIC",
+        InputLineage.from_events((level_event,)),
+    )
+    with pytest.raises(ValueError, match="does not match sweep response window"):
+        SweepObservation(
+            reference,
+            "GCZ6",
+            trade_through.raw_event_hash,
+            trade_through.event_time_utc,
+            trade_through.price,
+            trade_through.quantity,
+            NOW + timedelta(seconds=3),
+            earlier_response.price,
+            trade_through,
+            earlier_response,
+        )
+
+
+def test_d08_lineage_preserves_trade_through_correction_history():
+    from dataclasses import replace
+
+    original = replace(classified(1).trade, trade_id="T-1")
+    corrected = replace(classified(2).trade, trade_id="T-1")
+    new = TradeMutation(
+        original.source_id,
+        original.dataset_id,
+        original.instrument_id,
+        "T-1",
+        "RTH-2026-11-02",
+        1,
+        TradeMutationAction.NEW,
+        original.event_time_utc,
+        original.receive_time_utc,
+        "f" * 64,
+        1,
+        original,
+    )
+    correction = TradeMutation(
+        corrected.source_id,
+        corrected.dataset_id,
+        corrected.instrument_id,
+        "T-1",
+        "RTH-2026-11-02",
+        2,
+        TradeMutationAction.CORRECT,
+        corrected.event_time_utc,
+        corrected.receive_time_utc,
+        "e" * 64,
+        2,
+        corrected,
+        original.raw_event_hash,
+    )
+    level_event = classified(0).trade
+    response_event = classified(3).trade
+    reference = ReferenceLevel(
+        "prior-high",
+        "GCZ6",
+        Decimal("2399.9"),
+        "PRIOR_HIGH",
+        NOW + timedelta(seconds=1),
+        "SYNTHETIC",
+        InputLineage.from_events((level_event,)),
+    )
+    observation = SweepObservation(
+        reference,
+        "GCZ6",
+        corrected.raw_event_hash,
+        corrected.event_time_utc,
+        corrected.price,
+        corrected.quantity,
+        NOW + timedelta(seconds=3),
+        response_event.price,
+        corrected,
+        response_event,
+        (new, correction),
+    )
+    candidate = detect_liquidity_sweep_candidate(
+        observation, tick_size=Decimal("0.1"), definition=DetectorDefinition()
+    )
+    assert candidate is not None
+    assert candidate.input_lineage is not None
+    assert candidate.input_lineage.complete
+    assert set(candidate.input_lineage.input_event_hashes) >= {
+        original.raw_event_hash,
+        corrected.raw_event_hash,
+        new.raw_event_hash,
+        correction.raw_event_hash,
+        level_event.raw_event_hash,
+        response_event.raw_event_hash,
+    }

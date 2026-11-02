@@ -17,6 +17,7 @@ from typing import Callable, Iterable, Mapping, TypeAlias
 
 from researchos.quant_engine.order_flow.contracts import L2BookEvent, QuoteEvent, TradeEvent
 from researchos.quant_engine.order_flow.event_ledger import TradeMutation
+from researchos.quant_engine.order_flow.lineage import InputLineage
 
 MarketEvent: TypeAlias = TradeEvent | QuoteEvent | L2BookEvent | TradeMutation
 
@@ -375,6 +376,132 @@ class LineageRecord:
         return _sha256(canonical_bytes(self))
 
 
+def build_lineage_record_from_input_lineage(
+    output: object,
+    *,
+    input_lineage: InputLineage,
+    definition_id: str,
+    code_revision: str,
+    output_available_at_utc: datetime,
+) -> LineageRecord:
+    """Create a lineage record only when every required dependency is resolved."""
+    if not isinstance(input_lineage, InputLineage):
+        raise TypeError("input_lineage must be InputLineage")
+    if not input_lineage.complete:
+        raise ValueError(
+            "cannot certify detector output with incomplete input lineage: "
+            + ", ".join(input_lineage.missing_inputs)
+        )
+    if (
+        input_lineage.latest_input_event_time_utc is None
+        or input_lineage.latest_input_available_at_utc is None
+    ):
+        raise ValueError("complete input lineage must include causal clocks")
+    return build_lineage_record(
+        output,
+        input_event_hashes=input_lineage.input_event_hashes,
+        definition_id=definition_id,
+        code_revision=code_revision,
+        latest_input_event_time_utc=input_lineage.latest_input_event_time_utc,
+        latest_input_available_at_utc=input_lineage.latest_input_available_at_utc,
+        output_available_at_utc=output_available_at_utc,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class DetectorPipelineAudit:
+    """Combined raw replay, prefix-invariance, and complete-output-lineage result."""
+
+    replay_audit: ReplayAudit
+    prefix_invariance: PrefixInvariantResult
+    lineage_records: tuple[LineageRecord, ...]
+
+    @property
+    def passed(self) -> bool:
+        return self.prefix_invariance.passed and all(
+            record.output_available_at_utc >= record.latest_input_available_at_utc
+            for record in self.lineage_records
+        )
+
+
+def audit_detector_pipeline(
+    events: Iterable[MarketEvent],
+    *,
+    cutoff_utc: datetime,
+    replay: Callable[[tuple[MarketEvent, ...]], Iterable[object]],
+    output_available_at: Callable[[object], datetime],
+    definition_id: Callable[[object], str],
+    replay_config: Mapping[str, object],
+    code_revision: str,
+    expected_first_sequence: int | None = 1,
+    sequence_policies: Mapping[tuple[str, str, str, str], SequencePolicy] | None = None,
+    sequence_ordinals: Mapping[str, int] | None = None,
+    stream_partitions: Mapping[str, str] | None = None,
+) -> DetectorPipelineAudit:
+    """Run one fail-closed audit across raw replay, historical prefix, and lineage.
+
+    Both prefix-only and full replay outputs must carry complete event-derived
+    InputLineage. Outputs without a definition ID, causal clocks, or complete
+    raw input hashes are rejected rather than treated as certified.
+    """
+    _utc(cutoff_utc, "cutoff_utc")
+    materialized = tuple(events)
+    replay_audit = build_replay_audit(
+        materialized,
+        replay_config=replay_config,
+        code_revision=code_revision,
+        expected_first_sequence=expected_first_sequence,
+        sequence_policies=sequence_policies,
+        sequence_ordinals=sequence_ordinals,
+        stream_partitions=stream_partitions,
+    )
+    prefix_events = tuple(event for event in materialized if event.receive_time_utc <= cutoff_utc)
+    prefix_outputs = tuple(replay(prefix_events))
+    full_outputs = tuple(replay(materialized))
+
+    def validate_outputs(
+        outputs: tuple[object, ...],
+    ) -> tuple[tuple[object, datetime], tuple[LineageRecord, ...]]:
+        validated: list[tuple[object, datetime]] = []
+        records: list[LineageRecord] = []
+        for output in outputs:
+            available_at = output_available_at(output)
+            _utc(available_at, "output_available_at")
+            lineage = getattr(output, "input_lineage", None)
+            if not isinstance(lineage, InputLineage):
+                raise ValueError("detector output is missing InputLineage")
+            record = build_lineage_record_from_input_lineage(
+                output,
+                input_lineage=lineage,
+                definition_id=definition_id(output),
+                code_revision=code_revision,
+                output_available_at_utc=available_at,
+            )
+            validated.append((output, available_at))
+            records.append(record)
+        return tuple(validated), tuple(records)
+
+    prefix_validated, _ = validate_outputs(prefix_outputs)
+    full_validated, lineage_records = validate_outputs(full_outputs)
+
+    def historical_digest(outputs: tuple[tuple[object, datetime], ...]) -> tuple[int, str]:
+        selected = tuple(output for output, available_at in outputs if available_at <= cutoff_utc)
+        return len(selected), _sha256(canonical_bytes(selected))
+
+    prefix_count, prefix_hash = historical_digest(prefix_validated)
+    full_count, full_hash = historical_digest(full_validated)
+    prefix_result = PrefixInvariantResult(
+        cutoff_utc=cutoff_utc,
+        prefix_event_count=len(prefix_events),
+        full_event_count=len(materialized),
+        historical_output_count=prefix_count,
+        prefix_output_sha256=prefix_hash,
+        full_replay_prefix_sha256=full_hash,
+        passed=prefix_count == full_count and prefix_hash == full_hash,
+    )
+    return DetectorPipelineAudit(replay_audit, prefix_result, lineage_records)
+
+
 def build_lineage_record_from_events(
     output: object,
     *,
@@ -384,27 +511,14 @@ def build_lineage_record_from_events(
     output_available_at_utc: datetime,
 ) -> LineageRecord:
     """Derive lineage hashes and input clocks from the actual immutable events."""
-    events = tuple(input_events)
-    if not events:
+    input_lineage = InputLineage.from_events(input_events)
+    if input_lineage is None:
         raise ValueError("input_events must be non-empty")
-    if any(
-        not isinstance(event, (TradeEvent, QuoteEvent, L2BookEvent, TradeMutation))
-        for event in events
-    ):
-        raise TypeError("input_events contains an unsupported market event")
-    by_hash: dict[str, MarketEvent] = {}
-    for event in events:
-        prior = by_hash.get(event.raw_event_hash)
-        if prior is not None and canonical_bytes(prior) != canonical_bytes(event):
-            raise ValueError("same input raw hash has conflicting event payload")
-        by_hash[event.raw_event_hash] = event
-    return build_lineage_record(
+    return build_lineage_record_from_input_lineage(
         output,
-        input_event_hashes=by_hash,
+        input_lineage=input_lineage,
         definition_id=definition_id,
         code_revision=code_revision,
-        latest_input_event_time_utc=max(event.event_time_utc for event in by_hash.values()),
-        latest_input_available_at_utc=max(event.receive_time_utc for event in by_hash.values()),
         output_available_at_utc=output_available_at_utc,
     )
 

@@ -9,6 +9,10 @@ from researchos.quant_engine.order_flow.audit import (
     build_replay_audit,
 )
 from researchos.quant_engine.order_flow.contracts import TradeEvent
+from researchos.quant_engine.order_flow.features import (
+    aggregate_trade_flow,
+    classify_trade_from_ledger,
+)
 from researchos.quant_engine.order_flow.event_ledger import (
     TradeMutation,
     TradeMutationAction,
@@ -66,6 +70,14 @@ def test_trade_mutation_correction_replaces_prior_version():
     result = replay_trade_mutations((new, correction))
     assert result.active_trades == (corrected,)
     assert result.applied_mutation_hashes == ("1" * 64, "2" * 64)
+    assert result.applied_mutations == (new, correction)
+    assert result.mutations_for_active_trade(corrected) == (new, correction)
+    assert result.lineage_events_for_active_trade(corrected) == (
+        new,
+        correction,
+        original,
+        corrected,
+    )
     assert len(result.ledger_sha256) == 64
 
 
@@ -80,6 +92,8 @@ def test_trade_mutation_cancel_removes_trade_from_active_snapshot():
     )
     result = replay_trade_mutations((new, cancel))
     assert result.active_trades == ()
+    assert result.applied_mutations == (new, cancel)
+    assert result.active_trade_mutation_histories == ()
     assert len(result.applied_mutation_hashes) == 2
 
 
@@ -291,4 +305,105 @@ def test_corrected_trade_availability_must_match_mutation_receive_time():
             sequence_number=2,
             replacement_trade=late_corrected,
             supersedes_raw_event_hash=original.raw_event_hash,
+        )
+
+
+def test_corrected_trade_lineage_survives_classification_and_flow_aggregation():
+    original = trade(1, digest="a" * 64, price="2400", quantity="2")
+    corrected = trade(2, digest="b" * 64, price="2401", quantity="3")
+    new = mutation(1, TradeMutationAction.NEW, digest="1" * 64, replacement=original)
+    correction = mutation(
+        2,
+        TradeMutationAction.CORRECT,
+        digest="2" * 64,
+        replacement=corrected,
+        supersedes=original.raw_event_hash,
+    )
+    snapshot = replay_trade_mutations((new, correction))
+    classification = classify_trade_from_ledger(
+        corrected, (), ledger_snapshot=snapshot, max_quote_age=timedelta(seconds=1)
+    )
+    window = aggregate_trade_flow(
+        (classification,),
+        instrument_id="GCZ6",
+        session_id="RTH",
+        start_utc=NOW,
+        end_utc=NOW + timedelta(seconds=10),
+    )
+    assert window.input_lineage is not None
+    assert window.input_lineage.complete
+    assert window.input_lineage.input_event_hashes == tuple(
+        sorted(
+            (
+                original.raw_event_hash,
+                corrected.raw_event_hash,
+                new.raw_event_hash,
+                correction.raw_event_hash,
+            )
+        )
+    )
+
+
+def test_ledger_backed_classification_rejects_non_active_trade():
+    original = trade(1, digest="a" * 64)
+    new = mutation(1, TradeMutationAction.NEW, digest="1" * 64, replacement=original)
+    snapshot = replay_trade_mutations((new,))
+    different = trade(2, digest="b" * 64)
+    with pytest.raises(KeyError, match="not active"):
+        classify_trade_from_ledger(
+            different, (), ledger_snapshot=snapshot, max_quote_age=timedelta(seconds=1)
+        )
+
+
+def test_cancel_mutations_remain_in_empty_flow_window_lineage():
+    original = trade(1, digest="a" * 64)
+    new = mutation(1, TradeMutationAction.NEW, digest="1" * 64, replacement=original)
+    cancel = mutation(
+        2,
+        TradeMutationAction.CANCEL,
+        digest="2" * 64,
+        supersedes=original.raw_event_hash,
+    )
+    snapshot = replay_trade_mutations((new, cancel))
+    window = aggregate_trade_flow(
+        (),
+        instrument_id="GCZ6",
+        session_id="RTH",
+        start_utc=NOW,
+        end_utc=NOW + timedelta(seconds=10),
+        additional_lineage_events=snapshot.applied_mutations,
+    )
+    assert window.trade_count == 0
+    assert window.total_quantity == Decimal("0")
+    assert window.input_lineage is not None
+    assert window.input_lineage.complete
+    assert window.input_lineage.input_event_hashes == tuple(
+        sorted((new.raw_event_hash, cancel.raw_event_hash))
+    )
+
+
+def test_flow_rejects_additional_lineage_from_another_instrument():
+    other = trade(1, digest="a" * 64)
+    other = TradeEvent(
+        other.source_id,
+        other.dataset_id,
+        "MGCZ6",
+        other.event_time_utc,
+        other.receive_time_utc,
+        other.price,
+        other.quantity,
+        other.raw_event_hash,
+        other.aggressor_side,
+        other.aggressor_method,
+        other.sequence_number,
+        other.trade_id,
+    )
+    with pytest.raises(ValueError, match="match the flow instrument"):
+        aggregate_trade_flow(
+            (),
+            instrument_id="GCZ6",
+            session_id="RTH",
+            start_utc=NOW,
+            end_utc=NOW + timedelta(seconds=10),
+            additional_lineage_events=(other,),
         )

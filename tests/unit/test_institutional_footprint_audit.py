@@ -5,11 +5,13 @@ from decimal import Decimal
 import pytest
 
 from researchos.quant_engine.order_flow.audit import (
+    audit_detector_pipeline,
     audit_prefix_invariance,
     build_lineage_record,
     canonical_bytes,
     build_replay_audit,
     build_lineage_record_from_events,
+    build_lineage_record_from_input_lineage,
 )
 from researchos.quant_engine.order_flow.contracts import (
     AggressorSide,
@@ -17,6 +19,7 @@ from researchos.quant_engine.order_flow.contracts import (
     TradeEvent,
 )
 from researchos.quant_engine.order_flow.features import classify_trade
+from researchos.quant_engine.order_flow.lineage import InputLineage
 
 NOW = datetime(2026, 11, 2, 4, 0, tzinfo=timezone.utc)
 HASH_A = "a" * 64
@@ -133,6 +136,15 @@ class ReplayOutput:
     source_hash: str
     available_at_utc: datetime
     value: Decimal
+
+
+@dataclass(frozen=True)
+class DetectorReplayOutput:
+    source_hash: str
+    available_at_utc: datetime
+    value: Decimal
+    input_lineage: InputLineage
+    definition_id: str = HASH_C
 
 
 def test_prefix_invariance_passes_when_future_quotes_cannot_reclassify_old_trade():
@@ -275,11 +287,92 @@ def test_lineage_from_events_rejects_empty_or_conflicting_input_set():
         )
     first = trade(1, digest=HASH_A)
     conflicting = replace(first, quantity=Decimal("9"))
-    with pytest.raises(ValueError, match="conflicting event payload"):
+    with pytest.raises(ValueError, match="conflicting lineage event payload"):
         build_lineage_record_from_events(
             {"result": "conflict"},
             input_events=(first, conflicting),
             definition_id="f" * 64,
             code_revision=REVISION,
             output_available_at_utc=NOW + timedelta(seconds=2),
+        )
+
+
+def test_lineage_record_builder_accepts_complete_input_lineage_only():
+    events = (trade(1), trade(2))
+    lineage = InputLineage.from_events(events)
+    record = build_lineage_record_from_input_lineage(
+        {"output": "flow"},
+        input_lineage=lineage,
+        definition_id="f" * 64,
+        code_revision=REVISION,
+        output_available_at_utc=NOW + timedelta(seconds=3),
+    )
+    assert record.input_event_hashes == tuple(sorted((HASH_A, HASH_B)))
+    incomplete = InputLineage.from_events((), unresolved_hashes=("c" * 64,))
+    with pytest.raises(ValueError, match="incomplete input lineage"):
+        build_lineage_record_from_input_lineage(
+            {"output": "incomplete"},
+            input_lineage=incomplete,
+            definition_id="f" * 64,
+            code_revision=REVISION,
+            output_available_at_utc=NOW + timedelta(seconds=3),
+        )
+
+
+def test_detector_pipeline_audit_combines_replay_prefix_and_complete_lineage():
+    events = (trade(1), trade(2))
+
+    def replay(items):
+        return tuple(
+            DetectorReplayOutput(
+                event.raw_event_hash,
+                event.receive_time_utc,
+                event.quantity,
+                InputLineage.from_events((event,)),
+            )
+            for event in items
+        )
+
+    result = audit_detector_pipeline(
+        events,
+        cutoff_utc=events[0].receive_time_utc,
+        replay=replay,
+        output_available_at=lambda output: output.available_at_utc,
+        definition_id=lambda output: output.definition_id,
+        replay_config={"fixture": "prefix-lineage"},
+        code_revision=REVISION,
+    )
+    assert result.passed
+    assert result.replay_audit.event_count == 2
+    assert result.prefix_invariance.passed
+    assert len(result.lineage_records) == 2
+
+
+def test_detector_pipeline_audit_rejects_incomplete_output_lineage():
+    event = trade(1)
+
+    def replay(items):
+        return tuple(
+            DetectorReplayOutput(
+                item.raw_event_hash,
+                item.receive_time_utc,
+                item.quantity,
+                InputLineage.from_events(
+                    (),
+                    unresolved_hashes=(item.raw_event_hash,),
+                    missing_inputs=("missing_trade_payload",),
+                ),
+            )
+            for item in items
+        )
+
+    with pytest.raises(ValueError, match="incomplete input lineage"):
+        audit_detector_pipeline(
+            (event,),
+            cutoff_utc=event.receive_time_utc,
+            replay=replay,
+            output_available_at=lambda output: output.available_at_utc,
+            definition_id=lambda output: output.definition_id,
+            replay_config={},
+            code_revision=REVISION,
         )

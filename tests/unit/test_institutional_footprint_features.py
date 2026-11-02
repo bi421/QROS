@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import hashlib
 
 import pytest
 
@@ -48,6 +49,9 @@ def trade(**overrides):
         "raw_event_hash": HASH,
     }
     values.update(overrides)
+    if "raw_event_hash" not in overrides:
+        identity = "|".join(str(values[key]) for key in sorted(values) if key != "raw_event_hash")
+        values["raw_event_hash"] = hashlib.sha256(identity.encode("utf-8")).hexdigest()
     return TradeEvent(**values)
 
 
@@ -63,6 +67,9 @@ def quote(**overrides):
         "raw_event_hash": HASH,
     }
     values.update(overrides)
+    if "raw_event_hash" not in overrides:
+        identity = "|".join(str(values[key]) for key in sorted(values) if key != "raw_event_hash")
+        values["raw_event_hash"] = hashlib.sha256(identity.encode("utf-8")).hexdigest()
     return QuoteEvent(**values)
 
 
@@ -327,3 +334,40 @@ def test_empty_flow_window_has_zero_delta_and_zero_coverage() -> None:
     assert flow.delta == Decimal("0")
     assert flow.classified_coverage == Decimal("0")
     assert flow.trade_count == 0
+
+
+def test_flow_window_lineage_includes_trade_and_quote_raw_events():
+    q = quote(raw_event_hash="b" * 64)
+    t = trade(raw_event_hash="c" * 64)
+    classified = classify_trade(t, [q], max_quote_age=timedelta(seconds=1))
+    window = aggregate_trade_flow(
+        [classified],
+        instrument_id="GCZ6",
+        session_id="RTH",
+        start_utc=NOW,
+        end_utc=NOW + timedelta(seconds=1),
+    )
+    assert window.input_lineage is not None
+    assert window.input_lineage.complete
+    assert window.input_lineage.input_event_hashes == ("b" * 64, "c" * 64)
+    assert window.input_lineage.latest_input_event_time_utc == NOW
+    assert window.input_lineage.latest_input_available_at_utc == t.receive_time_utc
+
+
+def test_ambiguous_quote_lineage_keeps_both_candidate_quote_events():
+    first = quote(raw_event_hash="b" * 64)
+    second = quote(raw_event_hash="c" * 64)
+    classified = classify_trade(
+        trade(raw_event_hash="d" * 64), [first, second], max_quote_age=timedelta(seconds=1)
+    )
+    window = aggregate_trade_flow(
+        [classified],
+        instrument_id="GCZ6",
+        session_id="RTH",
+        start_utc=NOW,
+        end_utc=NOW + timedelta(seconds=1),
+    )
+    assert classified.reason == "AMBIGUOUS_QUOTE_TIMESTAMP"
+    assert window.input_lineage is not None
+    assert window.input_lineage.complete
+    assert window.input_lineage.input_event_hashes == ("b" * 64, "c" * 64, "d" * 64)

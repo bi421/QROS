@@ -6,7 +6,16 @@ from enum import Enum
 import hashlib
 import json
 from typing import Iterable, Mapping
-from researchos.quant_engine.order_flow.contracts import AggressorMethod, AggressorSide
+from researchos.quant_engine.order_flow.contracts import AggressorMethod, AggressorSide, TradeEvent
+from researchos.quant_engine.order_flow.event_ledger import (
+    TradeMutation,
+    replay_trade_mutations,
+)
+from researchos.quant_engine.order_flow.lineage import (
+    InputLineage,
+    LineageEvent,
+    combine_input_lineage,
+)
 from researchos.quant_engine.order_flow.features import FlowWindow, TradeClassification
 
 
@@ -91,6 +100,7 @@ class SizeReference:
     percentile: Decimal
     reference_count: int
     reference_end_utc: datetime
+    input_lineage: InputLineage | None = None
 
     def __post_init__(self):
         if self.reference_end_utc.tzinfo is None or self.reference_end_utc.utcoffset() != timedelta(
@@ -112,6 +122,14 @@ class SizeReference:
             or self.reference_count < 0
         ):
             raise ValueError("invalid size reference")
+        if self.input_lineage is not None and not isinstance(self.input_lineage, InputLineage):
+            raise TypeError("input_lineage must be InputLineage")
+        if (
+            self.input_lineage is not None
+            and self.input_lineage.latest_input_event_time_utc is not None
+            and self.input_lineage.latest_input_event_time_utc > self.reference_end_utc
+        ):
+            raise ValueError("size reference lineage contains an event after reference_end_utc")
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +148,7 @@ class LargePrintCandidate:
     reference_count: int
     reference_end_utc: datetime
     definition_id: str
+    input_lineage: InputLineage | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,6 +168,7 @@ class LargeTradeCluster:
     side: AggressorSide
     member_trade_hashes: tuple[str, ...]
     definition_id: str
+    input_lineage: InputLineage | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,6 +187,7 @@ class FlowResponse:
     normalized_price_progress: Decimal
     state: FootprintState
     definition_id: str
+    input_lineage: InputLineage | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +203,7 @@ class AbsorptionCandidate:
     supporting_flow_windows: tuple[tuple[datetime, datetime], ...]
     label: str
     definition_id: str
+    input_lineage: InputLineage | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,6 +214,7 @@ class ReferenceLevel:
     kind: str
     available_at_utc: datetime
     source: str
+    input_lineage: InputLineage | None = None
 
     def __post_init__(self):
         if (
@@ -207,6 +230,14 @@ class ReferenceLevel:
             raise ValueError("reference level availability must be timezone-aware UTC")
         if not self.price.is_finite() or self.price <= 0:
             raise ValueError("reference level price must be finite and positive")
+        if self.input_lineage is not None and not isinstance(self.input_lineage, InputLineage):
+            raise TypeError("input_lineage must be InputLineage")
+        if (
+            self.input_lineage is not None
+            and self.input_lineage.latest_input_available_at_utc is not None
+            and self.input_lineage.latest_input_available_at_utc > self.available_at_utc
+        ):
+            raise ValueError("reference level lineage was not available by available_at_utc")
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,6 +250,10 @@ class SweepObservation:
     trade_through_quantity: Decimal
     response_end_utc: datetime
     response_price: Decimal
+    trade_through_event: TradeEvent | None = None
+    response_event: TradeEvent | None = None
+    trade_through_mutation_events: tuple[TradeMutation, ...] = ()
+    response_mutation_events: tuple[TradeMutation, ...] = ()
 
     def __post_init__(self):
         if self.instrument_id != self.reference.instrument_id:
@@ -237,6 +272,43 @@ class SweepObservation:
             value = getattr(self, name)
             if not value.is_finite() or value <= 0:
                 raise ValueError(f"{name} must be finite and positive")
+        if self.trade_through_event is not None:
+            event = self.trade_through_event
+            if (
+                event.raw_event_hash != self.trade_through_raw_event_hash
+                or event.instrument_id != self.instrument_id
+                or event.event_time_utc != self.trade_through_time_utc
+                or event.price != self.trade_through_price
+                or event.quantity != self.trade_through_quantity
+                or event.receive_time_utc > self.response_end_utc
+            ):
+                raise ValueError("trade_through_event does not match sweep observation")
+        if self.response_event is not None:
+            event = self.response_event
+            if (
+                event.instrument_id != self.instrument_id
+                or event.price != self.response_price
+                or event.event_time_utc <= self.trade_through_time_utc
+                or event.event_time_utc > self.response_end_utc
+                or event.receive_time_utc > self.response_end_utc
+            ):
+                raise ValueError("response_event does not match sweep response window")
+        for label, event, mutations in (
+            ("trade-through", self.trade_through_event, self.trade_through_mutation_events),
+            ("response", self.response_event, self.response_mutation_events),
+        ):
+            if not isinstance(mutations, tuple) or any(
+                not isinstance(item, TradeMutation) for item in mutations
+            ):
+                raise TypeError(f"{label} mutation events must be a tuple of TradeMutation")
+            if mutations:
+                if event is None:
+                    raise ValueError(f"{label} mutation events require the matching trade event")
+                snapshot = replay_trade_mutations(mutations)
+                if snapshot.active_trades != (event,):
+                    raise ValueError(
+                        f"{label} mutations do not resolve to the matching trade event"
+                    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,6 +323,7 @@ class LiquiditySweepCandidate:
     response_ticks: Decimal
     response: str
     definition_id: str
+    input_lineage: InputLineage | None = None
 
 
 def detect_unusually_large_prints(
@@ -276,6 +349,11 @@ def detect_unusually_large_prints(
             or ref.percentile < definition.large_print_percentile
             or t.quantity < ref.quantity_threshold
             or ref.reference_end_utc >= t.event_time_utc
+            or (
+                ref.input_lineage is not None
+                and ref.input_lineage.latest_input_available_at_utc is not None
+                and ref.input_lineage.latest_input_available_at_utc > t.receive_time_utc
+            )
         ):
             continue
         out.append(
@@ -294,6 +372,26 @@ def detect_unusually_large_prints(
                 ref.reference_count,
                 ref.reference_end_utc,
                 definition.definition_id,
+                combine_input_lineage(
+                    (
+                        InputLineage.from_events(
+                            (
+                                t,
+                                *item.supporting_quote_events,
+                                *item.supporting_mutation_events,
+                                *(
+                                    mutation.replacement_trade
+                                    for mutation in item.supporting_mutation_events
+                                    if mutation.replacement_trade is not None
+                                ),
+                            )
+                        ),
+                        ref.input_lineage,
+                    ),
+                    missing_inputs=("size_reference_sample_lineage",)
+                    if ref.input_lineage is None
+                    else (),
+                ),
             )
         )
     return tuple(sorted(out, key=lambda x: (x.event_time_utc, x.trade_hash)))
@@ -373,6 +471,12 @@ def detect_large_trade_clusters(
                     side,
                     tuple(x.trade_hash for x in group),
                     definition.definition_id,
+                    combine_input_lineage(
+                        tuple(x.input_lineage for x in group),
+                        missing_inputs=("cluster_member_lineage",)
+                        if any(x.input_lineage is None for x in group)
+                        else (),
+                    ),
                 )
             )
             i = j
@@ -389,6 +493,8 @@ def classify_aggression_price_response(
     trailing_volatility_ticks: Decimal,
     volatility_as_of_utc: datetime,
     definition: DetectorDefinition,
+    price_input_events: Iterable[LineageEvent] = (),
+    volatility_input_events: Iterable[LineageEvent] = (),
 ) -> FlowResponse:
     """D05: source-separated aggression and signed price response."""
     if (
@@ -422,6 +528,38 @@ def classify_aggression_price_response(
             state = FootprintState.LOW_AGGRESSION_HIGH_PROGRESS
         else:
             state = FootprintState.OTHER
+    price_events = tuple(price_input_events)
+    volatility_events = tuple(volatility_input_events)
+    if any(
+        event.instrument_id != flow.instrument_id or event.event_time_utc > flow.end_utc
+        for event in price_events
+    ):
+        raise ValueError(
+            "price input events must match the flow instrument and end by flow.end_utc"
+        )
+    if any(
+        event.instrument_id != flow.instrument_id
+        or event.event_time_utc > volatility_as_of_utc
+        or event.receive_time_utc > flow.start_utc
+        for event in volatility_events
+    ):
+        raise ValueError("volatility inputs must be causal and available before flow.start_utc")
+    input_lineage = combine_input_lineage(
+        (
+            flow.input_lineage,
+            InputLineage.from_events(price_events),
+            InputLineage.from_events(volatility_events),
+        ),
+        missing_inputs=tuple(
+            label
+            for label, present in (
+                ("flow_window_lineage", flow.input_lineage is not None),
+                ("price_response_input_events", bool(price_events)),
+                ("volatility_input_events", bool(volatility_events)),
+            )
+            if not present
+        ),
+    )
     return FlowResponse(
         flow.instrument_id,
         flow.session_id,
@@ -437,6 +575,7 @@ def classify_aggression_price_response(
         price_progress_ticks / trailing_volatility_ticks,
         state,
         definition.definition_id,
+        input_lineage,
     )
 
 
@@ -448,6 +587,7 @@ def detect_absorption_candidate(
     contested_level_available_at_utc: datetime,
     test_count: int,
     definition: DetectorDefinition,
+    contested_level_input_events: Iterable[LineageEvent] = (),
 ) -> AbsorptionCandidate | None:
     """D06: trade-price absorption pattern only; never asserts hidden liquidity."""
     if side not in (AggressorSide.BUY, AggressorSide.SELL):
@@ -499,6 +639,28 @@ def detect_absorption_candidate(
         return None
     if any(current.start_utc < previous.end_utc for previous, current in zip(rows, rows[1:])):
         return None
+    level_events = tuple(contested_level_input_events)
+    if any(
+        event.instrument_id != first.instrument_id
+        or event.event_time_utc > contested_level_available_at_utc
+        or event.receive_time_utc > contested_level_available_at_utc
+        for event in level_events
+    ):
+        raise ValueError(
+            "contested level input events must match the flow instrument and be available "
+            "by the level timestamp"
+        )
+    input_lineage = combine_input_lineage(
+        tuple(x.input_lineage for x in rows) + (InputLineage.from_events(level_events),),
+        missing_inputs=tuple(
+            label
+            for label, present in (
+                ("supporting_flow_lineage", all(x.input_lineage is not None for x in rows)),
+                ("contested_level_input_events", bool(level_events)),
+            )
+            if not present
+        ),
+    )
     return AbsorptionCandidate(
         first.instrument_id,
         first.session_id,
@@ -511,6 +673,7 @@ def detect_absorption_candidate(
         tuple((x.start_utc, x.end_utc) for x in rows),
         "TRADE_PRICE_ABSORPTION_PATTERN",
         definition.definition_id,
+        input_lineage,
     )
 
 
@@ -553,6 +716,47 @@ def detect_liquidity_sweep_candidate(
             if observation.response_price < ref.price
             else "AT_REFERENCE_AT_WINDOW_END"
         )
+    trade_lineage_events: list[LineageEvent] = []
+    if observation.trade_through_event is not None:
+        trade_lineage_events.append(observation.trade_through_event)
+    trade_lineage_events.extend(observation.trade_through_mutation_events)
+    trade_lineage_events.extend(
+        mutation.replacement_trade
+        for mutation in observation.trade_through_mutation_events
+        if mutation.replacement_trade is not None
+    )
+    trade_lineage = (
+        InputLineage.from_events(trade_lineage_events)
+        if trade_lineage_events
+        else InputLineage.from_events(
+            (),
+            unresolved_hashes=(observation.trade_through_raw_event_hash,),
+            missing_inputs=("trade_through_event_payload",),
+        )
+    )
+    response_lineage_events: list[LineageEvent] = []
+    if observation.response_event is not None:
+        response_lineage_events.append(observation.response_event)
+    response_lineage_events.extend(observation.response_mutation_events)
+    response_lineage_events.extend(
+        mutation.replacement_trade
+        for mutation in observation.response_mutation_events
+        if mutation.replacement_trade is not None
+    )
+    response_lineage = (
+        InputLineage.from_events(response_lineage_events) if response_lineage_events else None
+    )
+    input_lineage = combine_input_lineage(
+        (ref.input_lineage, trade_lineage, response_lineage),
+        missing_inputs=tuple(
+            label
+            for label, present in (
+                ("reference_level_input_lineage", ref.input_lineage is not None),
+                ("response_event_payload", observation.response_event is not None),
+            )
+            if not present
+        ),
+    )
     return LiquiditySweepCandidate(
         ref.level_id,
         ref.instrument_id,
@@ -564,4 +768,5 @@ def detect_liquidity_sweep_candidate(
         move,
         response,
         definition.definition_id,
+        input_lineage,
     )

@@ -123,15 +123,49 @@ class TradeLedgerSnapshot:
     applied_mutation_hashes: tuple[str, ...]
     duplicate_mutation_count: int
     ledger_sha256: str
+    applied_mutations: tuple[TradeMutation, ...] = ()
+    active_trade_mutation_histories: tuple[tuple[TradeMutation, ...], ...] = ()
+
+    def __post_init__(self) -> None:
+        if len(self.active_trades) != len(self.active_trade_mutation_histories):
+            raise ValueError("each active trade must have one mutation history")
+        if (
+            tuple(item.raw_event_hash for item in self.applied_mutations)
+            != self.applied_mutation_hashes
+        ):
+            raise ValueError("applied mutation events and hashes must align")
+        for trade, history in zip(self.active_trades, self.active_trade_mutation_histories):
+            if not history or history[-1].replacement_trade != trade:
+                raise ValueError("active trade mutation history must end at the active trade")
+            if any(item.action == TradeMutationAction.CANCEL for item in history):
+                raise ValueError("active trade mutation history cannot contain a cancel")
+
+    def mutations_for_active_trade(self, trade: TradeEvent) -> tuple[TradeMutation, ...]:
+        """Return the complete NEW/CORRECT chain for this exact active trade."""
+        for active, history in zip(self.active_trades, self.active_trade_mutation_histories):
+            if active == trade:
+                return history
+        raise KeyError("trade is not active in this ledger snapshot")
+
+    def lineage_events_for_active_trade(
+        self, trade: TradeEvent
+    ) -> tuple[TradeMutation | TradeEvent, ...]:
+        """Return every mutation and every historical payload for InputLineage."""
+        history = self.mutations_for_active_trade(trade)
+        payloads = tuple(
+            item.replacement_trade for item in history if item.replacement_trade is not None
+        )
+        return (*history, *payloads)
 
 
 def replay_trade_mutations(mutations: Iterable[TradeMutation]) -> TradeLedgerSnapshot:
     """Apply mutations in supplied causal order; exact duplicate hashes are idempotent."""
     from researchos.quant_engine.order_flow.audit import canonical_bytes
 
-    active: dict[tuple[str, str, str, str], TradeEvent] = {}
-    revisions: dict[tuple[str, str, str, str], int] = {}
-    last_received: dict[tuple[str, str, str, str], datetime] = {}
+    active: dict[tuple[str, str, str, str, str], TradeEvent] = {}
+    active_histories: dict[tuple[str, str, str, str, str], list[TradeMutation]] = {}
+    revisions: dict[tuple[str, str, str, str, str], int] = {}
+    last_received: dict[tuple[str, str, str, str, str], datetime] = {}
     seen: dict[str, bytes] = {}
     ordered_unique: list[TradeMutation] = []
     duplicate_count = 0
@@ -173,9 +207,14 @@ def replay_trade_mutations(mutations: Iterable[TradeMutation]) -> TradeLedgerSna
                 raise ValueError("mutation does not supersede the current active trade version")
         if mutation.action == TradeMutationAction.CANCEL:
             del active[key]
+            del active_histories[key]
         else:
             assert mutation.replacement_trade is not None
             active[key] = mutation.replacement_trade
+            if mutation.action == TradeMutationAction.NEW:
+                active_histories[key] = [mutation]
+            else:
+                active_histories[key].append(mutation)
         revisions[key] = mutation.revision
         last_received[key] = mutation.receive_time_utc
         ordered_unique.append(mutation)
@@ -193,7 +232,25 @@ def replay_trade_mutations(mutations: Iterable[TradeMutation]) -> TradeLedgerSna
         )
     )
     hashes = tuple(m.raw_event_hash for m in ordered_unique)
+    active_keys = sorted(
+        active,
+        key=lambda key: (
+            active[key].source_id,
+            active[key].dataset_id,
+            active[key].instrument_id,
+            active[key].trade_id or "",
+            active[key].raw_event_hash,
+        ),
+    )
+    active_histories = tuple(tuple(active_histories[key]) for key in active_keys)
     digest = hashlib.sha256(
         canonical_bytes({"mutations": tuple(ordered_unique), "active_trades": active_trades})
     ).hexdigest()
-    return TradeLedgerSnapshot(active_trades, hashes, duplicate_count, digest)
+    return TradeLedgerSnapshot(
+        active_trades,
+        hashes,
+        duplicate_count,
+        digest,
+        tuple(ordered_unique),
+        active_histories,
+    )

@@ -16,6 +16,7 @@ from researchos.quant_engine.order_flow.contracts import (
     QuoteEvent,
     TradeEvent,
 )
+from researchos.quant_engine.order_flow.lineage import InputLineage, combine_input_lineage
 from researchos.quant_engine.order_flow.event_ledger import (
     TradeLedgerSnapshot,
     TradeMutation,
@@ -23,14 +24,17 @@ from researchos.quant_engine.order_flow.event_ledger import (
     replay_trade_mutations,
 )
 from researchos.quant_engine.order_flow.audit import (
+    DetectorPipelineAudit,
     LineageRecord,
     PrefixInvariantResult,
     ReplayAudit,
     SequenceMode,
     SequencePolicy,
+    audit_detector_pipeline,
     audit_prefix_invariance,
     build_lineage_record,
     build_lineage_record_from_events,
+    build_lineage_record_from_input_lineage,
     build_replay_audit,
     canonical_bytes,
 )
@@ -40,6 +44,7 @@ from researchos.quant_engine.order_flow.features import (
     TradeClassification,
     aggregate_trade_flow,
     classify_trade,
+    classify_trade_from_ledger,
     compute_cvd,
     price_progress_ticks,
 )
@@ -71,6 +76,7 @@ __all__ = [
     "BookSide",
     "CvdPoint",
     "DataQualityState",
+    "DetectorPipelineAudit",
     "DatasetManifest",
     "DetectorDefinition",
     "FeedType",
@@ -78,6 +84,7 @@ __all__ = [
     "FlowSource",
     "FlowWindow",
     "FootprintState",
+    "InputLineage",
     "InstrumentMetadata",
     "L2BookEvent",
     "LargePrintCandidate",
@@ -100,13 +107,17 @@ __all__ = [
     "TradeMutation",
     "TradeMutationAction",
     "aggregate_trade_flow",
+    "audit_detector_pipeline",
     "audit_prefix_invariance",
     "build_lineage_record",
     "build_lineage_record_from_events",
+    "build_lineage_record_from_input_lineage",
     "build_replay_audit",
     "canonical_bytes",
     "classify_aggression_price_response",
+    "combine_input_lineage",
     "classify_trade",
+    "classify_trade_from_ledger",
     "compute_cvd",
     "detect_absorption_candidate",
     "detect_large_trade_clusters",

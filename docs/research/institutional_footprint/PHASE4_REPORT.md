@@ -1,77 +1,87 @@
-# Phase 4 Report - Temporal and Replay Audit
+# Phase 4 Report - Temporal, Replay, and Lineage Audit
 
 **Study ID:** IFE1-2026-11-02
-**Phase:** 4 - Temporal and replay audit
-**Status:** PARTIAL - synthetic audit primitives pass; end-to-end phase gate remains open
+**Phase:** 4 - temporal and replay audit
+**Status:** PARTIAL - synthetic audit gates pass; source-specific and production integration gates remain open
 
-## 1. Implemented audit primitives
+## 1. Deterministic replay and temporal audit
 
-Added researchos/quant_engine/order_flow/audit.py.
+Implemented in `researchos/quant_engine/order_flow/audit.py`:
 
-- Canonical serialization supports immutable dataclasses, enums, UTC timestamps, exact Decimal strings, mappings, and sequences. Floating-point values are rejected rather than silently rounded.
-- build_replay_audit canonicalizes per-stream sequence order under an explicit policy and hashes canonical events, replay configuration, adapters, partitions, and code revision.
-- Replay validation fails closed for missing/non-integer sequence numbers, duplicate sequence numbers, duplicate raw-event hashes within a stream, sequence gaps, negative sequences, event-time regression, and receive-time regression.
-- audit_prefix_invariance selects input events by receive time (the point at which the process could know them), then compares outputs available by cutoff T from prefix-only replay and full replay.
-- build_lineage_record hashes a derived output and records sorted raw input hashes, detector definition hash, code revision, latest input event time, latest input availability time, and output availability time. It rejects invalid hashes and look-ahead timestamps.
+- Canonical serialization supports immutable dataclasses, enums, UTC timestamps, exact Decimal strings, mappings, and sequences. Floating-point values are rejected.
+- `build_replay_audit` validates per-stream sequence policies, partitions, event-time ordering, receive-time ordering, duplicate identities, and sequence gaps. It hashes canonical events, replay configuration, adapters, partitions, and code revision.
+- `audit_prefix_invariance` selects inputs by `receive_time_utc <= T`, then compares outputs available by T from prefix-only replay and full replay.
+- `build_lineage_record_from_events` and `build_lineage_record_from_input_lineage` derive or consume event-derived input lineage and reject incomplete lineage and look-ahead availability.
+- `audit_detector_pipeline` composes raw replay validation, prefix-only/full replay comparison, and output-lineage validation. Every output must expose a complete `InputLineage`, a valid detector definition ID, and an output-availability timestamp no earlier than its latest input.
 
-## 2. Detector hardening found during audit
+The detector replay function and output accessors remain caller-supplied. This is a reusable audit gate, not yet a canonical production orchestrator that wires every detector automatically.
 
-The audit review exposed Phase 3 weaknesses; these were corrected and covered by adversarial tests.
+## 2. Event-derived lineage integration
 
-- D01 now requires the reference to identify the same exact instrument and session as the scored trade. The caller must provide a session mapping derived from an explicit trading calendar; missing session mapping fails closed. A reference for MGC or ETH cannot qualify a GC or RTH trade.
-- D02 now partitions clusters by exact instrument, session, source, dataset, and cohort. A cluster cannot bridge a session boundary or combine unrelated source/cohort streams.
-- D06 now requires enough qualifying support windows, keeps exchange-flag and quote-inferred evidence separate, and rejects overlapping or cross-source support windows.
-- D08 now binds trade-through evidence to the same instrument as its pre-existing reference, requires a raw trade hash, validates UTC timestamps, finite positive prices/quantity, and tick alignment.
-- D08 window-end state labels are explicit: RECLAIMED_REFERENCE_BY_WINDOW_END, REMAINS_BEYOND_REFERENCE_AT_WINDOW_END, or AT_REFERENCE_AT_WINDOW_END. A touch exactly at the level is no longer mislabeled as acceptance. These are endpoint observations, not proof of sustained acceptance or rejection.
+Implemented in `lineage.py`, `features.py`, `detectors.py`, and `event_ledger.py`:
 
-## 3. Synthetic adversarial validation
+- Trade classification retains the supporting quote event payloads, rather than only a quote hash.
+- Flow windows derive lineage from selected trades, supporting quotes, correction mutations, and historical replacement trade payloads.
+- `TradeLedgerSnapshot` retains all applied mutation events and the full `NEW -> CORRECT` history for each active trade. `classify_trade_from_ledger` preserves that history through classification.
+- `aggregate_trade_flow` accepts `additional_lineage_events` so callers can include relevant cancellation mutations even when the canceled trade is absent from the active-trade snapshot. The caller must select the relevant ledger events; this is not an automatic session/window adapter.
+- D01 candidate lineage includes scored trade, quote evidence, correction history, historical trade payloads, and the size-reference lineage.
+- D02 clusters combine member lineage and preserve incompleteness if any member lacks lineage.
+- D05 carries flow, price-response, and volatility input lineage. Missing raw inputs remain explicitly incomplete.
+- D06 carries support-window and contested-level lineage and rejects contested-level events from a different instrument.
+- D08 carries reference, trade-through, response, and optional correction-history lineage. It rejects a response event that precedes the trade-through event.
+- `build_lineage_record_from_input_lineage` refuses to certify any output whose lineage is incomplete.
 
-- Replay digest invariant to input permutation when per-stream integer sequence numbers are valid.
+Lineage completeness is not inferred from a hash alone. If the caller does not supply the raw event payloads needed to establish a dependency, the output remains incomplete and the pipeline audit gate rejects it.
+
+## 3. Detector hardening retained from prior phases
+
+- D01 requires exact instrument and session match between the scored trade and its reference. The caller supplies session mapping from an explicit calendar; missing mapping fails closed.
+- D02 partitions clusters by exact instrument, session, source, dataset, and cohort.
+- D06 requires enough qualifying support windows, keeps exchange-flag and quote-inferred evidence separate, and rejects overlapping or cross-source support windows.
+- D08 requires a prior reference, an actual trade-through, valid UTC timestamps, finite positive prices/quantity, and tick alignment.
+- D08 endpoint labels remain `RECLAIMED_REFERENCE_BY_WINDOW_END`, `REMAINS_BEYOND_REFERENCE_AT_WINDOW_END`, or `AT_REFERENCE_AT_WINDOW_END`. These are endpoint observations, not proof of sustained acceptance or rejection.
+- D07 displayed-depth replenishment is not implemented; it requires L2 book reconstruction, sequence-gap invalidation, and snapshot recovery.
+
+## 4. Synthetic adversarial validation
+
+- Replay digest is invariant to input permutation when valid per-stream sequence metadata is supplied.
 - Replay digest changes when replay configuration or code revision changes.
-- Missing/non-integer, duplicate, gapped, negative, or time-regressing sequence streams are rejected.
-- Future-received quotes cannot reclassify an earlier trade.
-- A deliberately leaky replay that changes a historical output after a future event is appended is detected by prefix-invariance comparison.
-- Lineage output and metadata hashes are deterministic; invalid hashes and output availability earlier than latest input availability are rejected.
-- D01 cross-instrument and cross-session reference, D02 cross-session cluster, D06 mixed-source evidence, and D08 mismatched instrument/off-tick/at-level cases are covered.
+- Missing/non-integer, duplicate, gapped, negative, or time-regressing sequences are rejected under the applicable policy.
+- Explicit string-sequence ordinal adapters and sequence-reset partitions are validated; no vendor adapter has been certified.
+- Future-received quotes cannot reclassify an earlier trade; a deliberately leaky historical replay is detected by prefix-invariance comparison.
+- Pipeline audit rejects incomplete output lineage and compares prefix-only versus full-replay historical outputs.
+- Correction and cancel mutations are tested for revision ordering, supersession identity, idempotency, and conflicting hash payloads.
+- Corrected trade history is preserved through classification and flow aggregation; canceled mutation events can be included in an otherwise empty flow window's lineage.
+- D06 cross-instrument level lineage and D08 pre-trade response-event cases are rejected.
+- D08 lineage tests confirm the original trade payload, corrected payload, mutation events, reference event, and response event are all retained.
 
-## 4. Verification evidence
+## 5. Verification evidence
 
-- Historical Phase 1-4 and Market Structure regression suite at the prior commit: **131 passed**.
-- Phase 4 continuation focused suite (audit, mutation ledger, contracts, features, detectors): **71 passed**.
-- Targeted Ruff check and format check for the changed order-flow package and new tests: PASS.
+- Focused Phase 1-4 suite (audit, mutation ledger, features, detectors): **73 passed**.
+- Full repository `pytest -q`: **4701 passed, 41 skipped, 3 warnings** in **180.24 seconds**; exit code 0.
 - Full repository Ruff check: PASS.
-- Ruff format check on changed Python files: PASS.
-- Full repository pytest suite after this continuation: **4684 passed, 41 skipped, 3 warnings** in 342.47 seconds.
-- Git diff check: PASS.
+- Ruff format check on changed order-flow package and related tests: PASS.
+- `git diff --check`: PASS.
+- The three warnings are existing FastAPI/Starlette deprecations and a NumPy timedelta conversion warning in a Phase 5.2 provenance test; no tests failed.
 - No live feed, licensed market data, broker connection, XAUUSD CFD tick volume, or real COMEX data was used.
 
-The tests establish synthetic implementation behavior only. They do not establish real-market detector accuracy or predictive value. The three warnings are existing dependency deprecations in FastAPI/Starlette and a NumPy timedelta conversion in a Phase 5.2 provenance test; no test failed.
+These results prove synthetic implementation behavior only. They do not prove real-market detector accuracy, institutional identity, or predictive value.
 
-## 5. Explicit remaining blockers - Phase 4 is not yet complete
+## 6. Remaining blockers - Phase 4 remains PARTIAL
 
-1. A source-specific sequence-policy framework is now implemented: CONTIGUOUS and MONOTONIC modes, explicit string-sequence-to-integer ordinal adapters, and explicit per-event partition IDs for sequence-reset epochs. The default remains strict contiguous integer sequences. No actual vendor adapter or vendor sequence contract has been verified; a caller must supply an adapter/policy grounded in that vendor's documentation.
-2. A correction-aware trade mutation ledger now models NEW, CORRECT, and CANCEL revisions. Corrections/cancels must reference the currently active raw trade hash; revisions must be contiguous within an explicit trade scope; corrected payload availability must equal mutation receive time; exact duplicate mutation hashes are idempotent; conflicting duplicate payloads fail closed. Vendor-specific bust/cancel/correction semantics still require a documented adapter before ingest.
-3. Prefix invariance is a reusable audit helper, not yet wired into a single end-to-end detector replay pipeline. The caller supplies the replay function and output-availability accessor.
-4. The lineage builder records caller-supplied input hashes and timestamps. It does not yet automatically derive complete raw-input lineage for every detector. D05/D06 especially still need full source-event hash and availability propagation.
-5. D07 displayed-depth replenishment still requires L2 book reconstruction, sequence-gap invalidation, and snapshot recovery.
-6. No licensed GC/MGC source, vendor semantics, or independent real-event labels have been accepted.
+1. **Vendor sequence semantics:** CONTIGUOUS and MONOTONIC policies, explicit string-to-ordinal adapters, and explicit reset partitions exist. Actual vendor sequence semantics and adapters remain unverified until source documentation is available.
+2. **Vendor correction semantics:** the generic NEW/CORRECT/CANCEL ledger is synthetic-only. Vendor-specific bust, correction, cancel, and trade-ID scope rules require documented adapters.
+3. **Production detector orchestration:** `audit_detector_pipeline` provides the combined gate, but the actual detector replay callback and availability/definition accessors remain caller-supplied. A single canonical pipeline that automatically runs and audits all detector stages is not yet wired.
+4. **Caller-supplied lineage dependencies:** reference samples, price-response inputs, volatility inputs, contested-level inputs, and relevant cancellation events must be supplied by the integration layer. Missing dependencies deliberately block lineage certification.
+5. **D07 L2 book reconstruction:** displayed-depth replenishment remains unimplemented pending valid L2 snapshots, incremental updates, sequence-gap invalidation, and recovery semantics.
+6. **Real data and independent labels:** no licensed GC/MGC trade/quote/L2 feed or independent real-event labels have been accepted. Real detector precision/recall and market usefulness are therefore unknown.
 
-Therefore Phase 4 remains PARTIAL and Phase 5 real-data ingestion remains BLOCKED. The new mutation and sequence primitives are synthetic-only; they are not vendor conformance certification. Do not interpret this phase as proof that the detector suite is ready to identify institutional activity.
+**Phase 5 real-data ingestion remains BLOCKED.** Do not interpret the synthetic test results as proof that the engine can identify named institutions, beneficial owners, hidden orders, or profitable trades.
 
-## 6. Next required work
+## 7. Next required work
 
-Continue Phase 4 by wiring event-derived lineage into every detector output and integrating prefix-invariance plus deterministic replay into one end-to-end detector pipeline. Add vendor-specific sequence and mutation adapters only after source documentation is available. D07 still requires L2 reconstruction, sequence-gap invalidation, and snapshot recovery. Re-run full tests and the end-to-end replay gate before Phase 4 can be marked complete.
-
-
-## 7. Phase 4 continuation - correction ledger and sequence policies
-
-Implemented after the initial Phase 4 commit:
-
-- TradeMutation represents NEW, CORRECT, and CANCEL events separately from positive-quantity TradeEvent records and includes an explicit trade scope to avoid assuming vendor trade IDs are globally unique. Corrections replace the currently active version; cancels remove it from the active snapshot.
-- replay_trade_mutations requires per-trade contiguous revisions, current-version supersession hashes, non-regressing receive times, and exact identity matching. Exact repeated mutation payloads with the same raw hash are idempotent; a hash collision with a different payload is rejected.
-- TradeMutation is accepted by deterministic replay auditing and participates in per-source/dataset/instrument/event-type stream validation.
-- SequencePolicy supports CONTIGUOUS and MONOTONIC ordinal modes. String vendor sequences are not sorted lexicographically; they require an explicit raw-hash-to-integer ordinal adapter. Sequence resets require complete explicit per-event partition mapping, after which each partition is validated independently.
-- Unknown policy keys, incomplete reset partitions, duplicate ordinals, gaps under CONTIGUOUS mode, and event/receive-time regressions fail closed.
-- build_lineage_record_from_events derives input hashes and latest input clocks from actual immutable event objects rather than trusting caller-supplied hashes/timestamps.
-
-These are reusable synthetic primitives. They do not establish a real vendor's sequence, correction, or cancel semantics. Detector outputs are not yet universally lineage-enveloped, and the complete detector pipeline is not yet under a single prefix-invariance replay gate.
+- Wire a canonical detector replay orchestrator to `audit_detector_pipeline`; require complete raw-event lineage and explicit output availability for every emitted candidate.
+- Add source-specific sequence and correction adapters only after the chosen vendor's documentation and license terms are reviewed.
+- Implement D07 only with valid L2 reconstruction, sequence-gap invalidation, and snapshot recovery.
+- Obtain licensed GC/MGC data and independent event labels before measuring real-world detector accuracy.
+- Keep strategy research separate, preregistered, cost-aware, and out-of-sample. No order execution is in scope.

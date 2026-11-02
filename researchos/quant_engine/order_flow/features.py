@@ -15,6 +15,12 @@ from researchos.quant_engine.order_flow.contracts import (
     QuoteEvent,
     TradeEvent,
 )
+from researchos.quant_engine.order_flow.lineage import InputLineage, LineageEvent
+from researchos.quant_engine.order_flow.event_ledger import (
+    TradeLedgerSnapshot,
+    TradeMutation,
+    replay_trade_mutations,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +30,8 @@ class TradeClassification:
     method: AggressorMethod
     quote_hash: str | None
     reason: str
+    supporting_quote_events: tuple[QuoteEvent, ...] = ()
+    supporting_mutation_events: tuple[TradeMutation, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.trade, TradeEvent):
@@ -34,6 +42,25 @@ class TradeClassification:
             raise TypeError("method must be AggressorMethod")
         if not self.reason:
             raise ValueError("reason must be non-empty")
+        if not isinstance(self.supporting_quote_events, tuple) or any(
+            not isinstance(quote, QuoteEvent) for quote in self.supporting_quote_events
+        ):
+            raise TypeError("supporting_quote_events must be a tuple of QuoteEvent")
+        if (
+            self.quote_hash is not None
+            and self.supporting_quote_events
+            and self.quote_hash
+            not in {quote.raw_event_hash for quote in self.supporting_quote_events}
+        ):
+            raise ValueError("quote_hash must identify a supporting quote event")
+        if not isinstance(self.supporting_mutation_events, tuple) or any(
+            not isinstance(item, TradeMutation) for item in self.supporting_mutation_events
+        ):
+            raise TypeError("supporting_mutation_events must be a tuple of TradeMutation")
+        if self.supporting_mutation_events:
+            snapshot = replay_trade_mutations(self.supporting_mutation_events)
+            if snapshot.active_trades != (self.trade,):
+                raise ValueError("supporting mutations must resolve to this exact active trade")
         if self.method == AggressorMethod.UNKNOWN and self.side != AggressorSide.UNKNOWN:
             raise ValueError("UNKNOWN method requires UNKNOWN side")
         if self.method != AggressorMethod.UNKNOWN and self.side == AggressorSide.UNKNOWN:
@@ -61,6 +88,7 @@ class FlowWindow:
     quote_inferred_delta: Decimal
     delta: Decimal
     classified_coverage: Decimal
+    input_lineage: InputLineage | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +106,7 @@ def classify_trade(
     quotes: Iterable[QuoteEvent],
     *,
     max_quote_age: timedelta,
+    supporting_mutations: Iterable[TradeMutation] = (),
 ) -> TradeClassification:
     """Use exchange side when present; otherwise infer only from a causal valid quote.
 
@@ -85,6 +114,11 @@ def classify_trade(
     received by the time the trade was received. Equal event timestamps are
     treated as ambiguous because cross-feed sequence ordering is not assumed.
     """
+    mutation_events = tuple(supporting_mutations)
+    if mutation_events:
+        snapshot = replay_trade_mutations(mutation_events)
+        if snapshot.active_trades != (trade,):
+            raise ValueError("supporting mutations must resolve to this exact active trade")
     if max_quote_age <= timedelta(0):
         raise ValueError("max_quote_age must be positive")
 
@@ -95,6 +129,8 @@ def classify_trade(
             AggressorMethod.EXCHANGE_FLAG,
             None,
             "EXCHANGE_FLAG_PRESERVED",
+            (),
+            mutation_events,
         )
     if trade.aggressor_method == AggressorMethod.QUOTE_INFERRED:
         return TradeClassification(
@@ -103,6 +139,8 @@ def classify_trade(
             AggressorMethod.QUOTE_INFERRED,
             None,
             "PRECLASSIFIED_QUOTE_INFERENCE_PRESERVED",
+            (),
+            mutation_events,
         )
 
     eligible = [
@@ -119,6 +157,8 @@ def classify_trade(
             AggressorMethod.UNKNOWN,
             None,
             "NO_CAUSAL_PRIOR_QUOTE",
+            (),
+            mutation_events,
         )
 
     latest_time = max(quote.event_time_utc for quote in eligible)
@@ -130,6 +170,8 @@ def classify_trade(
             AggressorMethod.UNKNOWN,
             None,
             "AMBIGUOUS_QUOTE_TIMESTAMP",
+            tuple(latest),
+            mutation_events,
         )
 
     quote = latest[0]
@@ -140,6 +182,8 @@ def classify_trade(
             AggressorMethod.UNKNOWN,
             quote.raw_event_hash,
             "STALE_QUOTE",
+            (quote,),
+            mutation_events,
         )
     if quote.condition != QuoteCondition.NORMAL:
         return TradeClassification(
@@ -148,6 +192,8 @@ def classify_trade(
             AggressorMethod.UNKNOWN,
             quote.raw_event_hash,
             f"QUOTE_CONDITION_{quote.condition.value}",
+            (quote,),
+            mutation_events,
         )
 
     if trade.price >= quote.ask_price:
@@ -163,7 +209,28 @@ def classify_trade(
     method = (
         AggressorMethod.QUOTE_INFERRED if side != AggressorSide.UNKNOWN else AggressorMethod.UNKNOWN
     )
-    return TradeClassification(trade, side, method, quote.raw_event_hash, reason)
+    return TradeClassification(
+        trade, side, method, quote.raw_event_hash, reason, (quote,), mutation_events
+    )
+
+
+def classify_trade_from_ledger(
+    trade: TradeEvent,
+    quotes: Iterable[QuoteEvent],
+    *,
+    ledger_snapshot: TradeLedgerSnapshot,
+    max_quote_age: timedelta,
+) -> TradeClassification:
+    """Classify an active ledger trade while retaining every NEW/CORRECT revision."""
+    if not isinstance(ledger_snapshot, TradeLedgerSnapshot):
+        raise TypeError("ledger_snapshot must be TradeLedgerSnapshot")
+    mutations = ledger_snapshot.mutations_for_active_trade(trade)
+    return classify_trade(
+        trade,
+        quotes,
+        max_quote_age=max_quote_age,
+        supporting_mutations=mutations,
+    )
 
 
 def aggregate_trade_flow(
@@ -173,6 +240,7 @@ def aggregate_trade_flow(
     session_id: str,
     start_utc: datetime,
     end_utc: datetime,
+    additional_lineage_events: Iterable[LineageEvent] = (),
 ) -> FlowWindow:
     """Aggregate a half-open [start, end) interval without guessing unknown side."""
     if start_utc.tzinfo is None or end_utc.tzinfo is None:
@@ -238,6 +306,26 @@ def aggregate_trade_flow(
     classified_count = sum(item.side != AggressorSide.UNKNOWN for item in selected)
     unknown_count = len(selected) - classified_count
     coverage = (buy + sell) / total if total > 0 else Decimal("0")
+    lineage_events = [item.trade for item in selected]
+    extra_events = tuple(additional_lineage_events)
+    if any(event.instrument_id != instrument_id for event in extra_events):
+        raise ValueError("additional lineage events must match the flow instrument")
+    lineage_events.extend(extra_events)
+    unresolved_quote_hashes: list[str] = []
+    for item in selected:
+        lineage_events.extend(item.supporting_quote_events)
+        lineage_events.extend(item.supporting_mutation_events)
+        lineage_events.extend(
+            mutation.replacement_trade
+            for mutation in item.supporting_mutation_events
+            if mutation.replacement_trade is not None
+        )
+        if item.quote_hash is not None and not item.supporting_quote_events:
+            unresolved_quote_hashes.append(item.quote_hash)
+    input_lineage = InputLineage.from_events(
+        lineage_events,
+        unresolved_hashes=unresolved_quote_hashes,
+    )
 
     return FlowWindow(
         instrument_id=instrument_id,
@@ -259,6 +347,7 @@ def aggregate_trade_flow(
         quote_inferred_delta=quote_buy - quote_sell,
         delta=buy - sell,
         classified_coverage=coverage,
+        input_lineage=input_lineage,
     )
 
 
