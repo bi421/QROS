@@ -12,9 +12,11 @@ Implemented in `researchos/quant_engine/order_flow/audit.py`:
 - `build_replay_audit` validates per-stream sequence policies, partitions, event-time ordering, receive-time ordering, duplicate identities, and sequence gaps. It hashes canonical events, replay configuration, adapters, partitions, and code revision.
 - `audit_prefix_invariance` selects inputs by `receive_time_utc <= T`, then compares outputs available by T from prefix-only replay and full replay.
 - `build_lineage_record_from_events` and `build_lineage_record_from_input_lineage` derive or consume event-derived input lineage and reject incomplete lineage and look-ahead availability.
-- `audit_detector_pipeline` composes raw replay validation, prefix-only/full replay comparison, and output-lineage validation. Every output must expose a complete `InputLineage`, a valid detector definition ID, and an output-availability timestamp no earlier than its latest input.
+- `audit_detector_pipeline` composes raw replay validation, prefix-only/full historical comparison, and output-lineage validation. For correction/cancel streams, an explicit `replay_history` adapter must return `ReplayOutputVersion` records so later mutations cannot erase earlier knowable output history.
+- Every version must expose complete `InputLineage`, a valid detector definition ID, and an output-availability timestamp no earlier than its latest input and no later than the version timestamp. Future-availability claims are rejected.
+- Historical versions are supplied by the integration layer; the audit gate does not repeatedly replay every growing prefix, avoiding quadratic batch-replay cost. The integration must preserve bitemporal output history and remain deterministic.
 
-The detector replay function and output accessors remain caller-supplied. This is a reusable audit gate, not yet a canonical production orchestrator that wires every detector automatically.
+The detector replay function and output accessors remain caller-supplied. This is a stronger reusable temporal audit gate, not yet a canonical production orchestrator that wires every detector automatically.
 
 ## 2. Event-derived lineage integration
 
@@ -50,6 +52,9 @@ Lineage completeness is not inferred from a hash alone. If the caller does not s
 - Explicit string-sequence ordinal adapters and sequence-reset partitions are validated; no vendor adapter has been certified.
 - Future-received quotes cannot reclassify an earlier trade; a deliberately leaky historical replay is detected by prefix-invariance comparison.
 - Pipeline audit rejects incomplete output lineage and compares prefix-only versus full-replay historical outputs.
+- A correction/cancel stream without explicit versioned replay history is rejected.
+- A later cancel snapshot preserves the earlier as-of candidate version; prefix invariance passes for the earlier cutoff.
+- A replay version timestamped before its output's declared availability is rejected.
 - Correction and cancel mutations are tested for revision ordering, supersession identity, idempotency, and conflicting hash payloads.
 - Corrected trade history is preserved through classification and flow aggregation; canceled mutation events can be included in an otherwise empty flow window's lineage.
 - D06 cross-instrument level lineage and D08 pre-trade response-event cases are rejected.
@@ -57,8 +62,8 @@ Lineage completeness is not inferred from a hash alone. If the caller does not s
 
 ## 5. Verification evidence
 
-- Focused Phase 1-4 suite (audit, mutation ledger, features, detectors): **73 passed**.
-- Full repository `pytest -q`: **4701 passed, 41 skipped, 3 warnings** in **180.24 seconds**; exit code 0.
+- Focused Phase 1-4 suite (audit, mutation ledger, features, detectors): **92 passed**.
+- Full repository `pytest -q`: **4705 passed, 41 skipped, 3 warnings** in **174.31 seconds**; exit code 0.
 - Full repository Ruff check: PASS.
 - Ruff format check on changed order-flow package and related tests: PASS.
 - `git diff --check`: PASS.

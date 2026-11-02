@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -10,6 +10,7 @@ from researchos.quant_engine.order_flow.audit import (
     build_lineage_record,
     canonical_bytes,
     build_replay_audit,
+    ReplayOutputVersion,
     build_lineage_record_from_events,
     build_lineage_record_from_input_lineage,
 )
@@ -20,6 +21,7 @@ from researchos.quant_engine.order_flow.contracts import (
 )
 from researchos.quant_engine.order_flow.features import classify_trade
 from researchos.quant_engine.order_flow.lineage import InputLineage
+from researchos.quant_engine.order_flow.event_ledger import TradeMutation, TradeMutationAction
 
 NOW = datetime(2026, 11, 2, 4, 0, tzinfo=timezone.utc)
 HASH_A = "a" * 64
@@ -346,6 +348,165 @@ def test_detector_pipeline_audit_combines_replay_prefix_and_complete_lineage():
     assert result.replay_audit.event_count == 2
     assert result.prefix_invariance.passed
     assert len(result.lineage_records) == 2
+
+
+def test_detector_pipeline_preserves_pre_cancel_as_of_output_history():
+    first = replace(trade(1), trade_id="T-1")
+    later = trade(2)
+    old_output = DetectorReplayOutput(
+        first.raw_event_hash,
+        first.receive_time_utc,
+        first.quantity,
+        InputLineage.from_events((first,)),
+    )
+    cancel = TradeMutation(
+        source_id=first.source_id,
+        dataset_id=first.dataset_id,
+        instrument_id=first.instrument_id,
+        trade_id=first.trade_id or "T-1",
+        trade_scope_id="session-1",
+        revision=2,
+        action=TradeMutationAction.CANCEL,
+        event_time_utc=later.event_time_utc,
+        receive_time_utc=later.receive_time_utc,
+        raw_event_hash="e" * 64,
+        sequence_number=2,
+        supersedes_raw_event_hash=first.raw_event_hash,
+    )
+    new = TradeMutation(
+        source_id=first.source_id,
+        dataset_id=first.dataset_id,
+        instrument_id=first.instrument_id,
+        trade_id=first.trade_id or "T-1",
+        trade_scope_id="session-1",
+        revision=1,
+        action=TradeMutationAction.NEW,
+        event_time_utc=first.event_time_utc,
+        receive_time_utc=first.receive_time_utc,
+        raw_event_hash="d" * 64,
+        sequence_number=1,
+        replacement_trade=first,
+    )
+
+    retraction_output = DetectorReplayOutput(
+        cancel.raw_event_hash,
+        cancel.receive_time_utc,
+        Decimal("0"),
+        InputLineage.from_events((new, cancel)),
+    )
+
+    def replay_history(items):
+        if any(item.raw_event_hash == cancel.raw_event_hash for item in items):
+            return (
+                ReplayOutputVersion(old_output, first.receive_time_utc),
+                ReplayOutputVersion(retraction_output, cancel.receive_time_utc),
+            )
+        return (ReplayOutputVersion(old_output, first.receive_time_utc),)
+
+    result = audit_detector_pipeline(
+        (new, cancel),
+        cutoff_utc=first.receive_time_utc,
+        replay=lambda items: (),
+        replay_history=replay_history,
+        output_available_at=lambda output: output.available_at_utc,
+        definition_id=lambda output: output.definition_id,
+        replay_config={"fixture": "as-of-cancel-history"},
+        code_revision=REVISION,
+    )
+    assert result.passed
+    assert result.prefix_invariance.historical_output_count == 1
+    assert len(result.lineage_records) == 2
+
+
+def test_detector_pipeline_requires_versioned_history_for_corrections_and_cancels():
+    first = replace(trade(1), trade_id="T-1")
+    later = trade(2)
+    new = TradeMutation(
+        source_id=first.source_id,
+        dataset_id=first.dataset_id,
+        instrument_id=first.instrument_id,
+        trade_id=first.trade_id or "T-1",
+        trade_scope_id="session-1",
+        revision=1,
+        action=TradeMutationAction.NEW,
+        event_time_utc=first.event_time_utc,
+        receive_time_utc=first.receive_time_utc,
+        raw_event_hash="d" * 64,
+        sequence_number=1,
+        replacement_trade=first,
+    )
+    cancel = TradeMutation(
+        source_id=first.source_id,
+        dataset_id=first.dataset_id,
+        instrument_id=first.instrument_id,
+        trade_id=first.trade_id or "T-1",
+        trade_scope_id="session-1",
+        revision=2,
+        action=TradeMutationAction.CANCEL,
+        event_time_utc=later.event_time_utc,
+        receive_time_utc=later.receive_time_utc,
+        raw_event_hash="e" * 64,
+        sequence_number=2,
+        supersedes_raw_event_hash=first.raw_event_hash,
+    )
+    with pytest.raises(ValueError, match="require explicit replay_history"):
+        audit_detector_pipeline(
+            (new, cancel),
+            cutoff_utc=first.receive_time_utc,
+            replay=lambda items: (),
+            output_available_at=lambda output: output.available_at_utc,
+            definition_id=lambda output: output.definition_id,
+            replay_config={},
+            code_revision=REVISION,
+        )
+
+
+def test_detector_pipeline_rejects_output_before_its_availability_snapshot():
+    event = trade(1)
+    future_output = DetectorReplayOutput(
+        event.raw_event_hash,
+        event.receive_time_utc + timedelta(seconds=1),
+        event.quantity,
+        InputLineage.from_events((event,)),
+    )
+
+    with pytest.raises(ValueError, match="predates the output's declared availability"):
+        audit_detector_pipeline(
+            (event,),
+            cutoff_utc=event.receive_time_utc,
+            replay=lambda items: (),
+            replay_history=lambda items: (
+                ReplayOutputVersion(future_output, event.receive_time_utc),
+            ),
+            output_available_at=lambda output: output.available_at_utc,
+            definition_id=lambda output: output.definition_id,
+            replay_config={"fixture": "future-output"},
+            code_revision=REVISION,
+        )
+
+
+def test_detector_pipeline_rejects_prefix_history_after_cutoff():
+    event = trade(1)
+    output = DetectorReplayOutput(
+        event.raw_event_hash,
+        event.receive_time_utc,
+        event.quantity,
+        InputLineage.from_events((event,)),
+    )
+
+    with pytest.raises(ValueError, match="version after cutoff_utc"):
+        audit_detector_pipeline(
+            (event,),
+            cutoff_utc=event.receive_time_utc,
+            replay=lambda items: (),
+            replay_history=lambda items: (
+                ReplayOutputVersion(output, event.receive_time_utc + timedelta(seconds=1)),
+            ),
+            output_available_at=lambda item: item.available_at_utc,
+            definition_id=lambda item: item.definition_id,
+            replay_config={"fixture": "prefix-after-cutoff"},
+            code_revision=REVISION,
+        )
 
 
 def test_detector_pipeline_audit_rejects_incomplete_output_lineage():

@@ -16,7 +16,7 @@ import json
 from typing import Callable, Iterable, Mapping, TypeAlias
 
 from researchos.quant_engine.order_flow.contracts import L2BookEvent, QuoteEvent, TradeEvent
-from researchos.quant_engine.order_flow.event_ledger import TradeMutation
+from researchos.quant_engine.order_flow.event_ledger import TradeMutation, TradeMutationAction
 from researchos.quant_engine.order_flow.lineage import InputLineage
 
 MarketEvent: TypeAlias = TradeEvent | QuoteEvent | L2BookEvent | TradeMutation
@@ -424,6 +424,17 @@ class DetectorPipelineAudit:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class ReplayOutputVersion:
+    """A detector output as it was knowable at one receive-time snapshot."""
+
+    output: object
+    available_at_utc: datetime
+
+    def __post_init__(self) -> None:
+        _utc(self.available_at_utc, "available_at_utc")
+
+
 def audit_detector_pipeline(
     events: Iterable[MarketEvent],
     *,
@@ -437,12 +448,18 @@ def audit_detector_pipeline(
     sequence_policies: Mapping[tuple[str, str, str, str], SequencePolicy] | None = None,
     sequence_ordinals: Mapping[str, int] | None = None,
     stream_partitions: Mapping[str, str] | None = None,
+    replay_history: Callable[[tuple[MarketEvent, ...]], Iterable[ReplayOutputVersion]]
+    | None = None,
 ) -> DetectorPipelineAudit:
     """Run one fail-closed audit across raw replay, historical prefix, and lineage.
 
     Both prefix-only and full replay outputs must carry complete event-derived
-    InputLineage. Outputs without a definition ID, causal clocks, or complete
-    raw input hashes are rejected rather than treated as certified.
+    InputLineage. When correction/cancel mutations exist, replay_history is
+    mandatory and must return versioned outputs so later mutations cannot erase
+    earlier knowable history. This avoids repeated full-prefix replay and leaves
+    efficient streaming/history construction to the integration layer.
+    Outputs without a definition ID, causal clocks, or complete raw input hashes
+    are rejected rather than treated as certified.
     """
     _utc(cutoff_utc, "cutoff_utc")
     materialized = tuple(events)
@@ -456,17 +473,47 @@ def audit_detector_pipeline(
         stream_partitions=stream_partitions,
     )
     prefix_events = tuple(event for event in materialized if event.receive_time_utc <= cutoff_utc)
-    prefix_outputs = tuple(replay(prefix_events))
-    full_outputs = tuple(replay(materialized))
+    has_revisions = any(
+        isinstance(event, TradeMutation)
+        and event.action in (TradeMutationAction.CORRECT, TradeMutationAction.CANCEL)
+        for event in materialized
+    )
+    if has_revisions and replay_history is None:
+        raise ValueError("correction/cancel events require explicit replay_history versions")
+    if replay_history is None:
+        prefix_outputs = tuple(replay(prefix_events))
+        full_outputs = tuple(replay(materialized))
+    else:
+        prefix_outputs = tuple(replay_history(prefix_events))
+        full_outputs = tuple(replay_history(materialized))
+        if any(
+            not isinstance(item, ReplayOutputVersion) for item in (*prefix_outputs, *full_outputs)
+        ):
+            raise TypeError("replay_history must return ReplayOutputVersion items")
+        for label, versions in (("prefix", prefix_outputs), ("full", full_outputs)):
+            timestamps = tuple(item.available_at_utc for item in versions)
+            if timestamps != tuple(sorted(timestamps)):
+                raise ValueError(f"{label} replay history must be chronological")
+        if any(item.available_at_utc > cutoff_utc for item in prefix_outputs):
+            raise ValueError("prefix replay history contains a version after cutoff_utc")
 
     def validate_outputs(
         outputs: tuple[object, ...],
     ) -> tuple[tuple[object, datetime], tuple[LineageRecord, ...]]:
         validated: list[tuple[object, datetime]] = []
         records: list[LineageRecord] = []
-        for output in outputs:
-            available_at = output_available_at(output)
-            _utc(available_at, "output_available_at")
+        for replay_item in outputs:
+            if isinstance(replay_item, ReplayOutputVersion):
+                output = replay_item.output
+                available_at = replay_item.available_at_utc
+                declared_available_at = output_available_at(output)
+                _utc(declared_available_at, "output_available_at")
+                if declared_available_at > available_at:
+                    raise ValueError("replay version predates the output's declared availability")
+            else:
+                output = replay_item
+                available_at = output_available_at(output)
+                _utc(available_at, "output_available_at")
             lineage = getattr(output, "input_lineage", None)
             if not isinstance(lineage, InputLineage):
                 raise ValueError("detector output is missing InputLineage")
@@ -477,7 +524,7 @@ def audit_detector_pipeline(
                 code_revision=code_revision,
                 output_available_at_utc=available_at,
             )
-            validated.append((output, available_at))
+            validated.append((replay_item, available_at))
             records.append(record)
         return tuple(validated), tuple(records)
 
