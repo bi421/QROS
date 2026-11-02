@@ -1,0 +1,600 @@
+{
+    "schema_version":  "1.0.0",
+    "preregistration_version":  "MSV1-DRAFT-2026-11-02",
+    "study":  "QROS Market Structure Variant Study",
+    "variant_count":  56,
+    "axes":  {
+                 "swing_window":  [
+                                      2,
+                                      3,
+                                      4,
+                                      5,
+                                      6,
+                                      8,
+                                      10
+                                  ],
+                 "break_basis":  [
+                                     "wick",
+                                     "close"
+                                 ],
+                 "confirmation_bars":  [
+                                           1,
+                                           2
+                                       ],
+                 "break_buffer_atr":  [
+                                          0,
+                                          0.05
+                                      ],
+                 "atr_period":  [
+                                    14
+                                ],
+                 "choch_rule":  [
+                                    "opposite_confirmed_swing_break"
+                                ],
+                 "trend_filter":  [
+                                      "off"
+                                  ]
+             },
+    "variants":  [
+                     {
+                         "variant_key":  "sw02_wick_c1_atr0000",
+                         "swing_window":  2,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw02_wick_c1_atr0500",
+                         "swing_window":  2,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw02_wick_c2_atr0000",
+                         "swing_window":  2,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw02_wick_c2_atr0500",
+                         "swing_window":  2,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw02_close_c1_atr0000",
+                         "swing_window":  2,
+                         "break_basis":  "close",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw02_close_c1_atr0500",
+                         "swing_window":  2,
+                         "break_basis":  "close",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw02_close_c2_atr0000",
+                         "swing_window":  2,
+                         "break_basis":  "close",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw02_close_c2_atr0500",
+                         "swing_window":  2,
+                         "break_basis":  "close",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw03_wick_c1_atr0000",
+                         "swing_window":  3,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw03_wick_c1_atr0500",
+                         "swing_window":  3,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw03_wick_c2_atr0000",
+                         "swing_window":  3,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw03_wick_c2_atr0500",
+                         "swing_window":  3,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw03_close_c1_atr0000",
+                         "swing_window":  3,
+                         "break_basis":  "close",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw03_close_c1_atr0500",
+                         "swing_window":  3,
+                         "break_basis":  "close",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw03_close_c2_atr0000",
+                         "swing_window":  3,
+                         "break_basis":  "close",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw03_close_c2_atr0500",
+                         "swing_window":  3,
+                         "break_basis":  "close",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw04_wick_c1_atr0000",
+                         "swing_window":  4,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw04_wick_c1_atr0500",
+                         "swing_window":  4,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw04_wick_c2_atr0000",
+                         "swing_window":  4,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw04_wick_c2_atr0500",
+                         "swing_window":  4,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw04_close_c1_atr0000",
+                         "swing_window":  4,
+                         "break_basis":  "close",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw04_close_c1_atr0500",
+                         "swing_window":  4,
+                         "break_basis":  "close",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw04_close_c2_atr0000",
+                         "swing_window":  4,
+                         "break_basis":  "close",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw04_close_c2_atr0500",
+                         "swing_window":  4,
+                         "break_basis":  "close",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw05_wick_c1_atr0000",
+                         "swing_window":  5,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw05_wick_c1_atr0500",
+                         "swing_window":  5,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw05_wick_c2_atr0000",
+                         "swing_window":  5,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw05_wick_c2_atr0500",
+                         "swing_window":  5,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw05_close_c1_atr0000",
+                         "swing_window":  5,
+                         "break_basis":  "close",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw05_close_c1_atr0500",
+                         "swing_window":  5,
+                         "break_basis":  "close",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw05_close_c2_atr0000",
+                         "swing_window":  5,
+                         "break_basis":  "close",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw05_close_c2_atr0500",
+                         "swing_window":  5,
+                         "break_basis":  "close",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw06_wick_c1_atr0000",
+                         "swing_window":  6,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw06_wick_c1_atr0500",
+                         "swing_window":  6,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw06_wick_c2_atr0000",
+                         "swing_window":  6,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw06_wick_c2_atr0500",
+                         "swing_window":  6,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw06_close_c1_atr0000",
+                         "swing_window":  6,
+                         "break_basis":  "close",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw06_close_c1_atr0500",
+                         "swing_window":  6,
+                         "break_basis":  "close",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw06_close_c2_atr0000",
+                         "swing_window":  6,
+                         "break_basis":  "close",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw06_close_c2_atr0500",
+                         "swing_window":  6,
+                         "break_basis":  "close",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw08_wick_c1_atr0000",
+                         "swing_window":  8,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw08_wick_c1_atr0500",
+                         "swing_window":  8,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw08_wick_c2_atr0000",
+                         "swing_window":  8,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw08_wick_c2_atr0500",
+                         "swing_window":  8,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw08_close_c1_atr0000",
+                         "swing_window":  8,
+                         "break_basis":  "close",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw08_close_c1_atr0500",
+                         "swing_window":  8,
+                         "break_basis":  "close",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw08_close_c2_atr0000",
+                         "swing_window":  8,
+                         "break_basis":  "close",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw08_close_c2_atr0500",
+                         "swing_window":  8,
+                         "break_basis":  "close",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw10_wick_c1_atr0000",
+                         "swing_window":  10,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw10_wick_c1_atr0500",
+                         "swing_window":  10,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw10_wick_c2_atr0000",
+                         "swing_window":  10,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw10_wick_c2_atr0500",
+                         "swing_window":  10,
+                         "break_basis":  "wick",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw10_close_c1_atr0000",
+                         "swing_window":  10,
+                         "break_basis":  "close",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw10_close_c1_atr0500",
+                         "swing_window":  10,
+                         "break_basis":  "close",
+                         "confirmation_bars":  1,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw10_close_c2_atr0000",
+                         "swing_window":  10,
+                         "break_basis":  "close",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     },
+                     {
+                         "variant_key":  "sw10_close_c2_atr0500",
+                         "swing_window":  10,
+                         "break_basis":  "close",
+                         "confirmation_bars":  2,
+                         "break_buffer_atr":  0.05,
+                         "atr_period":  14,
+                         "choch_rule":  "opposite_confirmed_swing_break",
+                         "trend_filter":  "off"
+                     }
+                 ]
+}
