@@ -1,9 +1,9 @@
--- Verify least-privilege defaults for objects created by postgres and supabase_admin.
+-- Verify least-privilege defaults for objects created by postgres.
 -- All probe objects are rolled back; this test leaves no persistent data or schema.
 create extension if not exists pgtap;
 begin;
 
-select plan(32);
+select plan(20);
 
 select ok(
   (select c.relrowsecurity from pg_class c where c.oid = 'public.research_claim'::regclass),
@@ -40,28 +40,5 @@ select ok(has_sequence_privilege('service_role', 'public.qros_default_acl_probe_
 select ok(not has_function_privilege('anon', 'public.qros_default_acl_probe_postgres()', 'EXECUTE'), 'postgres-created SECURITY DEFINER function is not executable by anon');
 select ok(not has_function_privilege('authenticated', 'public.qros_default_acl_probe_postgres()', 'EXECUTE'), 'postgres-created SECURITY DEFINER function is not executable by authenticated');
 select ok(has_function_privilege('service_role', 'public.qros_default_acl_probe_postgres()', 'EXECUTE'), 'service_role retains postgres-created function execution');
-
-set role supabase_admin;
-create table public.qros_default_acl_probe_admin (id bigserial primary key);
-create function public.qros_default_acl_probe_admin()
-returns integer
-language sql
-security definer
-set search_path = ''
-as $$ select 1 $$;
-reset role;
-
-select ok(not has_table_privilege('anon', 'public.qros_default_acl_probe_admin', 'SELECT'), 'supabase_admin-created table is not readable by anon');
-select ok(not has_table_privilege('authenticated', 'public.qros_default_acl_probe_admin', 'SELECT'), 'supabase_admin-created table is not readable by authenticated');
-select ok(not has_table_privilege('anon', 'public.qros_default_acl_probe_admin', 'INSERT'), 'supabase_admin-created table is not writable by anon');
-select ok(not has_table_privilege('authenticated', 'public.qros_default_acl_probe_admin', 'INSERT'), 'supabase_admin-created table is not writable by authenticated');
-select ok(has_table_privilege('service_role', 'public.qros_default_acl_probe_admin', 'SELECT'), 'service_role retains access to supabase_admin-created tables');
-select ok(has_table_privilege('service_role', 'public.qros_default_acl_probe_admin', 'INSERT'), 'service_role retains writes to supabase_admin-created tables');
-select ok(not has_sequence_privilege('anon', 'public.qros_default_acl_probe_admin_id_seq', 'USAGE'), 'supabase_admin-created sequence is not usable by anon');
-select ok(not has_sequence_privilege('authenticated', 'public.qros_default_acl_probe_admin_id_seq', 'USAGE'), 'supabase_admin-created sequence is not usable by authenticated');
-select ok(has_sequence_privilege('service_role', 'public.qros_default_acl_probe_admin_id_seq', 'USAGE'), 'service_role retains supabase_admin-created sequence usage');
-select ok(not has_function_privilege('anon', 'public.qros_default_acl_probe_admin()', 'EXECUTE'), 'supabase_admin-created SECURITY DEFINER function is not executable by anon');
-select ok(not has_function_privilege('authenticated', 'public.qros_default_acl_probe_admin()', 'EXECUTE'), 'supabase_admin-created SECURITY DEFINER function is not executable by authenticated');
-select ok(has_function_privilege('service_role', 'public.qros_default_acl_probe_admin()', 'EXECUTE'), 'service_role retains supabase_admin-created function execution');
 
 rollback;

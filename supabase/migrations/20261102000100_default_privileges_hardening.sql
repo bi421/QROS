@@ -1,21 +1,22 @@
 -- QROS application data is server-side by default. Browser-readable surfaces
 -- must receive explicit grants and RLS policies. Keep service_role defaults
 -- because the API and worker use this server-only principal; it is never
--- shipped to browser clients. Apply to both public-object owner roles.
+-- shipped to browser clients. These defaults apply to QROS migration-owned
+-- objects created by postgres. Supabase's internal supabase_admin defaults are
+-- platform-managed and cannot be changed by the postgres migration role; see
+-- docs/operations/SUPABASE_DEFAULT_PRIVILEGES.md.
 
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   REVOKE ALL ON TABLES FROM anon, authenticated;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   REVOKE ALL ON SEQUENCES FROM anon, authenticated;
+-- PUBLIC function EXECUTE is a global PostgreSQL default. A schema-scoped
+-- REVOKE cannot cancel it, so remove PUBLIC EXECUTE globally for postgres-owned
+-- functions, then remove any direct browser-role grants in public.
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres
+  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated;
-
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
-  REVOKE ALL ON TABLES FROM anon, authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
-  REVOKE ALL ON SEQUENCES FROM anon, authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
-  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated;
+  REVOKE EXECUTE ON FUNCTIONS FROM anon, authenticated;
 
 -- research_claim is the one existing public table with browser grants. Keep
 -- member-scoped SELECT only; writes are performed by the server-side API.
