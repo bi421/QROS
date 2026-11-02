@@ -91,6 +91,9 @@ jobs:
       - name: Run database security tests
         run: supabase test db supabase/tests/tenant_isolation_test.sql
 
+      - name: Run default privilege tests
+        run: supabase test db supabase/tests/default_privileges_test.sql
+
       - name: Stop local Supabase
         if: always()
         run: supabase stop

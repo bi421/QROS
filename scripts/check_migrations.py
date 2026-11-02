@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 MIGRATIONS = Path("supabase/migrations")
-NAME_RE = re.compile(r"^\d{12}_[a-z0-9][a-z0-9_-]*\.sql$")
+NAME_RE = re.compile(r"^\d{12}(?:\d{2})?_[a-z0-9][a-z0-9_-]*\.sql$")
 
 # Security assertions must never execute before the grants they assert are revoked.
 # Keep this dependency explicit so timestamp changes cannot silently reintroduce a
@@ -33,17 +33,17 @@ def main() -> int:
     for path in files:
         if not NAME_RE.match(path.name):
             raise SystemExit(
-                f"invalid migration filename: {path}; expected YYYYMMDDHHMM_description.sql"
+                f"invalid migration filename: {path}; expected YYYYMMDDHHMM[SS]_description.sql"
             )
 
-        prefix = path.name[:12]
-        if prefix in seen:
-            raise SystemExit(f"duplicate migration timestamp: {prefix}")
-        seen.add(prefix)
+        version = path.name.split("_", 1)[0]
+        if version in seen:
+            raise SystemExit(f"duplicate migration timestamp: {version}")
+        seen.add(version)
 
-        if previous is not None and prefix <= previous:
+        if previous is not None and version <= previous:
             raise SystemExit(f"migration ordering is not strictly increasing: {path}")
-        previous = prefix
+        previous = version
 
         lowered = path.name.lower()
         if any(token in lowered for token in ("_down", "down_", "rollback", "revert")):
